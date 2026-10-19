@@ -1,0 +1,363 @@
+{
+  "id": "WaTplSync0000001",
+  "name": "META-WA-TEMPLATES-SYNC",
+  "active": false,
+  "nodes": [
+    {
+      "id": "f4fbcd8b-9ddb-5328-b5c8-2dd6d5f3a281",
+      "name": "Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "content": "## META-WA-TEMPLATES-SYNC\nPulls every template and its review status from Meta into app.wa_templates. Runs every 6 hours, by hand, or when called by META-WA-TEMPLATES-SUBMIT.",
+        "height": 220,
+        "width": 520
+      }
+    },
+    {
+      "id": "64007c1f-da67-5dc9-9126-c6024e9c4dfe",
+      "name": "Manual",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        160
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "495dcf31-7201-554a-a8b2-7f27ce08aa1c",
+      "name": "Every 6 hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "5d44e537-fb46-5351-b8c4-049905891ba9",
+      "name": "Called",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        240,
+        440
+      ],
+      "parameters": {
+        "inputSource": "passthrough"
+      }
+    },
+    {
+      "id": "7a77ef7a-0d7c-5845-b712-1f023dfd81ba",
+      "name": "Config request",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        960,
+        300
+      ],
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "6ff41e40-77aa-5711-a6a6-7281669ce8b2",
+              "name": "required",
+              "value": "whatsapp.waba_id|whatsapp.graph_api_version",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "87569872-b78f-57f6-9854-e4d09e6a3e6b",
+      "name": "Get config",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.4,
+      "position": [
+        1200,
+        300
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "WaCfgGet00000001",
+          "mode": "id",
+          "cachedResultName": "CFG-GET"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "1ef69bde-709f-52f4-a0b3-0b50b40cb521",
+      "name": "List templates",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1440,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://graph.facebook.com/{{ $('Get config').first().json.cfg['whatsapp.graph_api_version'] }}/{{ $('Get config').first().json.cfg['whatsapp.waba_id'] }}/message_templates",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "fields",
+              "value": "name,language,status,category,id,components,rejected_reason"
+            },
+            {
+              "name": "limit",
+              "value": "200"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CRED:meta-whatsapp-token",
+          "name": "meta-whatsapp-token"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "54ffb59c-34b4-505a-a085-2029a7cc51f5",
+      "name": "Listed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1680,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b607d377-e5c6-5b1a-bfcc-b7f6e670339c",
+              "leftValue": "={{ $json.statusCode === 200 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      }
+    },
+    {
+      "id": "111b98c4-1a32-5150-83b6-84c95021c0be",
+      "name": "Stop: Meta error",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        1920,
+        300
+      ],
+      "parameters": {
+        "errorMessage": "=Template list failed: HTTP {{ $json.statusCode }} {{ JSON.stringify($json.body) }}"
+      }
+    },
+    {
+      "id": "b07c4f0c-9f1d-5048-87b5-e379b80bc01c",
+      "name": "Each template",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1.1,
+      "position": [
+        2160,
+        300
+      ],
+      "parameters": {
+        "fieldToSplitOut": "body.data",
+        "options": {}
+      }
+    },
+    {
+      "id": "a4298a09-4b9b-58a6-aa31-13e42bba3d7f",
+      "name": "Upsert template",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        2400,
+        300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO app.wa_templates (name, language, category, status, meta_template_id, components, rejection_reason, last_synced_at)\nVALUES ($1, $2, $3, $4, $5, $6::jsonb, NULLIF($7, 'NONE'), now())\nON CONFLICT (name, language) DO UPDATE SET category = EXCLUDED.category, status = EXCLUDED.status,\n  meta_template_id = EXCLUDED.meta_template_id, components = EXCLUDED.components,\n  rejection_reason = EXCLUDED.rejection_reason, last_synced_at = now()\nRETURNING name, language, category, status, rejection_reason",
+        "options": {
+          "queryReplacement": "={{ [ $json.name, $json.language, $json.category, $json.status, $json.id, JSON.stringify($json.components || []), $json.rejected_reason || 'NONE' ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "CRED:office-postgres-app",
+          "name": "office-postgres-app"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Config request": {
+      "main": [
+        [
+          {
+            "node": "Get config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual": {
+      "main": [
+        [
+          {
+            "node": "Config request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every 6 hours": {
+      "main": [
+        [
+          {
+            "node": "Config request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Called": {
+      "main": [
+        [
+          {
+            "node": "Config request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get config": {
+      "main": [
+        [
+          {
+            "node": "List templates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List templates": {
+      "main": [
+        [
+          {
+            "node": "Listed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Listed?": {
+      "main": [
+        [
+          {
+            "node": "Each template",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Stop: Meta error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Each template": {
+      "main": [
+        [
+          {
+            "node": "Upsert template",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Cairo",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "WaErrHandler0001"
+  },
+  "pinData": {},
+  "tags": []
+}

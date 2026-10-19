@@ -1,9 +1,9 @@
 #!/bin/bash
 # Restores a backup into a NEW database and verifies it against the source.
-# It never overwrites the live office database.
+# It never overwrites the live office or n8n databases.
 #
-#   restore list [office]
-#   restore office <latest|FILE_NAME> [TARGET_DB] [--drop-after-verify]
+#   restore list [office|n8n]
+#   restore <office|n8n> <latest|FILE_NAME> [TARGET_DB] [--drop-after-verify]
 #
 # TARGET_DB defaults to <db>_restore_<YYYYmmdd_HHMMSS>.
 set -euo pipefail
@@ -13,7 +13,7 @@ usage() { sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
 
 [[ $# -ge 1 ]] || usage
 if [[ "$1" == "list" ]]; then
-  for db in ${2:-office}; do
+  for db in ${2:-office n8n}; do
     echo "== $db"
     s3_as backup s3 ls "s3://$BUCKET_BACKUPS/postgres/$db/" | sort
   done
@@ -29,9 +29,9 @@ done
 db="${args[0]}"; name="${args[1]}"
 target="${args[2]:-${db}_restore_$(date '+%Y%m%d_%H%M%S')}"
 
-[[ "$db" == "office" ]] || die "database must be office"
+[[ "$db" == "office" || "$db" == "n8n" ]] || die "database must be office or n8n"
 [[ "$target" =~ ^[a-z0-9_]+$ ]] || die "target database name may only contain a-z, 0-9 and _"
-case "$target" in office|postgres|template0|template1) die "refusing to restore over '$target'" ;; esac
+case "$target" in office|n8n|postgres|template0|template1) die "refusing to restore over '$target'" ;; esac
 
 if [[ "$name" == "latest" ]]; then
   name="$(s3_as backup s3 ls "s3://$BUCKET_BACKUPS/postgres/$db/" | awk '{print $4}' | sort | tail -1)"
@@ -60,10 +60,9 @@ PGPASSWORD="$POSTGRES_SUPERUSER_PASSWORD" pg_restore -h postgres -U "$POSTGRES_S
   -d "$target" --no-password --exit-on-error "$work/$name"
 
 # Verify: exact row count of every table, source vs restored.
-# (Hangfire queue tables change every minute, so they are left out of the comparison.)
 count_sql="SELECT format('SELECT %L || ''|'' || count(*) FROM %I.%I;', n.nspname || '.' || c.relname, n.nspname, c.relname)
            FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-           WHERE c.relkind = 'r' AND n.nspname NOT IN ('pg_catalog','information_schema','hangfire')
+           WHERE c.relkind = 'r' AND n.nspname NOT IN ('pg_catalog','information_schema')
            ORDER BY 1"
 counts() { psql_super "$1" -c "$count_sql" | psql_super "$1" | sort; }
 counts "$db"     > "$work/source.txt"

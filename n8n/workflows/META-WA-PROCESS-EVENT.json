@@ -1,0 +1,82 @@
+{
+  "id": "WaProcEvent00001",
+  "name": "META-WA-PROCESS-EVENT",
+  "active": false,
+  "nodes": [
+    {
+      "id": "99910b0d-e988-5790-9247-2e30d4578e0a",
+      "name": "Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "content": "## META-WA-PROCESS-EVENT\nInput: events exactly as emitted by the WhatsApp Trigger (change value + `field`).\nAll rules live in `app.wa_process_event()` (one transaction): dedupe by payload hash and wamid, 24h window, group messages ignored, delivery statuses only move forward, template updates.\nMedia is NOT downloaded here (TASK 03).",
+        "height": 220,
+        "width": 520
+      }
+    },
+    {
+      "id": "f80d2ee2-6874-5692-9ecb-84ccbc306528",
+      "name": "Start",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {
+        "inputSource": "passthrough"
+      }
+    },
+    {
+      "id": "93a78ac6-b8af-556e-bde8-b715861700b7",
+      "name": "Process event",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        480,
+        300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT app.wa_process_event($1::jsonb) AS result",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify($json) ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "CRED:office-postgres-app",
+          "name": "office-postgres-app"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Process event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Cairo",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "WaErrHandler0001"
+  },
+  "pinData": {},
+  "tags": []
+}

@@ -1,0 +1,171 @@
+{
+  "id": "WaCfgGet00000001",
+  "name": "CFG-GET",
+  "active": false,
+  "nodes": [
+    {
+      "id": "d77966d5-ee1b-56aa-b34f-711325baad71",
+      "name": "Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "content": "## CFG-GET\nReturns every non-secret setting from `app.settings` as `cfg`.\nOptional input `required`: keys separated by `|`. If any is empty the workflow stops with an error.",
+        "height": 220,
+        "width": 520
+      }
+    },
+    {
+      "id": "7e5b1eb3-30b9-5688-becf-75e8373d7eed",
+      "name": "Start",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {
+        "inputSource": "passthrough"
+      }
+    },
+    {
+      "id": "d81bad02-e11b-5217-bcfc-67ded94493de",
+      "name": "Read settings",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        480,
+        300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT jsonb_object_agg(key, value) AS cfg,\n       COALESCE(array_agg(key ORDER BY key) FILTER (WHERE value = '' AND key = ANY(string_to_array($1, '|'))), '{}') AS missing\nFROM app.settings",
+        "options": {
+          "queryReplacement": "={{ [ $json.required || 'none' ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "CRED:office-postgres-app",
+          "name": "office-postgres-app"
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "799227dd-064e-5e64-8ac1-8b0b78de9481",
+      "name": "Missing settings?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        720,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c52edcf0-5323-5cff-b116-b171ff2a0bfa",
+              "leftValue": "={{ $json.missing.length > 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      }
+    },
+    {
+      "id": "bcc158a4-befe-5e4e-8c4a-bb0f42af6705",
+      "name": "Stop: missing settings",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        960,
+        300
+      ],
+      "parameters": {
+        "errorMessage": "=Missing values in app.settings: {{ $json.missing.join(', ') }}"
+      }
+    },
+    {
+      "id": "a9bcdc5c-99c2-5be3-850d-af589e35b9da",
+      "name": "Config",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        300
+      ],
+      "parameters": {}
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Read settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read settings": {
+      "main": [
+        [
+          {
+            "node": "Missing settings?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Missing settings?": {
+      "main": [
+        [
+          {
+            "node": "Stop: missing settings",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Cairo",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "WaErrHandler0001"
+  },
+  "pinData": {},
+  "tags": []
+}

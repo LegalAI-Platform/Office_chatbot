@@ -1,0 +1,370 @@
+{
+  "id": "WaSubCheck000001",
+  "name": "META-WA-SUBSCRIPTION-CHECK",
+  "active": false,
+  "nodes": [
+    {
+      "id": "f6db17ba-652a-54ba-9eb2-a23ca9591b06",
+      "name": "Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "content": "## META-WA-SUBSCRIPTION-CHECK\nShows the App webhook subscription (callback URL, fields) and makes sure the WABA has this App in subscribed_apps (subscribes it if missing). Used by tunnel-refresh.",
+        "height": 220,
+        "width": 520
+      }
+    },
+    {
+      "id": "bc936dc8-4147-5a06-9efd-a77cc739e907",
+      "name": "Manual",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "8ab2eb6e-f2a0-51ad-9cf4-3a8062961087",
+      "name": "Config request",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        480,
+        300
+      ],
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "bcd93e41-4684-5696-9d37-b62daa663531",
+              "name": "required",
+              "value": "whatsapp.app_id|whatsapp.waba_id|whatsapp.graph_api_version",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "21f5100a-68e5-51bf-8789-d42f69fb8d82",
+      "name": "Get config",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.4,
+      "position": [
+        720,
+        300
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "WaCfgGet00000001",
+          "mode": "id",
+          "cachedResultName": "CFG-GET"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "9a406eb1-7933-5148-a271-a255b5155ad0",
+      "name": "App subscriptions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        960,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://graph.facebook.com/{{ $('Get config').first().json.cfg['whatsapp.graph_api_version'] }}/{{ $('Get config').first().json.cfg['whatsapp.app_id'] }}/subscriptions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "credentials": {
+        "httpQueryAuth": {
+          "id": "CRED:meta-app-token",
+          "name": "meta-app-token"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "8e5e8e80-d965-5060-8fb2-dc0daed4710e",
+      "name": "WABA subscribed apps",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1200,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://graph.facebook.com/{{ $('Get config').first().json.cfg['whatsapp.graph_api_version'] }}/{{ $('Get config').first().json.cfg['whatsapp.waba_id'] }}/subscribed_apps",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CRED:meta-whatsapp-token",
+          "name": "meta-whatsapp-token"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "2d745ef1-955a-5377-b914-55f74d17c867",
+      "name": "WABA missing app?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1440,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "141d776b-3109-52bb-a84d-1b50d10f031d",
+              "leftValue": "={{ $json.statusCode === 200 && (!$json.body.data || $json.body.data.length === 0) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      }
+    },
+    {
+      "id": "55b7a3a4-b0a5-572d-9d16-f6d1904f6871",
+      "name": "Subscribe WABA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1680,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/{{ $('Get config').first().json.cfg['whatsapp.graph_api_version'] }}/{{ $('Get config').first().json.cfg['whatsapp.waba_id'] }}/subscribed_apps",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CRED:meta-whatsapp-token",
+          "name": "meta-whatsapp-token"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "8b89f69e-a291-5824-a30b-7c3006e94ddf",
+      "name": "Summary",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1920,
+        300
+      ],
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e0c5a8a1-07ee-5ffd-87c6-0d42a57ee256",
+              "name": "app_subscriptions_http",
+              "value": "={{ $('App subscriptions').first().json.statusCode }}",
+              "type": "number"
+            },
+            {
+              "id": "f5432b2a-c2a9-5ddd-bd69-ce3c0d7a98bc",
+              "name": "whatsapp_subscription",
+              "value": "={{ ($('App subscriptions').first().json.body.data || []).find(s => s.object === 'whatsapp_business_account') || null }}",
+              "type": "object"
+            },
+            {
+              "id": "d0fb5397-5164-57ea-bf2f-68b21b91586f",
+              "name": "waba_subscribed_apps",
+              "value": "={{ $('WABA subscribed apps').first().json.body.data || [] }}",
+              "type": "array"
+            },
+            {
+              "id": "4c2462f4-5b69-5a0c-9050-30a8ebcbf9fd",
+              "name": "waba_subscribed_now",
+              "value": "={{ $('WABA missing app?').first().json.statusCode === 200 && ($('WABA subscribed apps').first().json.body.data || []).length === 0 }}",
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Config request": {
+      "main": [
+        [
+          {
+            "node": "Get config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual": {
+      "main": [
+        [
+          {
+            "node": "Config request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get config": {
+      "main": [
+        [
+          {
+            "node": "App subscriptions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "App subscriptions": {
+      "main": [
+        [
+          {
+            "node": "WABA subscribed apps",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WABA subscribed apps": {
+      "main": [
+        [
+          {
+            "node": "WABA missing app?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WABA missing app?": {
+      "main": [
+        [
+          {
+            "node": "Subscribe WABA",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Subscribe WABA": {
+      "main": [
+        [
+          {
+            "node": "Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Cairo",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "WaErrHandler0001"
+  },
+  "pinData": {},
+  "tags": []
+}

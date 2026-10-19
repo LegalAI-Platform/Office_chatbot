@@ -1,0 +1,443 @@
+{
+  "id": "WaTplSubmit00001",
+  "name": "META-WA-TEMPLATES-SUBMIT",
+  "active": false,
+  "nodes": [
+    {
+      "id": "518e9b61-8d6f-58e3-8c4b-50030ccab5b1",
+      "name": "Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "content": "## META-WA-TEMPLATES-SUBMIT (run by hand)\nSyncs first, then submits only the M-03 templates (n8n/templates/whatsapp-templates.json) that Meta does not have yet. Never resubmits or deletes.\nRegenerate this workflow if the templates file changes.",
+        "height": 220,
+        "width": 520
+      }
+    },
+    {
+      "id": "aa68eb1a-4e35-5e2c-88bc-e8aa2ef2ee93",
+      "name": "Manual",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "1c8d498f-f439-54a5-87de-4a24de4ff3ab",
+      "name": "Sync first",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.4,
+      "position": [
+        480,
+        300
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "WaTplSync0000001",
+          "mode": "id",
+          "cachedResultName": "META-WA-TEMPLATES-SYNC"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "bff567d9-e342-5478-80fd-74797e498292",
+      "name": "Config request",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        720,
+        300
+      ],
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "78020a4d-0621-577c-baa7-0078f94857df",
+              "name": "required",
+              "value": "whatsapp.waba_id|whatsapp.graph_api_version",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "5c6fc167-f30c-5b5f-860f-75970d8f57ad",
+      "name": "Get config",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.4,
+      "position": [
+        960,
+        300
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "WaCfgGet00000001",
+          "mode": "id",
+          "cachedResultName": "CFG-GET"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "61ff8839-010c-5b59-9fae-f37fe4c5e8fa",
+      "name": "Template definitions",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1200,
+        300
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\"templates\": [{\"name\": \"reminder_day_before\", \"language\": \"ar\", \"category\": \"UTILITY\", \"components\": [{\"type\": \"BODY\", \"text\": \"تذكير بميعاد حضرتك مع الأستاذ سعد بكرة {{1}} الساعة {{2}}. نوع الاستشارة: {{3}}. التفاصيل: {{4}}. لو محتاج تغيّر الميعاد ابعتلنا هنا.\", \"example\": {\"body_text\": [[\"الثلاثاء 21 أكتوبر\", \"6 مساءً\", \"مقابلة في المكتب\", \"المكتب في الدقي، والعنوان على الخريطة\"]]}}]}, {\"name\": \"reminder_2h_before\", \"language\": \"ar\", \"category\": \"UTILITY\", \"components\": [{\"type\": \"BODY\", \"text\": \"ميعاد حضرتك مع الأستاذ سعد النهارده الساعة {{1}}. نوع الاستشارة: {{2}}. التفاصيل: {{3}}. في انتظار حضرتك.\", \"example\": {\"body_text\": [[\"6 مساءً\", \"استشارة بالتليفون\", \"الأستاذ هيكلم حضرتك على نفس الرقم\"]]}}]}, {\"name\": \"booking_followup\", \"language\": \"ar\", \"category\": \"UTILITY\", \"components\": [{\"type\": \"BODY\", \"text\": \"لسه حابب تحجز مع الأستاذ؟\"}]}, {\"name\": \"staff_contact_10am\", \"language\": \"ar\", \"category\": \"UTILITY\", \"components\": [{\"type\": \"BODY\", \"text\": \"صباح الخير، معاك مكتب الأستاذ سعد فتحي سعد بخصوص طلب حضرتك.\"}]}, {\"name\": \"staff_delay_apology\", \"language\": \"ar\", \"category\": \"UTILITY\", \"components\": [{\"type\": \"BODY\", \"text\": \"معلش اتأخرنا على حضرتك، هنكلمك خلال دقايق.\"}]}, {\"name\": \"payment_confirmed_booking\", \"language\": \"ar\", \"category\": \"UTILITY\", \"components\": [{\"type\": \"BODY\", \"text\": \"تم تأكيد ميعاد حضرتك يوم {{1}} الساعة {{2}} ✅. التفاصيل: {{3}}. لو محتاج أي حاجة ابعتلنا هنا.\", \"example\": {\"body_text\": [[\"الثلاثاء 21 أكتوبر\", \"6 مساءً\", \"استشارة بالتليفون، والأستاذ هيكلم حضرتك\"]]}}]}, {\"name\": \"payment_partial\", \"language\": \"ar\", \"category\": \"UTILITY\", \"components\": [{\"type\": \"BODY\", \"text\": \"وصلنا {{1}} جنيه من {{2}}. محتاجين باقي المبلغ {{3}} جنيه عشان نأكد الميعاد.\", \"example\": {\"body_text\": [[\"300\", \"500\", \"200\"]]}}]}, {\"name\": \"payment_rejected\", \"language\": \"ar\", \"category\": \"UTILITY\", \"components\": [{\"type\": \"BODY\", \"text\": \"نعتذر لحضرتك، الإيصال ما اتقبلش. ممكن تبعت إيصال تاني أو تكلمنا على {{1}} في مواعيد العمل.\", \"example\": {\"body_text\": [[\"01000000000\"]]}}]}, {\"name\": \"refund_completed\", \"language\": \"ar\", \"category\": \"UTILITY\", \"components\": [{\"type\": \"BODY\", \"text\": \"تم رد مبلغ {{1}} جنيه لحضرتك على {{2}}. شكرًا لحضرتك.\", \"example\": {\"body_text\": [[\"500\", \"InstaPay\"]]}}]}, {\"name\": \"service_ready\", \"language\": \"ar\", \"category\": \"UTILITY\", \"components\": [{\"type\": \"BODY\", \"text\": \"الخدمة المطلوبة ({{1}}) جاهزة، وهتوصل حضرتك هنا حالًا.\", \"example\": {\"body_text\": [[\"مراجعة العقد\"]]}}]}, {\"name\": \"urgent_10am\", \"language\": \"ar\", \"category\": \"UTILITY\", \"components\": [{\"type\": \"BODY\", \"text\": \"صباح الخير، بخصوص طلب حضرتك العاجل، الأستاذ هيتواصل مع حضرتك.\"}]}]}",
+        "options": {}
+      }
+    },
+    {
+      "id": "a4c13292-7cda-560a-a1f9-be9f769a9344",
+      "name": "Each definition",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1.1,
+      "position": [
+        1440,
+        300
+      ],
+      "parameters": {
+        "fieldToSplitOut": "templates",
+        "options": {}
+      }
+    },
+    {
+      "id": "1c08cb99-001d-5031-9743-a344094458ae",
+      "name": "Already at Meta?",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1680,
+        300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT $3::jsonb AS def,\n       NOT EXISTS (SELECT 1 FROM app.wa_templates WHERE name = $1 AND language = $2) AS is_new",
+        "options": {
+          "queryReplacement": "={{ [ $json.name, $json.language, JSON.stringify($json) ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "CRED:office-postgres-app",
+          "name": "office-postgres-app"
+        }
+      }
+    },
+    {
+      "id": "2cdaed54-78a2-55ae-9dcb-46859083fe51",
+      "name": "New?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1920,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "0fbc54cc-786e-597c-8ae1-d7205671f609",
+              "leftValue": "={{ $json.is_new }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      }
+    },
+    {
+      "id": "b9bc1959-f291-5f76-a007-29a44c3d2e8e",
+      "name": "Submit to Meta",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2160,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/{{ $('Get config').first().json.cfg['whatsapp.graph_api_version'] }}/{{ $('Get config').first().json.cfg['whatsapp.waba_id'] }}/message_templates",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.def) }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CRED:meta-whatsapp-token",
+          "name": "meta-whatsapp-token"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "d951168c-bdc0-5031-bf58-46f486384c10",
+      "name": "Submitted",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        2400,
+        300
+      ],
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c9040a8f-2bf1-5551-ac35-9f5017824944",
+              "name": "name",
+              "value": "={{ $('Already at Meta?').item.json.def.name }}",
+              "type": "string"
+            },
+            {
+              "id": "b24febf6-1612-5fa7-82e4-024d7034da83",
+              "name": "http_status",
+              "value": "={{ $json.statusCode }}",
+              "type": "number"
+            },
+            {
+              "id": "9addce94-320c-5396-9de2-09961423d116",
+              "name": "meta_status",
+              "value": "={{ $json.body.status || null }}",
+              "type": "string"
+            },
+            {
+              "id": "f84b23f4-5fa4-571a-9a70-d607a4788e0b",
+              "name": "meta_category",
+              "value": "={{ $json.body.category || null }}",
+              "type": "string"
+            },
+            {
+              "id": "4952055e-035f-5bff-bd40-8e9714aaacff",
+              "name": "error",
+              "value": "={{ $json.body.error ? $json.body.error.message : null }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "572711ca-53de-589a-9d04-eac038e64803",
+      "name": "Already exists",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        2640,
+        300
+      ],
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "9cedf822-ec78-5a59-a549-67b79b5ab0c1",
+              "name": "name",
+              "value": "={{ $json.def.name }}",
+              "type": "string"
+            },
+            {
+              "id": "905bf084-52ea-5833-a456-c6e2da219dbf",
+              "name": "skipped",
+              "value": "={{ true }}",
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Config request": {
+      "main": [
+        [
+          {
+            "node": "Get config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual": {
+      "main": [
+        [
+          {
+            "node": "Sync first",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sync first": {
+      "main": [
+        [
+          {
+            "node": "Config request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get config": {
+      "main": [
+        [
+          {
+            "node": "Template definitions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Template definitions": {
+      "main": [
+        [
+          {
+            "node": "Each definition",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Each definition": {
+      "main": [
+        [
+          {
+            "node": "Already at Meta?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Already at Meta?": {
+      "main": [
+        [
+          {
+            "node": "New?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "New?": {
+      "main": [
+        [
+          {
+            "node": "Submit to Meta",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Already exists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Submit to Meta": {
+      "main": [
+        [
+          {
+            "node": "Submitted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Cairo",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "WaErrHandler0001"
+  },
+  "pinData": {},
+  "tags": []
+}

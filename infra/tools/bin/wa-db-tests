@@ -1,0 +1,143 @@
+#!/bin/bash
+# TASK 02 database tests: runs the fake WhatsApp fixtures in /fixtures/whatsapp
+# through app.wa_process_event / wa_outbound_prepare / wa_outbound_result as
+# office_app (the role n8n uses) and checks the results. No call to Meta.
+# Test rows use dummy numbers 2010000000xx and are deleted before and after.
+set -uo pipefail
+source /usr/local/bin/_lib
+
+FX=/fixtures/whatsapp
+[[ -d "$FX" ]] || die "fixtures not mounted at $FX"
+
+passed=0; failed=0
+assert_eq() {  # assert_eq "description" actual expected
+  if [[ "$2" == "$3" ]]; then echo "PASS  $1"; passed=$((passed+1))
+  else echo "FAIL  $1 (got '$2', expected '$3')"; failed=$((failed+1)); fi
+}
+app() { psql_as office_app "$OFFICE_APP_PASSWORD" office "$@"; }
+# psql only expands :'var' in SQL read from stdin, not in -c.
+process() { app -v ev="$(cat "$FX/$1")" <<<"SELECT app.wa_process_event(:'ev'::jsonb);"; }
+q() { app -c "$1"; }
+
+cleanup() {
+  psql_super office -c "
+    DELETE FROM app.wa_message_statuses WHERE wamid LIKE 'wamid.TEST-%';
+    DELETE FROM app.wa_outbound_messages WHERE wa_id LIKE '2010000000%';
+    DELETE FROM app.wa_inbound_messages WHERE wa_id LIKE '2010000000%';
+    DELETE FROM app.wa_contact_windows WHERE wa_id LIKE '2010000000%';
+    DELETE FROM app.wa_webhook_events WHERE phone_number_id = '100000000000001' OR payload->>'message_template_name' = 'hello_world' AND payload->>'message_template_id' = '999000111';
+    DELETE FROM app.wa_templates WHERE meta_template_id = '999000111';" >/dev/null
+}
+cleanup
+
+echo "== Inbound events"
+r="$(process 01_text.json)"
+assert_eq "text event creates one new message" "$(jq -r .messages_new <<<"$r")" "1"
+assert_eq "text message stored as pending" "$(q "SELECT message_type||'/'||processing_status||'/'||contact_name FROM app.wa_inbound_messages WHERE wamid='wamid.TEST-IN-TEXT-1'")" "text/pending/Test Client One"
+assert_eq "24h window opened for the sender" "$(q "SELECT count(*) FROM app.wa_contact_windows WHERE wa_id='201000000001'")" "1"
+
+r="$(process 01_text.json)"
+assert_eq "same event twice is a duplicate (no side effects)" "$(jq -r .duplicate_event <<<"$r")" "true"
+assert_eq "same event twice keeps one event row" "$(q "SELECT count(*) FROM app.wa_webhook_events WHERE payload @> '{\"messages\":[{\"id\":\"wamid.TEST-IN-TEXT-1\"}]}' AND NOT payload ? 'test_note'")" "1"
+
+r="$(process 02_text_same_wamid_other_event.json)"
+assert_eq "same wamid in another event is not inserted again" "$(jq -r '"\(.messages_new)/\(.messages_duplicate)"' <<<"$r")" "0/1"
+assert_eq "still exactly one row for that wamid" "$(q "SELECT count(*) FROM app.wa_inbound_messages WHERE wamid='wamid.TEST-IN-TEXT-1'")" "1"
+
+for f in 03_audio.json 04_image.json 05_document.json; do process "$f" >/dev/null; done
+assert_eq "audio, image, document stored with their Meta type" \
+  "$(q "SELECT string_agg(message_type, ',' ORDER BY message_type) FROM app.wa_inbound_messages WHERE wamid IN ('wamid.TEST-IN-AUDIO-1','wamid.TEST-IN-IMAGE-1','wamid.TEST-IN-DOC-1')")" "audio,document,image"
+assert_eq "media is not downloaded (only the Meta media id is kept)" \
+  "$(q "SELECT raw->'audio'->>'id' FROM app.wa_inbound_messages WHERE wamid='wamid.TEST-IN-AUDIO-1'")" "MEDIA-AUDIO-1"
+assert_eq "window moved to the newest message" \
+  "$(q "SELECT last_inbound_wamid FROM app.wa_contact_windows WHERE wa_id='201000000001'")" "wamid.TEST-IN-DOC-1"
+
+process 01_text.json >/dev/null   # older message arriving late (duplicate anyway)
+assert_eq "window never moves backwards" \
+  "$(q "SELECT last_inbound_wamid FROM app.wa_contact_windows WHERE wa_id='201000000001'")" "wamid.TEST-IN-DOC-1"
+
+process 06_referral.json >/dev/null
+assert_eq "click-to-WhatsApp referral is saved" \
+  "$(q "SELECT referral->>'source_id' FROM app.wa_inbound_messages WHERE wamid='wamid.TEST-IN-REF-1'")" "AD-123"
+
+r="$(process 07_group.json)"
+assert_eq "group message is ignored" "$(q "SELECT processing_status||'/'||is_group FROM app.wa_inbound_messages WHERE wamid='wamid.TEST-IN-GROUP-1'")" "ignored_group/true"
+assert_eq "group message opens no 24h window (so no reply is possible)" "$(q "SELECT count(*) FROM app.wa_contact_windows WHERE wa_id='201000000003'")" "0"
+
+echo "== Outbound guards"
+# Fixture timestamps are fixed in the past, so simulate a client who wrote an hour ago.
+q "UPDATE app.wa_contact_windows SET last_inbound_at = now() - interval '1 hour' WHERE wa_id='201000000001'" >/dev/null
+r="$(q "SELECT app.wa_outbound_prepare('test:1','201000000001','text','{\"text\":{\"body\":\"hi\"}}','wa-db-tests')")"
+assert_eq "text inside the 24h window may be sent" "$(jq -r .action <<<"$r")" "send"
+out1="$(jq -r .outbound_id <<<"$r")"
+r="$(q "SELECT app.wa_outbound_prepare('test:1','201000000001','text','{\"text\":{\"body\":\"hi\"}}','wa-db-tests')")"
+assert_eq "same idempotency key twice is a duplicate (sent once)" "$(jq -r .action <<<"$r")" "duplicate"
+assert_eq "only one outbound row for the key" "$(q "SELECT count(*) FROM app.wa_outbound_messages WHERE idempotency_key='test:1'")" "1"
+
+r="$(q "SELECT app.wa_outbound_result('$out1', true, '{\"messages\":[{\"id\":\"wamid.TEST-OUT-1\"}]}')")"
+assert_eq "successful Graph API result stores the wamid" "$(q "SELECT status||'/'||wamid FROM app.wa_outbound_messages WHERE id='$out1'")" "sent/wamid.TEST-OUT-1"
+
+q "INSERT INTO app.wa_contact_windows (wa_id, last_inbound_at) VALUES ('201000000002', now() - interval '25 hours')" >/dev/null
+r="$(q "SELECT app.wa_outbound_prepare('test:2','201000000002','text','{\"text\":{\"body\":\"late\"}}','wa-db-tests')")"
+assert_eq "text 25h after the last inbound is blocked" "$(jq -r '.action + "/" + .error_code' <<<"$r")" "blocked_window/OUTSIDE_24H_WINDOW"
+r="$(q "SELECT app.wa_outbound_prepare('test:3','201000000009','text','{\"text\":{\"body\":\"never wrote\"}}','wa-db-tests')")"
+assert_eq "text to a number that never wrote is blocked" "$(jq -r .action <<<"$r")" "blocked_window"
+
+r="$(q "SELECT app.wa_outbound_prepare('test:4','201000000002','template','{}','wa-db-tests','reminder_day_before','ar')")"
+assert_eq "template that is not approved is refused" "$(jq -r '.action + "/" + .error_code' <<<"$r")" "template_not_approved/TEMPLATE_NOT_APPROVED"
+
+process 20_template_approved.json >/dev/null
+assert_eq "template status update is recorded" "$(q "SELECT status FROM app.wa_templates WHERE name='hello_world' AND language='en_US'")" "APPROVED"
+r="$(q "SELECT app.wa_outbound_prepare('test:5','201000000002','template','{}','wa-db-tests','hello_world','en_US')")"
+assert_eq "approved template may be sent outside the 24h window" "$(jq -r .action <<<"$r")" "send"
+
+if q "SELECT app.wa_outbound_prepare('test:6','20abc','text','{}','wa-db-tests')" >/dev/null 2>&1; then
+  assert_eq "invalid wa_id is rejected" "accepted" "rejected"
+else
+  assert_eq "invalid wa_id is rejected" "rejected" "rejected"
+fi
+
+r="$(q "SELECT app.wa_outbound_prepare('test:7','201000000001','text','{}','wa-db-tests')")"
+out7="$(jq -r .outbound_id <<<"$r")"
+r="$(q "SELECT app.wa_outbound_result('$out7', false, NULL, '{\"error\":{\"code\":190,\"message\":\"Invalid OAuth access token\"}}')")"
+assert_eq "Meta error 190 maps to TOKEN_INVALID" "$(jq -r .error_code <<<"$r")" "TOKEN_INVALID"
+r="$(q "SELECT app.wa_outbound_prepare('test:8','201000000001','text','{}','wa-db-tests')")"
+out8="$(jq -r .outbound_id <<<"$r")"
+r="$(q "SELECT app.wa_outbound_result('$out8', false, NULL, '{\"error\":{\"code\":131047,\"message\":\"Re-engagement message\"}}')")"
+assert_eq "Meta error 131047 maps to OUTSIDE_24H_WINDOW" "$(jq -r .error_code <<<"$r")" "OUTSIDE_24H_WINDOW"
+
+echo "== Delivery statuses"
+process 10_status_sent.json >/dev/null
+process 11_status_read.json >/dev/null
+process 12_status_delivered_late.json >/dev/null
+assert_eq "sent -> read -> late delivered ends as read" "$(q "SELECT status FROM app.wa_outbound_messages WHERE wamid='wamid.TEST-OUT-1'")" "read"
+assert_eq "all three status events are logged" "$(q "SELECT count(*) FROM app.wa_message_statuses WHERE wamid='wamid.TEST-OUT-1'")" "3"
+
+r="$(q "SELECT app.wa_outbound_prepare('test:9','201000000001','text','{}','wa-db-tests')")"
+out9="$(jq -r .outbound_id <<<"$r")"
+q "SELECT app.wa_outbound_result('$out9', true, '{\"messages\":[{\"id\":\"wamid.TEST-OUT-2\"}]}')" >/dev/null
+process 13_status_failed_other.json >/dev/null
+assert_eq "failed status stores Meta's error" "$(q "SELECT status||'/'||(last_error->0->>'code') FROM app.wa_outbound_messages WHERE wamid='wamid.TEST-OUT-2'")" "failed/131026"
+
+echo "== Permissions"
+if psql_as office_readonly "$OFFICE_READONLY_PASSWORD" office -c "SELECT app.wa_process_event('{}'::jsonb)" >/dev/null 2>&1; then
+  assert_eq "office_readonly cannot call wa_process_event" "allowed" "denied"
+else
+  assert_eq "office_readonly cannot call wa_process_event" "denied" "denied"
+fi
+if psql_as office_readonly "$OFFICE_READONLY_PASSWORD" office -c "INSERT INTO app.settings(key) VALUES ('x.test')" >/dev/null 2>&1; then
+  assert_eq "office_readonly cannot write settings" "allowed" "denied"
+else
+  assert_eq "office_readonly cannot write settings" "denied" "denied"
+fi
+if psql_super office -c "INSERT INTO app.settings(key, value) VALUES ('whatsapp.access_token', 'x')" >/dev/null 2>&1; then
+  assert_eq "settings refuses secret-looking keys" "accepted" "refused"
+  psql_super office -c "DELETE FROM app.settings WHERE key='whatsapp.access_token'" >/dev/null
+else
+  assert_eq "settings refuses secret-looking keys" "refused" "refused"
+fi
+
+cleanup
+echo
+echo "Result: $passed passed, $failed failed."
+[[ $failed -eq 0 ]]

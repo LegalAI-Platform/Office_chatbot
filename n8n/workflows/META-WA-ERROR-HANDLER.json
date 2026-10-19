@@ -1,0 +1,195 @@
+{
+  "id": "WaErrHandler0001",
+  "name": "META-WA-ERROR-HANDLER",
+  "active": false,
+  "nodes": [
+    {
+      "id": "6122c8d0-18fe-5ace-95a2-c03412e46576",
+      "name": "Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "content": "## META-WA-ERROR-HANDLER\nError workflow for every TASK 02 workflow. Logs to app.workflow_errors (long digit sequences such as phone numbers are masked).\nTelegram: create credential ops-telegram, set `ops.telegram_chat_id` in app.settings, then ENABLE the two disabled nodes.",
+        "height": 220,
+        "width": 520
+      }
+    },
+    {
+      "id": "5680e4f2-acd5-5a9e-a6fd-8ec87167508d",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "fd632188-25dc-516e-9b43-adb0dab2f997",
+      "name": "Log error",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        480,
+        300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO app.workflow_errors (workflow_name, execution_id, node_name, message, details)\nVALUES ($1, $2, $3, $4, $5::jsonb)\nRETURNING id, workflow_name, node_name, message, execution_id,\n  (SELECT value FROM app.settings WHERE key = 'ops.telegram_chat_id') AS telegram_chat_id",
+        "options": {
+          "queryReplacement": "={{ [ $json.workflow.name, String($json.execution.id ?? ''), $json.execution.lastNodeExecuted || '', String($json.execution.error && $json.execution.error.message ?? '').replace(/\\d{6,}/g, d => d.slice(0, 4) + '****' + d.slice(-3)), JSON.stringify({ workflow_id: $json.workflow.id, mode: $json.execution.mode, url: $json.execution.url, error_name: $json.execution.error && $json.execution.error.name, description: String($json.execution.error && $json.execution.error.description ?? '').replace(/\\d{6,}/g, d => d.slice(0, 4) + '****' + d.slice(-3)) }) ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "CRED:office-postgres-app",
+          "name": "office-postgres-app"
+        }
+      }
+    },
+    {
+      "id": "89b14423-cfca-5b11-b364-70f2af66b810",
+      "name": "Telegram configured?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        720,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "e113693d-e6d1-54d4-8ec3-e1240bf9d3ee",
+              "leftValue": "={{ !!$json.telegram_chat_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      }
+    },
+    {
+      "id": "89d61221-3655-5e43-b418-3d21b8f3445d",
+      "name": "Telegram alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        960,
+        300
+      ],
+      "parameters": {
+        "chatId": "={{ $json.telegram_chat_id }}",
+        "text": "=⚠️ n8n error\nWorkflow: {{ $json.workflow_name }}\nNode: {{ $json.node_name }}\n{{ $json.message }}\nExecution: {{ $json.execution_id }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "CRED:ops-telegram",
+          "name": "ops-telegram"
+        }
+      },
+      "disabled": true
+    },
+    {
+      "id": "64142490-ded1-5776-aa30-4137bd015520",
+      "name": "Mark notified",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1200,
+        300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE app.workflow_errors SET notified = true WHERE id = $1::uuid",
+        "options": {
+          "queryReplacement": "={{ [ $('Log error').first().json.id ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "CRED:office-postgres-app",
+          "name": "office-postgres-app"
+        }
+      },
+      "disabled": true
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Log error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log error": {
+      "main": [
+        [
+          {
+            "node": "Telegram configured?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram configured?": {
+      "main": [
+        [
+          {
+            "node": "Telegram alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram alert": {
+      "main": [
+        [
+          {
+            "node": "Mark notified",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Cairo",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "pinData": {},
+  "tags": []
+}

@@ -1,0 +1,696 @@
+{
+  "id": "WaTestHarness001",
+  "name": "WA-TEST-HARNESS",
+  "active": false,
+  "nodes": [
+    {
+      "id": "ca2bff06-aab4-5246-ad56-9cb96a498293",
+      "name": "Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "content": "## WA-TEST-HARNESS (tests only, run with `n8n execute`)\nRuns fixtures through the real n8n wiring without Meta: PROCESS-EVENT, the 24h-window guard, the template guard and input validation. Uses dummy numbers 2010000000xx and deletes its rows at the end.",
+        "height": 220,
+        "width": 520
+      }
+    },
+    {
+      "id": "eb6c1a33-9549-510e-b024-56e82fb780ff",
+      "name": "Manual",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "a2b8f68b-1203-5d7f-ad32-d529cf4bcff7",
+      "name": "Clean before",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        480,
+        300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "DELETE FROM app.wa_outbound_messages WHERE idempotency_key LIKE 'harness:%';\nDELETE FROM app.wa_inbound_messages WHERE wamid LIKE 'wamid.HARNESS-%';\nDELETE FROM app.wa_webhook_events WHERE payload->>'harness' = 'true';\nDELETE FROM app.wa_contact_windows WHERE wa_id IN ('201000000011', '201000000012');\nSELECT 1 AS ok",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "CRED:office-postgres-app",
+          "name": "office-postgres-app"
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "009b47b1-1b27-5639-bedc-d9c8baffd204",
+      "name": "Fixture event",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        720,
+        300
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\"harness\": \"true\", \"messaging_product\": \"whatsapp\", \"field\": \"messages\", \"metadata\": {\"display_phone_number\": \"15550000000\", \"phone_number_id\": \"100000000000001\"}, \"contacts\": [{\"profile\": {\"name\": \"Harness\"}, \"wa_id\": \"201000000011\"}], \"messages\": [{\"from\": \"201000000011\", \"id\": \"wamid.HARNESS-1\", \"timestamp\": \"1760900000\", \"type\": \"text\", \"text\": {\"body\": \"harness\"}}]}",
+        "options": {}
+      }
+    },
+    {
+      "id": "10fbad28-4714-52f8-8bbb-5c43ecbfe178",
+      "name": "Process event",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.4,
+      "position": [
+        960,
+        300
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "WaProcEvent00001",
+          "mode": "id",
+          "cachedResultName": "META-WA-PROCESS-EVENT"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "940eed77-e8c6-5890-a344-aed3ae4e5ac1",
+      "name": "Same event again",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1200,
+        300
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify($('Fixture event').first().json) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "29fdb987-52be-5979-bf00-befc716128e1",
+      "name": "Process event again",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.4,
+      "position": [
+        1440,
+        300
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "WaProcEvent00001",
+          "mode": "id",
+          "cachedResultName": "META-WA-PROCESS-EVENT"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "3483736c-89d5-5457-ad64-550251099867",
+      "name": "Stale window",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1680,
+        300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO app.wa_contact_windows (wa_id, last_inbound_at) VALUES ('201000000012', now() - interval '25 hours')\nON CONFLICT (wa_id) DO UPDATE SET last_inbound_at = EXCLUDED.last_inbound_at RETURNING wa_id",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "CRED:office-postgres-app",
+          "name": "office-postgres-app"
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "f6a552e9-ff7d-506f-8bb5-959d584895e8",
+      "name": "Text after 25h",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1920,
+        300
+      ],
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "3c90df74-b658-561d-84bd-68bc0670cb51",
+              "name": "wa_id",
+              "value": "201000000012",
+              "type": "string"
+            },
+            {
+              "id": "4dd04b92-e02c-5c72-b3d5-8aa14bbf4bb6",
+              "name": "text",
+              "value": "harness",
+              "type": "string"
+            },
+            {
+              "id": "e2d5a40f-7345-59d3-bef6-8963a4ff5945",
+              "name": "idempotency_key",
+              "value": "harness:window",
+              "type": "string"
+            },
+            {
+              "id": "04e82339-6571-5a96-b54b-ea5aa8502768",
+              "name": "requested_by",
+              "value": "WA-TEST-HARNESS",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "75cb88d6-6439-589b-b6d7-091af9e51d22",
+      "name": "Send text (blocked)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.4,
+      "position": [
+        2160,
+        300
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "WaSendMsg0000001",
+          "mode": "id",
+          "cachedResultName": "META-WA-SEND-MESSAGE"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "8e375157-264d-53bc-8343-ba8b267b9f24",
+      "name": "Unapproved template",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        2400,
+        300
+      ],
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d49ab58d-2a8f-5a88-a791-65feec9b5323",
+              "name": "wa_id",
+              "value": "201000000012",
+              "type": "string"
+            },
+            {
+              "id": "86423b8c-b045-56d0-a9f2-75f5527a51aa",
+              "name": "template_name",
+              "value": "reminder_day_before",
+              "type": "string"
+            },
+            {
+              "id": "bb441dfb-7709-5068-a096-56ab0bdc78ac",
+              "name": "language",
+              "value": "ar",
+              "type": "string"
+            },
+            {
+              "id": "0d42c7af-89aa-5440-9fc5-4e4aad5bf5c1",
+              "name": "idempotency_key",
+              "value": "harness:template",
+              "type": "string"
+            },
+            {
+              "id": "a41c7620-9331-5f6e-8164-0d8d3f20f74b",
+              "name": "requested_by",
+              "value": "WA-TEST-HARNESS",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "80bc8a9d-a5fe-56f1-b082-afcc7591c0a1",
+      "name": "Send template (refused)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.4,
+      "position": [
+        2640,
+        300
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "WaSendTpl0000001",
+          "mode": "id",
+          "cachedResultName": "META-WA-SEND-TEMPLATE"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "2ce057ba-fd1d-5752-a154-4b1d863a5aa4",
+      "name": "Invalid input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        2880,
+        300
+      ],
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "de77068a-50b6-5bee-a25d-dee07760344c",
+              "name": "wa_id",
+              "value": "12ab",
+              "type": "string"
+            },
+            {
+              "id": "bf324439-018d-5f94-b2f1-c6692959ad3a",
+              "name": "text",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "02d10423-5a49-563d-9d1c-239ee7d715cc",
+              "name": "idempotency_key",
+              "value": "harness:invalid",
+              "type": "string"
+            },
+            {
+              "id": "d672eb6e-a086-5fb6-a31b-f89ff7b84ee2",
+              "name": "requested_by",
+              "value": "WA-TEST-HARNESS",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a9e77f2a-bdc9-5ec0-86b7-d500f9012c4c",
+      "name": "Send invalid",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.4,
+      "position": [
+        3120,
+        300
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "WaSendMsg0000001",
+          "mode": "id",
+          "cachedResultName": "META-WA-SEND-MESSAGE"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "b508f793-25e4-584e-b229-003df623aad0",
+      "name": "Database state",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        3360,
+        300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n (SELECT count(*) FROM app.wa_inbound_messages WHERE wamid = 'wamid.HARNESS-1')::int AS inbound_rows,\n (SELECT count(*) FROM app.wa_webhook_events WHERE payload->>'harness' = 'true')::int AS event_rows,\n (SELECT count(*) FROM app.wa_contact_windows WHERE wa_id = '201000000011')::int AS window_rows,\n (SELECT jsonb_object_agg(idempotency_key, jsonb_build_object('status', status, 'attempts', attempts))\n    FROM app.wa_outbound_messages WHERE idempotency_key LIKE 'harness:%') AS outbound",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "CRED:office-postgres-app",
+          "name": "office-postgres-app"
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "44c1e1ad-c6f6-577c-ac97-028eb8873de1",
+      "name": "Summary",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        3600,
+        300
+      ],
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "9bf25a09-3a6a-5c1d-bc92-d2404bcc6971",
+              "name": "first_process",
+              "value": "={{ $('Process event').first().json.result }}",
+              "type": "object"
+            },
+            {
+              "id": "8e0d503e-0865-52ea-a3b8-a1de09204017",
+              "name": "second_process",
+              "value": "={{ $('Process event again').first().json.result }}",
+              "type": "object"
+            },
+            {
+              "id": "64238e80-7a97-5124-b6f4-28a990984105",
+              "name": "send_text_after_25h",
+              "value": "={{ $('Send text (blocked)').first().json }}",
+              "type": "object"
+            },
+            {
+              "id": "f223c369-ac5c-5fc2-9ec2-d6fad61b09eb",
+              "name": "send_unapproved_template",
+              "value": "={{ $('Send template (refused)').first().json }}",
+              "type": "object"
+            },
+            {
+              "id": "99951c99-a149-5655-be33-5cd633fdc5dc",
+              "name": "send_invalid_input",
+              "value": "={{ $('Send invalid').first().json }}",
+              "type": "object"
+            },
+            {
+              "id": "39d1eee7-5d06-5363-8674-4cc8983c0d55",
+              "name": "database",
+              "value": "={{ $json }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "6a344942-c841-5223-9493-be9f9d37d326",
+      "name": "Clean after",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        3840,
+        300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "DELETE FROM app.wa_outbound_messages WHERE idempotency_key LIKE 'harness:%';\nDELETE FROM app.wa_inbound_messages WHERE wamid LIKE 'wamid.HARNESS-%';\nDELETE FROM app.wa_webhook_events WHERE payload->>'harness' = 'true';\nDELETE FROM app.wa_contact_windows WHERE wa_id IN ('201000000011', '201000000012');\nSELECT 1 AS cleaned",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "CRED:office-postgres-app",
+          "name": "office-postgres-app"
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "ed9aa0b2-f654-587e-aefb-12b25b80b53f",
+      "name": "Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        4080,
+        300
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify($('Summary').first().json) }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Manual": {
+      "main": [
+        [
+          {
+            "node": "Clean before",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean before": {
+      "main": [
+        [
+          {
+            "node": "Fixture event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fixture event": {
+      "main": [
+        [
+          {
+            "node": "Process event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process event": {
+      "main": [
+        [
+          {
+            "node": "Same event again",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Same event again": {
+      "main": [
+        [
+          {
+            "node": "Process event again",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process event again": {
+      "main": [
+        [
+          {
+            "node": "Stale window",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stale window": {
+      "main": [
+        [
+          {
+            "node": "Text after 25h",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Text after 25h": {
+      "main": [
+        [
+          {
+            "node": "Send text (blocked)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send text (blocked)": {
+      "main": [
+        [
+          {
+            "node": "Unapproved template",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Unapproved template": {
+      "main": [
+        [
+          {
+            "node": "Send template (refused)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send template (refused)": {
+      "main": [
+        [
+          {
+            "node": "Invalid input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Invalid input": {
+      "main": [
+        [
+          {
+            "node": "Send invalid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send invalid": {
+      "main": [
+        [
+          {
+            "node": "Database state",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Database state": {
+      "main": [
+        [
+          {
+            "node": "Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summary": {
+      "main": [
+        [
+          {
+            "node": "Clean after",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean after": {
+      "main": [
+        [
+          {
+            "node": "Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Cairo",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "WaErrHandler0001"
+  },
+  "pinData": {},
+  "tags": []
+}

@@ -1,6 +1,0 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-  <!-- Domain and application rules. Must not reference EF Core, ASP.NET Core or HTTP clients. -->
-  <PropertyGroup>
-    <RootNamespace>Office.Core</RootNamespace>
-  </PropertyGroup>
-</Project>

@@ -1,0 +1,182 @@
+{
+  "id": "WaEchoTest000001",
+  "name": "WA-ECHO-TEST",
+  "active": false,
+  "nodes": [
+    {
+      "id": "80d3c289-eef2-5e0d-83cc-a70ded24594e",
+      "name": "Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "content": "## WA-ECHO-TEST (test only)\nReplies 'تم استلام رسالتك (اختبار) ✅' to new text messages, only when `whatsapp.echo_test_enabled = true` and the sender is in `whatsapp.test_recipients`. Never replies twice (idempotency key echo:<wamid>). Keep it disabled outside tests.",
+        "height": 220,
+        "width": 520
+      }
+    },
+    {
+      "id": "dd3e0b13-d5b6-5cfe-a4d3-cb86987c1e8a",
+      "name": "Start",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {
+        "inputSource": "passthrough"
+      }
+    },
+    {
+      "id": "ef62a9c3-f539-5748-b757-1b090e05f06d",
+      "name": "Eligible messages",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        480,
+        300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH s AS (\n  SELECT max(value) FILTER (WHERE key = 'whatsapp.echo_test_enabled') AS enabled,\n         max(value) FILTER (WHERE key = 'whatsapp.test_recipients')   AS recipients\n  FROM app.settings)\nSELECT m.wamid, m.wa_id\nFROM app.wa_inbound_messages m, s\nWHERE s.enabled = 'true'\n  AND m.wa_id = ANY(string_to_array(replace(s.recipients, ' ', ''), ','))\n  AND m.message_type = 'text' AND NOT m.is_group\n  AND m.received_at > now() - interval '10 minutes'\n  AND NOT EXISTS (SELECT 1 FROM app.wa_outbound_messages o WHERE o.idempotency_key = 'echo:' || m.wamid)\nORDER BY m.received_at",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "CRED:office-postgres-app",
+          "name": "office-postgres-app"
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "a20f6ed4-86da-5311-8faf-c9c38b488594",
+      "name": "Build reply",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        720,
+        300
+      ],
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cf4e2788-4059-5a13-b84b-60b688d08a75",
+              "name": "wa_id",
+              "value": "={{ $json.wa_id }}",
+              "type": "string"
+            },
+            {
+              "id": "7e091c74-6368-54f6-82c3-694517d82ceb",
+              "name": "text",
+              "value": "تم استلام رسالتك (اختبار) ✅",
+              "type": "string"
+            },
+            {
+              "id": "9ec85c07-da56-5fdf-8ac1-b6a18977a412",
+              "name": "idempotency_key",
+              "value": "=echo:{{ $json.wamid }}",
+              "type": "string"
+            },
+            {
+              "id": "a9ee0834-9667-5c8b-8ae0-63324d333f5e",
+              "name": "requested_by",
+              "value": "WA-ECHO-TEST",
+              "type": "string"
+            },
+            {
+              "id": "a079b2fb-7f62-5862-a1e4-471ca7f45e6f",
+              "name": "context_wamid",
+              "value": "={{ $json.wamid }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "d5314c4c-dd24-5f1d-82ce-5becb149ee11",
+      "name": "Send reply",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.4,
+      "position": [
+        960,
+        300
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "WaSendMsg0000001",
+          "mode": "id",
+          "cachedResultName": "META-WA-SEND-MESSAGE"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Eligible messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Eligible messages": {
+      "main": [
+        [
+          {
+            "node": "Build reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build reply": {
+      "main": [
+        [
+          {
+            "node": "Send reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Cairo",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "WaErrHandler0001"
+  },
+  "pinData": {},
+  "tags": []
+}

@@ -1,0 +1,707 @@
+{
+  "id": "WaSendTpl0000001",
+  "name": "META-WA-SEND-TEMPLATE",
+  "active": false,
+  "nodes": [
+    {
+      "id": "b8133560-7ffa-5bc5-9755-d8a394f85ffb",
+      "name": "Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "content": "## META-WA-SEND-TEMPLATE\nInput: `wa_id`, `template_name`, optional `language` (default ar), optional `components`, `idempotency_key`, `requested_by`.\nOutput: same as META-WA-SEND-MESSAGE. Refuses templates that are not APPROVED in app.wa_templates.",
+        "height": 220,
+        "width": 520
+      }
+    },
+    {
+      "id": "72eb4272-98c0-5d9d-afa1-a911149732ea",
+      "name": "Start",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {
+        "inputSource": "passthrough"
+      }
+    },
+    {
+      "id": "b8dae653-7a07-5f5a-82f9-098c855d2bdb",
+      "name": "Valid input?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        480,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "d42ae212-4dc4-5d68-860a-6e47a15c08dc",
+              "leftValue": "={{ /^[0-9]{8,15}$/.test(String($json.wa_id || '')) && !!$json.template_name && !!$json.idempotency_key && !!$json.requested_by }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      }
+    },
+    {
+      "id": "142b5169-14a4-52aa-b4e1-9bb7c7ebbff4",
+      "name": "Invalid input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        720,
+        300
+      ],
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e8e30d01-a83c-5e8a-9ff0-cecc57859329",
+              "name": "ok",
+              "value": "={{ false }}",
+              "type": "boolean"
+            },
+            {
+              "id": "f39ef3d2-a648-5154-9c86-1112b77a35e7",
+              "name": "status",
+              "value": "invalid",
+              "type": "string"
+            },
+            {
+              "id": "5a540262-01e9-5fa2-9f63-307e8f7e4021",
+              "name": "error_code",
+              "value": "INVALID_INPUT",
+              "type": "string"
+            },
+            {
+              "id": "5ddd2c2b-ce41-58c5-831c-54a61f47b362",
+              "name": "error_message",
+              "value": "wa_id must be 8-15 digits; text/template, idempotency_key and requested_by are required",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "d4436fb0-65fa-53b3-904d-d3c3b1dd60bc",
+      "name": "Prepare",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        960,
+        300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT app.wa_outbound_prepare($1, $2, 'template', $3::jsonb, $4, $5, $6) AS r, $3::jsonb AS payload",
+        "options": {
+          "queryReplacement": "={{ [ $json.idempotency_key, $json.wa_id, JSON.stringify({ messaging_product: 'whatsapp', recipient_type: 'individual', to: $json.wa_id, type: 'template', template: { name: $json.template_name, language: { code: $json.language || 'ar' }, components: $json.components || [] } }), $json.requested_by, $json.template_name, $json.language || 'ar' ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "CRED:office-postgres-app",
+          "name": "office-postgres-app"
+        }
+      }
+    },
+    {
+      "id": "1ef4f076-1d3b-5c3a-8ceb-d63053ea4946",
+      "name": "Send now?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1200,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ce051d59-7cc7-5a75-a221-8227783f847f",
+              "leftValue": "={{ $json.r.action === 'send' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      }
+    },
+    {
+      "id": "ecc1376e-8a52-5a28-adf1-22c3948091d7",
+      "name": "Not sent",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1440,
+        300
+      ],
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "fbf0a365-fd39-5714-a616-2e8171909098",
+              "name": "ok",
+              "value": "={{ $json.r.action === 'duplicate' && ['sent', 'delivered', 'read'].includes($json.r.status) }}",
+              "type": "boolean"
+            },
+            {
+              "id": "2f4ed8e3-27b3-56ee-83f5-8208045103ca",
+              "name": "outbound_id",
+              "value": "={{ $json.r.outbound_id }}",
+              "type": "string"
+            },
+            {
+              "id": "e064f616-d44d-5854-878a-495285201fe1",
+              "name": "wamid",
+              "value": "={{ $json.r.wamid || null }}",
+              "type": "string"
+            },
+            {
+              "id": "214995d3-b0c9-5a20-b4ea-77503416197a",
+              "name": "status",
+              "value": "={{ $json.r.status }}",
+              "type": "string"
+            },
+            {
+              "id": "48eb52b2-847e-5201-9124-38ac1771b55c",
+              "name": "action",
+              "value": "={{ $json.r.action }}",
+              "type": "string"
+            },
+            {
+              "id": "5fbd58ae-29d5-5134-8bd7-ff343163242a",
+              "name": "error_code",
+              "value": "={{ $json.r.error_code || ($json.r.action === 'duplicate' ? 'DUPLICATE' : null) }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "4f9d1846-6cc8-5b1e-9ef0-4e338c8f8191",
+      "name": "Config request",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1680,
+        300
+      ],
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "352fc93f-4e16-544f-a82e-ca992985f884",
+              "name": "required",
+              "value": "whatsapp.phone_number_id|whatsapp.graph_api_version",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "7929044b-0584-5a18-acbb-d06868525907",
+      "name": "Get config",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.4,
+      "position": [
+        1920,
+        300
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "WaCfgGet00000001",
+          "mode": "id",
+          "cachedResultName": "CFG-GET"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "55b1031d-52e6-5de2-825f-7bdf9d9883e2",
+      "name": "Send to Meta",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2160,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/{{ $('Get config').first().json.cfg['whatsapp.graph_api_version'] }}/{{ $('Get config').first().json.cfg['whatsapp.phone_number_id'] }}/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Prepare').first().json.payload) }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CRED:meta-whatsapp-token",
+          "name": "meta-whatsapp-token"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "88c5c69f-89c9-56b6-b61b-2b16585aef0b",
+      "name": "Retry once?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2400,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "08ad2dcb-d47b-5685-b6d2-1a273f537ff4",
+              "leftValue": "={{ [429, 500, 502, 503, 504].includes($json.statusCode) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      }
+    },
+    {
+      "id": "44966094-70cc-5604-93b8-da3e19be1634",
+      "name": "Wait 3s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2640,
+        300
+      ],
+      "parameters": {
+        "amount": 3,
+        "unit": "seconds"
+      },
+      "webhookId": "0c1d47a0-b4f9-5b34-811f-946547d69a51"
+    },
+    {
+      "id": "fe29ad45-1abb-5d8c-8b38-c4482f449e3a",
+      "name": "Send to Meta (retry)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2880,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/{{ $('Get config').first().json.cfg['whatsapp.graph_api_version'] }}/{{ $('Get config').first().json.cfg['whatsapp.phone_number_id'] }}/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Prepare').first().json.payload) }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CRED:meta-whatsapp-token",
+          "name": "meta-whatsapp-token"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "6e4ca62b-d353-5691-9b2d-a277fe33a7f4",
+      "name": "Record result",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        3120,
+        300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT app.wa_outbound_result($1::uuid, $2::boolean, $3::jsonb, $4::jsonb) AS out",
+        "options": {
+          "queryReplacement": "={{ [ $('Prepare').first().json.r.outbound_id, ($json.statusCode >= 200 && $json.statusCode < 300), JSON.stringify($json.body ?? null), ($json.statusCode >= 200 && $json.statusCode < 300) ? 'null' : JSON.stringify($json.body ?? { message: ($json.error && $json.error.message) || 'no response from Meta' }) ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "CRED:office-postgres-app",
+          "name": "office-postgres-app"
+        }
+      }
+    },
+    {
+      "id": "ab08e678-7be0-5ac9-9e62-291192ae9851",
+      "name": "Token invalid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        3360,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "1b42a1bf-8595-546e-9ac2-4b958b82f16e",
+              "leftValue": "={{ $json.out.error_code === 'TOKEN_INVALID' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      }
+    },
+    {
+      "id": "8878a701-957c-59e4-9adc-8fc98306f593",
+      "name": "Stop: Meta token invalid",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        3600,
+        300
+      ],
+      "parameters": {
+        "errorMessage": "Meta rejected the access token (error 190). Rotate meta-whatsapp-token (docs/runbooks/whatsapp.md)."
+      }
+    },
+    {
+      "id": "6b246958-5b2d-53b1-ba45-28b447b7e52f",
+      "name": "Output",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        3840,
+        300
+      ],
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "86e45adc-4f58-57f9-8533-adfbff122199",
+              "name": "ok",
+              "value": "={{ $json.out.ok }}",
+              "type": "boolean"
+            },
+            {
+              "id": "54ccd0cc-d826-5475-b30a-d51be1edac04",
+              "name": "outbound_id",
+              "value": "={{ $json.out.outbound_id }}",
+              "type": "string"
+            },
+            {
+              "id": "f5e9956e-be2f-5ead-ac5f-26c0be79ece3",
+              "name": "wamid",
+              "value": "={{ $json.out.wamid || null }}",
+              "type": "string"
+            },
+            {
+              "id": "9866fe3e-9506-5008-846c-897f1c4c64da",
+              "name": "status",
+              "value": "={{ $json.out.status }}",
+              "type": "string"
+            },
+            {
+              "id": "2aac214e-0a23-56d4-bc82-6e7c3e81a357",
+              "name": "error_code",
+              "value": "={{ $json.out.error_code || null }}",
+              "type": "string"
+            },
+            {
+              "id": "ed934368-b22b-5fbe-85c3-9ce1681aa18e",
+              "name": "error_message",
+              "value": "={{ $json.out.error_message || null }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Config request": {
+      "main": [
+        [
+          {
+            "node": "Get config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Valid input?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valid input?": {
+      "main": [
+        [
+          {
+            "node": "Prepare",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Invalid input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare": {
+      "main": [
+        [
+          {
+            "node": "Send now?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send now?": {
+      "main": [
+        [
+          {
+            "node": "Config request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Not sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get config": {
+      "main": [
+        [
+          {
+            "node": "Send to Meta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send to Meta": {
+      "main": [
+        [
+          {
+            "node": "Retry once?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retry once?": {
+      "main": [
+        [
+          {
+            "node": "Wait 3s",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 3s": {
+      "main": [
+        [
+          {
+            "node": "Send to Meta (retry)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send to Meta (retry)": {
+      "main": [
+        [
+          {
+            "node": "Record result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record result": {
+      "main": [
+        [
+          {
+            "node": "Token invalid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Token invalid?": {
+      "main": [
+        [
+          {
+            "node": "Stop: Meta token invalid",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Cairo",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "WaErrHandler0001"
+  },
+  "pinData": {},
+  "tags": []
+}

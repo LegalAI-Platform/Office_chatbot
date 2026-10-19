@@ -1,7 +1,6 @@
-# Applies EF Core migrations and the Hangfire schema as office_migrator (Office.Cli).
-#   Usage: migrate.ps1 [up|status]
-param([ValidateSet('up', 'status')][string]$Command = 'up')
+# Runs dbmate migrations on the office database as office_migrator.
+#   Usage: migrate.ps1 up|down|status
+param([ValidateSet('up', 'down', 'status')][string]$Command = 'status')
 . (Join-Path $PSScriptRoot '_common.ps1')
 Assert-EnvFile
-if ($Command -eq 'up') { Invoke-Compose run --rm cli migrate }
-else { Invoke-Compose run --rm cli migrations-list }
+Invoke-Compose run --rm migrate $Command

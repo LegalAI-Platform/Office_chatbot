@@ -1,11 +1,11 @@
-# Office WhatsApp System (Hazem) - Test/Staging stack
-# Decisions: docs/decisions/DECISIONS-v1.1.md
+# Office WhatsApp System (Hazem) - Test/Staging stack (TASK 01)
+# Decisions: docs/decisions/DECISIONS-v1.0.md
 #
 # Core services start with `docker compose up -d`.
-# Optional profiles: tunnel (Cloudflare Quick Tunnel), tunnel-named (Named Tunnel),
-#                    tools (one-off commands: tools, cli).
-# Every port is bound to 127.0.0.1 only. The API is the only service ever exposed
-# to the internet, and only through a tunnel profile.
+# Optional profiles: panel (Appsmith), tunnel (Cloudflare Quick Tunnel),
+#                    tunnel-named (Cloudflare Named Tunnel), tools (one-off commands).
+# Every port is bound to 127.0.0.1 only. n8n is the only service ever exposed
+# to the internet, and only through the tunnel profile.
 
 name: ${COMPOSE_PROJECT_NAME:-office}
 
@@ -21,26 +21,6 @@ x-tools: &tools
     TZ: Africa/Cairo
   networks: [office_net]
   restart: "no"
-
-x-backend: &backend
-  build:
-    context: ./backend
-  image: office-backend:local
-  networks: [office_net]
-
-x-whatsapp-env: &whatsapp-env
-  WhatsApp__Enabled: ${WhatsApp__Enabled:-false}
-  WhatsApp__AppId: ${WhatsApp__AppId:-}
-  WhatsApp__WabaId: ${WhatsApp__WabaId:-}
-  WhatsApp__PhoneNumberId: ${WhatsApp__PhoneNumberId:-}
-  WhatsApp__GraphApiVersion: ${WhatsApp__GraphApiVersion:-v26.0}
-  WhatsApp__AppSecret: ${WhatsApp__AppSecret:-}
-  WhatsApp__AccessToken: ${WhatsApp__AccessToken:-}
-  WhatsApp__VerifyToken: ${WhatsApp__VerifyToken:-}
-  WhatsApp__TestRecipients: ${WhatsApp__TestRecipients:-}
-  WhatsApp__EchoTest__Enabled: ${WhatsApp__EchoTest__Enabled:-false}
-  Telegram__BotToken: ${Telegram__BotToken:-}
-  Telegram__ChatId: ${Telegram__ChatId:-}
 
 services:
   # Refuses to let the stack start while .env still has CHANGE_ME values,
@@ -68,6 +48,7 @@ services:
       POSTGRES_DB: postgres
       POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
       # Consumed only by infra/postgres/init/01-create-databases-and-roles.sh
+      N8N_DB_PASSWORD: ${N8N_DB_PASSWORD}
       OFFICE_MIGRATOR_PASSWORD: ${OFFICE_MIGRATOR_PASSWORD}
       OFFICE_APP_PASSWORD: ${OFFICE_APP_PASSWORD}
       OFFICE_READONLY_PASSWORD: ${OFFICE_READONLY_PASSWORD}
@@ -95,6 +76,7 @@ services:
     command: ["redis-server", "/usr/local/etc/redis/redis.conf", "--requirepass", "${REDIS_PASSWORD}"]
     environment:
       TZ: Africa/Cairo
+      # Lets redis-cli inside the container authenticate without -a on the command line.
       REDISCLI_AUTH: ${REDIS_PASSWORD}
     volumes:
       - redis_data:/data
@@ -108,8 +90,9 @@ services:
       retries: 10
     networks: [office_net]
 
-  # S3-compatible object storage for the test environment (MinIO publishes no
-  # images anymore). Production uses Cloudflare R2.
+  # S3-compatible object storage for the test environment.
+  # Replaces MinIO (T-06): MinIO no longer publishes container images.
+  # Production stays on Cloudflare R2.
   garage:
     image: dxflrs/garage:v2.4.1
     restart: unless-stopped
@@ -125,7 +108,7 @@ services:
       - garage_meta:/var/lib/garage/meta
       - garage_data:/var/lib/garage/data
     ports:
-      - "127.0.0.1:3900:3900"
+      - "127.0.0.1:3900:3900"   # S3 API
     healthcheck:
       test: ["CMD", "/garage", "status"]
       interval: 10s
@@ -134,6 +117,7 @@ services:
       start_period: 10s
     networks: [office_net]
 
+  # One-shot: cluster layout, buckets, access keys, policies, lifecycle. Idempotent.
   storage-init:
     <<: *tools
     command: ["storage-init"]
@@ -141,73 +125,84 @@ services:
       garage:
         condition: service_healthy
 
-  # One-shot: EF Core migrations + Hangfire schema as office_migrator (T-19).
-  # Runs on every `up`; a no-op when the database is current. The API waits for it.
-  migrator:
-    <<: *backend
-    restart: "no"
-    entrypoint: ["dotnet", "/app/cli/Office.Cli.dll", "migrate"]
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      TZ: Africa/Cairo
-      DOTNET_ENVIRONMENT: ${ENVIRONMENT}
-      ConnectionStrings__Office: Host=postgres;Port=5432;Database=office;Username=office_app;Password=${OFFICE_APP_PASSWORD}
-      ConnectionStrings__OfficeMigrator: Host=postgres;Port=5432;Database=office;Username=office_migrator;Password=${OFFICE_MIGRATOR_PASSWORD}
-
-  # ASP.NET Core backend (T-03). Runs as office_app (no DDL); never migrates itself.
-  api:
-    <<: *backend
+  n8n:
+    image: n8nio/n8n:2.43.8
     restart: unless-stopped
     depends_on:
-      migrator:
-        condition: service_completed_successfully
-      storage-init:
-        condition: service_completed_successfully
-      redis:
-        condition: service_healthy
-    environment:
-      <<: *whatsapp-env
-      TZ: Africa/Cairo
-      ASPNETCORE_ENVIRONMENT: ${ENVIRONMENT}
-      ConnectionStrings__Office: Host=postgres;Port=5432;Database=office;Username=office_app;Password=${OFFICE_APP_PASSWORD}
-      ConnectionStrings__Redis: redis:6379,password=${REDIS_PASSWORD}
-    ports:
-      - "127.0.0.1:8081:8080"
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health/ready | grep -q Healthy"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 20s
-
-  # Operational commands (Office.Cli):  docker compose run --rm cli <command>
-  cli:
-    <<: *backend
-    profiles: ["tools"]
-    restart: "no"
-    entrypoint: ["dotnet", "/app/cli/Office.Cli.dll"]
-    depends_on:
       postgres:
         condition: service_healthy
+      storage-init:
+        condition: service_completed_successfully
     environment:
-      <<: *whatsapp-env
       TZ: Africa/Cairo
-      DOTNET_ENVIRONMENT: ${ENVIRONMENT}
-      ConnectionStrings__Office: Host=postgres;Port=5432;Database=office;Username=office_app;Password=${OFFICE_APP_PASSWORD}
-      ConnectionStrings__OfficeMigrator: Host=postgres;Port=5432;Database=office;Username=office_migrator;Password=${OFFICE_MIGRATOR_PASSWORD}
+      GENERIC_TIMEZONE: Africa/Cairo
+      # Database: PostgreSQL only, never SQLite.
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: n8n
+      DB_POSTGRESDB_USER: n8n_user
+      DB_POSTGRESDB_PASSWORD: ${N8N_DB_PASSWORD}
+      # If this key changes or is lost, every credential stored in n8n becomes unreadable.
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+      N8N_HOST: ${N8N_HOST}
+      N8N_PORT: 5678
+      N8N_PROTOCOL: ${N8N_PROTOCOL}
+      # n8n 2.x name (WEBHOOK_URL is deprecated); .env keeps the variable WEBHOOK_URL.
+      N8N_WEBHOOK_URL: ${WEBHOOK_URL}
+      N8N_PROXY_HOPS: ${N8N_PROXY_HOPS}
+      N8N_SECURE_COOKIE: ${N8N_SECURE_COOKIE}
+      # Privacy / telemetry
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_VERSION_NOTIFICATIONS_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+      # Secrets live in n8n Credentials only; Code nodes cannot read env vars.
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "true"
+      # Execution data pruning (hours)
+      EXECUTIONS_DATA_PRUNE: "true"
+      EXECUTIONS_DATA_MAX_AGE: ${EXECUTIONS_DATA_MAX_AGE}
+    volumes:
+      - n8n_data:/home/node/.n8n
+      # Workflow JSON, templates and import/export scripts (read-only).
+      - ./n8n:/opt/office/n8n:ro
+    ports:
+      - "127.0.0.1:5678:5678"
+    healthcheck:
+      # /healthz/readiness answers 503 until the database is connected and n8n's own
+      # migrations are committed (/healthz alone says "ok" too early on a fresh install).
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5678/healthz/readiness | grep -q ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 120s
+    networks: [office_net]
 
-  # Cloudflare Quick Tunnel: random https://*.trycloudflare.com URL that changes on
-  # every start. Forwards to the API only. Use scripts/*/tunnel-refresh.
+  appsmith:
+    image: appsmith/appsmith-ce:v2.4.3
+    profiles: ["panel"]
+    restart: unless-stopped
+    depends_on:
+      preflight:
+        condition: service_completed_successfully
+    environment:
+      TZ: Africa/Cairo
+      APPSMITH_DISABLE_TELEMETRY: "true"
+    volumes:
+      - appsmith_data:/appsmith-stacks
+    ports:
+      - "127.0.0.1:8080:80"
+    networks: [office_net]
+
+  # Cloudflare Quick Tunnel: no account needed, random https://*.trycloudflare.com
+  # URL that changes on every start. Forwards to n8n only.
   tunnel:
     image: cloudflare/cloudflared:2026.9.3
     profiles: ["tunnel"]
     restart: unless-stopped
     depends_on:
-      api:
+      n8n:
         condition: service_healthy
-    command: ["tunnel", "--no-autoupdate", "--metrics", "0.0.0.0:2000", "--url", "http://api:8080"]
+    command: ["tunnel", "--no-autoupdate", "--metrics", "0.0.0.0:2000", "--url", "http://n8n:5678"]
     healthcheck:
       test: ["CMD", "cloudflared", "tunnel", "--metrics", "127.0.0.1:2000", "ready"]
       interval: 15s
@@ -216,14 +211,14 @@ services:
       start_period: 15s
     networks: [office_net]
 
-  # Cloudflare Named Tunnel (stable hostname, needs a domain). Public hostname
-  # -> http://api:8080 is configured in the Cloudflare dashboard.
+  # Cloudflare Named Tunnel: stable hostname. Configure the public hostname
+  # -> http://n8n:5678 in the Cloudflare dashboard and set CLOUDFLARE_TUNNEL_TOKEN.
   tunnel-named:
     image: cloudflare/cloudflared:2026.9.3
     profiles: ["tunnel-named"]
     restart: unless-stopped
     depends_on:
-      api:
+      n8n:
         condition: service_healthy
     command: ["tunnel", "--no-autoupdate", "--metrics", "0.0.0.0:2000", "run"]
     environment:
@@ -241,6 +236,23 @@ services:
   tools:
     <<: *tools
     profiles: ["tools"]
+    volumes:
+      - ./n8n/fixtures:/fixtures:ro
+
+  # SQL migrations for the office database (connects as office_migrator only).
+  #   docker compose run --rm migrate up|down|status
+  migrate:
+    image: amacneil/dbmate:2.36.0
+    profiles: ["tools"]
+    restart: "no"
+    environment:
+      DATABASE_URL: postgres://office_migrator:${OFFICE_MIGRATOR_PASSWORD}@postgres:5432/office?sslmode=disable
+      DBMATE_MIGRATIONS_DIR: /db/migrations
+      DBMATE_NO_DUMP_SCHEMA: "true"
+      DBMATE_WAIT: "true"
+    volumes:
+      - ./database/migrations:/db/migrations:ro
+    networks: [office_net]
 
 networks:
   office_net:
@@ -251,3 +263,5 @@ volumes:
   redis_data:
   garage_meta:
   garage_data:
+  n8n_data:
+  appsmith_data:

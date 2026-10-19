@@ -1,0 +1,147 @@
+{
+  "id": "WaInbound0000001",
+  "name": "META-WA-INBOUND",
+  "active": false,
+  "nodes": [
+    {
+      "id": "97299f5f-5b5d-5cc0-826b-125f70a7be3c",
+      "name": "Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "content": "## META-WA-INBOUND\nWhatsApp Trigger: verifies X-Hub-Signature-256 with the App Secret (credential meta-whatsapp-trigger), answers Meta's verification, and registers the webhook subscription on activation. Kept thin: every event goes to META-WA-PROCESS-EVENT.\nOnly ONE trigger per Meta App. After the tunnel URL changes run scripts/*/tunnel-refresh.",
+        "height": 220,
+        "width": 520
+      }
+    },
+    {
+      "id": "1f9ff900-b947-5d7b-acee-d6afa0114998",
+      "name": "WhatsApp Trigger",
+      "type": "n8n-nodes-base.whatsAppTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {
+        "updates": [
+          "messages",
+          "message_template_status_update"
+        ],
+        "options": {
+          "messageStatusUpdates": [
+            "all"
+          ]
+        }
+      },
+      "credentials": {
+        "whatsAppTriggerApi": {
+          "id": "CRED:meta-whatsapp-trigger",
+          "name": "meta-whatsapp-trigger"
+        }
+      },
+      "webhookId": "3c1f0b6e-6a52-4f0e-9a51-0e0c0a5ea001"
+    },
+    {
+      "id": "c28f8bea-3de4-54a2-83fb-f57348602700",
+      "name": "Process events",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.4,
+      "position": [
+        480,
+        300
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "WaProcEvent00001",
+          "mode": "id",
+          "cachedResultName": "META-WA-PROCESS-EVENT"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "2cfbe279-3b76-5642-90f6-d26e4ceb2208",
+      "name": "Echo test",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.4,
+      "position": [
+        720,
+        300
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "WaEchoTest000001",
+          "mode": "id",
+          "cachedResultName": "WA-ECHO-TEST"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    }
+  ],
+  "connections": {
+    "WhatsApp Trigger": {
+      "main": [
+        [
+          {
+            "node": "Process events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process events": {
+      "main": [
+        [
+          {
+            "node": "Echo test",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Cairo",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "WaErrHandler0001"
+  },
+  "pinData": {},
+  "tags": []
+}

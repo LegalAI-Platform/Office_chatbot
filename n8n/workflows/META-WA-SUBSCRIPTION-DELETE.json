@@ -1,0 +1,220 @@
+{
+  "id": "WaSubDelete00001",
+  "name": "META-WA-SUBSCRIPTION-DELETE",
+  "active": false,
+  "nodes": [
+    {
+      "id": "0cd53179-23ea-55ff-b291-426431b3b1ad",
+      "name": "Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "content": "## META-WA-SUBSCRIPTION-DELETE\nDeletes the App's whatsapp_business_account webhook subscription at Meta. tunnel-refresh runs it before restarting n8n with a new tunnel URL; on start-up the WhatsApp Trigger registers the new URL.",
+        "height": 220,
+        "width": 520
+      }
+    },
+    {
+      "id": "f08fbc72-9bb1-5eaf-80d9-e9414473bf87",
+      "name": "Manual",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "3d9cc1ad-3459-5ae8-9e35-a64ad79c141b",
+      "name": "Config request",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        480,
+        300
+      ],
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ef8b7a20-614a-5bd3-84a2-c0cde17365ff",
+              "name": "required",
+              "value": "whatsapp.app_id|whatsapp.graph_api_version",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "2f49a2cc-3f1d-5aa6-963d-fe221511103e",
+      "name": "Get config",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.4,
+      "position": [
+        720,
+        300
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "WaCfgGet00000001",
+          "mode": "id",
+          "cachedResultName": "CFG-GET"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "8a9fdbda-75b8-5bd0-b6bc-8f2f4ee2ff31",
+      "name": "Delete subscription",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        960,
+        300
+      ],
+      "parameters": {
+        "method": "DELETE",
+        "url": "=https://graph.facebook.com/{{ $('Get config').first().json.cfg['whatsapp.graph_api_version'] }}/{{ $('Get config').first().json.cfg['whatsapp.app_id'] }}/subscriptions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "object",
+              "value": "whatsapp_business_account"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "httpQueryAuth": {
+          "id": "CRED:meta-app-token",
+          "name": "meta-app-token"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "923516c2-b2ab-5455-823f-c93e3f3a94d1",
+      "name": "Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1200,
+        300
+      ],
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "aeaad575-6296-5d2f-bba7-d89ba40233ce",
+              "name": "http_status",
+              "value": "={{ $json.statusCode }}",
+              "type": "number"
+            },
+            {
+              "id": "3ecd67d7-5a8f-5316-a1e0-a9a642d79b05",
+              "name": "body",
+              "value": "={{ $json.body }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Config request": {
+      "main": [
+        [
+          {
+            "node": "Get config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual": {
+      "main": [
+        [
+          {
+            "node": "Config request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get config": {
+      "main": [
+        [
+          {
+            "node": "Delete subscription",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete subscription": {
+      "main": [
+        [
+          {
+            "node": "Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Cairo",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "WaErrHandler0001"
+  },
+  "pinData": {},
+  "tags": []
+}

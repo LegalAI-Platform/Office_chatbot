@@ -5,7 +5,7 @@ require_env_file
 
 failed=0
 echo "== Container health"
-for svc in postgres redis garage api; do
+for svc in postgres redis garage n8n; do
   health="$(docker compose ps --format '{{.Health}}' "$svc" 2>/dev/null || true)"
   if [[ "$health" == "healthy" ]]; then
     echo "PASS  $svc is healthy"

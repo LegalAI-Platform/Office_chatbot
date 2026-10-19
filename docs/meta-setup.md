@@ -4,9 +4,7 @@
 
 **قاعدتين ثابتين:**
 - **القيم اللي مش secret** (الأرقام والـ IDs) ابعتها في الشات، وهي متعلّمة في الدليل بـ 📤.
-- **الـ secrets** (App Secret والـ Token) **ما تتبعتش في الشات خالص**. بتكتبها بنفسك في ملف `.env` على جهازك (الجزء 3)، وهي متعلّمة بـ 🔒.
-
-> **اتغير إيه عن النسخة اللي فاتت؟** مفيش n8n خلاص (DECISIONS v1.1). الـ secrets بتروح في `.env` بدل n8n Credentials، والـ backend هو اللي بيسجّل الـ webhook عند Meta أوتوماتيك. **الجزء 1 و2 زي ما هم بالظبط**، فلو كنت خلّصتهم كمّل من الجزء 3.
+- **الـ secrets** (App Secret والـ Token) **ما تتبعتش في الشات خالص**. بتدخلها بنفسك في n8n، وهي متعلّمة بـ 🔒.
 
 > أسماء الأزرار في Meta بتتغير من وقت للتاني. لو لقيت اسم مختلف شوية، دوّر على أقرب اسم ليه.
 
@@ -50,7 +48,7 @@
 | القيمة | مثال للشكل |
 |---|---|
 | 📤 **App ID** | `1234567890123456` |
-| 🔒 **App Secret** (دوس **Show**) | **ما تبعتهوش.** هتحطه في `.env` في الجزء 3 |
+| 🔒 **App Secret** (دوس **Show**) | **ما تبعتهوش.** هتحطه في n8n في الجزء 3 |
 
 > ✅ **علامة النجاح:** في **API Setup** دوس **Send message**. لو رسالة `hello_world` وصلتلك على واتساب، الجزء ده تمام.
 
@@ -63,17 +61,16 @@
 ### 2.1 اعمل System User
 1. افتح https://business.facebook.com/settings (Business Settings).
 2. **Users ← System users ← Add**.
-3. الاسم: `office-backend`. الدور: **Admin**.
-   (لو كنت عملته قبل كده باسم `office-n8n`، سيبه زي ما هو، مفيش مشكلة.)
+3. الاسم: `office-n8n`. الدور: **Admin**.
 
 ### 2.2 اديله صلاحيات
-1. اختار الـ System User ← **Assign assets** (أو **Add assets**).
+1. اختار `office-n8n` ← **Assign assets** (أو **Add assets**).
 2. **Apps** ← `Office WhatsApp Test` ← **Full control** (أو **Manage app**).
 3. **WhatsApp accounts** ← الحساب التجريبي ← **Full control**.
 4. **Save**.
 
 ### 2.3 اعمل الـ Token
-1. وانت على الـ System User دوس **Generate new token**.
+1. وانت على `office-n8n` دوس **Generate new token**.
 2. الـ App: `Office WhatsApp Test`.
 3. **Token expiration: Never**.
 4. الصلاحيات (Permissions):
@@ -84,48 +81,41 @@
 
 ---
 
-## الجزء 3: كتابة القيم في `.env` (🔒 إنت بس)
+## الجزء 3: إدخال الـ secrets في n8n (🔒 إنت بس)
 
-`.env` موجود في أول فولدر المشروع (`WHAT\.env`)، وعليه `.gitignore` فمش بيدخل git أبدًا.
+افتح http://127.0.0.1:5678 ← القائمة الشمال ← **Credentials** (أو **Overview ← Credentials**) ← **Create credential**.
 
-> ✅ **الـ backend جاهز.** الأسطر دي موجودة فعلًا في آخر `.env` وقيمها فاضية، فاملاها بس.
+### 3.1 `meta-whatsapp-trigger`
+- النوع: ابحث عن **WhatsApp OAuth API** (ده الـ credential بتاع WhatsApp Trigger).
+- **Client ID** = 📤 App ID
+- **Client Secret** = 🔒 App Secret
+- **اسم الـ credential لازم يبقى بالظبط:** `meta-whatsapp-trigger`
+- **Save**.
 
-### 3.1 افتح الملف
-- من PowerShell، وانت في فولدر المشروع:
-  ```powershell
-  notepad .env
-  ```
-- **قواعد الكتابة:** `الاسم=القيمة` في سطر واحد، من غير مسافات حوالين `=`، ومن غير علامات تنصيص.
+### 3.2 `meta-whatsapp-token`
+- النوع: **Header Auth**.
+- **Name** = `Authorization`
+- **Value** = `Bearer ` وبعدها الـ token. لازم كلمة `Bearer` ومسافة واحدة قبل الـ token.
+- **اسم الـ credential لازم يبقى بالظبط:** `meta-whatsapp-token`
+- **Save**.
 
-### 3.2 الـ Verify Token
-ده كلمة سر بتتأكد بيها Meta إن الـ webhook بتاعنا. **اتولّد خلاص** واتكتب في `.env` في سطر `WhatsApp__VerifyToken=`، فسيبه زي ما هو وما تغيّروش.
+### 3.3 `meta-app-token`
+الـ credential ده بيستخدمه `tunnel-refresh` عشان يمسح الاشتراك القديم عند Meta لما رابط الـ tunnel يتغير.
+- النوع: **Query Auth**.
+- **Name** = `access_token`
+- **Value** = 📤 App ID، وبعده علامة `|`، وبعدها 🔒 App Secret، من غير مسافات.
+  الشكل: `1234567890123456|abcdef0123456789...`
+- **اسم الـ credential لازم يبقى بالظبط:** `meta-app-token`
+- **Save**.
 
-### 3.3 القيم المطلوبة
-```env
-# --- WhatsApp (Meta Cloud API) ---
-WhatsApp__Enabled=true
-WhatsApp__AppId=📤 App ID
-WhatsApp__WabaId=📤 WhatsApp Business Account ID
-WhatsApp__PhoneNumberId=📤 Phone number ID
-WhatsApp__TestRecipients=📤 رقمك من غير + ومن غير مسافات، زي 2010xxxxxxxx
-WhatsApp__AppSecret=🔒 App Secret
-WhatsApp__AccessToken=🔒 الـ token الدائم من الجزء 2.3 (من غير كلمة Bearer)
-WhatsApp__VerifyToken=(موجود خلاص، ما تغيّروش)
-```
-- لو ضفت أكتر من رقم كمستقبل: `WhatsApp__TestRecipients=2010xxxxxxxx,2011xxxxxxxx`.
-- احفظ الملف واقفله.
-
-> **ما تحتاجش تدخل على Meta وتكتب الـ Callback URL بإيدك.** أمر `tunnel-refresh` بيسجّل الـ webhook عند Meta أوتوماتيك بالقيم دي، وبيحدّثه كل ما رابط الـ tunnel يتغير.
+> لو n8n عرض **Test** أو **Retry** وطلع خطأ، ما تقلقش. الـ agent هيتأكد منهم بعدين.
 
 ### 3.4 (اختياري) Telegram للتنبيهات
 لو عاوز تنبيه على Telegram لما حاجة تفشل:
 1. على Telegram كلّم **@BotFather** ← `/newbot` ← انسخ الـ token 🔒.
 2. ابعت أي رسالة للبوت الجديد من حسابك.
-3. ضيف في `.env`:
-   ```env
-   Telegram__BotToken=🔒 token البوت
-   ```
-4. 📤 قول في الشات إنك عملته، وأنا هجيب الـ chat id وأضيفه.
+3. في n8n اعمل credential من نوع **Telegram API**، وحط فيه الـ token، وسمّيه `ops-telegram`.
+4. 📤 قول في الشات إنك عملته، والـ agent هيجيب الـ chat id.
 
 ---
 
@@ -175,8 +165,9 @@ WhatsApp__VerifyToken=(موجود خلاص، ما تغيّروش)
 - [ ] 1.4 📤: App ID، وWABA ID، وPhone number ID، ورقم الاختبار، ورقمي.
 - [ ] 1.4 ✅: رسالة `hello_world` وصلتني.
 - [ ] 2: System User اتعمل، والـ token الدائم اتعمل.
-- [ ] 3.3: كل أسطر `WhatsApp__*` اتكتبت في `.env`، ومنها `WhatsApp__Enabled=true`.
-- [ ] بعدها شغّل `up` ثم `tunnel-refresh`، وقولّي، وأنا أكمّل الاختبارات الحقيقية مع Meta.
-- [ ] 3.4 (اختياري): `Telegram__BotToken` اتكتب في `.env`.
+- [ ] 3.1: credential `meta-whatsapp-trigger` اتعمل في n8n.
+- [ ] 3.2: credential `meta-whatsapp-token` اتعمل في n8n.
+- [ ] 3.3: credential `meta-app-token` اتعمل في n8n.
+- [ ] 3.4 (اختياري): `ops-telegram` اتعمل.
 - [ ] 4.1: Business Verification بدأ. الحالة: ________
 - [ ] 5: ⛔ لسه. رقم المكتب ما اتلمسش.
