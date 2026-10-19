@@ -1,0 +1,88 @@
+#!/bin/bash
+# Restores a backup into a NEW database and verifies it against the source.
+# It never overwrites the live office or n8n databases.
+#
+#   restore list [office|n8n]
+#   restore <office|n8n> <latest|FILE_NAME> [TARGET_DB] [--drop-after-verify]
+#
+# TARGET_DB defaults to <db>_restore_<YYYYmmdd_HHMMSS>.
+set -euo pipefail
+source /usr/local/bin/_lib
+
+usage() { sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
+
+[[ $# -ge 1 ]] || usage
+if [[ "$1" == "list" ]]; then
+  for db in ${2:-office n8n}; do
+    echo "== $db"
+    s3_as backup s3 ls "s3://$BUCKET_BACKUPS/postgres/$db/" | sort
+  done
+  exit 0
+fi
+
+drop_after=false
+args=()
+for a in "$@"; do
+  if [[ "$a" == "--drop-after-verify" ]]; then drop_after=true; else args+=("$a"); fi
+done
+[[ ${#args[@]} -ge 2 ]] || usage
+db="${args[0]}"; name="${args[1]}"
+target="${args[2]:-${db}_restore_$(date '+%Y%m%d_%H%M%S')}"
+
+[[ "$db" == "office" || "$db" == "n8n" ]] || die "database must be office or n8n"
+[[ "$target" =~ ^[a-z0-9_]+$ ]] || die "target database name may only contain a-z, 0-9 and _"
+case "$target" in office|n8n|postgres|template0|template1) die "refusing to restore over '$target'" ;; esac
+
+if [[ "$name" == "latest" ]]; then
+  name="$(s3_as backup s3 ls "s3://$BUCKET_BACKUPS/postgres/$db/" | awk '{print $4}' | sort | tail -1)"
+  [[ -n "$name" ]] || die "no backups found for $db"
+fi
+
+exists="$(psql_super postgres -c "SELECT count(*) FROM pg_database WHERE datname = '$target'")"
+[[ "$exists" == "0" ]] || die "database $target already exists"
+
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+
+log "Downloading $name ..."
+s3_as backup s3 cp --only-show-errors "s3://$BUCKET_BACKUPS/postgres/$db/$name" "$work/$name"
+
+log "Creating database $target ..."
+psql_super postgres -c "CREATE DATABASE \"$target\""
+if $drop_after; then
+  # Also clean up when restore or verification fails half-way.
+  trap 'psql_super postgres -c "DROP DATABASE IF EXISTS \"$target\"" >/dev/null 2>&1 || true; rm -rf "$work"' EXIT
+fi
+psql_super postgres -c "REVOKE ALL ON DATABASE \"$target\" FROM PUBLIC"
+
+log "Restoring into $target ..."
+PGPASSWORD="$POSTGRES_SUPERUSER_PASSWORD" pg_restore -h postgres -U "$POSTGRES_SUPERUSER" \
+  -d "$target" --no-password --exit-on-error "$work/$name"
+
+# Verify: exact row count of every table, source vs restored.
+count_sql="SELECT format('SELECT %L || ''|'' || count(*) FROM %I.%I;', n.nspname || '.' || c.relname, n.nspname, c.relname)
+           FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+           WHERE c.relkind = 'r' AND n.nspname NOT IN ('pg_catalog','information_schema')
+           ORDER BY 1"
+counts() { psql_super "$1" -c "$count_sql" | psql_super "$1" | sort; }
+counts "$db"     > "$work/source.txt"
+counts "$target" > "$work/target.txt"
+
+tables="$(wc -l < "$work/target.txt" | tr -d ' ')"
+if diff -q "$work/source.txt" "$work/target.txt" >/dev/null; then
+  echo "VERIFY OK: $tables tables, row counts identical between $db and $target."
+  result=0
+else
+  echo "VERIFY MISMATCH between $db and $target (the source may have changed since the backup):"
+  diff "$work/source.txt" "$work/target.txt" || true
+  result=2
+fi
+
+if $drop_after; then
+  psql_super postgres -c "DROP DATABASE \"$target\""
+  trap 'rm -rf "$work"' EXIT
+  log "Dropped $target."
+else
+  log "Restored database kept: $target"
+fi
+exit $result

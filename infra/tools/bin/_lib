@@ -1,0 +1,54 @@
+#!/bin/bash
+# Shared helpers for the tools image. Sourced, not executed.
+
+GARAGE_ADMIN_URL="${GARAGE_ADMIN_URL:-http://garage:3903}"
+S3_ENDPOINT="${S3_ENDPOINT:-http://garage:3900}"
+
+BUCKET_MEDIA="office-media"
+BUCKET_SENSITIVE="office-sensitive"
+BUCKET_BACKUPS="office-backups"
+
+log() { echo "[$(date '+%H:%M:%S')] $*" >&2; }
+die() { echo "ERROR: $*" >&2; exit 1; }
+
+# garage_api METHOD PATH [JSON_BODY] -> prints body, returns 0 on 2xx, 1 otherwise.
+# The HTTP status is left in $GARAGE_HTTP_STATUS.
+garage_api() {
+  local method="$1" path="$2" body="${3:-}" out
+  out="$(mktemp)"
+  if [[ -n "$body" ]]; then
+    GARAGE_HTTP_STATUS="$(curl -sS -o "$out" -w '%{http_code}' -X "$method" \
+      -H "Authorization: Bearer ${GARAGE_ADMIN_TOKEN}" -H 'Content-Type: application/json' \
+      --data "$body" "${GARAGE_ADMIN_URL}${path}")" || GARAGE_HTTP_STATUS=000
+  else
+    GARAGE_HTTP_STATUS="$(curl -sS -o "$out" -w '%{http_code}' -X "$method" \
+      -H "Authorization: Bearer ${GARAGE_ADMIN_TOKEN}" "${GARAGE_ADMIN_URL}${path}")" || GARAGE_HTTP_STATUS=000
+  fi
+  cat "$out"; rm -f "$out"
+  [[ "$GARAGE_HTTP_STATUS" =~ ^2 ]]
+}
+
+# s3_as n8n|backup <aws cli args...>
+s3_as() {
+  local who="$1"; shift
+  local id secret
+  case "$who" in
+    n8n)    id="$S3_N8N_ACCESS_KEY_ID";    secret="$S3_N8N_SECRET_ACCESS_KEY" ;;
+    backup) id="$S3_BACKUP_ACCESS_KEY_ID"; secret="$S3_BACKUP_SECRET_ACCESS_KEY" ;;
+    anon)   aws --endpoint-url "$S3_ENDPOINT" --region "$S3_REGION" --no-sign-request "$@"; return ;;
+    *) die "unknown S3 identity: $who" ;;
+  esac
+  AWS_ACCESS_KEY_ID="$id" AWS_SECRET_ACCESS_KEY="$secret" \
+    aws --endpoint-url "$S3_ENDPOINT" --region "$S3_REGION" "$@"
+}
+
+# psql_as ROLE PASSWORD DB [psql args...]
+psql_as() {
+  local role="$1" pw="$2" db="$3"; shift 3
+  PGPASSWORD="$pw" psql -h postgres -U "$role" -d "$db" -v ON_ERROR_STOP=1 --no-psqlrc -qAt "$@"
+}
+psql_super() { local db="$1"; shift; psql_as "$POSTGRES_SUPERUSER" "$POSTGRES_SUPERUSER_PASSWORD" "$db" "$@"; }
+
+# Make helpers available inside `bash -c` sub-shells.
+export GARAGE_ADMIN_URL S3_ENDPOINT BUCKET_MEDIA BUCKET_SENSITIVE BUCKET_BACKUPS
+export -f log die garage_api s3_as psql_as psql_super

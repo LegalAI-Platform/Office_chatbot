@@ -1,0 +1,95 @@
+#!/bin/bash
+# Idempotent Garage setup: single-node layout, 3 private buckets, 2 least-privilege
+# access keys, and the 30-day expiry rule on office-backups.
+set -euo pipefail
+source /usr/local/bin/_lib
+
+# 1. Wait for the admin API.
+for i in $(seq 1 30); do
+  if status="$(garage_api GET /v2/GetClusterStatus 2>/dev/null)"; then break; fi
+  [[ $i -eq 30 ]] && die "Garage admin API not reachable (HTTP ${GARAGE_HTTP_STATUS:-?})"
+  sleep 2
+done
+
+# 2. Cluster layout (single node, 1 zone).
+node_id="$(jq -r '.nodes[0].id' <<<"$status")"
+has_role="$(jq -r '.nodes[0].role != null' <<<"$status")"
+if [[ "$has_role" != "true" ]]; then
+  log "Assigning layout role to node ${node_id:0:16}..."
+  garage_api POST /v2/UpdateClusterLayout \
+    "{\"roles\":[{\"id\":\"$node_id\",\"zone\":\"dc1\",\"capacity\":20000000000,\"tags\":[\"test\"]}]}" >/dev/null \
+    || die "UpdateClusterLayout failed (HTTP $GARAGE_HTTP_STATUS)"
+  layout="$(garage_api GET /v2/GetClusterLayout)" || die "GetClusterLayout failed"
+  next=$(( $(jq -r '.version' <<<"$layout") + 1 ))
+  garage_api POST /v2/ApplyClusterLayout "{\"version\":$next}" >/dev/null \
+    || die "ApplyClusterLayout failed (HTTP $GARAGE_HTTP_STATUS)"
+  log "Layout version $next applied."
+else
+  log "Layout already applied."
+fi
+
+# 3. Buckets.
+bucket_id() { garage_api GET "/v2/GetBucketInfo?globalAlias=$1" 2>/dev/null | jq -r '.id // empty'; }
+ensure_bucket() {
+  local name="$1" id
+  id="$(bucket_id "$name" || true)"
+  if [[ -z "$id" ]]; then
+    garage_api POST /v2/CreateBucket "{\"globalAlias\":\"$name\"}" >/dev/null \
+      || die "CreateBucket $name failed (HTTP $GARAGE_HTTP_STATUS)"
+    id="$(bucket_id "$name")"
+    log "Bucket $name created."
+  else
+    log "Bucket $name exists."
+  fi
+  # Never publicly readable (no website access).
+  garage_api POST "/v2/UpdateBucket?id=$id" '{"websiteAccess":{"enabled":false}}' >/dev/null \
+    || die "UpdateBucket $name failed (HTTP $GARAGE_HTTP_STATUS)"
+  echo "$id"
+}
+media_id="$(ensure_bucket "$BUCKET_MEDIA" | tail -1)"
+sensitive_id="$(ensure_bucket "$BUCKET_SENSITIVE" | tail -1)"
+backups_id="$(ensure_bucket "$BUCKET_BACKUPS" | tail -1)"
+
+# 4. Access keys (imported from .env so they are stable across rebuilds).
+ensure_key() {
+  local id="$1" secret="$2" name="$3"
+  if garage_api GET "/v2/GetKeyInfo?id=$id" >/dev/null 2>&1; then
+    log "Key $name exists."
+  else
+    garage_api POST /v2/ImportKey \
+      "{\"accessKeyId\":\"$id\",\"secretAccessKey\":\"$secret\",\"name\":\"$name\"}" >/dev/null \
+      || die "ImportKey $name failed (HTTP $GARAGE_HTTP_STATUS)"
+    log "Key $name imported."
+  fi
+}
+ensure_key "$S3_N8N_ACCESS_KEY_ID"    "$S3_N8N_SECRET_ACCESS_KEY"    "n8n"
+ensure_key "$S3_BACKUP_ACCESS_KEY_ID" "$S3_BACKUP_SECRET_ACCESS_KEY" "backup"
+
+# 5. Permissions: allow exactly what each key needs, deny everything else.
+set_perm() {
+  local bucket_id="$1" key="$2" read="$3" write="$4" owner="$5"
+  garage_api POST /v2/DenyBucketKey \
+    "{\"bucketId\":\"$bucket_id\",\"accessKeyId\":\"$key\",\"permissions\":{\"read\":true,\"write\":true,\"owner\":true}}" >/dev/null \
+    || die "DenyBucketKey failed (HTTP $GARAGE_HTTP_STATUS)"
+  if [[ "$read$write$owner" != "falsefalsefalse" ]]; then
+    garage_api POST /v2/AllowBucketKey \
+      "{\"bucketId\":\"$bucket_id\",\"accessKeyId\":\"$key\",\"permissions\":{\"read\":$read,\"write\":$write,\"owner\":$owner}}" >/dev/null \
+      || die "AllowBucketKey failed (HTTP $GARAGE_HTTP_STATUS)"
+  fi
+}
+#           bucket         key                         read  write owner
+set_perm "$media_id"     "$S3_N8N_ACCESS_KEY_ID"     true  true  false
+set_perm "$sensitive_id" "$S3_N8N_ACCESS_KEY_ID"     true  true  false
+set_perm "$backups_id"   "$S3_N8N_ACCESS_KEY_ID"     false false false
+set_perm "$media_id"     "$S3_BACKUP_ACCESS_KEY_ID"  false false false
+set_perm "$sensitive_id" "$S3_BACKUP_ACCESS_KEY_ID"  false false false
+set_perm "$backups_id"   "$S3_BACKUP_ACCESS_KEY_ID"  true  true  true
+log "Key permissions applied."
+
+# 6. Backups expire after 30 days (T-15).
+s3_as backup s3api put-bucket-lifecycle-configuration --bucket "$BUCKET_BACKUPS" \
+  --lifecycle-configuration '{"Rules":[{"ID":"expire-after-30-days","Status":"Enabled","Filter":{"Prefix":""},"Expiration":{"Days":30}}]}' \
+  || die "put-bucket-lifecycle-configuration failed"
+log "Lifecycle rule (30 days) set on $BUCKET_BACKUPS."
+
+log "Storage init complete."

@@ -1,0 +1,58 @@
+# Environment variables
+
+All values live in `.env` (never committed). `.env.example` has every variable with a
+placeholder. `scripts/*/gen-secrets` prints fresh values for every secret.
+The `preflight` job refuses to start the stack while a required value is empty, still
+contains `CHANGE_ME`, or has the wrong format.
+
+| Variable | Used by | Secret | Example / format | Task |
+|---|---|---|---|---|
+| `ENVIRONMENT` | preflight, reset | no | `test` (or `staging`) | 01 |
+| `COMPOSE_PROJECT_NAME` | docker compose | no | `office` | 01 |
+| `POSTGRES_SUPERUSER` | postgres, tools | no | `postgres_admin` | 01 |
+| `POSTGRES_SUPERUSER_PASSWORD` | postgres, tools | **yes** | 48 hex chars | 01 |
+| `N8N_DB_PASSWORD` | postgres init, n8n | **yes** | 48 hex chars, URL-safe | 01 |
+| `OFFICE_MIGRATOR_PASSWORD` | postgres init, migrate | **yes** | 48 hex chars, URL-safe | 01 |
+| `OFFICE_APP_PASSWORD` | postgres init, tools; n8n credential later | **yes** | 48 hex chars, URL-safe | 01 |
+| `OFFICE_READONLY_PASSWORD` | postgres init, tools; Appsmith later | **yes** | 48 hex chars, URL-safe | 01 |
+| `REDIS_PASSWORD` | redis, tools; n8n credential later | **yes** | 48 hex chars | 01 |
+| `GARAGE_RPC_SECRET` | garage | **yes** | exactly 64 lowercase hex | 01 |
+| `GARAGE_ADMIN_TOKEN` | garage, storage-init, healthcheck | **yes** | 64 hex chars | 01 |
+| `S3_REGION` | tools; n8n S3 credential later | no | `garage` | 01 |
+| `S3_N8N_ACCESS_KEY_ID` | storage-init; n8n S3 credential later | no (identifier) | `GK` + 24 hex | 01 |
+| `S3_N8N_SECRET_ACCESS_KEY` | storage-init; n8n S3 credential later | **yes** | 64 hex | 01 |
+| `S3_BACKUP_ACCESS_KEY_ID` | storage-init, backup, restore | no (identifier) | `GK` + 24 hex | 01 |
+| `S3_BACKUP_SECRET_ACCESS_KEY` | storage-init, backup, restore | **yes** | 64 hex | 01 |
+| `N8N_ENCRYPTION_KEY` | n8n | **yes — critical** | 64 hex. Losing or changing it makes stored credentials unreadable | 01 |
+| `N8N_HOST` | n8n | no | `127.0.0.1` (or the tunnel hostname) | 01 |
+| `N8N_PROTOCOL` | n8n | no | `http` locally, `https` behind the tunnel | 01 |
+| `WEBHOOK_URL` | n8n (passed as `N8N_WEBHOOK_URL`, the n8n 2.x name) | no | `http://127.0.0.1:5678/` or `https://<tunnel>/` (trailing slash) | 01 / 02 |
+| `N8N_PROXY_HOPS` | n8n | no | `1` (cloudflared) | 01 |
+| `N8N_SECURE_COOKIE` | n8n | no | `false` for local http, `true` behind HTTPS | 01 |
+| `EXECUTIONS_DATA_MAX_AGE` | n8n | no | hours; `336` = 14 days | 01 |
+| `CLOUDFLARE_TUNNEL_TOKEN` | tunnel-named | **yes** | empty = Quick Tunnel | 01 / 02 |
+| `WHATSAPP_PHONE_NUMBER_ID` | n8n workflows | no | empty for now | 02 |
+| `WHATSAPP_WABA_ID` | n8n workflows | no | empty for now | 02 |
+| `GRAPH_API_VERSION` | n8n workflows | no | empty for now, e.g. `v23.0` | 02 |
+| `OPENAI_MODEL` | n8n workflows | no | empty until sample tests (T-08) | 04 |
+| `OPS_TELEGRAM_CHAT_ID` | error workflow | no | empty for now | monitoring |
+
+Variables set directly in `docker-compose.yml` (not in `.env`): `TZ` / `GENERIC_TIMEZONE`
+(`Africa/Cairo`), `DB_TYPE=postgresdb`, `N8N_DIAGNOSTICS_ENABLED=false`,
+`N8N_VERSION_NOTIFICATIONS_ENABLED=false`, `N8N_PERSONALIZATION_ENABLED=false`,
+`N8N_BLOCK_ENV_ACCESS_IN_NODE=true`, `EXECUTIONS_DATA_PRUNE=true`,
+`APPSMITH_DISABLE_TELEMETRY=true`.
+
+## Secrets that never go in `.env`
+
+They are entered as **n8n Credentials** (encrypted with `N8N_ENCRYPTION_KEY`), never in
+`.env`, files, workflow JSON or logs:
+
+| Secret | Task |
+|---|---|
+| WhatsApp permanent access token | 02 |
+| Meta App Secret (webhook signature) | 02 |
+| Webhook verify token | 02 |
+| OpenAI API key | 04 |
+| Google Calendar OAuth / service account | 08 |
+| Telegram bot token | monitoring |

@@ -1,0 +1,99 @@
+#!/bin/bash
+# Full environment check (TASK 01, section 10). Prints PASS/FAIL per item.
+# Exit code 0 only when every item passes.
+set -uo pipefail
+source /usr/local/bin/_lib
+
+passed=0; failed=0
+check() {  # check "description" command...
+  local desc="$1"; shift
+  if "$@" >/dev/null 2>&1; then
+    echo "PASS  $desc"; passed=$((passed+1))
+  else
+    echo "FAIL  $desc"; failed=$((failed+1))
+  fi
+}
+expect_fail() { ! "$@"; }
+sql_equals() {  # sql_equals DB "SQL" EXPECTED
+  [[ "$(psql_super "$1" -c "$2")" == "$3" ]]
+}
+http_status_is() { [[ "$(curl -s -o /dev/null -w '%{http_code}' "$1")" == "$2" ]]; }
+redis_reply_matches() {  # redis_reply_matches with-auth|no-auth PATTERN CMD...
+  local mode="$1" pattern="$2"; shift 2
+  local reply
+  if [[ "$mode" == "with-auth" ]]; then
+    reply="$(REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli -h redis "$@" 2>&1)"
+  else
+    reply="$(env -u REDISCLI_AUTH redis-cli -h redis "$@" 2>&1)"
+  fi
+  [[ "$reply" == $pattern ]]
+}
+bucket_private() { garage_api GET "/v2/GetBucketInfo?globalAlias=$1" | jq -e '.websiteAccess == false'; }
+lifecycle_30_days() {
+  s3_as backup s3api get-bucket-lifecycle-configuration --bucket "$BUCKET_BACKUPS" \
+    | jq -e '.Rules[0].Expiration.Days == 30 and .Rules[0].Status == "Enabled"'
+}
+
+echo "== Containers"
+for svc in postgres redis garage n8n; do
+  check "$svc reachable on the internal network" getent hosts "$svc"
+done
+
+echo "== PostgreSQL"
+check "office_app can connect to office" \
+  psql_as office_app "$OFFICE_APP_PASSWORD" office -c 'SELECT 1'
+check "office_app cannot CREATE TABLE in schema app" \
+  expect_fail psql_as office_app "$OFFICE_APP_PASSWORD" office -c 'CREATE TABLE app.__hc_probe(x int)'
+check "office_app cannot CREATE TABLE in schema public" \
+  expect_fail psql_as office_app "$OFFICE_APP_PASSWORD" office -c 'CREATE TABLE public.__hc_probe(x int)'
+check "office_readonly can read office" \
+  psql_as office_readonly "$OFFICE_READONLY_PASSWORD" office -c 'SELECT 1'
+check "office_readonly cannot INSERT" \
+  expect_fail psql_as office_readonly "$OFFICE_READONLY_PASSWORD" office -c 'INSERT INTO public.schema_migrations(version) VALUES ($$__hc$$)'
+check "n8n_user cannot connect to office" \
+  expect_fail psql_as n8n_user "$N8N_DB_PASSWORD" office -c 'SELECT 1'
+check "office_app cannot connect to n8n" \
+  expect_fail psql_as office_app "$OFFICE_APP_PASSWORD" n8n -c 'SELECT 1'
+check "server timezone is Africa/Cairo" sql_equals postgres "SHOW timezone" "Africa/Cairo"
+
+echo "== n8n"
+check "n8n /healthz returns 200" http_status_is http://n8n:5678/healthz 200
+check "n8n /healthz/readiness returns 200 (database connected, migrations done)" \
+  http_status_is http://n8n:5678/healthz/readiness 200
+check "n8n stores its data in PostgreSQL (core tables exist in database n8n)" \
+  sql_equals n8n "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('workflow_entity', 'credentials_entity', 'user')" "3"
+
+echo "== Redis"
+check "PING with password returns PONG" redis_reply_matches with-auth "PONG" ping
+check "PING without password is rejected" redis_reply_matches no-auth "*NOAUTH*" ping
+check "FLUSHALL is disabled" redis_reply_matches with-auth "*unknown command*" FLUSHALL
+
+echo "== Object storage (Garage)"
+for b in "$BUCKET_MEDIA" "$BUCKET_SENSITIVE" "$BUCKET_BACKUPS"; do
+  check "bucket $b exists" garage_api GET "/v2/GetBucketInfo?globalAlias=$b"
+  check "bucket $b has no public (website) access" bucket_private "$b"
+  check "bucket $b refuses anonymous listing" expect_fail s3_as anon s3 ls "s3://$b"
+done
+probe="healthcheck/probe-$(date +%s).txt"
+echo "probe" > /tmp/probe.txt
+check "n8n key can write to $BUCKET_MEDIA" s3_as n8n s3 cp /tmp/probe.txt "s3://$BUCKET_MEDIA/$probe"
+check "n8n key can write to $BUCKET_SENSITIVE" s3_as n8n s3 cp /tmp/probe.txt "s3://$BUCKET_SENSITIVE/$probe"
+check "n8n key cannot write to $BUCKET_BACKUPS" expect_fail s3_as n8n s3 cp /tmp/probe.txt "s3://$BUCKET_BACKUPS/$probe"
+check "backup key can write to $BUCKET_BACKUPS" s3_as backup s3 cp /tmp/probe.txt "s3://$BUCKET_BACKUPS/$probe"
+check "backup key cannot read $BUCKET_SENSITIVE" expect_fail s3_as backup s3 ls "s3://$BUCKET_SENSITIVE"
+check "lifecycle: $BUCKET_BACKUPS expires objects after 30 days" lifecycle_30_days
+s3_as n8n s3 rm "s3://$BUCKET_MEDIA/$probe" >/dev/null 2>&1 || true
+s3_as n8n s3 rm "s3://$BUCKET_SENSITIVE/$probe" >/dev/null 2>&1 || true
+s3_as backup s3 rm "s3://$BUCKET_BACKUPS/$probe" >/dev/null 2>&1 || true
+
+echo "== Migrations"
+check "migration 0001 is applied" \
+  sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0001'" "1"
+check "schema app exists" \
+  sql_equals office "SELECT count(*) FROM pg_namespace WHERE nspname = 'app'" "1"
+check "function app.set_updated_at() exists" \
+  sql_equals office "SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'app' AND p.proname = 'set_updated_at'" "1"
+
+echo
+echo "Result: $passed passed, $failed failed."
+[[ $failed -eq 0 ]]

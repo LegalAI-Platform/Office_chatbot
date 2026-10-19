@@ -1,0 +1,23 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Local backups and dumps
+backups/
+*.dump
+*.sql.gz
+
+# Local data folders (all service data lives in Docker named volumes)
+data/
+.local/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# Raw chat exports (contain personal data)
+exports/

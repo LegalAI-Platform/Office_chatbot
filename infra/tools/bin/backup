@@ -1,0 +1,22 @@
+#!/bin/bash
+# Dumps the office and n8n databases (pg_dump custom format, compressed) and
+# uploads them to s3://office-backups/postgres/<db>/<db>_<YYYYmmdd-HHMMSS>.dump
+# Timestamps use Africa/Cairo. Objects expire after 30 days (bucket lifecycle).
+set -euo pipefail
+source /usr/local/bin/_lib
+
+ts="$(date '+%Y%m%d-%H%M%S')"
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+
+for db in office n8n; do
+  file="${db}_${ts}.dump"
+  log "Dumping $db ..."
+  PGPASSWORD="$POSTGRES_SUPERUSER_PASSWORD" pg_dump -h postgres -U "$POSTGRES_SUPERUSER" \
+    -d "$db" -Fc -Z 6 --no-password -f "$work/$file"
+  size="$(du -h "$work/$file" | cut -f1)"
+  s3_as backup s3 cp --only-show-errors "$work/$file" "s3://$BUCKET_BACKUPS/postgres/$db/$file"
+  echo "s3://$BUCKET_BACKUPS/postgres/$db/$file  ($size)"
+done
+
+log "Backup complete."

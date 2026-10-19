@@ -1,0 +1,100 @@
+# Infrastructure (TASK 01) — Test/Staging
+
+Reference: [DECISIONS-v1.0.md](decisions/DECISIONS-v1.0.md) — T-01 to T-06, T-09, T-11 to T-13, T-15.
+
+## Components
+
+```mermaid
+flowchart LR
+    META[Meta WhatsApp Cloud API<br/>TASK 02] -. HTTPS webhook .-> CF[cloudflared<br/>profile: tunnel]
+    CF -->|http://n8n:5678 only| N8N[n8n 2.43.8<br/>Regular mode]
+
+    subgraph office_net [Docker network office_net — all host ports on 127.0.0.1]
+        N8N -->|n8n_user| PGN[(PostgreSQL 16<br/>db: n8n)]
+        N8N -. office_app, TASK 02+ .-> PGO[(PostgreSQL 16<br/>db: office)]
+        N8N -. TASK 03+ .-> REDIS[(Redis 7.4)]
+        N8N -. n8n key, TASK 03+ .-> S3[(Garage S3<br/>office-media<br/>office-sensitive)]
+        APPS[Appsmith CE<br/>profile: panel] -. office_app / office_readonly, later .-> PGO
+        MIG[dbmate<br/>office_migrator] --> PGO
+        TOOLS[office-tools<br/>preflight, storage-init,<br/>healthcheck, backup, restore] --> PGN
+        TOOLS --> PGO
+        TOOLS -->|backup key| BK[(Garage S3<br/>office-backups)]
+        TOOLS -->|admin API| S3
+    end
+```
+
+Startup order: `preflight` → `postgres`, `redis`, `garage` → `storage-init` → `n8n`.
+`preflight` and `storage-init` are one-shot jobs; everything else restarts `unless-stopped`.
+
+## PostgreSQL roles and privileges
+
+| Role | Database | Can do | Cannot do | Used by |
+|---|---|---|---|---|
+| `postgres_admin` (superuser) | all | everything | — | init script, backup, restore, healthcheck only |
+| `n8n_user` | `n8n` (owner) | n8n internal tables | connect to `office` | n8n |
+| `office_migrator` | `office` (owner) | DDL, owns schema `app` | connect to `n8n` | dbmate migrations only |
+| `office_app` | `office` | `SELECT, INSERT, UPDATE, DELETE` on tables in `app`; sequences | `CREATE` anything; connect to `n8n` | n8n workflows (TASK 02+), Appsmith writes |
+| `office_readonly` | `office` | `SELECT` | any write; connect to `n8n` | reports, Appsmith read views |
+
+- `CONNECT` is revoked from `PUBLIC` on `n8n`, `office` and `postgres`.
+- Default privileges: every table or sequence `office_migrator` creates later is granted to
+  `office_app` and `office_readonly` automatically.
+- `office_app` and `office_readonly` use `search_path = app, public` and timezone `Africa/Cairo`.
+- Server timezone: `Africa/Cairo`.
+- Extensions installed by migration 0001: `pgcrypto`, `citext`.
+
+## Object storage
+
+T-06 asked for MinIO in test. **MinIO no longer publishes container images**, so the test
+environment uses **Garage** instead: open source, S3-compatible, per-key bucket permissions
+and lifecycle expiry. Production stays on **Cloudflare R2** (T-06). The n8n S3 credential
+only needs its endpoint and keys changed.
+
+| Bucket | Content | Access |
+|---|---|---|
+| `office-media` | voice notes, regular images and files | n8n key: read + write |
+| `office-sensitive` | ID cards, Urfi documents, payment receipts | n8n key: read + write |
+| `office-backups` | PostgreSQL dumps, expire after 30 days | backup key: read + write + owner |
+
+| Access key | `office-media` | `office-sensitive` | `office-backups` |
+|---|---|---|---|
+| n8n (`S3_N8N_ACCESS_KEY_ID`) | read, write | read, write | none |
+| backup (`S3_BACKUP_ACCESS_KEY_ID`) | none | none | read, write, owner |
+
+- No bucket has website/public access, and anonymous requests are rejected.
+- Keys are imported from `.env`, so they stay the same after a rebuild.
+- The Garage admin API (port 3903) is reachable only inside `office_net`.
+
+**Differences from the original T-06 wording:**
+- **No object versioning or object lock.** Garage does not support them. Protection in
+  test comes from the separate bucket, least-privilege keys and the daily database backup.
+  R2 behaves the same way, so production design must not depend on versioning either.
+- **No web console.** Inspect buckets with
+  `docker compose run --rm tools aws --endpoint-url http://garage:3900 --region garage s3 ls`
+  (with the right keys set), or with the healthcheck.
+
+### Sensitive files and AI (T-09)
+
+Anything in `office-sensitive` — ID cards, Urfi documents, receipts — **must never be sent to
+any AI provider** (OpenAI or other). Workflows in later tasks:
+- store these files only in `office-sensitive`;
+- never pass their binary data, URLs or extracted text to an AI node;
+- send the AI only the text messages it needs for intent classification (T-07).
+
+## Network exposure
+
+- Every published port is bound to `127.0.0.1`.
+- Only n8n can be reached from the internet, and only through cloudflared (profiles `tunnel`
+  or `tunnel-named`), which forwards to `http://n8n:5678` and nothing else.
+- Create the n8n owner account before starting any tunnel.
+
+## Moving to production (documentation only, not implemented)
+
+| Test | Production |
+|---|---|
+| Docker Desktop on Windows or a small isolated VPS | Dedicated VPS (decided after testing, T-01) |
+| Garage | Cloudflare R2, with separate buckets and scoped API tokens |
+| Quick/Named Tunnel | Real domain with HTTPS, e.g. `bot.<domain>` and `panel.<domain>` (T-13) |
+| `ENVIRONMENT=test` | `ENVIRONMENT=production`, separate `.env` and credentials |
+| `N8N_SECURE_COOKIE=false` | `true` |
+| Backups on Garage | Backups on R2 + regular restore drills |
