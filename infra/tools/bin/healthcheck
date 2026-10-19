@@ -86,7 +86,29 @@ s3_as n8n s3 rm "s3://$BUCKET_MEDIA/$probe" >/dev/null 2>&1 || true
 s3_as n8n s3 rm "s3://$BUCKET_SENSITIVE/$probe" >/dev/null 2>&1 || true
 s3_as backup s3 rm "s3://$BUCKET_BACKUPS/$probe" >/dev/null 2>&1 || true
 
+echo "== WhatsApp (TASK 02)"
+check "WhatsApp tables exist (8)" \
+  sql_equals office "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'app' AND table_name IN ('settings','wa_webhook_events','wa_inbound_messages','wa_contact_windows','wa_outbound_messages','wa_message_statuses','wa_templates','workflow_errors')" "8"
+check "office_app can write WhatsApp tables (rolled back)" \
+  psql_as office_app "$OFFICE_APP_PASSWORD" office -c 'BEGIN; DELETE FROM app.wa_templates WHERE false; ROLLBACK;'
+check "office_app cannot ALTER WhatsApp tables" \
+  expect_fail psql_as office_app "$OFFICE_APP_PASSWORD" office -c 'ALTER TABLE app.wa_templates ADD COLUMN __hc int'
+check "office_readonly cannot write WhatsApp tables" \
+  expect_fail psql_as office_readonly "$OFFICE_READONLY_PASSWORD" office -c 'DELETE FROM app.wa_templates'
+check "office_app may run the WhatsApp functions" \
+  sql_equals office "SELECT has_function_privilege('office_app', 'app.wa_process_event(jsonb)', 'EXECUTE')::text" "true"
+check "office_readonly may not run them" \
+  sql_equals office "SELECT has_function_privilege('office_readonly', 'app.wa_process_event(jsonb)', 'EXECUTE')::text" "false"
+check "echo test is switched off" \
+  sql_equals office "SELECT value FROM app.settings WHERE key = 'whatsapp.echo_test_enabled'" "false"
+check "n8n has the 12 TASK 02 workflows" \
+  sql_equals n8n "SELECT count(*) FROM workflow_entity WHERE id IN ('WaCfgGet00000001','WaErrHandler0001','WaInbound0000001','WaProcEvent00001','WaSendMsg0000001','WaSendTpl0000001','WaSubCheck000001','WaSubDelete00001','WaTplSubmit00001','WaTplSync0000001','WaEchoTest000001','WaTestHarness001')" "12"
+check "n8n has the office-postgres-app credential" \
+  sql_equals n8n "SELECT count(*) FROM credentials_entity WHERE name = 'office-postgres-app'" "1"
+
 echo "== Migrations"
+check "migration 0002 (WhatsApp) is applied" \
+  sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0002'" "1"
 check "migration 0001 is applied" \
   sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0001'" "1"
 check "schema app exists" \

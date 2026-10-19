@@ -4,11 +4,18 @@ WhatsApp assistant ("Hazem") for the law office of Ustaz Saad Fathy Saad.
 n8n orchestrates the flows, Meta WhatsApp Cloud API carries the messages, and
 PostgreSQL holds the business data.
 
-This repository currently contains **TASK 01 — infrastructure only**: no business
-tables, no n8n workflows, and no integrations yet.
-All decisions: [docs/decisions/DECISIONS-v1.0.md](docs/decisions/DECISIONS-v1.0.md).
-Architecture and permissions: [docs/infrastructure.md](docs/infrastructure.md).
-Environment variables: [docs/env-variables.md](docs/env-variables.md).
+Done so far: **TASK 01** (infrastructure) and **TASK 02** (Meta WhatsApp Cloud API in n8n;
+live tests with Meta pending the project owner's Meta setup).
+
+- All decisions: [docs/decisions/DECISIONS-v1.2.md](docs/decisions/DECISIONS-v1.2.md)
+- Architecture and permissions: [docs/infrastructure.md](docs/infrastructure.md)
+- WhatsApp workflows, error codes, settings: [docs/whatsapp-integration.md](docs/whatsapp-integration.md)
+- Operations runbook: [docs/runbooks/whatsapp.md](docs/runbooks/whatsapp.md)
+- Meta setup (project owner): [docs/meta-setup.md](docs/meta-setup.md)
+- Environment variables: [docs/env-variables.md](docs/env-variables.md)
+
+TASK 02 commands: `n8n-import` / `n8n-export` (workflows), `wa-tests` (database rules and the
+workflow harness, no Meta needed), `tunnel-refresh` / `tunnel-down` (Quick Tunnel + Meta webhook).
 
 ## Services
 

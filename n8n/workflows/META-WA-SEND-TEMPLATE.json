@@ -310,9 +310,7 @@
           "name": "meta-whatsapp-token"
         }
       },
-      "retryOnFail": true,
-      "maxTries": 3,
-      "waitBetweenTries": 2000,
+      "retryOnFail": false,
       "onError": "continueRegularOutput"
     },
     {
@@ -335,7 +333,7 @@
           "conditions": [
             {
               "id": "08ad2dcb-d47b-5685-b6d2-1a273f537ff4",
-              "leftValue": "={{ [429, 500, 502, 503, 504].includes($json.statusCode) }}",
+              "leftValue": "={{ [429, 502, 503, 504].includes($json.statusCode) }}",
               "rightValue": "",
               "operator": {
                 "type": "boolean",
@@ -400,9 +398,7 @@
           "name": "meta-whatsapp-token"
         }
       },
-      "retryOnFail": true,
-      "maxTries": 3,
-      "waitBetweenTries": 2000,
+      "retryOnFail": false,
       "onError": "continueRegularOutput"
     },
     {

@@ -13,7 +13,7 @@ contains `CHANGE_ME`, or has the wrong format.
 | `POSTGRES_SUPERUSER_PASSWORD` | postgres, tools | **yes** | 48 hex chars | 01 |
 | `N8N_DB_PASSWORD` | postgres init, n8n | **yes** | 48 hex chars, URL-safe | 01 |
 | `OFFICE_MIGRATOR_PASSWORD` | postgres init, migrate | **yes** | 48 hex chars, URL-safe | 01 |
-| `OFFICE_APP_PASSWORD` | postgres init, tools; n8n credential later | **yes** | 48 hex chars, URL-safe | 01 |
+| `OFFICE_APP_PASSWORD` | postgres init, tools; n8n credential `office-postgres-app` (created by `create-local-credentials.sh`) | **yes** | 48 hex chars, URL-safe | 01 |
 | `OFFICE_READONLY_PASSWORD` | postgres init, tools; Appsmith later | **yes** | 48 hex chars, URL-safe | 01 |
 | `REDIS_PASSWORD` | redis, tools; n8n credential later | **yes** | 48 hex chars | 01 |
 | `GARAGE_RPC_SECRET` | garage | **yes** | exactly 64 lowercase hex | 01 |
@@ -31,11 +31,15 @@ contains `CHANGE_ME`, or has the wrong format.
 | `N8N_SECURE_COOKIE` | n8n | no | `false` for local http, `true` behind HTTPS | 01 |
 | `EXECUTIONS_DATA_MAX_AGE` | n8n | no | hours; `336` = 14 days | 01 |
 | `CLOUDFLARE_TUNNEL_TOKEN` | tunnel-named | **yes** | empty = Quick Tunnel | 01 / 02 |
-| `WHATSAPP_PHONE_NUMBER_ID` | n8n workflows | no | empty for now | 02 |
-| `WHATSAPP_WABA_ID` | n8n workflows | no | empty for now | 02 |
-| `GRAPH_API_VERSION` | n8n workflows | no | empty for now, e.g. `v23.0` | 02 |
 | `OPENAI_MODEL` | n8n workflows | no | empty until sample tests (T-08) | 04 |
-| `OPS_TELEGRAM_CHAT_ID` | error workflow | no | empty for now | monitoring |
+
+## Non-secret WhatsApp settings: `app.settings`, not `.env`
+
+Meta identifiers live in the database table `app.settings` and are read by the `CFG-GET`
+workflow (n8n Code nodes cannot read environment variables, by design):
+`whatsapp.app_id`, `whatsapp.waba_id`, `whatsapp.phone_number_id`,
+`whatsapp.graph_api_version` (`v26.0`), `whatsapp.test_recipients`, `whatsapp.echo_test_enabled`,
+`ops.telegram_chat_id`. See [whatsapp-integration.md](whatsapp-integration.md#settings-appsettings-non-secret).
 
 Variables set directly in `docker-compose.yml` (not in `.env`): `TZ` / `GENERIC_TIMEZONE`
 (`Africa/Cairo`), `DB_TYPE=postgresdb`, `N8N_DIAGNOSTICS_ENABLED=false`,
@@ -50,9 +54,8 @@ They are entered as **n8n Credentials** (encrypted with `N8N_ENCRYPTION_KEY`), n
 
 | Secret | Task |
 |---|---|
-| WhatsApp permanent access token | 02 |
-| Meta App Secret (webhook signature) | 02 |
-| Webhook verify token | 02 |
+| WhatsApp permanent access token (`meta-whatsapp-token`) | 02 |
+| Meta App Secret (`meta-whatsapp-trigger`, `meta-app-token`) | 02 |
 | OpenAI API key | 04 |
 | Google Calendar OAuth / service account | 08 |
 | Telegram bot token | monitoring |
