@@ -4,7 +4,7 @@ Assert-EnvFile
 
 $failed = $false
 Write-Host "== Container health"
-foreach ($svc in 'postgres', 'redis', 'garage', 'n8n') {
+foreach ($svc in 'postgres', 'redis', 'garage', 'api') {
     $health = (& docker compose ps --format '{{.Health}}' $svc 2>$null) -join ''
     if ($health -eq 'healthy') { Write-Host "PASS  $svc is healthy" }
     else { Write-Host "FAIL  $svc is '$health'"; $failed = $true }

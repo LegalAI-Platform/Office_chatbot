@@ -1,0 +1,127 @@
+{
+  "_comment": "M-03 templates from docs/decisions/DECISIONS-v1.0.md. Source of truth for META-WA-TEMPLATES-SUBMIT. Texts marked 'adjusted' were changed only because Meta rejects a body that starts or ends with a variable.",
+  "templates": [
+    {
+      "name": "reminder_day_before",
+      "language": "ar",
+      "category": "UTILITY",
+      "adjusted": "added 'التفاصيل:' and a closing sentence so the body does not end with {{4}}",
+      "components": [
+        {
+          "type": "BODY",
+          "text": "تذكير بميعاد حضرتك مع الأستاذ سعد بكرة {{1}} الساعة {{2}}. نوع الاستشارة: {{3}}. التفاصيل: {{4}}. لو محتاج تغيّر الميعاد ابعتلنا هنا.",
+          "example": { "body_text": [["الثلاثاء 21 أكتوبر", "6 مساءً", "مقابلة في المكتب", "المكتب في الدقي، والعنوان على الخريطة"]] }
+        }
+      ]
+    },
+    {
+      "name": "reminder_2h_before",
+      "language": "ar",
+      "category": "UTILITY",
+      "adjusted": "added 'التفاصيل:' and a closing sentence so the body does not end with {{3}}",
+      "components": [
+        {
+          "type": "BODY",
+          "text": "ميعاد حضرتك مع الأستاذ سعد النهارده الساعة {{1}}. نوع الاستشارة: {{2}}. التفاصيل: {{3}}. في انتظار حضرتك.",
+          "example": { "body_text": [["6 مساءً", "استشارة بالتليفون", "الأستاذ هيكلم حضرتك على نفس الرقم"]] }
+        }
+      ]
+    },
+    {
+      "name": "booking_followup",
+      "language": "ar",
+      "category": "UTILITY",
+      "components": [
+        { "type": "BODY", "text": "لسه حابب تحجز مع الأستاذ؟" }
+      ]
+    },
+    {
+      "name": "staff_contact_10am",
+      "language": "ar",
+      "category": "UTILITY",
+      "components": [
+        { "type": "BODY", "text": "صباح الخير، معاك مكتب الأستاذ سعد فتحي سعد بخصوص طلب حضرتك." }
+      ]
+    },
+    {
+      "name": "staff_delay_apology",
+      "language": "ar",
+      "category": "UTILITY",
+      "components": [
+        { "type": "BODY", "text": "معلش اتأخرنا على حضرتك، هنكلمك خلال دقايق." }
+      ]
+    },
+    {
+      "name": "payment_confirmed_booking",
+      "language": "ar",
+      "category": "UTILITY",
+      "adjusted": "added 'التفاصيل:' and a closing sentence so the body does not end with {{3}}",
+      "components": [
+        {
+          "type": "BODY",
+          "text": "تم تأكيد ميعاد حضرتك يوم {{1}} الساعة {{2}} ✅. التفاصيل: {{3}}. لو محتاج أي حاجة ابعتلنا هنا.",
+          "example": { "body_text": [["الثلاثاء 21 أكتوبر", "6 مساءً", "استشارة بالتليفون، والأستاذ هيكلم حضرتك"]] }
+        }
+      ]
+    },
+    {
+      "name": "payment_partial",
+      "language": "ar",
+      "category": "UTILITY",
+      "components": [
+        {
+          "type": "BODY",
+          "text": "وصلنا {{1}} جنيه من {{2}}. محتاجين باقي المبلغ {{3}} جنيه عشان نأكد الميعاد.",
+          "example": { "body_text": [["300", "500", "200"]] }
+        }
+      ]
+    },
+    {
+      "name": "payment_rejected",
+      "language": "ar",
+      "category": "UTILITY",
+      "adjusted": "added 'في مواعيد العمل' so the body does not end with {{1}}",
+      "components": [
+        {
+          "type": "BODY",
+          "text": "نعتذر لحضرتك، الإيصال ما اتقبلش. ممكن تبعت إيصال تاني أو تكلمنا على {{1}} في مواعيد العمل.",
+          "example": { "body_text": [["01000000000"]] }
+        }
+      ]
+    },
+    {
+      "name": "refund_completed",
+      "language": "ar",
+      "category": "UTILITY",
+      "adjusted": "added a closing sentence so the body does not end with {{2}}",
+      "components": [
+        {
+          "type": "BODY",
+          "text": "تم رد مبلغ {{1}} جنيه لحضرتك على {{2}}. شكرًا لحضرتك.",
+          "example": { "body_text": [["500", "InstaPay"]] }
+        }
+      ]
+    },
+    {
+      "name": "service_ready",
+      "language": "ar",
+      "category": "UTILITY",
+      "adjusted": "reworded so the body does not start with {{1}}",
+      "components": [
+        {
+          "type": "BODY",
+          "text": "الخدمة المطلوبة ({{1}}) جاهزة، وهتوصل حضرتك هنا حالًا.",
+          "example": { "body_text": [["مراجعة العقد"]] }
+        }
+      ]
+    },
+    {
+      "name": "urgent_10am",
+      "language": "ar",
+      "category": "UTILITY",
+      "components": [
+        { "type": "BODY", "text": "صباح الخير، بخصوص طلب حضرتك العاجل، الأستاذ هيتواصل مع حضرتك." }
+      ]
+    }
+  ]
+}

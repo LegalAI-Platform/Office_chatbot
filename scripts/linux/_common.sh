@@ -5,7 +5,10 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
 
-ALL_PROFILES=(--profile panel --profile tunnel --profile tunnel-named --profile tools)
+ALL_PROFILES=(--profile tunnel --profile tunnel-named --profile tools)
+
+# Git Bash on Windows rewrites container paths such as /app/...; harmless on Linux.
+export MSYS_NO_PATHCONV=1
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 
@@ -28,3 +31,6 @@ check_no_placeholders() {
     die "replace them (scripts/linux/gen-secrets.sh prints fresh values)"
   fi
 }
+
+# json_string KEY  ->  first "KEY": "value" from JSON on stdin (no jq on Git Bash).
+json_string() { grep -oE "\"$1\": *\"[^\"]*\"" | head -1 | sed -E 's/.*: *"(.*)"/\1/'; }

@@ -1,0 +1,34 @@
+{
+  "messaging_product": "whatsapp",
+  "metadata": {
+    "display_phone_number": "15550000000",
+    "phone_number_id": "100000000000001"
+  },
+  "contacts": [
+    {
+      "profile": {
+        "name": "Test Client One"
+      },
+      "wa_id": "201000000001"
+    }
+  ],
+  "messages": [
+    {
+      "from": "201000000001",
+      "id": "wamid.TEST-IN-REF-1",
+      "timestamp": "1760900040",
+      "type": "text",
+      "text": {
+        "body": "Hello from ad"
+      },
+      "referral": {
+        "source_url": "https://fb.me/test",
+        "source_id": "AD-123",
+        "source_type": "ad",
+        "headline": "Test ad",
+        "ctwa_clid": "CLID-TEST"
+      }
+    }
+  ],
+  "field": "messages"
+}

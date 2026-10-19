@@ -1,0 +1,28 @@
+{
+  "messaging_product": "whatsapp",
+  "metadata": {
+    "display_phone_number": "15550000000",
+    "phone_number_id": "100000000000001"
+  },
+  "contacts": [
+    {
+      "profile": {
+        "name": "Test Client One"
+      },
+      "wa_id": "201000000001"
+    }
+  ],
+  "messages": [
+    {
+      "from": "201000000001",
+      "id": "wamid.TEST-IN-TEXT-1",
+      "timestamp": "1760900000",
+      "type": "text",
+      "text": {
+        "body": "Test message"
+      }
+    }
+  ],
+  "field": "messages",
+  "test_note": "same wamid, different event"
+}

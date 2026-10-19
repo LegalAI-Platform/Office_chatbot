@@ -8,13 +8,18 @@ err() { echo "PREFLIGHT FAIL: $*" >&2; fail=1; }
 required=(
   ENVIRONMENT
   POSTGRES_SUPERUSER POSTGRES_SUPERUSER_PASSWORD
-  N8N_DB_PASSWORD OFFICE_MIGRATOR_PASSWORD OFFICE_APP_PASSWORD OFFICE_READONLY_PASSWORD
+  OFFICE_MIGRATOR_PASSWORD OFFICE_APP_PASSWORD OFFICE_READONLY_PASSWORD
   REDIS_PASSWORD
   GARAGE_RPC_SECRET GARAGE_ADMIN_TOKEN S3_REGION
-  S3_N8N_ACCESS_KEY_ID S3_N8N_SECRET_ACCESS_KEY
+  S3_APP_ACCESS_KEY_ID S3_APP_SECRET_ACCESS_KEY
   S3_BACKUP_ACCESS_KEY_ID S3_BACKUP_SECRET_ACCESS_KEY
-  N8N_ENCRYPTION_KEY N8N_HOST N8N_PROTOCOL WEBHOOK_URL
 )
+
+# WhatsApp secrets are only required once WhatsApp is switched on (docs/meta-setup.md).
+if [[ "${WhatsApp__Enabled:-false}" == "true" ]]; then
+  required+=(WhatsApp__AppId WhatsApp__WabaId WhatsApp__PhoneNumberId WhatsApp__AppSecret
+             WhatsApp__AccessToken WhatsApp__VerifyToken WhatsApp__TestRecipients)
+fi
 
 for v in "${required[@]}"; do
   val="${!v:-}"
@@ -30,28 +35,33 @@ case "${ENVIRONMENT:-}" in
   *) err "ENVIRONMENT must be 'test' or 'staging' for this stack (got '${ENVIRONMENT:-}')" ;;
 esac
 
-for v in POSTGRES_SUPERUSER_PASSWORD N8N_DB_PASSWORD OFFICE_MIGRATOR_PASSWORD \
+for v in POSTGRES_SUPERUSER_PASSWORD OFFICE_MIGRATOR_PASSWORD \
          OFFICE_APP_PASSWORD OFFICE_READONLY_PASSWORD REDIS_PASSWORD GARAGE_ADMIN_TOKEN; do
   val="${!v:-}"
   [[ -n "$val" && ${#val} -lt 24 ]] && err "$v must be at least 24 characters"
 done
 
-# Passwords are embedded in connection URLs; keep them URL-safe.
-for v in N8N_DB_PASSWORD OFFICE_MIGRATOR_PASSWORD OFFICE_APP_PASSWORD OFFICE_READONLY_PASSWORD; do
+# Passwords are embedded in connection strings; keep them free of ';', '=' and quotes.
+for v in OFFICE_MIGRATOR_PASSWORD OFFICE_APP_PASSWORD OFFICE_READONLY_PASSWORD REDIS_PASSWORD; do
   val="${!v:-}"
   [[ -n "$val" && ! "$val" =~ ^[A-Za-z0-9_-]+$ ]] && err "$v may only contain letters, digits, '_' and '-'"
 done
 
-[[ "${N8N_ENCRYPTION_KEY:-}" =~ ^.{32,}$ ]] || err "N8N_ENCRYPTION_KEY must be at least 32 characters"
 [[ "${GARAGE_RPC_SECRET:-}" =~ ^[0-9a-f]{64}$ ]] || err "GARAGE_RPC_SECRET must be exactly 64 lowercase hex characters"
 
-for v in S3_N8N_ACCESS_KEY_ID S3_BACKUP_ACCESS_KEY_ID; do
+if [[ "${WhatsApp__Enabled:-false}" == "true" ]]; then
+  [[ "${WhatsApp__VerifyToken:-}" =~ ^.{24,}$ ]] || err "WhatsApp__VerifyToken must be at least 24 characters"
+  [[ "${WhatsApp__TestRecipients:-}" =~ ^[0-9]{8,15}(,[0-9]{8,15})*$ ]] \
+    || err "WhatsApp__TestRecipients must be digits only, comma-separated (e.g. 2010xxxxxxxx), no '+' or spaces"
+fi
+
+for v in S3_APP_ACCESS_KEY_ID S3_BACKUP_ACCESS_KEY_ID; do
   [[ "${!v:-}" =~ ^GK[0-9a-f]{24}$ ]] || err "$v must be 'GK' followed by 24 lowercase hex characters"
 done
-for v in S3_N8N_SECRET_ACCESS_KEY S3_BACKUP_SECRET_ACCESS_KEY; do
+for v in S3_APP_SECRET_ACCESS_KEY S3_BACKUP_SECRET_ACCESS_KEY; do
   [[ "${!v:-}" =~ ^[0-9a-f]{64}$ ]] || err "$v must be exactly 64 lowercase hex characters"
 done
-[[ "${S3_N8N_ACCESS_KEY_ID:-}" != "${S3_BACKUP_ACCESS_KEY_ID:-}" ]] || err "n8n and backup S3 keys must be different"
+[[ "${S3_APP_ACCESS_KEY_ID:-}" != "${S3_BACKUP_ACCESS_KEY_ID:-}" ]] || err "app and backup S3 keys must be different"
 
 if [[ $fail -ne 0 ]]; then
   echo "Preflight failed. Fix .env (see .env.example and docs/env-variables.md)." >&2

@@ -62,7 +62,7 @@ ensure_key() {
     log "Key $name imported."
   fi
 }
-ensure_key "$S3_N8N_ACCESS_KEY_ID"    "$S3_N8N_SECRET_ACCESS_KEY"    "n8n"
+ensure_key "$S3_APP_ACCESS_KEY_ID"    "$S3_APP_SECRET_ACCESS_KEY"    "app"
 ensure_key "$S3_BACKUP_ACCESS_KEY_ID" "$S3_BACKUP_SECRET_ACCESS_KEY" "backup"
 
 # 5. Permissions: allow exactly what each key needs, deny everything else.
@@ -78,9 +78,9 @@ set_perm() {
   fi
 }
 #           bucket         key                         read  write owner
-set_perm "$media_id"     "$S3_N8N_ACCESS_KEY_ID"     true  true  false
-set_perm "$sensitive_id" "$S3_N8N_ACCESS_KEY_ID"     true  true  false
-set_perm "$backups_id"   "$S3_N8N_ACCESS_KEY_ID"     false false false
+set_perm "$media_id"     "$S3_APP_ACCESS_KEY_ID"     true  true  false
+set_perm "$sensitive_id" "$S3_APP_ACCESS_KEY_ID"     true  true  false
+set_perm "$backups_id"   "$S3_APP_ACCESS_KEY_ID"     false false false
 set_perm "$media_id"     "$S3_BACKUP_ACCESS_KEY_ID"  false false false
 set_perm "$sensitive_id" "$S3_BACKUP_ACCESS_KEY_ID"  false false false
 set_perm "$backups_id"   "$S3_BACKUP_ACCESS_KEY_ID"  true  true  true

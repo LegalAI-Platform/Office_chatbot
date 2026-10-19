@@ -1,0 +1,29 @@
+{
+  "messaging_product": "whatsapp",
+  "metadata": {
+    "display_phone_number": "15550000000",
+    "phone_number_id": "100000000000001"
+  },
+  "contacts": [
+    {
+      "profile": {
+        "name": "Test Client One"
+      },
+      "wa_id": "201000000001"
+    }
+  ],
+  "messages": [
+    {
+      "from": "201000000001",
+      "id": "wamid.TEST-IN-IMAGE-1",
+      "timestamp": "1760900020",
+      "type": "image",
+      "image": {
+        "id": "MEDIA-IMAGE-1",
+        "mime_type": "image/jpeg",
+        "sha256": "fake"
+      }
+    }
+  ],
+  "field": "messages"
+}

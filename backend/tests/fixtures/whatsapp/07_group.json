@@ -1,0 +1,28 @@
+{
+  "messaging_product": "whatsapp",
+  "metadata": {
+    "display_phone_number": "15550000000",
+    "phone_number_id": "100000000000001"
+  },
+  "contacts": [
+    {
+      "profile": {
+        "name": "Group Member"
+      },
+      "wa_id": "201000000003"
+    }
+  ],
+  "messages": [
+    {
+      "from": "201000000003",
+      "id": "wamid.TEST-IN-GROUP-1",
+      "timestamp": "1760900050",
+      "type": "text",
+      "text": {
+        "body": "group msg"
+      },
+      "group_id": "GROUP-TEST-1"
+    }
+  ],
+  "field": "messages"
+}

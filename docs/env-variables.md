@@ -1,58 +1,42 @@
 # Environment variables
 
-All values live in `.env` (never committed). `.env.example` has every variable with a
-placeholder. `scripts/*/gen-secrets` prints fresh values for every secret.
-The `preflight` job refuses to start the stack while a required value is empty, still
-contains `CHANGE_ME`, or has the wrong format.
+All values live in `.env` (never committed). `.env.example` lists every variable.
+`gen-secrets` prints fresh values for every generated secret. The `preflight` job refuses to start
+the stack while a required value is empty, contains `CHANGE_ME`, or has the wrong format.
 
-| Variable | Used by | Secret | Example / format | Task |
+Variables with `__` map to .NET configuration sections: `WhatsApp__AppId` = `WhatsApp:AppId`.
+
+| Variable | Used by | Secret | Format / example | Task |
 |---|---|---|---|---|
-| `ENVIRONMENT` | preflight, reset | no | `test` (or `staging`) | 01 |
+| `ENVIRONMENT` | preflight, reset, API/CLI environment name | no | `test` (or `staging`) | 01 |
 | `COMPOSE_PROJECT_NAME` | docker compose | no | `office` | 01 |
-| `POSTGRES_SUPERUSER` | postgres, tools | no | `postgres_admin` | 01 |
-| `POSTGRES_SUPERUSER_PASSWORD` | postgres, tools | **yes** | 48 hex chars | 01 |
-| `N8N_DB_PASSWORD` | postgres init, n8n | **yes** | 48 hex chars, URL-safe | 01 |
-| `OFFICE_MIGRATOR_PASSWORD` | postgres init, migrate | **yes** | 48 hex chars, URL-safe | 01 |
-| `OFFICE_APP_PASSWORD` | postgres init, tools; n8n credential later | **yes** | 48 hex chars, URL-safe | 01 |
-| `OFFICE_READONLY_PASSWORD` | postgres init, tools; Appsmith later | **yes** | 48 hex chars, URL-safe | 01 |
-| `REDIS_PASSWORD` | redis, tools; n8n credential later | **yes** | 48 hex chars | 01 |
+| `POSTGRES_SUPERUSER` | postgres, tools, tests | no | `postgres_admin` | 01 |
+| `POSTGRES_SUPERUSER_PASSWORD` | postgres, tools, tests | **yes** | 48 hex chars | 01 |
+| `OFFICE_MIGRATOR_PASSWORD` | postgres init, `cli migrate`, tests | **yes** | 48 hex, letters/digits/`_-` only | 01 |
+| `OFFICE_APP_PASSWORD` | postgres init, API, CLI, tools, tests | **yes** | 48 hex, letters/digits/`_-` only | 01 |
+| `OFFICE_READONLY_PASSWORD` | postgres init, tools | **yes** | 48 hex, letters/digits/`_-` only | 01 |
+| `REDIS_PASSWORD` | redis, API, tools, tests | **yes** | 48 hex, letters/digits/`_-` only | 01 |
 | `GARAGE_RPC_SECRET` | garage | **yes** | exactly 64 lowercase hex | 01 |
-| `GARAGE_ADMIN_TOKEN` | garage, storage-init, healthcheck | **yes** | 64 hex chars | 01 |
-| `S3_REGION` | tools; n8n S3 credential later | no | `garage` | 01 |
-| `S3_N8N_ACCESS_KEY_ID` | storage-init; n8n S3 credential later | no (identifier) | `GK` + 24 hex | 01 |
-| `S3_N8N_SECRET_ACCESS_KEY` | storage-init; n8n S3 credential later | **yes** | 64 hex | 01 |
-| `S3_BACKUP_ACCESS_KEY_ID` | storage-init, backup, restore | no (identifier) | `GK` + 24 hex | 01 |
-| `S3_BACKUP_SECRET_ACCESS_KEY` | storage-init, backup, restore | **yes** | 64 hex | 01 |
-| `N8N_ENCRYPTION_KEY` | n8n | **yes — critical** | 64 hex. Losing or changing it makes stored credentials unreadable | 01 |
-| `N8N_HOST` | n8n | no | `127.0.0.1` (or the tunnel hostname) | 01 |
-| `N8N_PROTOCOL` | n8n | no | `http` locally, `https` behind the tunnel | 01 |
-| `WEBHOOK_URL` | n8n (passed as `N8N_WEBHOOK_URL`, the n8n 2.x name) | no | `http://127.0.0.1:5678/` or `https://<tunnel>/` (trailing slash) | 01 / 02 |
-| `N8N_PROXY_HOPS` | n8n | no | `1` (cloudflared) | 01 |
-| `N8N_SECURE_COOKIE` | n8n | no | `false` for local http, `true` behind HTTPS | 01 |
-| `EXECUTIONS_DATA_MAX_AGE` | n8n | no | hours; `336` = 14 days | 01 |
-| `CLOUDFLARE_TUNNEL_TOKEN` | tunnel-named | **yes** | empty = Quick Tunnel | 01 / 02 |
-| `WHATSAPP_PHONE_NUMBER_ID` | n8n workflows | no | empty for now | 02 |
-| `WHATSAPP_WABA_ID` | n8n workflows | no | empty for now | 02 |
-| `GRAPH_API_VERSION` | n8n workflows | no | empty for now, e.g. `v23.0` | 02 |
-| `OPENAI_MODEL` | n8n workflows | no | empty until sample tests (T-08) | 04 |
-| `OPS_TELEGRAM_CHAT_ID` | error workflow | no | empty for now | monitoring |
+| `GARAGE_ADMIN_TOKEN` | garage, storage-init, healthcheck | **yes** | 64 hex | 01 |
+| `S3_REGION` | tools; backend from TASK 03 | no | `garage` | 01 |
+| `S3_APP_ACCESS_KEY_ID` / `S3_APP_SECRET_ACCESS_KEY` | storage-init; backend from TASK 03 | id no / secret **yes** | `GK`+24 hex / 64 hex | 01 |
+| `S3_BACKUP_ACCESS_KEY_ID` / `S3_BACKUP_SECRET_ACCESS_KEY` | storage-init, backup, restore | id no / secret **yes** | `GK`+24 hex / 64 hex | 01 |
+| `WhatsApp__Enabled` | API, CLI, preflight | no | `false` until Meta setup is done | 02 |
+| `WhatsApp__AppId` | API, CLI | no | Meta App ID | 02 |
+| `WhatsApp__WabaId` | API, CLI | no | WhatsApp Business Account ID | 02 |
+| `WhatsApp__PhoneNumberId` | API, CLI | no | phone number ID that sends | 02 |
+| `WhatsApp__GraphApiVersion` | API, CLI | no | `v26.0` (Meta changelog, 2026-10) | 02 |
+| `WhatsApp__TestRecipients` | API, CLI, preflight | no | `2010xxxxxxxx[,…]`, digits only | 02 |
+| `WhatsApp__AppSecret` | API (signature), CLI (app token) | **yes** | from Meta App settings → Basic | 02 |
+| `WhatsApp__AccessToken` | API, CLI | **yes** | permanent system-user token, without `Bearer` | 02 |
+| `WhatsApp__VerifyToken` | API (GET verification), CLI | **yes** | generated by `gen-secrets` (48 hex) | 02 |
+| `WhatsApp__EchoTest__Enabled` | API | no | `false`; `true` only while testing, only in `test` | 02 |
+| `Telegram__BotToken` / `Telegram__ChatId` | API (alerts, T-16) | token **yes** | optional | 02 |
+| `CLOUDFLARE_TUNNEL_TOKEN` | tunnel-named | **yes** | empty = Quick Tunnel | 01 |
+| `OPENAI_MODEL` | backend (TASK 04) | no | empty until sample tests (T-08) | 04 |
 
-Variables set directly in `docker-compose.yml` (not in `.env`): `TZ` / `GENERIC_TIMEZONE`
-(`Africa/Cairo`), `DB_TYPE=postgresdb`, `N8N_DIAGNOSTICS_ENABLED=false`,
-`N8N_VERSION_NOTIFICATIONS_ENABLED=false`, `N8N_PERSONALIZATION_ENABLED=false`,
-`N8N_BLOCK_ENV_ACCESS_IN_NODE=true`, `EXECUTIONS_DATA_PRUNE=true`,
-`APPSMITH_DISABLE_TELEMETRY=true`.
+Set directly in `docker-compose.yml` (not in `.env`): `TZ=Africa/Cairo`, the connection strings
+(`ConnectionStrings__Office` as `office_app`, `ConnectionStrings__OfficeMigrator` for the CLI only,
+`ConnectionStrings__Redis`), `ASPNETCORE_ENVIRONMENT` / `DOTNET_ENVIRONMENT` from `ENVIRONMENT`.
 
-## Secrets that never go in `.env`
-
-They are entered as **n8n Credentials** (encrypted with `N8N_ENCRYPTION_KEY`), never in
-`.env`, files, workflow JSON or logs:
-
-| Secret | Task |
-|---|---|
-| WhatsApp permanent access token | 02 |
-| Meta App Secret (webhook signature) | 02 |
-| Webhook verify token | 02 |
-| OpenAI API key | 04 |
-| Google Calendar OAuth / service account | 08 |
-| Telegram bot token | monitoring |
+Secrets are never written to files other than `.env`, never logged, and never shared in chat.

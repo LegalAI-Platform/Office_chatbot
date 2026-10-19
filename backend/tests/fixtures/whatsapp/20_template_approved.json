@@ -1,0 +1,8 @@
+{
+  "event": "APPROVED",
+  "message_template_id": 999000111,
+  "message_template_name": "hello_world",
+  "message_template_language": "en_US",
+  "reason": "NONE",
+  "field": "message_template_status_update"
+}

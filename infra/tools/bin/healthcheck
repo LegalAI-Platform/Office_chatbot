@@ -29,13 +29,19 @@ redis_reply_matches() {  # redis_reply_matches with-auth|no-auth PATTERN CMD...
   [[ "$reply" == $pattern ]]
 }
 bucket_private() { garage_api GET "/v2/GetBucketInfo?globalAlias=$1" | jq -e '.websiteAccess == false'; }
+webhook_refuses_unsigned() {
+  local code
+  code="$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' http://api:8080/webhooks/whatsapp)"
+  [[ "$code" == "401" || "$code" == "503" ]]
+}
+ef_migrations_applied() { (( $(psql_super office -c "SELECT count(*) FROM app.__ef_migrations_history") >= 1 )); }
 lifecycle_30_days() {
   s3_as backup s3api get-bucket-lifecycle-configuration --bucket "$BUCKET_BACKUPS" \
     | jq -e '.Rules[0].Expiration.Days == 30 and .Rules[0].Status == "Enabled"'
 }
 
 echo "== Containers"
-for svc in postgres redis garage n8n; do
+for svc in postgres redis garage api; do
   check "$svc reachable on the internal network" getent hosts "$svc"
 done
 
@@ -48,20 +54,20 @@ check "office_app cannot CREATE TABLE in schema public" \
   expect_fail psql_as office_app "$OFFICE_APP_PASSWORD" office -c 'CREATE TABLE public.__hc_probe(x int)'
 check "office_readonly can read office" \
   psql_as office_readonly "$OFFICE_READONLY_PASSWORD" office -c 'SELECT 1'
-check "office_readonly cannot INSERT" \
-  expect_fail psql_as office_readonly "$OFFICE_READONLY_PASSWORD" office -c 'INSERT INTO public.schema_migrations(version) VALUES ($$__hc$$)'
-check "n8n_user cannot connect to office" \
-  expect_fail psql_as n8n_user "$N8N_DB_PASSWORD" office -c 'SELECT 1'
-check "office_app cannot connect to n8n" \
-  expect_fail psql_as office_app "$OFFICE_APP_PASSWORD" n8n -c 'SELECT 1'
+check "office_readonly cannot write WhatsApp tables" \
+  expect_fail psql_as office_readonly "$OFFICE_READONLY_PASSWORD" office -c 'DELETE FROM app.wa_templates'
+check "office_app can write WhatsApp tables (rolled back)" \
+  psql_as office_app "$OFFICE_APP_PASSWORD" office -c 'BEGIN; DELETE FROM app.wa_templates WHERE false; ROLLBACK;'
+check "office_app cannot ALTER WhatsApp tables" \
+  expect_fail psql_as office_app "$OFFICE_APP_PASSWORD" office -c 'ALTER TABLE app.wa_templates ADD COLUMN __hc int'
+check "the n8n database no longer exists (DECISIONS v1.1)" \
+  sql_equals postgres "SELECT count(*) FROM pg_database WHERE datname = 'n8n'" "0"
 check "server timezone is Africa/Cairo" sql_equals postgres "SHOW timezone" "Africa/Cairo"
 
-echo "== n8n"
-check "n8n /healthz returns 200" http_status_is http://n8n:5678/healthz 200
-check "n8n /healthz/readiness returns 200 (database connected, migrations done)" \
-  http_status_is http://n8n:5678/healthz/readiness 200
-check "n8n stores its data in PostgreSQL (core tables exist in database n8n)" \
-  sql_equals n8n "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('workflow_entity', 'credentials_entity', 'user')" "3"
+echo "== API"
+check "api /health/live returns 200" http_status_is http://api:8080/health/live 200
+check "api /health/ready returns 200 (PostgreSQL and Redis reachable)" http_status_is http://api:8080/health/ready 200
+check "webhook POST without a valid signature is refused (401, or 503 while WhatsApp is off)" webhook_refuses_unsigned
 
 echo "== Redis"
 check "PING with password returns PONG" redis_reply_matches with-auth "PONG" ping
@@ -76,19 +82,22 @@ for b in "$BUCKET_MEDIA" "$BUCKET_SENSITIVE" "$BUCKET_BACKUPS"; do
 done
 probe="healthcheck/probe-$(date +%s).txt"
 echo "probe" > /tmp/probe.txt
-check "n8n key can write to $BUCKET_MEDIA" s3_as n8n s3 cp /tmp/probe.txt "s3://$BUCKET_MEDIA/$probe"
-check "n8n key can write to $BUCKET_SENSITIVE" s3_as n8n s3 cp /tmp/probe.txt "s3://$BUCKET_SENSITIVE/$probe"
-check "n8n key cannot write to $BUCKET_BACKUPS" expect_fail s3_as n8n s3 cp /tmp/probe.txt "s3://$BUCKET_BACKUPS/$probe"
+check "app key can write to $BUCKET_MEDIA" s3_as app s3 cp /tmp/probe.txt "s3://$BUCKET_MEDIA/$probe"
+check "app key can write to $BUCKET_SENSITIVE" s3_as app s3 cp /tmp/probe.txt "s3://$BUCKET_SENSITIVE/$probe"
+check "app key cannot write to $BUCKET_BACKUPS" expect_fail s3_as app s3 cp /tmp/probe.txt "s3://$BUCKET_BACKUPS/$probe"
 check "backup key can write to $BUCKET_BACKUPS" s3_as backup s3 cp /tmp/probe.txt "s3://$BUCKET_BACKUPS/$probe"
 check "backup key cannot read $BUCKET_SENSITIVE" expect_fail s3_as backup s3 ls "s3://$BUCKET_SENSITIVE"
 check "lifecycle: $BUCKET_BACKUPS expires objects after 30 days" lifecycle_30_days
-s3_as n8n s3 rm "s3://$BUCKET_MEDIA/$probe" >/dev/null 2>&1 || true
-s3_as n8n s3 rm "s3://$BUCKET_SENSITIVE/$probe" >/dev/null 2>&1 || true
+s3_as app s3 rm "s3://$BUCKET_MEDIA/$probe" >/dev/null 2>&1 || true
+s3_as app s3 rm "s3://$BUCKET_SENSITIVE/$probe" >/dev/null 2>&1 || true
 s3_as backup s3 rm "s3://$BUCKET_BACKUPS/$probe" >/dev/null 2>&1 || true
 
 echo "== Migrations"
-check "migration 0001 is applied" \
-  sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0001'" "1"
+check "EF Core migrations are applied" ef_migrations_applied
+check "old dbmate table is gone" \
+  sql_equals office "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'schema_migrations'" "0"
+check "Hangfire schema exists" \
+  sql_equals office "SELECT count(*) FROM pg_namespace WHERE nspname = 'hangfire'" "1"
 check "schema app exists" \
   sql_equals office "SELECT count(*) FROM pg_namespace WHERE nspname = 'app'" "1"
 check "function app.set_updated_at() exists" \
