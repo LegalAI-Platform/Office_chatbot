@@ -8,12 +8,13 @@ err() { echo "PREFLIGHT FAIL: $*" >&2; fail=1; }
 required=(
   ENVIRONMENT
   POSTGRES_SUPERUSER POSTGRES_SUPERUSER_PASSWORD
-  N8N_DB_PASSWORD OFFICE_MIGRATOR_PASSWORD OFFICE_APP_PASSWORD OFFICE_READONLY_PASSWORD
+  N8N_DB_PASSWORD OFFICE_MIGRATOR_PASSWORD OFFICE_APP_PASSWORD OFFICE_READONLY_PASSWORD OFFICE_API_PASSWORD
   REDIS_PASSWORD
   GARAGE_RPC_SECRET GARAGE_ADMIN_TOKEN S3_REGION
   S3_N8N_ACCESS_KEY_ID S3_N8N_SECRET_ACCESS_KEY
   S3_BACKUP_ACCESS_KEY_ID S3_BACKUP_SECRET_ACCESS_KEY
   N8N_ENCRYPTION_KEY N8N_HOST N8N_PROTOCOL WEBHOOK_URL
+  HAZEM_API_TOKEN N8N_INTERNAL_SEND_TOKEN
 )
 
 for v in "${required[@]}"; do
@@ -31,18 +32,23 @@ case "${ENVIRONMENT:-}" in
 esac
 
 for v in POSTGRES_SUPERUSER_PASSWORD N8N_DB_PASSWORD OFFICE_MIGRATOR_PASSWORD \
-         OFFICE_APP_PASSWORD OFFICE_READONLY_PASSWORD REDIS_PASSWORD GARAGE_ADMIN_TOKEN; do
+         OFFICE_APP_PASSWORD OFFICE_READONLY_PASSWORD OFFICE_API_PASSWORD REDIS_PASSWORD GARAGE_ADMIN_TOKEN; do
   val="${!v:-}"
   [[ -n "$val" && ${#val} -lt 24 ]] && err "$v must be at least 24 characters"
 done
 
 # Passwords are embedded in connection URLs; keep them URL-safe.
-for v in N8N_DB_PASSWORD OFFICE_MIGRATOR_PASSWORD OFFICE_APP_PASSWORD OFFICE_READONLY_PASSWORD; do
+for v in N8N_DB_PASSWORD OFFICE_MIGRATOR_PASSWORD OFFICE_APP_PASSWORD OFFICE_READONLY_PASSWORD OFFICE_API_PASSWORD; do
   val="${!v:-}"
   [[ -n "$val" && ! "$val" =~ ^[A-Za-z0-9_-]+$ ]] && err "$v may only contain letters, digits, '_' and '-'"
 done
 
 [[ "${N8N_ENCRYPTION_KEY:-}" =~ ^.{32,}$ ]] || err "N8N_ENCRYPTION_KEY must be at least 32 characters"
+# n8n <-> .NET API (DECISIONS v1.3, T-18): one secret per direction, header-safe characters.
+for v in HAZEM_API_TOKEN N8N_INTERNAL_SEND_TOKEN; do
+  [[ "${!v:-}" =~ ^[A-Za-z0-9_-]{32,}$ ]] || err "$v must be at least 32 letters, digits, '_' or '-'"
+done
+[[ "${HAZEM_API_TOKEN:-}" != "${N8N_INTERNAL_SEND_TOKEN:-}" ]] || err "HAZEM_API_TOKEN and N8N_INTERNAL_SEND_TOKEN must be different"
 [[ "${GARAGE_RPC_SECRET:-}" =~ ^[0-9a-f]{64}$ ]] || err "GARAGE_RPC_SECRET must be exactly 64 lowercase hex characters"
 
 for v in S3_N8N_ACCESS_KEY_ID S3_BACKUP_ACCESS_KEY_ID; do

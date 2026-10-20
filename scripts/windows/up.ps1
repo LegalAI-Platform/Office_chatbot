@@ -1,4 +1,4 @@
-# Starts the core services: postgres, redis, garage, storage-init, n8n.
+# Starts the core services: postgres, redis, garage, storage-init, n8n and the .NET api.
 . (Join-Path $PSScriptRoot '_common.ps1')
 Assert-NoPlaceholders
 Invoke-Compose up -d --wait

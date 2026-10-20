@@ -1,5 +1,7 @@
 #!/bin/bash
 # Creates the n8n and office databases and their least-privilege roles.
+# office_api (the .NET backend, DECISIONS v1.3) only gets CONNECT here; its schema "hazem"
+# and the grants on it come from migration 0003.
 # Runs automatically on the first start (empty volume). Safe to run again:
 #   docker compose exec postgres bash /docker-entrypoint-initdb.d/01-create-databases-and-roles.sh
 set -euo pipefail
@@ -8,6 +10,7 @@ set -euo pipefail
 : "${OFFICE_MIGRATOR_PASSWORD:?missing}"
 : "${OFFICE_APP_PASSWORD:?missing}"
 : "${OFFICE_READONLY_PASSWORD:?missing}"
+: "${OFFICE_API_PASSWORD:?missing}"
 
 run_psql() {
   psql -v ON_ERROR_STOP=1 --no-psqlrc --username "$POSTGRES_USER" \
@@ -15,6 +18,7 @@ run_psql() {
     -v migrator_pw="$OFFICE_MIGRATOR_PASSWORD" \
     -v app_pw="$OFFICE_APP_PASSWORD" \
     -v readonly_pw="$OFFICE_READONLY_PASSWORD" \
+    -v api_pw="$OFFICE_API_PASSWORD" \
     "$@"
 }
 
@@ -25,17 +29,22 @@ SELECT 'CREATE ROLE n8n_user LOGIN' WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHE
 SELECT 'CREATE ROLE office_migrator LOGIN' WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'office_migrator') \gexec
 SELECT 'CREATE ROLE office_app LOGIN' WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'office_app') \gexec
 SELECT 'CREATE ROLE office_readonly LOGIN' WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'office_readonly') \gexec
+SELECT 'CREATE ROLE office_api LOGIN' WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'office_api') \gexec
 
 ALTER ROLE n8n_user        WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION PASSWORD :'n8n_pw';
 ALTER ROLE office_migrator WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION PASSWORD :'migrator_pw';
 ALTER ROLE office_app      WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION PASSWORD :'app_pw';
 ALTER ROLE office_readonly WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION PASSWORD :'readonly_pw';
+ALTER ROLE office_api      WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION PASSWORD :'api_pw';
 
 -- Application roles look in the "app" schema first (created by migration 0001).
 ALTER ROLE office_app      SET search_path = app, public;
 ALTER ROLE office_readonly SET search_path = app, public;
 ALTER ROLE office_app      SET timezone = 'Africa/Cairo';
 ALTER ROLE office_readonly SET timezone = 'Africa/Cairo';
+-- The .NET backend works in schema "hazem" (migration 0003) and has no access to "app".
+ALTER ROLE office_api      SET search_path = hazem, public;
+ALTER ROLE office_api      SET timezone = 'Africa/Cairo';
 
 -- Databases
 SELECT 'CREATE DATABASE n8n OWNER n8n_user' WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'n8n') \gexec
@@ -49,7 +58,7 @@ REVOKE ALL ON DATABASE n8n    FROM PUBLIC;
 REVOKE ALL ON DATABASE office FROM PUBLIC;
 REVOKE ALL ON DATABASE postgres FROM PUBLIC;
 
-GRANT CONNECT ON DATABASE office TO office_app, office_readonly;
+GRANT CONNECT ON DATABASE office TO office_app, office_readonly, office_api;
 -- Owners (n8n_user on n8n, office_migrator on office) keep their implicit rights.
 EOSQL
 
@@ -69,4 +78,4 @@ ALTER DEFAULT PRIVILEGES FOR ROLE office_migrator
   GRANT SELECT ON SEQUENCES TO office_readonly;
 EOSQL
 
-echo "[init] databases n8n and office, and roles n8n_user, office_migrator, office_app, office_readonly are ready."
+echo "[init] databases n8n and office, and roles n8n_user, office_migrator, office_app, office_readonly, office_api are ready."

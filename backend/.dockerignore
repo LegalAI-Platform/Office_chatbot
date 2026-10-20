@@ -1,0 +1,7 @@
+**/bin/
+**/obj/
+.nuget-packages/
+**/TestResults/
+tests/
+.config/
+*.user

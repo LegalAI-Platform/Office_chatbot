@@ -1,31 +1,38 @@
 # Office WhatsApp System (Hazem) — Test/Staging infrastructure
 
 WhatsApp assistant ("Hazem") for the law office of Ustaz Saad Fathy Saad.
-n8n orchestrates the flows, Meta WhatsApp Cloud API carries the messages, and
-PostgreSQL holds the business data.
+**n8n** is the WhatsApp layer (the only part that talks to Meta WhatsApp Cloud API), the
+**.NET API** (ASP.NET Core, `backend/`) is the brain, and PostgreSQL holds the data.
 
-Done so far: **TASK 01** (infrastructure) and **TASK 02** (Meta WhatsApp Cloud API in n8n;
-live tests with Meta pending the project owner's Meta setup).
+Done so far: **TASK 01** (infrastructure), **TASK 02** (Meta WhatsApp Cloud API in n8n; live
+tests with Meta pending the project owner's Meta setup) and the **n8n ↔ .NET hand-off**
+(DECISIONS v1.3; the API only answers with a test echo until TASK 04).
 
-- All decisions: [docs/decisions/DECISIONS-v1.2.md](docs/decisions/DECISIONS-v1.2.md)
+- All decisions: [docs/decisions/DECISIONS-v1.3.md](docs/decisions/DECISIONS-v1.3.md)
+- n8n ↔ .NET API contract: [docs/hazem-internal-api.md](docs/hazem-internal-api.md)
+- Backend: [backend/README.md](backend/README.md)
 - Architecture and permissions: [docs/infrastructure.md](docs/infrastructure.md)
 - WhatsApp workflows, error codes, settings: [docs/whatsapp-integration.md](docs/whatsapp-integration.md)
 - Operations runbook: [docs/runbooks/whatsapp.md](docs/runbooks/whatsapp.md)
 - Meta setup (project owner): [docs/meta-setup.md](docs/meta-setup.md)
 - Environment variables: [docs/env-variables.md](docs/env-variables.md)
 
-TASK 02 commands: `n8n-import` / `n8n-export` (workflows), `wa-tests` (database rules and the
-workflow harness, no Meta needed), `tunnel-refresh` / `tunnel-down` (Quick Tunnel + Meta webhook).
+TASK 02 commands: `n8n-import` / `n8n-export` (workflows and the credentials from `.env`),
+`wa-tests` (database rules and the workflow harness, no Meta needed), `tunnel-refresh` /
+`tunnel-down` (Quick Tunnel + Meta webhook).
+v1.3 commands: `backend-test` (.NET unit and integration tests), `hazem-e2e` (the whole loop
+n8n → API → n8n without Meta).
 
 ## Services
 
 | Service | Local URL / port | Purpose | Starts with |
 |---|---|---|---|
-| n8n 2.43.8 | http://127.0.0.1:5678 | Flow orchestrator (Regular mode, PostgreSQL backend) | core |
+| n8n 2.43.8 | http://127.0.0.1:5678 | WhatsApp layer: Meta in and out (Regular mode, PostgreSQL backend) | core |
+| .NET API (ASP.NET Core 10) | none (`http://api:8080` inside Docker only) | The brain: turns, decisions, later the panel API | core |
 | PostgreSQL 16.15 | 127.0.0.1:5432 | Databases `n8n` and `office` | core |
 | Redis 7.4.11 | 127.0.0.1:6379 | Debounce, dedup, locks, rate limits (later tasks) | core |
 | Garage v2.4.1 (S3) | http://127.0.0.1:3900 | Object storage: `office-media`, `office-sensitive`, `office-backups` | core |
-| Appsmith CE v2.4.3 | http://127.0.0.1:8080 | Office panel (pages built in a later task) | `panel` profile |
+| Appsmith CE v2.4.3 | http://127.0.0.1:8080 | Unused: the panel will be React on the API (TASK 07) | `panel` profile |
 | cloudflared 2026.9.3 | public https URL | Exposes **n8n only** for the Meta webhook | `tunnel` / `tunnel-named` profile |
 
 Every port is bound to `127.0.0.1`. Nothing is reachable from the network except n8n,
@@ -65,6 +72,10 @@ Every script below exists in two versions: `scripts\windows\<name>.ps1` and
    ```powershell
    powershell -ExecutionPolicy Bypass -File scripts\windows\migrate.ps1 up
    ```
+   Then import the n8n workflows (also creates the credentials that come from `.env`):
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File scripts\windows\n8n-import.ps1
+   ```
 5. **Check everything:**
    ```powershell
    powershell -ExecutionPolicy Bypass -File scripts\windows\healthcheck.ps1
@@ -86,6 +97,10 @@ Every script below exists in two versions: `scripts\windows\<name>.ps1` and
 | `logs <service> [lines]` | Follow one service's logs |
 | `healthcheck` | Full check (containers, ports, DB roles, n8n, Redis, buckets, keys, migrations) |
 | `migrate up\|down\|status` | Run migrations on `office` as `office_migrator` |
+| `n8n-import` | Credentials from `.env` + workflows into n8n; restarts n8n when a schedule or webhook was published |
+| `wa-tests` | WhatsApp database rules + n8n harness (no Meta) |
+| `backend-test [-Docker]` | .NET tests; uses a throwaway database (needs `up`) |
+| `hazem-e2e` | Whole loop n8n ↔ API without Meta (dry run), then switches the test settings off |
 | `backup` | Dump `office` and `n8n` to `office-backups` |
 | `restore ...` | Restore a dump into a new database and verify it |
 | `reset` | **Deletes all data.** Only with `ENVIRONMENT=test` and after typing `RESET` |

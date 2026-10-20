@@ -35,7 +35,7 @@ lifecycle_30_days() {
 }
 
 echo "== Containers"
-for svc in postgres redis garage n8n; do
+for svc in postgres redis garage n8n api; do
   check "$svc reachable on the internal network" getent hosts "$svc"
 done
 
@@ -55,6 +55,18 @@ check "n8n_user cannot connect to office" \
 check "office_app cannot connect to n8n" \
   expect_fail psql_as office_app "$OFFICE_APP_PASSWORD" n8n -c 'SELECT 1'
 check "server timezone is Africa/Cairo" sql_equals postgres "SHOW timezone" "Africa/Cairo"
+check "office_api (.NET) can connect to office" \
+  psql_as office_api "$OFFICE_API_PASSWORD" office -c 'SELECT 1'
+check "office_api can write schema hazem (rolled back)" \
+  psql_as office_api "$OFFICE_API_PASSWORD" office -c 'BEGIN; DELETE FROM hazem.turns WHERE false; ROLLBACK;'
+check "office_api cannot CREATE TABLE in schema hazem" \
+  expect_fail psql_as office_api "$OFFICE_API_PASSWORD" office -c 'CREATE TABLE hazem.__hc_probe(x int)'
+check "office_api cannot read the WhatsApp tables (schema app)" \
+  expect_fail psql_as office_api "$OFFICE_API_PASSWORD" office -c 'SELECT 1 FROM app.wa_inbound_messages LIMIT 1'
+check "office_app (n8n) cannot read the API tables (schema hazem)" \
+  expect_fail psql_as office_app "$OFFICE_APP_PASSWORD" office -c 'SELECT 1 FROM hazem.turns LIMIT 1'
+check "office_api cannot connect to n8n" \
+  expect_fail psql_as office_api "$OFFICE_API_PASSWORD" n8n -c 'SELECT 1'
 
 echo "== n8n"
 check "n8n /healthz returns 200" http_status_is http://n8n:5678/healthz 200
@@ -99,14 +111,34 @@ check "office_app may run the WhatsApp functions" \
   sql_equals office "SELECT has_function_privilege('office_app', 'app.wa_process_event(jsonb)', 'EXECUTE')::text" "true"
 check "office_readonly may not run them" \
   sql_equals office "SELECT has_function_privilege('office_readonly', 'app.wa_process_event(jsonb)', 'EXECUTE')::text" "false"
-check "echo test is switched off" \
-  sql_equals office "SELECT value FROM app.settings WHERE key = 'whatsapp.echo_test_enabled'" "false"
-check "n8n has the 12 TASK 02 workflows" \
-  sql_equals n8n "SELECT count(*) FROM workflow_entity WHERE id IN ('WaCfgGet00000001','WaErrHandler0001','WaInbound0000001','WaProcEvent00001','WaSendMsg0000001','WaSendTpl0000001','WaSubCheck000001','WaSubDelete00001','WaTplSubmit00001','WaTplSync0000001','WaEchoTest000001','WaTestHarness001')" "12"
-check "n8n has the office-postgres-app credential" \
-  sql_equals n8n "SELECT count(*) FROM credentials_entity WHERE name = 'office-postgres-app'" "1"
+check "dry run is off (whatsapp.dry_run = false: real sends reach Meta)" \
+  sql_equals office "SELECT value FROM app.settings WHERE key = 'whatsapp.dry_run'" "false"
+check "n8n has the 15 workflows (TASK 02 + v1.3 hand-off)" \
+  sql_equals n8n "SELECT count(*) FROM workflow_entity WHERE id IN ('WaCfgGet00000001','WaErrHandler0001','WaInbound0000001','WaProcEvent00001','WaSendMsg0000001','WaSendTpl0000001','WaSubCheck000001','WaSubDelete00001','WaTplSubmit00001','WaTplSync0000001','WaTestHarness001','WaFwdTurn0000001','WaHandleTurn0001','WaSendAction0001','WaIntSend0000001')" "15"
+check "n8n has the credentials from .env (office-postgres-app, hazem-api, hazem-internal-send)" \
+  sql_equals n8n "SELECT count(*) FROM credentials_entity WHERE name IN ('office-postgres-app','hazem-api','hazem-internal-send')" "3"
+
+echo "== n8n <-> .NET API (DECISIONS v1.3)"
+api_status() {  # api_status URL [curl args...] -> HTTP status of a POST with a JSON body {}
+  local url="$1"; shift
+  curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' "$@" "$url"
+}
+check "API is ready (database as office_api, schema hazem)" \
+  bash -c '[[ "$(curl -s http://api:8080/health/ready)" == Healthy ]]'
+check "API refuses a request without X-Hazem-Token (401)" \
+  test "$(api_status http://api:8080/api/hazem/turns)" = 401
+check "API accepts n8n's token (an empty turn is 400, not 401)" \
+  test "$(api_status http://api:8080/api/hazem/turns -H "X-Hazem-Token: $HAZEM_API_TOKEN")" = 400
+check "n8n internal send webhook is live and refuses a request without the token (403)" \
+  test "$(api_status http://n8n:5678/webhook/hazem-internal-send)" = 403
+check "API echo test is switched off" \
+  sql_equals office "SELECT value FROM hazem.settings WHERE key = 'echo.enabled'" "false"
+check "no text message waiting for the API for more than 10 minutes" \
+  sql_equals office "SELECT count(*) FROM app.wa_inbound_messages WHERE message_type = 'text' AND processing_status IN ('pending', 'processing') AND received_at < now() - interval '10 minutes'" "0"
 
 echo "== Migrations"
+check "migration 0003 (API schema hazem) is applied" \
+  sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0003'" "1"
 check "migration 0002 (WhatsApp) is applied" \
   sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0002'" "1"
 check "migration 0001 is applied" \

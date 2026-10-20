@@ -14,7 +14,8 @@ contains `CHANGE_ME`, or has the wrong format.
 | `N8N_DB_PASSWORD` | postgres init, n8n | **yes** | 48 hex chars, URL-safe | 01 |
 | `OFFICE_MIGRATOR_PASSWORD` | postgres init, migrate | **yes** | 48 hex chars, URL-safe | 01 |
 | `OFFICE_APP_PASSWORD` | postgres init, tools; n8n credential `office-postgres-app` (created by `create-local-credentials.sh`) | **yes** | 48 hex chars, URL-safe | 01 |
-| `OFFICE_READONLY_PASSWORD` | postgres init, tools; Appsmith later | **yes** | 48 hex chars, URL-safe | 01 |
+| `OFFICE_READONLY_PASSWORD` | postgres init, tools; the panel's read views later | **yes** | 48 hex chars, URL-safe | 01 |
+| `OFFICE_API_PASSWORD` | postgres init, api (role `office_api`, schema `hazem` only), tools | **yes** | 48 hex chars, URL-safe | v1.3 |
 | `REDIS_PASSWORD` | redis, tools; n8n credential later | **yes** | 48 hex chars | 01 |
 | `GARAGE_RPC_SECRET` | garage | **yes** | exactly 64 lowercase hex | 01 |
 | `GARAGE_ADMIN_TOKEN` | garage, storage-init, healthcheck | **yes** | 64 hex chars | 01 |
@@ -30,6 +31,8 @@ contains `CHANGE_ME`, or has the wrong format.
 | `N8N_PROXY_HOPS` | n8n | no | `1` (cloudflared) | 01 |
 | `N8N_SECURE_COOKIE` | n8n | no | `false` for local http, `true` behind HTTPS | 01 |
 | `EXECUTIONS_DATA_MAX_AGE` | n8n | no | hours; `336` = 14 days | 01 |
+| `HAZEM_API_TOKEN` | api; n8n credential `hazem-api` (n8n → API, header `X-Hazem-Token`) | **yes** | 64 hex chars; different from the next one | v1.3 |
+| `N8N_INTERNAL_SEND_TOKEN` | api; n8n credential `hazem-internal-send` (API → n8n internal send webhook) | **yes** | 64 hex chars | v1.3 |
 | `CLOUDFLARE_TUNNEL_TOKEN` | tunnel-named | **yes** | empty = Quick Tunnel | 01 / 02 |
 | `OPENAI_MODEL` | n8n workflows | no | empty until sample tests (T-08) | 04 |
 

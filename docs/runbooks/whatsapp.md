@@ -21,9 +21,34 @@ Symptom: messages to the test number never reach `app.wa_webhook_events`.
 
 1. `up` → `migrate up` → `n8n-import`.
 2. Create the n8n owner at http://127.0.0.1:5678 **before** any tunnel.
-3. `office-postgres-app`: `docker compose exec -T -e OFFICE_APP_PASSWORD=<from .env> n8n sh /opt/office/n8n/scripts/create-local-credentials.sh`
-   (the `n8n-import` warning lists what is still missing), then `n8n-import` again.
+3. `n8n-import` creates `office-postgres-app`, `hazem-api` and `hazem-internal-send` from `.env`
+   by itself; its warning lists the Meta credentials that are still missing.
 4. Meta credentials again (docs/meta-setup.md part 3) and the `whatsapp.*` settings.
+
+## The .NET API is down (DECISIONS v1.3, T-20)
+
+Symptom: client messages stay `pending` in `app.wa_inbound_messages` with
+`last_error = {"code": "API_UNAVAILABLE"}`; the healthcheck says a text message is waiting
+for more than 10 minutes.
+1. `status` / `logs api`: is the `api` container running and healthy?
+2. `docker compose run --rm tools sh -c 'curl -s http://api:8080/health/ready'` must print
+   `Healthy`. `Unhealthy` usually means migration 0003 is missing: `migrate up`.
+3. Start it (`up`). Nothing is lost: WA-FORWARD-TURN picks the waiting messages up within a minute.
+
+## n8n and the API refuse each other's token
+
+Symptom: `app.workflow_errors` shows "The API refused X-Hazem-Token", or the API's sends come
+back with `N8N_HTTP_403`.
+1. `HAZEM_API_TOKEN` and `N8N_INTERNAL_SEND_TOKEN` in `.env` must be set and different.
+2. Run `n8n-import` (rewrites the credentials `hazem-api` and `hazem-internal-send` from `.env`),
+   then `docker compose up -d api` (re-reads `.env`).
+3. To change a token: new value in `.env`, then step 2. Both sides always read it from `.env`.
+
+## End-to-end test without Meta
+
+`hazem-e2e`: message → n8n → API → reply (dry run) → result back; same turn twice; API down and
+back; API → n8n send; wrong tokens. Uses dummy numbers 20100000006x and switches dry run and the
+API echo off again at the end. `backend-test` runs the .NET unit and integration tests.
 
 ## Access token expired or revoked (Meta error 190)
 

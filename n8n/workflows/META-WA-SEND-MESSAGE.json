@@ -13,7 +13,7 @@
         0
       ],
       "parameters": {
-        "content": "## META-WA-SEND-MESSAGE\nInput: `wa_id`, `text`, `idempotency_key`, `requested_by`, optional `context_wamid`.\nOutput: `{ ok, outbound_id, wamid, status, error_code, error_message }`.\nNever sends twice for the same idempotency key. Refuses (OUTSIDE_24H_WINDOW) without calling Meta when the client has not written in the last 24 hours: use META-WA-SEND-TEMPLATE.\nRetries: one retry after 3 s only for HTTP 429/502/503/504. No retry after a timeout or HTTP 500 (Meta may already have sent it): the result is NETWORK_OR_UNKNOWN / META_ERROR and the caller decides.",
+        "content": "## META-WA-SEND-MESSAGE\nInput: `wa_id`, `text`, `idempotency_key`, `requested_by`, optional `context_wamid`.\nOutput: `{ ok, outbound_id, wamid, status, error_code, error_message }`.\nNever sends twice for the same idempotency key. Refuses (OUTSIDE_24H_WINDOW) without calling Meta when the client has not written in the last 24 hours: use META-WA-SEND-TEMPLATE.\nRetries: one retry after 3 s only for HTTP 429/502/503/504. No retry after a timeout or HTTP 500 (Meta may already have sent it): the result is NETWORK_OR_UNKNOWN / META_ERROR and the caller decides.\nDry run (`whatsapp.dry_run = true`, tests only): recorded as sent with wamid.DRYRUN-<outbound_id>, Meta is never called.",
         "height": 220,
         "width": 520
       }
@@ -119,7 +119,7 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT app.wa_outbound_prepare($1, $2, 'text', $3::jsonb, $4) AS r, $3::jsonb AS payload",
+        "query": "SELECT app.wa_outbound_prepare($1, $2, 'text', $3::jsonb, $4) AS r, $3::jsonb AS payload, COALESCE((SELECT value = 'true' FROM app.settings WHERE key = 'whatsapp.dry_run'), false) AS dry_run",
         "options": {
           "queryReplacement": "={{ [ $json.idempotency_key, $json.wa_id, JSON.stringify(Object.assign({ messaging_product: 'whatsapp', recipient_type: 'individual', to: $json.wa_id, type: 'text', text: { preview_url: false, body: $json.text } }, $json.context_wamid ? { context: { message_id: $json.context_wamid } } : {})), $json.requested_by ] }}"
         }
@@ -525,6 +525,56 @@
         },
         "options": {}
       }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ab1b9d45-cdaf-5794-becf-2ea00729c390",
+              "leftValue": "={{ $json.dry_run === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "e4386221-b8a5-5e5a-9364-24442f5938cb",
+      "name": "Dry run?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1680,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify({ statusCode: 200, body: { messaging_product: 'whatsapp', messages: [{ id: 'wamid.DRYRUN-' + $json.r.outbound_id }] } }) }}",
+        "options": {}
+      },
+      "id": "8b637a00-73aa-5d67-8fbf-95f51747e91a",
+      "name": "Dry-run response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1920,
+        0
+      ]
     }
   ],
   "connections": {
@@ -583,7 +633,7 @@
       "main": [
         [
           {
-            "node": "Config request",
+            "node": "Dry run?",
             "type": "main",
             "index": 0
           }
@@ -682,6 +732,35 @@
         [
           {
             "node": "Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dry run?": {
+      "main": [
+        [
+          {
+            "node": "Dry-run response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Config request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dry-run response": {
+      "main": [
+        [
+          {
+            "node": "Record result",
             "type": "main",
             "index": 0
           }

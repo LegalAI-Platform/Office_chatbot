@@ -21,3 +21,10 @@ desktop.ini
 
 # Raw chat exports (contain personal data)
 exports/
+
+# .NET build output (backend/ only: infra/tools/bin holds tracked scripts)
+backend/**/bin/
+backend/**/obj/
+backend/.nuget-packages/
+backend/**/TestResults/
+*.user

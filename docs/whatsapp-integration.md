@@ -1,6 +1,7 @@
-# WhatsApp integration (TASK 02, n8n) — DECISIONS v1.2
+# WhatsApp integration (TASK 02, n8n) — DECISIONS v1.3
 
-n8n is the orchestrator; every rule that must hold (dedupe, 24-hour window, status order,
+n8n is the WhatsApp layer: the only part that talks to Meta. Business decisions belong to the
+.NET API ([hazem-internal-api.md](hazem-internal-api.md)). Every rule that must hold (dedupe, 24-hour window, status order,
 idempotent sending, template approval) lives in PostgreSQL functions in migration
 `0002_whatsapp.sql`, so it runs in one transaction and is tested without Meta.
 
@@ -10,8 +11,14 @@ flowchart LR
     CF --> IN[META-WA-INBOUND<br/>WhatsApp Trigger]
     IN --> PE[META-WA-PROCESS-EVENT]
     PE -->|"app.wa_process_event()"| PG[(PostgreSQL · office.app)]
-    PE --> ECHO[WA-ECHO-TEST<br/>off by default]
-    ECHO --> SM
+    PE --> FWD[WA-FORWARD-TURN<br/>+ every minute]
+    FWD --> HT[WA-HANDLE-TURN]
+    HT -- "POST /api/hazem/turns" --> API[.NET API]
+    HT --> SA[WA-SEND-ACTION]
+    API -- "POST /webhook/hazem-internal-send" --> IS[WA-INTERNAL-SEND]
+    IS --> SA
+    SA --> SM
+    SA --> ST
     SM[META-WA-SEND-MESSAGE] -->|"wa_outbound_prepare / _result"| PG
     ST[META-WA-SEND-TEMPLATE] --> PG
     SM -- "Graph API /messages" --> META
@@ -36,7 +43,10 @@ flowchart LR
 | `META-WA-SUBSCRIPTION-CHECK` | manual | Shows the app's callback URL and fields; subscribes the WABA to the app if missing. Used by `tunnel-refresh`. |
 | `META-WA-SUBSCRIPTION-DELETE` | manual | Deletes the app's webhook subscription. Used by `tunnel-refresh` / `tunnel-down`. |
 | `META-WA-ERROR-HANDLER` | error workflow | Logs every failure to `app.workflow_errors` (long digit runs masked); Telegram nodes are disabled until `ops-telegram` exists. |
-| `WA-ECHO-TEST` | after PROCESS-EVENT | Test only: replies «تم استلام رسالتك (اختبار) ✅» once, only if `whatsapp.echo_test_enabled = true` and the sender is in `whatsapp.test_recipients`. |
+| `WA-FORWARD-TURN` | after INBOUND / every minute / manual | Claims waiting text messages (`app.wa_turns_claim`, max 20) and runs WA-HANDLE-TURN for each. The minute schedule retries messages that waited while the API was down. |
+| `WA-HANDLE-TURN` | sub-workflow | One turn: `POST /api/hazem/turns`, sends every action through WA-SEND-ACTION, reports to `POST /api/hazem/send-results`, then `app.wa_turns_finish`. API down / 5xx / 401 / 403 → back to `pending`; 400 / 422 → `failed`. |
+| `WA-SEND-ACTION` | sub-workflow | One action: `send_text` → SEND-MESSAGE, `send_template` → SEND-TEMPLATE, anything else → `INVALID_INPUT`. |
+| `WA-INTERNAL-SEND` | Webhook `POST /webhook/hazem-internal-send` | Sends for the API (reminders, panel). Header `X-Hazem-Token` checked against credential `hazem-internal-send`; 403 otherwise. |
 | `WA-TEST-HARNESS` | manual (`n8n execute`) | Runs fixtures through the real wiring without Meta (used by `wa-tests`). |
 
 All workflows: timezone `Africa/Cairo`, error workflow `META-WA-ERROR-HANDLER`, successful
@@ -74,8 +84,8 @@ recorded as failed and the caller decides (with a new idempotency key if it real
 | `whatsapp.waba_id` | WhatsApp Business Account ID |
 | `whatsapp.phone_number_id` | phone number ID that sends |
 | `whatsapp.graph_api_version` | `v26.0` (latest in Meta's changelog, 2026-10) |
-| `whatsapp.test_recipients` | comma-separated `wa_id` list (digits only) |
-| `whatsapp.echo_test_enabled` | `false` (true only while testing) |
+| `whatsapp.test_recipients` | comma-separated `wa_id` list allowed on Meta's test number (digits only) |
+| `whatsapp.dry_run` | `false`. `true` only during `hazem-e2e`: sends are recorded as sent (`wamid.DRYRUN-…`) without calling Meta. The healthcheck fails while it is `true` |
 | `ops.telegram_chat_id` | optional, for alerts |
 
 Set them with SQL as the superuser, for example:
@@ -86,7 +96,9 @@ Secrets never go here (a CHECK constraint rejects secret-looking keys); they liv
 
 | Name | Type | Created by |
 |---|---|---|
-| `office-postgres-app` | Postgres (`office_app`) | `n8n/scripts/create-local-credentials.sh` (from `.env`) |
+| `office-postgres-app` | Postgres (`office_app`) | `n8n-import` (from `.env`) |
+| `hazem-api` | Header Auth `X-Hazem-Token` = `HAZEM_API_TOKEN` | `n8n-import` (from `.env`) |
+| `hazem-internal-send` | Header Auth `X-Hazem-Token` = `N8N_INTERNAL_SEND_TOKEN` | `n8n-import` (from `.env`) |
 | `meta-whatsapp-trigger` | WhatsApp OAuth API (App ID + App Secret) | project owner (docs/meta-setup.md) |
 | `meta-whatsapp-token` | Header Auth (`Authorization: Bearer …`) | project owner |
 | `meta-app-token` | Query Auth (`access_token = AppID|AppSecret`) | project owner |

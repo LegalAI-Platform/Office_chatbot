@@ -1,0 +1,149 @@
+{
+  "name": "WA-INTERNAL-SEND",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## WA-INTERNAL-SEND\n`POST /webhook/hazem-internal-send` — used ONLY by the .NET API.\nHeader `X-Hazem-Token` checked by the Webhook node (credential hazem-internal-send = N8N_INTERNAL_SEND_TOKEN). n8n is reachable through the tunnel, so this header is the only protection: never disable it. Body and answer: docs/hazem-internal-api.md.",
+        "height": 260,
+        "width": 520
+      },
+      "id": "6353ff04-c3e3-5e39-ba5f-0dff0c71a87d",
+      "name": "Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "hazem-internal-send",
+        "authentication": "headerAuth",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "b80f8681-2583-5d83-9991-39037f4cbb08",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "7d2b9c4e-1f3a-4e6b-8a5c-2d9e0f1a7b31",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CRED:hazem-internal-send",
+          "name": "hazem-internal-send"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $input.first().json.body || {};\nconst by = typeof b.requested_by === 'string' && b.requested_by ? ':' + b.requested_by.slice(0, 80) : '';\nreturn [{ json: {\n  type: b.type, wa_id: String(b.wa_id ?? ''), text: b.text, template_name: b.template_name,\n  language: b.language, components: b.components, idempotency_key: b.idempotency_key,\n  context_wamid: b.context_wamid, requested_by: 'hazem-api' + by } }];"
+      },
+      "id": "a5658eb2-23d4-589b-95db-c0cf0bfad04b",
+      "name": "Read request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "WaSendAction0001",
+          "mode": "id",
+          "cachedResultName": "WA-SEND-ACTION"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "2c53a7d9-55e9-53ef-b45d-bc1042c25e14",
+      "name": "Send action",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.4,
+      "position": [
+        720,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\nreturn [{ json: { ok: r.ok === true, outbound_id: r.outbound_id || null, wamid: r.wamid || null,\n  status: r.status || null, error_code: r.error_code || null, error_message: r.error_message || null } }];"
+      },
+      "id": "fc7d7908-2d2e-54d7-b607-d6b3a135e5e2",
+      "name": "Answer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Read request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read request": {
+      "main": [
+        [
+          {
+            "node": "Send action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send action": {
+      "main": [
+        [
+          {
+            "node": "Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Cairo",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "WaErrHandler0001"
+  },
+  "pinData": {},
+  "id": "WaIntSend0000001",
+  "tags": []
+}

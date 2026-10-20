@@ -25,6 +25,7 @@ cleanup() {
     DELETE FROM app.wa_outbound_messages WHERE wa_id LIKE '2010000000%';
     DELETE FROM app.wa_inbound_messages WHERE wa_id LIKE '2010000000%';
     DELETE FROM app.wa_contact_windows WHERE wa_id LIKE '2010000000%';
+    DELETE FROM hazem.turns WHERE wa_id LIKE '2010000000%';
     DELETE FROM app.wa_webhook_events WHERE phone_number_id = '100000000000001' OR payload->>'message_template_name' = 'hello_world' AND payload->>'message_template_id' = '999000111';
     DELETE FROM app.wa_templates WHERE meta_template_id = '999000111';" >/dev/null
 }
@@ -119,6 +120,60 @@ q "SELECT app.wa_outbound_result('$out9', true, '{\"messages\":[{\"id\":\"wamid.
 process 13_status_failed_other.json >/dev/null
 assert_eq "failed status stores Meta's error" "$(q "SELECT status||'/'||(last_error->0->>'code') FROM app.wa_outbound_messages WHERE wamid='wamid.TEST-OUT-2'")" "failed/131026"
 
+echo "== Hand-off to the API (DECISIONS v1.3)"
+H=201000000071
+hand_event() {  # hand_event WAMID TYPE: one message from $H, as the WhatsApp Trigger emits it
+  jq -nc --arg id "$1" --arg type "$2" --arg wa "$H" '{
+    field: "messages", messaging_product: "whatsapp",
+    metadata: {display_phone_number: "15550000000", phone_number_id: "100000000000001"},
+    contacts: [{profile: {name: "Hand-off"}, wa_id: $wa}],
+    messages: [({from: $wa, id: $id, timestamp: "1760900000", type: $type}
+      + (if $type == "text" then {text: {body: "hand-off test"}} else {audio: {id: "MEDIA-HAND-1", mime_type: "audio/ogg"}} end))]}'
+}
+# Insert and claim in one transaction, so the every-minute WA-FORWARD-TURN in n8n cannot take
+# these rows first.
+r="$(app -v t="$(hand_event wamid.TEST-HAND-1 text)" -v a="$(hand_event wamid.TEST-HAND-AUDIO audio)" <<'SQL' | tail -1
+BEGIN;
+SELECT app.wa_process_event(:'t'::jsonb);
+SELECT app.wa_process_event(:'a'::jsonb);
+SELECT app.wa_turns_claim(10, ARRAY['201000000071']);
+COMMIT;
+SQL
+)"
+assert_eq "claim returns the waiting text message as a turn" \
+  "$(jq -r '"\(length)/\(.[0].turn_id)/\(.[0].messages[0].text)"' <<<"$r")" "1/wa:wamid.TEST-HAND-1/hand-off test"
+assert_eq "media is not handed over before TASK 03 (stays pending)" \
+  "$(q "SELECT processing_status FROM app.wa_inbound_messages WHERE wamid='wamid.TEST-HAND-AUDIO'")" "pending"
+assert_eq "claimed message is marked processing" \
+  "$(q "SELECT processing_status FROM app.wa_inbound_messages WHERE wamid='wamid.TEST-HAND-1'")" "processing"
+assert_eq "a claimed message is not claimed twice" \
+  "$(q "SELECT app.wa_turns_claim(10, ARRAY['201000000071'])")" "[]"
+assert_eq "finish marks it processed" \
+  "$(q "SELECT app.wa_turns_finish(ARRAY['wamid.TEST-HAND-1'], 'processed')")/$(q "SELECT processing_status||'/'||(processed_at IS NOT NULL) FROM app.wa_inbound_messages WHERE wamid='wamid.TEST-HAND-1'")" "1/processed/true"
+assert_eq "finish never changes a message that is no longer processing" \
+  "$(q "SELECT app.wa_turns_finish(ARRAY['wamid.TEST-HAND-1'], 'pending')")" "0"
+# A message left in 'processing' for 6 minutes (n8n stopped half-way). The trigger keeps
+# updated_at current, so the superuser backdates it with triggers off, then claims as office_app.
+r="$(psql_super office <<'SQL' | tail -1
+BEGIN;
+SET LOCAL session_replication_role = replica;
+UPDATE app.wa_inbound_messages SET processing_status = 'processing', updated_at = now() - interval '6 minutes'
+ WHERE wamid = 'wamid.TEST-HAND-1';
+SET LOCAL session_replication_role = origin;
+SET LOCAL ROLE office_app;
+SELECT jsonb_array_length(app.wa_turns_claim(10, ARRAY['201000000071']));
+COMMIT;
+SQL
+)"
+assert_eq "a message stuck in processing for 5+ minutes is claimed again" "$r" "1"
+if q "SELECT app.wa_turns_finish(ARRAY['wamid.TEST-HAND-1'], 'done')" >/dev/null 2>&1; then
+  assert_eq "finish refuses an unknown status" "accepted" "refused"
+else
+  assert_eq "finish refuses an unknown status" "refused" "refused"
+fi
+assert_eq "dry run exists and is off; the old echo setting is gone" \
+  "$(q "SELECT string_agg(key||'='||value, ',' ORDER BY key) FROM app.settings WHERE key IN ('whatsapp.dry_run','whatsapp.echo_test_enabled')")" "whatsapp.dry_run=false"
+
 echo "== Permissions"
 if psql_as office_readonly "$OFFICE_READONLY_PASSWORD" office -c "SELECT app.wa_process_event('{}'::jsonb)" >/dev/null 2>&1; then
   assert_eq "office_readonly cannot call wa_process_event" "allowed" "denied"
@@ -129,6 +184,11 @@ if psql_as office_readonly "$OFFICE_READONLY_PASSWORD" office -c "INSERT INTO ap
   assert_eq "office_readonly cannot write settings" "allowed" "denied"
 else
   assert_eq "office_readonly cannot write settings" "denied" "denied"
+fi
+if psql_as office_readonly "$OFFICE_READONLY_PASSWORD" office -c "SELECT app.wa_turns_claim(1)" >/dev/null 2>&1; then
+  assert_eq "office_readonly cannot claim turns" "allowed" "denied"
+else
+  assert_eq "office_readonly cannot claim turns" "denied" "denied"
 fi
 if psql_super office -c "INSERT INTO app.settings(key, value) VALUES ('whatsapp.access_token', 'x')" >/dev/null 2>&1; then
   assert_eq "settings refuses secret-looking keys" "accepted" "refused"

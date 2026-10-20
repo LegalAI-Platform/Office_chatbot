@@ -1,5 +1,5 @@
 #!/bin/bash
-# Starts the core services: postgres, redis, garage, storage-init, n8n.
+# Starts the core services: postgres, redis, garage, storage-init, n8n and the .NET api.
 source "$(dirname "$0")/_common.sh"
 check_no_placeholders
 docker compose up -d --wait

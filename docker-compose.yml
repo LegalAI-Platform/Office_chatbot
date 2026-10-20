@@ -1,11 +1,12 @@
 # Office WhatsApp System (Hazem) - Test/Staging stack (TASK 01)
-# Decisions: docs/decisions/DECISIONS-v1.0.md
+# Decisions: docs/decisions/DECISIONS-v1.3.md
 #
-# Core services start with `docker compose up -d`.
+# Core services start with `docker compose up -d`: postgres, redis, garage, n8n and the
+# .NET backend (api).
 # Optional profiles: panel (Appsmith), tunnel (Cloudflare Quick Tunnel),
 #                    tunnel-named (Cloudflare Named Tunnel), tools (one-off commands).
 # Every port is bound to 127.0.0.1 only. n8n is the only service ever exposed
-# to the internet, and only through the tunnel profile.
+# to the internet, and only through the tunnel profile. The api has no host port at all.
 
 name: ${COMPOSE_PROJECT_NAME:-office}
 
@@ -52,6 +53,7 @@ services:
       OFFICE_MIGRATOR_PASSWORD: ${OFFICE_MIGRATOR_PASSWORD}
       OFFICE_APP_PASSWORD: ${OFFICE_APP_PASSWORD}
       OFFICE_READONLY_PASSWORD: ${OFFICE_READONLY_PASSWORD}
+      OFFICE_API_PASSWORD: ${OFFICE_API_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
@@ -177,6 +179,35 @@ services:
       start_period: 120s
     networks: [office_net]
 
+  # .NET backend: the brain (DECISIONS v1.3). n8n calls it at http://api:8080 and it calls
+  # n8n back at the internal send webhook. Inside office_net only: no host port, no tunnel.
+  # Database role office_api: schema "hazem" only (migration 0003).
+  api:
+    build:
+      context: ./backend
+    image: office-api:local
+    pull_policy: build
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      TZ: Africa/Cairo
+      ASPNETCORE_ENVIRONMENT: ${ENVIRONMENT}
+      ConnectionStrings__Office: Host=postgres;Port=5432;Database=office;Username=office_api;Password=${OFFICE_API_PASSWORD}
+      Hazem__ApiToken: ${HAZEM_API_TOKEN}
+      Hazem__N8nInternalSendUrl: http://n8n:5678/webhook/hazem-internal-send
+      Hazem__N8nInternalSendToken: ${N8N_INTERNAL_SEND_TOKEN}
+    healthcheck:
+      # Process only; /health/ready (database and migration 0003) is checked by the healthcheck job.
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health/live | grep -q Healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks: [office_net]
+
+  # Panel: unused until the React panel (TASK 07, DECISIONS v1.3 T-11).
   appsmith:
     image: appsmith/appsmith-ce:v2.4.3
     profiles: ["panel"]

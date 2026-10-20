@@ -1,6 +1,7 @@
-# Infrastructure (TASK 01) — Test/Staging
+# Infrastructure (TASK 01, updated for DECISIONS v1.3) — Test/Staging
 
-Reference: [DECISIONS-v1.0.md](decisions/DECISIONS-v1.0.md) — T-01 to T-06, T-09, T-11 to T-13, T-15.
+Reference: [DECISIONS-v1.3.md](decisions/DECISIONS-v1.3.md) — T-01 to T-06, T-09, T-11 to T-13, T-15 to T-22.
+n8n is the WhatsApp layer; the .NET API is the brain ([hazem-internal-api.md](hazem-internal-api.md)).
 
 ## Components
 
@@ -11,10 +12,11 @@ flowchart LR
 
     subgraph office_net [Docker network office_net — all host ports on 127.0.0.1]
         N8N -->|n8n_user| PGN[(PostgreSQL 16<br/>db: n8n)]
-        N8N -. office_app, TASK 02+ .-> PGO[(PostgreSQL 16<br/>db: office)]
+        N8N -->|office_app<br/>schema app| PGO[(PostgreSQL 16<br/>db: office)]
+        N8N <-->|X-Hazem-Token| API[.NET API<br/>no host port]
+        API -->|office_api<br/>schema hazem| PGO
         N8N -. TASK 03+ .-> REDIS[(Redis 7.4)]
         N8N -. n8n key, TASK 03+ .-> S3[(Garage S3<br/>office-media<br/>office-sensitive)]
-        APPS[Appsmith CE<br/>profile: panel] -. office_app / office_readonly, later .-> PGO
         MIG[dbmate<br/>office_migrator] --> PGO
         TOOLS[office-tools<br/>preflight, storage-init,<br/>healthcheck, backup, restore] --> PGN
         TOOLS --> PGO
@@ -23,7 +25,8 @@ flowchart LR
     end
 ```
 
-Startup order: `preflight` → `postgres`, `redis`, `garage` → `storage-init` → `n8n`.
+Startup order: `preflight` → `postgres`, `redis`, `garage` → `storage-init` → `n8n`; `api` starts
+once `postgres` is healthy (its `/health/ready` also needs migration 0003).
 `preflight` and `storage-init` are one-shot jobs; everything else restarts `unless-stopped`.
 
 ## PostgreSQL roles and privileges
@@ -33,13 +36,17 @@ Startup order: `preflight` → `postgres`, `redis`, `garage` → `storage-init` 
 | `postgres_admin` (superuser) | all | everything | — | init script, backup, restore, healthcheck only |
 | `n8n_user` | `n8n` (owner) | n8n internal tables | connect to `office` | n8n |
 | `office_migrator` | `office` (owner) | DDL, owns schema `app` | connect to `n8n` | dbmate migrations only |
-| `office_app` | `office` | `SELECT, INSERT, UPDATE, DELETE` on tables in `app`; sequences | `CREATE` anything; connect to `n8n` | n8n workflows (TASK 02+), Appsmith writes |
+| `office_app` | `office` | `SELECT, INSERT, UPDATE, DELETE` on tables in `app`; sequences; the `app.wa_*` functions | `CREATE` anything; any access to schema `hazem`; connect to `n8n` | n8n workflows |
+| `office_api` | `office` | `SELECT, INSERT, UPDATE, DELETE` on tables in `hazem` | `CREATE` anything; any access to schema `app`; connect to `n8n` | .NET API |
 | `office_readonly` | `office` | `SELECT` | any write; connect to `n8n` | reports, Appsmith read views |
 
 - `CONNECT` is revoked from `PUBLIC` on `n8n`, `office` and `postgres`.
 - Default privileges: every table or sequence `office_migrator` creates later is granted to
-  `office_app` and `office_readonly` automatically.
-- `office_app` and `office_readonly` use `search_path = app, public` and timezone `Africa/Cairo`.
+  `office_app` and `office_readonly` automatically; in schema `hazem` (migration 0003) to
+  `office_api` instead. `office_app` has no `USAGE` on `hazem` and `office_api` none on `app`,
+  so each role is kept out of the other's tables by the database itself.
+- `office_app` and `office_readonly` use `search_path = app, public`, `office_api` uses
+  `search_path = hazem, public`; all use timezone `Africa/Cairo`.
 - Server timezone: `Africa/Cairo`.
 - Extensions installed by migration 0001: `pgcrypto`, `citext`.
 
@@ -86,6 +93,9 @@ any AI provider** (OpenAI or other). Workflows in later tasks:
 - Every published port is bound to `127.0.0.1`.
 - Only n8n can be reached from the internet, and only through cloudflared (profiles `tunnel`
   or `tunnel-named`), which forwards to `http://n8n:5678` and nothing else.
+- The .NET API has **no** published port: only n8n (and the tools container) reach it, at
+  `http://api:8080` inside `office_net`. n8n's internal webhook `hazem-internal-send` is reachable
+  through the tunnel like any n8n webhook, so it is protected by the `X-Hazem-Token` header.
 - Create the n8n owner account before starting any tunnel.
 
 ## Moving to production (documentation only, not implemented)

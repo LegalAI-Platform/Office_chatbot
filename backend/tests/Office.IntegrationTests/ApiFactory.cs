@@ -1,0 +1,70 @@
+using System.Collections.Concurrent;
+using System.Net;
+using System.Text;
+using System.Text.Json.Nodes;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
+using Office.Infrastructure.N8n;
+
+namespace Office.IntegrationTests;
+
+/// <summary>The real API on the throwaway database (as office_api), with n8n faked at the HTTP boundary.</summary>
+public sealed class ApiFactory(TestDatabase db) : WebApplicationFactory<Program>
+{
+    public const string ApiToken = "integration-test-api-token-0123456789abcdef";
+    public const string N8nToken = "integration-test-n8n-token-0123456789abcdef";
+    public const string N8nUrl = "http://n8n.test/webhook/hazem-internal-send";
+
+    public FakeN8n N8n { get; } = new();
+
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
+        builder.UseEnvironment("test");
+        builder.UseSetting("ConnectionStrings:Office", db.ApiConnectionString);
+        builder.UseSetting("Hazem:ApiToken", ApiToken);
+        builder.UseSetting("Hazem:N8nInternalSendUrl", N8nUrl);
+        builder.UseSetting("Hazem:N8nInternalSendToken", N8nToken);
+        builder.ConfigureTestServices(services =>
+            services.AddHttpClient(N8nWhatsAppGateway.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => N8n));
+    }
+
+    public HttpClient CreateN8nClient()
+    {
+        var client = CreateClient();
+        client.DefaultRequestHeaders.Add(N8nWhatsAppGateway.TokenHeader, ApiToken);
+        return client;
+    }
+}
+
+/// <summary>Records every call to n8n's internal webhook and answers like WA-INTERNAL-SEND.</summary>
+public sealed class FakeN8n : HttpMessageHandler
+{
+    private int _counter;
+    public ConcurrentQueue<(string Url, string? Token, string Body)> Requests { get; } = new();
+    public Func<HttpRequestMessage, HttpResponseMessage>? Responder { get; set; }
+
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+    {
+        var body = request.Content is null ? "" : await request.Content.ReadAsStringAsync(ct);
+        var token = request.Headers.TryGetValues(N8nWhatsAppGateway.TokenHeader, out var v) ? v.Single() : null;
+        Requests.Enqueue((request.RequestUri!.ToString(), token, body));
+        if (Responder is not null)
+        {
+            return Responder(request);
+        }
+
+        var n = Interlocked.Increment(ref _counter);
+        return new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(new JsonObject
+            {
+                ["ok"] = true,
+                ["outbound_id"] = $"00000000-0000-0000-0000-{n:D12}",
+                ["wamid"] = $"wamid.FAKE-{n}",
+                ["status"] = "sent",
+            }.ToJsonString(), Encoding.UTF8, "application/json"),
+        };
+    }
+}

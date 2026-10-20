@@ -1,0 +1,146 @@
+#!/bin/bash
+# Steps of the end-to-end test n8n <-> .NET API (DECISIONS v1.3), driven by scripts/*/hazem-e2e.
+# Each step is one call: hazem-e2e <step>. Dummy numbers 20100000006x only; no call to Meta
+# (whatsapp.dry_run is switched on for the test and off again by "cleanup").
+set -uo pipefail
+source /usr/local/bin/_lib
+
+A=201000000061   # echo recipient
+B=201000000062   # writes while the API is down
+
+passed=0; failed=0
+assert_eq() {  # assert_eq "description" actual expected
+  if [[ "$2" == "$3" ]]; then echo "PASS  $1"; passed=$((passed+1))
+  else echo "FAIL  $1 (got '$2', expected '$3')"; failed=$((failed+1)); fi
+}
+q() { psql_super office -c "$1"; }
+# The every-minute schedule in n8n may be handling the same message right now, so states are
+# polled (up to 30 s) instead of read once.
+wait_eq() {  # wait_eq "description" "SQL" expected
+  local got=""
+  for _ in $(seq 1 30); do
+    got="$(q "$2")"
+    [[ "$got" == "$3" ]] && break
+    sleep 1
+  done
+  assert_eq "$1" "$got" "$3"
+}
+inject() {  # inject WA_ID WAMID TEXT: a Meta text event through app.wa_process_event, as n8n does
+  local ev
+  ev="$(jq -nc --arg wa "$1" --arg id "$2" --arg text "$3" --arg ts "$(date +%s)" '{
+    field: "messages", messaging_product: "whatsapp",
+    metadata: {display_phone_number: "15550000000", phone_number_id: "100000000000001"},
+    contacts: [{profile: {name: "E2E"}, wa_id: $wa}],
+    messages: [{from: $wa, id: $id, timestamp: $ts, type: "text", text: {body: $text}}]}')"
+  psql_as office_app "$OFFICE_APP_PASSWORD" office -v ev="$ev" <<<"SELECT app.wa_process_event(:'ev'::jsonb);" >/dev/null
+}
+finish() { echo "Result: $passed passed, $failed failed."; [[ $failed -eq 0 ]]; }
+
+case "${1:-}" in
+  cleanup)
+    q "
+      DELETE FROM hazem.send_results WHERE idempotency_key IN
+        (SELECT idempotency_key FROM app.wa_outbound_messages WHERE wa_id IN ('$A', '$B'));
+      DELETE FROM app.wa_outbound_messages WHERE wa_id IN ('$A', '$B');
+      DELETE FROM app.wa_inbound_messages WHERE wa_id IN ('$A', '$B');
+      DELETE FROM app.wa_contact_windows WHERE wa_id IN ('$A', '$B');
+      DELETE FROM app.wa_webhook_events WHERE payload->'contacts'->0->>'wa_id' IN ('$A', '$B');
+      DELETE FROM hazem.turns WHERE wa_id IN ('$A', '$B');
+      DELETE FROM hazem.send_results WHERE turn_id LIKE 'wa:wamid.E2E-%' OR idempotency_key LIKE 'e2e:%'
+         OR idempotency_key LIKE 'hazem:wa:wamid.E2E-%';
+      UPDATE app.settings SET value = 'false', updated_by = 'hazem-e2e' WHERE key = 'whatsapp.dry_run';
+      UPDATE hazem.settings SET value = 'false', updated_by = 'hazem-e2e' WHERE key = 'echo.enabled';
+      UPDATE hazem.settings SET value = '', updated_by = 'hazem-e2e' WHERE key = 'echo.recipients';" >/dev/null
+    echo "cleaned: dummy rows deleted, dry run and echo switched off"
+    ;;
+
+  setup)
+    "$0" cleanup >/dev/null
+    q "
+      UPDATE app.settings SET value = 'true', updated_by = 'hazem-e2e' WHERE key = 'whatsapp.dry_run';
+      UPDATE hazem.settings SET value = 'true', updated_by = 'hazem-e2e' WHERE key = 'echo.enabled';
+      UPDATE hazem.settings SET value = '$A,$B', updated_by = 'hazem-e2e' WHERE key = 'echo.recipients';" >/dev/null
+    inject "$A" wamid.E2E-1 "مرحبا من اختبار e2e"
+    echo "setup: dry run and echo on, wamid.E2E-1 waiting"
+    ;;
+
+  check-loop)
+    wait_eq "inbound message handed to the API and finished" \
+      "SELECT processing_status FROM app.wa_inbound_messages WHERE wamid = 'wamid.E2E-1'" "processed"
+    wait_eq "API stored the turn and answered with the echo" \
+      "SELECT status || '/' || responder || '/' || jsonb_array_length(actions) FROM hazem.turns WHERE turn_id = 'wa:wamid.E2E-1'" "processed/echo/1"
+    wait_eq "n8n sent the API's action once (dry run, never Meta)" \
+      "SELECT status || '/' || attempts || '/' || (wamid LIKE 'wamid.DRYRUN-%') || '/' || requested_by FROM app.wa_outbound_messages WHERE idempotency_key = 'hazem:wa:wamid.E2E-1:0'" "sent/1/true/hazem-api"
+    wait_eq "the reply quotes the client's message" \
+      "SELECT request_payload->'context'->>'message_id' FROM app.wa_outbound_messages WHERE idempotency_key = 'hazem:wa:wamid.E2E-1:0'" "wamid.E2E-1"
+    wait_eq "n8n reported the send result back to the API" \
+      "SELECT ok || '/' || reported_by || '/' || status FROM hazem.send_results WHERE idempotency_key = 'hazem:wa:wamid.E2E-1:0'" "true/n8n/sent"
+    finish
+    ;;
+
+  replay)
+    # As if n8n had stopped half-way: the message is handed over again.
+    q "UPDATE app.wa_inbound_messages SET processing_status = 'pending', processed_at = NULL WHERE wamid = 'wamid.E2E-1'" >/dev/null
+    echo "replay: wamid.E2E-1 is pending again"
+    ;;
+
+  check-replay)
+    wait_eq "replayed turn finished again" \
+      "SELECT processing_status FROM app.wa_inbound_messages WHERE wamid = 'wamid.E2E-1'" "processed"
+    wait_eq "replay: still one turn in the API" \
+      "SELECT count(*) FROM hazem.turns WHERE turn_id = 'wa:wamid.E2E-1'" "1"
+    wait_eq "replay: the client still got exactly one reply (1 row, 1 attempt)" \
+      "SELECT count(*) || '/' || max(attempts) FROM app.wa_outbound_messages WHERE wa_id = '$A'" "1/1"
+    finish
+    ;;
+
+  inject-b)
+    inject "$B" wamid.E2E-2 "رسالة والـ API واقف"
+    echo "wamid.E2E-2 waiting"
+    ;;
+
+  check-api-down)
+    wait_eq "API down: the message waits as pending (not lost)" \
+      "SELECT processing_status || '/' || (last_error->>'code') FROM app.wa_inbound_messages WHERE wamid = 'wamid.E2E-2'" "pending/API_UNAVAILABLE"
+    wait_eq "API down: nothing was sent" \
+      "SELECT count(*) FROM app.wa_outbound_messages WHERE wa_id = '$B'" "0"
+    finish
+    ;;
+
+  check-recovered)
+    wait_eq "API back: the waiting message is handled" \
+      "SELECT processing_status FROM app.wa_inbound_messages WHERE wamid = 'wamid.E2E-2'" "processed"
+    wait_eq "API back: its reply is sent once" \
+      "SELECT status || '/' || attempts FROM app.wa_outbound_messages WHERE idempotency_key = 'hazem:wa:wamid.E2E-2:0'" "sent/1"
+    finish
+    ;;
+
+  check-api-send)
+    wait_eq "API -> n8n: the API's own send went through n8n's rules (dry run)" \
+      "SELECT count(*) FROM app.wa_outbound_messages WHERE wa_id = '$A' AND requested_by = 'hazem-api:cli send-test' AND status = 'sent' AND wamid LIKE 'wamid.DRYRUN-%'" "1"
+    wait_eq "API -> n8n: the API recorded the result" \
+      "SELECT count(*) FROM hazem.send_results WHERE idempotency_key LIKE 'cli-send-test:%' AND reported_by = 'api' AND ok AND updated_at > now() - interval '5 minutes'" "1"
+    finish
+    ;;
+
+  check-auth)
+    code="$(curl -s -o /dev/null -w '%{http_code}' -X POST http://n8n:5678/webhook/hazem-internal-send \
+      -H 'Content-Type: application/json' \
+      -d "{\"type\":\"send_text\",\"wa_id\":\"$A\",\"text\":\"x\",\"idempotency_key\":\"e2e:noauth\"}")"
+    assert_eq "n8n internal send without the token is refused" "$code" "403"
+    code="$(curl -s -o /dev/null -w '%{http_code}' -X POST http://n8n:5678/webhook/hazem-internal-send \
+      -H 'Content-Type: application/json' -H "X-Hazem-Token: $HAZEM_API_TOKEN" \
+      -d "{\"type\":\"send_text\",\"wa_id\":\"$A\",\"text\":\"x\",\"idempotency_key\":\"e2e:noauth\"}")"
+    assert_eq "n8n internal send with the other direction's token is refused" "$code" "403"
+    wait_eq "refused requests sent nothing" \
+      "SELECT count(*) FROM app.wa_outbound_messages WHERE idempotency_key = 'e2e:noauth'" "0"
+    code="$(curl -s -o /dev/null -w '%{http_code}' -X POST http://api:8080/api/hazem/turns \
+      -H 'Content-Type: application/json' -H "X-Hazem-Token: $N8N_INTERNAL_SEND_TOKEN" -d '{}')"
+    assert_eq "API refuses the other direction's token" "$code" "401"
+    finish
+    ;;
+
+  *)
+    die "usage: hazem-e2e setup|check-loop|replay|check-replay|inject-b|check-api-down|check-recovered|check-api-send|check-auth|cleanup"
+    ;;
+esac
