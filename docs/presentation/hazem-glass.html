@@ -1,0 +1,444 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>عرض حازم</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Readex+Pro:wght@300;400;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one deliberate dark world. Slow light blobs behind frosted "liquid glass" panes,
+   an iOS-style floating tab bar, a glass phone, and an iOS Settings list for the rules. */
+:root {
+  color-scheme: dark;
+  --ground: #050B0A;
+  --ink: #F2F7F5;
+  --ink-2: rgba(242, 247, 245, 0.72);
+  --ink-3: rgba(242, 247, 245, 0.5);
+  --mint: #5EE6C1;
+  --teal: #149A7E;
+  --brass: #E9C27A;
+  --rose: #F08A8A;
+  --glass: rgba(255, 255, 255, 0.075);
+  --glass-strong: rgba(255, 255, 255, 0.13);
+  --glass-edge: rgba(255, 255, 255, 0.22);
+  --glass-shine: rgba(255, 255, 255, 0.45);
+  --bubble-client: rgba(255, 255, 255, 0.16);
+  --bubble-hazem: rgba(94, 230, 193, 0.22);
+  --shadow: rgba(0, 0, 0, 0.45);
+  --font-display: "Readex Pro", "IBM Plex Sans Arabic", "Segoe UI", Tahoma, sans-serif;
+  --font-body: "IBM Plex Sans Arabic", "Readex Pro", "Segoe UI", Tahoma, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+  --r-xl: 34px;
+  --r-lg: 26px;
+  --r-md: 18px;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--ground); color: var(--ink); font-family: var(--font-body); font-size: 1rem; line-height: 1.75; overflow-x: hidden; }
+h1, h2, h3 { font-family: var(--font-display); margin: 0; text-wrap: balance; line-height: 1.2; }
+p { margin: 0; }
+:focus-visible { outline: 2px solid var(--mint); outline-offset: 3px; border-radius: 10px; }
+.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* ---------- Living background ---------- */
+.aurora { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+.aurora span { position: absolute; border-radius: 50%; filter: blur(70px); opacity: 0.55; }
+.aurora .a { width: 52vmax; height: 52vmax; background: radial-gradient(circle at 30% 30%, #18C59D, transparent 62%); top: -18vmax; right: -12vmax; }
+.aurora .b { width: 46vmax; height: 46vmax; background: radial-gradient(circle at 50% 50%, #0E6A59, transparent 65%); bottom: -20vmax; left: -14vmax; }
+.aurora .c { width: 34vmax; height: 34vmax; background: radial-gradient(circle at 50% 50%, #C9973F, transparent 65%); top: 38%; left: 30%; opacity: 0.32; }
+.aurora .d { width: 28vmax; height: 28vmax; background: radial-gradient(circle at 50% 50%, #2A7F9E, transparent 65%); top: 8%; left: 6%; opacity: 0.35; }
+.grain { position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0.06;
+  background-image: radial-gradient(rgba(255,255,255,.8) 0.6px, transparent 0.6px); background-size: 3px 3px; }
+@media (prefers-reduced-motion: no-preference) {
+  .aurora .a { animation: drift-a 26s ease-in-out infinite alternate; }
+  .aurora .b { animation: drift-b 32s ease-in-out infinite alternate; }
+  .aurora .c { animation: drift-c 22s ease-in-out infinite alternate; }
+  .aurora .d { animation: drift-a 30s ease-in-out infinite alternate-reverse; }
+  @keyframes drift-a { to { transform: translate(-8vmax, 10vmax) scale(1.12); } }
+  @keyframes drift-b { to { transform: translate(10vmax, -6vmax) scale(1.08); } }
+  @keyframes drift-c { to { transform: translate(-12vmax, -8vmax) scale(0.9); } }
+}
+
+/* ---------- Liquid glass ---------- */
+.glass {
+  position: relative; isolation: isolate;
+  background: linear-gradient(150deg, var(--glass-strong), var(--glass) 45%, rgba(255,255,255,0.04));
+  -webkit-backdrop-filter: blur(26px) saturate(170%);
+  backdrop-filter: blur(26px) saturate(170%);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--r-lg);
+  box-shadow: inset 0 1px 0 var(--glass-shine), inset 0 -1px 0 rgba(255,255,255,0.08),
+              inset 0 0 30px rgba(255,255,255,0.04), 0 24px 60px var(--shadow);
+}
+.glass::before { /* specular highlight */
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: -1;
+  background: radial-gradient(120% 60% at 85% -10%, rgba(255,255,255,0.22), transparent 55%),
+              radial-gradient(80% 50% at 0% 110%, rgba(94,230,193,0.12), transparent 60%);
+}
+
+/* ---------- Page ---------- */
+.page {
+  position: relative; z-index: 1; max-width: 1160px; margin: 0 auto;
+  padding-left: max(18px, env(safe-area-inset-left, 0px));
+  padding-right: max(18px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 120px;
+  display: grid; gap: 120px;
+}
+
+/* Floating tab bar (iOS) */
+.tabbar {
+  position: sticky; top: calc(12px + env(safe-area-inset-top, 0px)); z-index: 5; justify-self: center;
+  display: flex; gap: 4px; padding: 6px; border-radius: 999px; margin-bottom: -88px; max-width: 100%; overflow-x: auto;
+  scrollbar-width: none;
+}
+.tabbar::-webkit-scrollbar { display: none; }
+.tabbar a { color: var(--ink-2); text-decoration: none; font-size: 0.88rem; padding: 7px 16px; border-radius: 999px; white-space: nowrap; transition: background 160ms ease, color 160ms ease; }
+.tabbar a:hover, .tabbar a:focus-visible { background: rgba(255,255,255,0.14); color: var(--ink); }
+
+/* Hero */
+.hero { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr); gap: 56px; align-items: center; padding-top: 72px; }
+.kicker { display: inline-flex; align-items: center; gap: 10px; font-size: 0.85rem; color: var(--ink-2); padding: 6px 14px 6px 8px; border-radius: 999px; }
+.kicker .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--mint); box-shadow: 0 0 12px var(--mint); }
+.hero h1 {
+  font-size: clamp(4.2rem, 13vw, 9rem); font-weight: 700; letter-spacing: -0.02em; margin-top: 18px;
+  background: linear-gradient(170deg, #FFFFFF 10%, #BFF5E5 45%, var(--mint) 75%, #2FB592);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 10px 40px rgba(94,230,193,0.25));
+}
+.hero .sub { font-family: var(--font-display); font-weight: 300; font-size: clamp(1.3rem, 2.6vw, 1.8rem); color: var(--ink); margin-top: 4px; }
+.hero .thesis { color: var(--ink-2); font-size: 1.12rem; max-width: 40ch; margin-top: 18px; }
+.chips { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
+.chip { padding: 14px 18px; border-radius: var(--r-md); display: grid; gap: 2px; min-width: 150px; }
+.chip b { font-family: var(--font-display); font-size: 1.45rem; font-weight: 600; line-height: 1.2; }
+.chip span { color: var(--ink-3); font-size: 0.8rem; }
+
+/* Glass phone */
+.phone { width: min(100%, 340px); justify-self: center; border-radius: 48px; padding: 12px; }
+.screen { border-radius: 38px; overflow: hidden; background: linear-gradient(180deg, rgba(5,11,10,0.55), rgba(5,11,10,0.35)); border: 1px solid rgba(255,255,255,0.1); }
+.island { width: 96px; height: 26px; border-radius: 999px; background: #000; margin: 10px auto 6px; }
+.chat-head { display: flex; align-items: center; gap: 10px; padding: 6px 16px 12px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+.avatar { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-family: var(--font-display); font-weight: 600;
+  background: linear-gradient(140deg, var(--mint), var(--teal)); color: #04211B; }
+.chat-head b { display: block; font-size: 0.85rem; font-weight: 600; line-height: 1.3; }
+.chat-head small { color: var(--mint); font-size: 0.7rem; }
+.chat { padding: 14px 12px 18px; display: grid; gap: 8px; }
+.msg { max-width: 86%; padding: 8px 12px 5px; border-radius: 18px; font-size: 0.86rem; line-height: 1.6;
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.12); }
+.msg time { display: block; font-family: var(--font-mono); font-size: 0.62rem; color: var(--ink-3); margin-top: 2px; }
+.msg.client { justify-self: start; background: var(--bubble-client); border-start-start-radius: 6px; }
+.msg.hazem { justify-self: end; background: var(--bubble-hazem); border-start-end-radius: 6px; border-color: rgba(94,230,193,0.3); }
+.note { justify-self: center; font-size: 0.7rem; color: var(--ink-2); padding: 3px 12px; border-radius: 999px; background: rgba(255,255,255,0.08); border: 1px dashed rgba(255,255,255,0.22); }
+.msg.file { display: flex; gap: 8px; align-items: center; }
+.file-ico { width: 30px; height: 38px; border-radius: 6px; background: rgba(255,255,255,0.18); display: grid; place-items: center; font-family: var(--font-mono); font-size: 0.55rem; color: var(--ink-2); }
+@media (prefers-reduced-motion: no-preference) {
+  .hero .msg, .hero .note { animation: pop 700ms cubic-bezier(.2,.8,.2,1.2) both; }
+  .hero .msg:nth-child(2) { animation-delay: 120ms; } .hero .note { animation-delay: 260ms; } .hero .msg:nth-child(4) { animation-delay: 420ms; }
+  @keyframes pop { from { transform: translateY(10px) scale(0.96); } to { transform: none; } }
+}
+
+/* Section heads */
+.head { display: grid; gap: 10px; max-width: 64ch; }
+.eyebrow { color: var(--brass); font-size: 0.85rem; font-weight: 600; letter-spacing: 0.02em; }
+.head h2 { font-size: clamp(2rem, 4.6vw, 3.2rem); font-weight: 600; }
+.head p { color: var(--ink-2); font-size: 1.08rem; }
+
+/* Problem */
+.trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin-top: 32px; }
+.pane { padding: 24px; display: grid; gap: 10px; align-content: start; }
+.pane h3 { font-size: 1.2rem; font-weight: 600; }
+.pane p { color: var(--ink-2); }
+.icon { width: 46px; height: 46px; border-radius: 15px; display: grid; place-items: center;
+  background: linear-gradient(140deg, rgba(94,230,193,0.35), rgba(20,154,126,0.15)); border: 1px solid rgba(94,230,193,0.35); }
+.icon svg { width: 22px; height: 22px; stroke: var(--mint); fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Journey */
+.journey { display: grid; gap: 22px; margin-top: 36px; position: relative; }
+.journey::before { content: ""; position: absolute; inset-block: 30px; inset-inline-start: 27px; width: 2px;
+  background: linear-gradient(180deg, transparent, rgba(94,230,193,0.6), rgba(233,194,122,0.5), transparent); }
+.scene { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 18px; align-items: start; }
+.badge { position: relative; z-index: 1; width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center;
+  font-family: var(--font-mono); font-weight: 500; color: var(--mint); font-size: 0.95rem; }
+.card { padding: 22px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 22px; align-items: start; }
+.card-top { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.card-top h3 { font-size: 1.45rem; font-weight: 600; }
+.clock { font-family: var(--font-mono); font-size: 0.8rem; color: var(--ink-3); }
+.mini { border-radius: 22px; background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.1); }
+.mini .chat { padding: 14px 12px; }
+.backstage { display: grid; gap: 10px; align-content: start; padding: 4px 2px; }
+.backstage .lbl { font-size: 0.78rem; color: var(--brass); font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.backstage .lbl::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--brass); box-shadow: 0 0 10px var(--brass); }
+.backstage p { color: var(--ink-2); font-size: 0.98rem; }
+.tags { display: flex; gap: 6px; flex-wrap: wrap; }
+.tag { font-family: var(--font-mono); font-size: 0.7rem; padding: 2px 10px; border-radius: 999px; color: var(--mint); border: 1px solid rgba(94,230,193,0.4); background: rgba(94,230,193,0.08); }
+@media (prefers-reduced-motion: no-preference) {
+  .card { transition: transform 220ms ease, box-shadow 220ms ease; }
+  .card:hover { transform: translateY(-3px); box-shadow: inset 0 1px 0 var(--glass-shine), 0 30px 70px rgba(0,0,0,0.5), 0 0 0 1px rgba(94,230,193,0.25); }
+}
+
+/* Side cases */
+.bento { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 32px; }
+.bento .pane { gap: 12px; }
+.say { font-size: 0.88rem; padding: 8px 12px; border-radius: 14px; background: var(--bubble-hazem); border: 1px solid rgba(94,230,193,0.25); }
+
+/* Architecture */
+.flow { margin-top: 34px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; position: relative; }
+.flow::before { content: ""; position: absolute; top: 50%; inset-inline: 6%; height: 2px; z-index: 0;
+  background: repeating-linear-gradient(90deg, rgba(94,230,193,0.8) 0 10px, transparent 10px 20px); background-size: 40px 2px; }
+@media (prefers-reduced-motion: no-preference) {
+  .flow::before { animation: flowline 1.4s linear infinite; }
+  @keyframes flowline { to { background-position: -40px 0; } }
+}
+.node { position: relative; z-index: 1; padding: 20px; display: grid; gap: 6px; align-content: start; }
+.node h3 { font-size: 1.15rem; font-weight: 600; }
+.node .tech { font-family: var(--font-mono); font-size: 0.74rem; color: var(--brass); direction: ltr; text-align: right; }
+.node ul { margin: 6px 0 0; padding-inline-start: 18px; color: var(--ink-2); font-size: 0.88rem; line-height: 1.75; }
+.node.core { background: linear-gradient(150deg, rgba(94,230,193,0.32), rgba(20,154,126,0.14)); border-color: rgba(94,230,193,0.45); }
+.node.brain { background: linear-gradient(150deg, rgba(233,194,122,0.26), rgba(233,194,122,0.08)); border-color: rgba(233,194,122,0.4); }
+.stores { margin-top: 16px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+
+/* Rules as iOS Settings */
+.settings { margin-top: 32px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 22px; align-items: start; }
+.group { border-radius: var(--r-lg); overflow: hidden; }
+.group-title { font-size: 0.78rem; color: var(--ink-3); padding: 0 18px 8px; }
+.row { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 14px 18px; }
+.row + .row { border-top: 1px solid rgba(255,255,255,0.09); }
+.row .ri { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; }
+.row .ri svg { width: 17px; height: 17px; fill: none; stroke: #FFFFFF; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.row b { font-weight: 500; display: block; line-height: 1.45; }
+.row small { color: var(--ink-3); font-size: 0.8rem; display: block; line-height: 1.5; }
+.toggle { width: 51px; height: 31px; border-radius: 999px; position: relative; flex: none; border: 1px solid rgba(255,255,255,0.15); }
+.toggle::after { content: ""; position: absolute; top: 2px; width: 25px; height: 25px; border-radius: 50%; background: #FFFFFF; box-shadow: 0 2px 6px rgba(0,0,0,0.35); }
+.toggle.off { background: rgba(255,255,255,0.14); } .toggle.off::after { right: 2px; }
+.toggle.on { background: #34C759; } .toggle.on::after { left: 2px; }
+.lock { font-size: 0.68rem; color: var(--ink-3); display: flex; gap: 4px; align-items: center; justify-content: flex-end; margin-top: 4px; }
+
+/* Needs */
+.needs { margin-top: 32px; display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; }
+.needs .pane .who { font-size: 0.75rem; color: var(--brass); font-weight: 600; }
+
+/* Finale */
+.finale { padding: clamp(32px, 6vw, 64px); text-align: center; display: grid; gap: 14px; justify-items: center; border-radius: var(--r-xl); }
+.finale h2 { font-size: clamp(2rem, 5vw, 3.4rem); font-weight: 600; }
+.finale p { color: var(--ink-2); font-size: 1.1rem; max-width: 46ch; }
+footer { color: var(--ink-3); font-size: 0.8rem; text-align: center; margin-top: -80px; }
+
+@media (max-width: 900px) {
+  .hero, .settings { grid-template-columns: minmax(0, 1fr); }
+  .trio, .bento, .stores { grid-template-columns: minmax(0, 1fr); }
+  .flow { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .flow::before { display: none; }
+  .card { grid-template-columns: minmax(0, 1fr); }
+  .page { gap: 88px; }
+}
+@media (max-width: 520px) {
+  .flow { grid-template-columns: minmax(0, 1fr); }
+  .scene { grid-template-columns: minmax(0, 1fr); }
+  .badge { width: 44px; height: 44px; }
+  .journey::before { display: none; }
+}
+</style>
+</head>
+<body>
+
+<div class="aurora" aria-hidden="true"><span class="a"></span><span class="b"></span><span class="c"></span><span class="d"></span></div>
+<div class="grain" aria-hidden="true"></div>
+
+<div class="page" dir="rtl" lang="ar">
+
+  <nav class="tabbar glass" aria-label="أقسام العرض">
+    <a href="#journey">الرحلة</a>
+    <a href="#cases">الحالات</a>
+    <a href="#system">النظام</a>
+    <a href="#rules">الحدود</a>
+    <a href="#needs">المطلوب</a>
+  </nav>
+
+  <header class="hero">
+    <div>
+      <span class="kicker glass"><span class="dot"></span>ستوري بورد المشروع · أكتوبر 2026</span>
+      <h1>حازم</h1>
+      <p class="sub">مساعد واتساب لمكتب الأستاذ سعد فتحي سعد للمحاماة</p>
+      <p class="thesis">العميل يكتب في أي وقت، وحازم يستقبله ويرتّب طلبه ويمشّيه لحد ميعاد مع الأستاذ. والقرار والرأي القانوني للمكتب بس.</p>
+      <div class="chips">
+        <div class="chip glass"><b>24 ساعة</b><span>حازم بيستقبل الرسايل</span></div>
+        <div class="chip glass"><b>10 ص – 12 م</b><span>مواعيد عمل المكتب</span></div>
+        <div class="chip glass"><b>صفر</b><span>آراء قانونية من الآلة</span></div>
+      </div>
+    </div>
+    <div class="phone glass" aria-label="مثال لمحادثة على واتساب">
+      <div class="screen">
+        <div class="island"></div>
+        <div class="chat-head"><div class="avatar">ح</div><div><b>مكتب الأستاذ سعد فتحي سعد</b><small>حازم · متصل الآن</small></div></div>
+        <div class="chat">
+          <div class="msg client">السلام عليكم<time>11:52 م</time></div>
+          <div class="msg client">عندي مشكلة مع المطور في التجمع<time>11:52 م</time></div>
+          <div class="note">8 ثواني من غير رسايل جديدة ← رد واحد</div>
+          <div class="msg hazem">أهلًا بحضرتك في مكتب الأستاذ سعد فتحي سعد للمحاماة، معاك حازم. ممكن اسم حضرتك رباعي؟<time>11:52 م</time></div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <section aria-labelledby="problem-title">
+    <div class="head">
+      <span class="eyebrow">ليه حازم</span>
+      <h2 id="problem-title">المكتب بيخسر عملاء بالليل</h2>
+      <p>أغلب الناس بتكتب للمحامي وقت المشكلة، مش وقت مواعيد المكتب.</p>
+    </div>
+    <div class="trio">
+      <div class="pane glass"><div class="icon"><svg viewBox="0 0 24 24"><path d="M12 7v5l3 2"/><circle cx="12" cy="12" r="9"/></svg></div><h3>رسايل من غير رد</h3><p>عميل يكتب الساعة 2 الفجر، ولما الموظف يرد الصبح يكون كلّم مكتب تاني.</p></div>
+      <div class="pane glass"><div class="icon"><svg viewBox="0 0 24 24"><path d="M4 5h16v10H8l-4 4z"/><path d="M8 9h8M8 12h5"/></svg></div><h3>نفس الأسئلة كل يوم</h3><p>الاستشارة بكام؟ المكتب فين؟ أدفع إزاي؟ الموظف بيضيّع وقته في ردود متكررة.</p></div>
+      <div class="pane glass"><div class="icon"><svg viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M10 12h5M10 16h5"/></svg></div><h3>ورق وإيصالات متلخبطة</h3><p>صور بطاقات وإيصالات وعقود في محادثات متفرقة، من غير مراجعة ولا سجل.</p></div>
+    </div>
+  </section>
+
+  <section id="journey" aria-labelledby="journey-title">
+    <div class="head">
+      <span class="eyebrow">الرحلة الأساسية · عميل جديد</span>
+      <h2 id="journey-title">من أول رسالة لحد ما يقعد قدام الأستاذ</h2>
+      <p>8 لقطات بالترتيب. في كل لقطة: اللي العميل بيشوفه على واتساب، وجنبها اللي بيحصل في النظام في نفس اللحظة. الاسم والمواعيد أمثلة.</p>
+    </div>
+    <div class="journey" id="journey-list"></div>
+  </section>
+
+  <section id="cases" aria-labelledby="cases-title">
+    <div class="head">
+      <span class="eyebrow">مشاهد جانبية</span>
+      <h2 id="cases-title">الحالات اللي بتحصل كل يوم</h2>
+    </div>
+    <div class="bento">
+      <div class="pane glass"><h3>فويس بدل كتابة</h3><div class="say">(رسالة صوتية · <span class="num">0:42</span>)</div><p>الفويس بيتفرّغ لنص بالعربي، والتسجيل الأصلي بيتحفظ.</p></div>
+      <div class="pane glass"><h3>«مستعجل»</h3><div class="say">استلمنا طلبك العاجل وبلغنا الأستاذ.</div><p>تنبيه فوري للأستاذ وحده، وهو يقبل أو يرفض. العاجلة بالتليفون بـ1,000 جنيه.</p></div>
+      <div class="pane glass"><h3>موكل حالي</h3><div class="say">رسالتك وصلت للمكتب، وهيرد عليك المسؤول.</div><p>حازم ما بيأكدش ولا بينفي إن حد موكل، ولا بيقول أي معلومة عن قضية.</p></div>
+      <div class="pane glass"><h3>الموظف دخل المحادثة</h3><div class="say">(حازم بيسكت)</div><p>أول ما موظف يرد بنفسه، حازم يقف لحد ما الموظف يرجّعها.</p></div>
+      <div class="pane glass"><h3>زواج أو طلاق عرفي</h3><div class="say">سن الزوج كام، وسن الزوجة كام؟</div><p>سؤال واحد في كل رسالة وبترتيب ثابت، والأستاذ بيراجع قبل الميعاد.</p></div>
+      <div class="pane glass"><h3>ملف كبير أو غريب</h3><div class="say">(أكبر من 50 ميجا، أو ملف تنفيذي)</div><p>الملف ما بيتنزلش، والسبب بيتسجل، والرد من النصوص المعتمدة.</p></div>
+    </div>
+  </section>
+
+  <section id="system" aria-labelledby="system-title">
+    <div class="head">
+      <span class="eyebrow">ورا الكواليس</span>
+      <h2 id="system-title">جزء بيتكلم مع واتساب، وجزء بيفكّر</h2>
+      <p>كل جزء ليه شغلانة واحدة، والداتابيز نفسها بتمنع أي جزء يكتب في جداول التاني.</p>
+    </div>
+    <div class="flow">
+      <div class="node glass"><h3>العميل</h3><span class="tech">WhatsApp</span><ul><li>نص، وفويس، وصور، ومستندات</li></ul></div>
+      <div class="node glass core"><h3>طبقة الواتساب</h3><span class="tech">n8n</span><ul><li>يتأكد إن الرسالة جاية من واتساب فعلًا</li><li>يمنع التكرار ويجمع الـ 8 ثواني</li><li>ينزّل الميديا ويفرّغ الفويس</li><li>مفيش فيه أي قرار</li></ul></div>
+      <div class="node glass brain"><h3>العقل</h3><span class="tech">ASP.NET Core</span><ul><li>يفهم نية العميل (نص بس)</li><li>يمشّي مراحل الحجز والدفع</li><li>يختار الرد المعتمد</li></ul></div>
+      <div class="node glass"><h3>المكتب</h3><span class="tech">Staff · Lawyer</span><ul><li>الموظف يراجع ويحدد</li><li>الأستاذ يستشير ويقرر</li></ul></div>
+    </div>
+    <div class="stores">
+      <div class="node glass"><h3>قاعدة البيانات</h3><span class="tech">PostgreSQL</span><ul><li>جداول الواتساب لطبقة الواتساب بس، وجداول البيزنس للعقل بس</li></ul></div>
+      <div class="node glass"><h3>مخزن الملفات</h3><span class="tech">Cloudflare R2</span><ul><li>مخزن للملفات الحساسة لوحده، والعقل بياخد مراجع بس</li></ul></div>
+      <div class="node glass"><h3>الذكاء الاصطناعي</h3><span class="tech">OpenAI</span><ul><li>تفريغ الفويس وفهم النص، وصفر صور أو مستندات</li></ul></div>
+    </div>
+  </section>
+
+  <section id="rules" aria-labelledby="rules-title">
+    <div class="head">
+      <span class="eyebrow">الحدود</span>
+      <h2 id="rules-title">إعدادات حازم، ومقفولة</h2>
+      <p>كل مفتاح هنا مقفول في الكود نفسه، وعليه اختبار أوتوماتيك. محدش يقدر يغيّره من اللوحة.</p>
+    </div>
+    <div class="settings">
+      <div>
+        <p class="group-title">ممنوع دايمًا</p>
+        <div class="group glass">
+          <div class="row"><span class="ri" style="background:#FF453A"><svg viewBox="0 0 24 24"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/></svg></span><div><b>رأي قانوني من الآلة</b><small>مفيش «قضيتك مضمونة». السؤال القانوني مكانه الاستشارة.</small></div><span><span class="toggle off" role="img" aria-label="مقفول"></span></span></div>
+          <div class="row"><span class="ri" style="background:#FF9F0A"><svg viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="16" rx="2"/><path d="M9 9h6M9 13h6"/></svg></span><div><b>إرسال صور أو ورق لأي AI</b><small>البطاقات والإيصالات والعقود بتتحفظ في مخزن حساس.</small></div><span><span class="toggle off" role="img" aria-label="مقفول"></span></span></div>
+          <div class="row"><span class="ri" style="background:#BF5AF2"><svg viewBox="0 0 24 24"><path d="M8 7h11v8H8z"/><path d="M5 10v8h11"/></svg></span><div><b>نفس الرسالة مرتين</b><small>كل رسالة ليها مفتاح مميز، فما تتكررش عند العميل.</small></div><span><span class="toggle off" role="img" aria-label="مقفول"></span></span></div>
+          <div class="row"><span class="ri" style="background:#0A84FF"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg></span><div><b>رسالة عادية بعد 24 ساعة</b><small>بعد 24 ساعة من آخر رسالة للعميل، قوالب Meta المعتمدة بس.</small></div><span><span class="toggle off" role="img" aria-label="مقفول"></span></span></div>
+        </div>
+      </div>
+      <div>
+        <p class="group-title">شغّال دايمًا</p>
+        <div class="group glass">
+          <div class="row"><span class="ri" style="background:#30D158"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h10M4 17h7"/></svg></span><div><b>الأسعار من جدول المكتب بس</b><small>مفيش سعر ولا خصم من عند حازم، والاستثناء للمسؤول.</small></div><span><span class="toggle on" role="img" aria-label="شغّال"></span></span></div>
+          <div class="row"><span class="ri" style="background:#64D2FF"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M4 19c0-3 2.5-5 5-5s5 2 5 5"/><path d="M16 11l2 2 3-4"/></svg></span><div><b>يسكت لما الموظف يرد</b><small>أول ما الموظف يدخل المحادثة، حازم يقف.</small></div><span><span class="toggle on" role="img" aria-label="شغّال"></span></span></div>
+          <div class="row"><span class="ri" style="background:#FFD60A"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span><div><b>الدفع قبل الميعاد</b><small>مفيش حجز في تقويم الأستاذ قبل ما الموظف يراجع الإيصال.</small></div><span><span class="toggle on" role="img" aria-label="شغّال"></span></span></div>
+          <div class="row"><span class="ri" style="background:#5E5CE6"><svg viewBox="0 0 24 24"><path d="M12 4a8 8 0 1 0 8 8"/><path d="M12 8v4h4"/></svg></span><div><b>مواعيد المكتب في الوعود</b><small>بعد 11 بالليل الوعد بيبقى «بكرة الساعة 10 الصبح».</small></div><span><span class="toggle on" role="img" aria-label="شغّال"></span></span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="needs" aria-labelledby="needs-title">
+    <div class="head">
+      <span class="eyebrow">علشان نشتغل فعلي</span>
+      <h2 id="needs-title">محتاجين إيه من المكتب</h2>
+    </div>
+    <div class="needs">
+      <div class="pane glass"><span class="who">عند Meta</span><h3>توثيق النشاط</h3><p>Business Verification، وبياخد أيام. وبعده اسم العرض «مكتب الأستاذ سعد فتحي سعد».</p></div>
+      <div class="pane glass"><span class="who">عند Meta</span><h3>تطبيق Meta ومفاتيحه</h3><p>App وحساب واتساب للأعمال وtoken دائم، ويتدخلوا مباشرة في النظام.</p></div>
+      <div class="pane glass"><span class="who">المكتب</span><h3>بيانات التشغيل</h3><p>العنوان، ورقم التواصل، وبيانات InstaPay والمحفظة، والموظفين، والموكلين الحاليين.</p></div>
+      <div class="pane glass"><span class="who">قرار المكتب</span><h3>نقل رقم المكتب</h3><p>بعد التجربة على رقم اختبار، ومع backup لمحادثات الواتساب الحالية.</p></div>
+      <div class="pane glass"><span class="who">قبل الإطلاق</span><h3>دومين وسيرفر</h3><p>رابط ثابت وسيرفر للإنتاج، بدل الرابط المؤقت بتاع الاختبار.</p></div>
+    </div>
+  </section>
+
+  <section class="finale glass" aria-labelledby="final-title">
+    <span class="eyebrow">الخطوة الجاية</span>
+    <h2 id="final-title">حازم يبتدي يفهم العميل</h2>
+    <p>تصنيف نية العميل والرد بالنصوص المعتمدة. وبالتوازي، المكتب يبدأ توثيق Meta عشان نجرب على واتساب الحقيقي.</p>
+  </section>
+
+  <footer>حازم · عرض داخلي · أكتوبر 2026</footer>
+</div>
+
+<script>
+(function () {
+  var scenes = [
+    { n: "01", t: "العميل يكتب", c: "الأحد · 11:52 م", l: "طبقة الواتساب",
+      chat: [["client", "السلام عليكم", "11:52:01 م"], ["client", "عندي مشكلة مع المطور في التجمع", "11:52:04 م"], ["client", "محتاج أفهم أعمل إيه", "11:52:07 م"]],
+      b: "Meta بتبعت كل رسالة لوحدها. n8n بيتأكد إنها جاية من Meta فعلًا، ويحفظها مرة واحدة، ويستنى 8 ثواني من غير رسايل جديدة. بعدها الـ 3 رسايل بيبقوا دور واحد ورد واحد.", r: ["8 ثواني"] },
+    { n: "02", t: "الترحيب والاسم", c: "الأحد · 11:52 م", l: "العقل",
+      chat: [["hazem", "أهلًا بحضرتك في مكتب الأستاذ سعد فتحي سعد للمحاماة، معاك حازم. ممكن اسم حضرتك رباعي؟", "11:52 م"], ["client", "أحمد محمود عبد الله السيد", "11:53 م"]],
+      b: "الرقم بيتراجع على القوائم بالترتيب: الممنوعين، وقائمة الأستاذ، والموكلين الحاليين. لو موكل حالي، حازم يحوّله للموظف المسؤول من غير ما يقول أي معلومة عن قضيته.", r: ["B-01", "B-14"] },
+    { n: "03", t: "عرض الاستشارة", c: "الأحد · 11:53 م", l: "الذكاء الاصطناعي",
+      chat: [["hazem", "الأستاذ سعد هيسمع موضوع حضرتك بنفسه. متاح استشارة بالتليفون أو الفيديو، ربع ساعة بـ500 جنيه، أو مقابلة في المكتب، نص ساعة بـ1,000 جنيه. تحب أنهي واحدة؟", "11:53 م"], ["client", "مقابلة في المكتب", "11:54 م"]],
+      b: "الذكاء الاصطناعي بيفهم نية العميل بس، زي «عايز يحجز». أما الرد نفسه فبيتاخد من نصوص معتمدة من المكتب. حازم ما بيألّفش سعر ولا رأي.", r: ["T-07"] },
+    { n: "04", t: "بيانات الدفع", c: "الأحد · 11:54 م", l: "قواعد الحجز",
+      chat: [["hazem", "مقابلة في المكتب بـ1,000 جنيه. التحويل على InstaPay أو محفظة كاش. بعد التحويل ابعتلي صورة الإيصال هنا، والمكتب هيأكد الميعاد مع حضرتك.", "11:54 م"]],
+      b: "مفيش أي ميعاد بيتحجز قبل ما الدفع يتراجع، عشان تقويم الأستاذ ما يتملاش بحجوزات وهمية.", r: ["B-08"] },
+    { n: "05", t: "الإيصال", c: "الأحد · 11:58 م", l: "تخزين الملفات",
+      chat: [["file", "صورة الإيصال"], ["hazem", "استلمنا الإيصال، وهيتم مراجعته وتأكيد الحجز بكرة الساعة 10 الصبح. مواعيد العمل الرسمية من 10 الصبح لحد 12 بالليل.", "11:58 م"]],
+      b: "الصورة بتتنزل من Meta على طول، وتتحفظ في مخزن الملفات الحساسة، وعمرها ما بتروح لأي ذكاء اصطناعي. وبعد الساعة 11 بالليل الوعد بيبقى «بكرة الساعة 10».", r: ["T-09", "B-06"] },
+    { n: "06", t: "الموظف يأكد", c: "الاثنين · 10:20 ص", l: "الموظف",
+      chat: [["note", "الموظف راجع الإيصال وحدد الميعاد"], ["hazem", "تم تأكيد ميعاد حضرتك يوم الثلاثاء الساعة 6 مساءً ✅. التفاصيل: مقابلة في المكتب.", "10:20 ص"]],
+      b: "الإيصال بيفتح مهمة مراجعة للموظف في لوحة المكتب. الموظف هو اللي بيقبل أو يرفض، وهو اللي بيحدد الميعاد. حازم بيبلّغ القرار بس.", r: ["B-05"] },
+    { n: "07", t: "التذكير", c: "الاثنين · 6:00 م", l: "قوالب Meta",
+      chat: [["hazem", "تذكير بميعاد حضرتك مع الأستاذ سعد بكرة الثلاثاء الساعة 6 مساءً. نوع الاستشارة: مقابلة في المكتب. لو محتاج تغيّر الميعاد ابعتلنا هنا.", "6:00 م"], ["note", "وتذكير تاني قبل الميعاد بساعتين"]],
+      b: "بعد 24 ساعة من آخر رسالة للعميل، واتساب ما بيسمحش برسالة عادية. التذكير بيتبعت كقالب Meta وافقت عليه مسبقًا.", r: ["M-02", "M-03"] },
+    { n: "08", t: "قدام الأستاذ", c: "الثلاثاء · 6:00 م", l: "الأستاذ",
+      chat: [["note", "كارت العميل عند الأستاذ"], ["client", "الاسم: أحمد محمود عبد الله السيد\nالخدمة: مقابلة في المكتب · مدفوع ✅\nكلامه زي ما كتبه، وتفريغ أي فويس، والورق اللي بعته\nجاي منين: إعلان واتساب"]],
+      b: "الأستاذ بيدخل الاستشارة وهو عارف الموضوع من غير ما يقرا المحادثة كلها. والرأي القانوني كله من عنده.", r: [] }
+  ];
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  var list = document.getElementById("journey-list");
+  scenes.forEach(function (s) {
+    var row = el("article", "scene");
+    row.appendChild(el("div", "badge glass", s.n));
+    var card = el("div", "card glass");
+    var top = el("div", "card-top"); top.appendChild(el("h3", null, s.t)); top.appendChild(el("span", "clock", s.c)); card.appendChild(top);
+    var mini = el("div", "mini"); var chat = el("div", "chat");
+    s.chat.forEach(function (m) {
+      if (m[0] === "note") { chat.appendChild(el("div", "note", m[1])); return; }
+      var b = el("div", "msg " + (m[0] === "hazem" ? "hazem" : "client") + (m[0] === "file" ? " file" : ""));
+      if (m[0] === "file") { b.appendChild(el("span", "file-ico", "JPG")); b.appendChild(el("span", null, m[1])); }
+      else { m[1].split("\n").forEach(function (line, i) { if (i) b.appendChild(document.createElement("br")); b.appendChild(document.createTextNode(line)); }); }
+      if (m[2]) b.appendChild(el("time", null, m[2]));
+      chat.appendChild(b);
+    });
+    mini.appendChild(chat); card.appendChild(mini);
+    var back = el("div", "backstage"); back.appendChild(el("span", "lbl", "ورا الكواليس · " + s.l)); back.appendChild(el("p", null, s.b));
+    if (s.r.length) { var tags = el("div", "tags"); s.r.forEach(function (r) { tags.appendChild(el("span", "tag", r)); }); back.appendChild(tags); }
+    card.appendChild(back); row.appendChild(card); list.appendChild(row);
+  });
+})();
+</script>
+</body>
+</html>
