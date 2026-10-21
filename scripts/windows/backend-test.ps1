@@ -22,11 +22,12 @@ if (-not $Docker -and (Get-Command dotnet -ErrorAction SilentlyContinue)) {
 
 $envArgs = @()
 foreach ($v in $vars) { $envArgs += @('-e', $v) }
-# Copy the sources inside the container so host bin/obj folders are never reused.
+# Copy the sources inside the container so host bin/obj folders are never reused, and skip
+# Visual Studio's .vs folder (its files are locked while the solution is open).
 & docker run --rm --network office_net @envArgs `
     -e OFFICE_TEST_PG_HOST=postgres -e OFFICE_TEST_MIGRATIONS_DIR=/migrations `
     -e DOTNET_CLI_TELEMETRY_OPTOUT=1 -e DOTNET_NOLOGO=1 `
     -v "$(Join-Path $Root 'backend'):/src:ro" -v "$(Join-Path $Root 'database\migrations'):/migrations:ro" `
     -v office_nuget:/root/.nuget/packages `
-    $sdkImage sh -c 'cp -r /src /work && cd /work && find . -name bin -o -name obj -o -name .nuget-packages | xargs rm -rf && rm -f NuGet.config && dotnet test --solution Office.sln'
+    $sdkImage sh -c 'mkdir /work && find /src -mindepth 1 -maxdepth 1 ! -name .vs ! -name .nuget-packages -exec cp -r {} /work/ \; && cd /work && find . -name bin -o -name obj | xargs rm -rf && rm -f NuGet.config && dotnet test --solution Office.sln'
 exit $LASTEXITCODE

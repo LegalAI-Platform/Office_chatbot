@@ -25,10 +25,12 @@ public static class HazemEndpoints
             }
 
             var response = await turns.HandleAsync(request!, ct);
-            // Never log message text or the full phone number.
+            // Never log message text, captions, transcripts, file names or the full phone number:
+            // only the turn id, the message types and counts.
             loggers.CreateLogger("Office.Api.Hazem.Turns").LogInformation(
-                "Turn {TurnId} from {WaId}: {Status}, {MessageCount} message(s), {ActionCount} action(s)",
-                response.TurnId, TurnRules.Mask(request!.WaId), response.Status, request.Messages!.Count, response.Actions.Count);
+                "Turn {TurnId} from {WaId}: {Status}, {MessageCount} message(s) [{MessageTypes}], {ActionCount} action(s)",
+                response.TurnId, TurnRules.Mask(request!.WaId), response.Status, request.Messages!.Count,
+                string.Join(",", request.Messages.Select(m => m.Type)), response.Actions.Count);
             return Results.Ok(response);
         });
 

@@ -136,6 +136,75 @@ public sealed class HazemApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal(1L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.turns WHERE turn_id = 'wa:race'"));
     }
 
+    // ---------- TASK 03: grouped turns with media ----------
+
+    private static JsonObject MediaTurn(string turnId) => new()
+    {
+        ["turn_id"] = turnId,
+        ["wa_id"] = Recipient,
+        ["contact_name"] = "Test Client",
+        ["messages"] = new JsonArray(
+            new JsonObject { ["wamid"] = "wamid.m1", ["type"] = "text", ["text"] = "دي بطاقتي", ["sent_at"] = "2026-10-20T10:15:00+03:00", ["context_wamid"] = null },
+            new JsonObject
+            {
+                ["wamid"] = "wamid.m2", ["type"] = "image", ["caption"] = "CAPTION-SECRET", ["sent_at"] = "2026-10-20T10:15:02+03:00",
+                ["media"] = new JsonObject
+                {
+                    ["status"] = "stored", ["bucket"] = "office-sensitive", ["key"] = "wa/2026/10/0b6c.jpg",
+                    ["mime_type"] = "image/jpeg", ["size_bytes"] = 1234, ["sha256"] = "ab",
+                },
+            },
+            new JsonObject
+            {
+                ["wamid"] = "wamid.m3", ["type"] = "document", ["caption"] = null, ["sent_at"] = "2026-10-20T10:15:03+03:00",
+                ["media"] = new JsonObject { ["status"] = "too_large", ["mime_type"] = "application/pdf", ["size_bytes"] = 73400320, ["filename"] = "FILENAME-SECRET.pdf" },
+            },
+            new JsonObject
+            {
+                ["wamid"] = "wamid.m4", ["type"] = "audio", ["sent_at"] = "2026-10-20T10:15:04+03:00",
+                ["media"] = new JsonObject { ["status"] = "stored", ["bucket"] = "office-media", ["key"] = "wa/2026/10/1a2b.ogg", ["mime_type"] = "audio/ogg", ["voice"] = true },
+                ["transcript"] = new JsonObject { ["status"] = "done", ["text"] = "TRANSCRIPT-SECRET عايز أحجز", ["language"] = "ar" },
+            }),
+    };
+
+    [Fact]
+    public async Task Grouped_turn_with_media_is_stored_and_echoed_from_the_transcript()
+    {
+        await db.SetEchoAsync(true, Recipient);
+        var (status, body) = await PostTurn(_n8n, MediaTurn("wt:00000000-0000-0000-0000-000000000001"));
+        Assert.Equal(HttpStatusCode.OK, status);
+        var action = Assert.Single(body!["actions"]!.AsArray())!;
+        Assert.StartsWith(TurnResponder.EchoVoicePrefix + "TRANSCRIPT-SECRET", (string?)action["text"]);
+        Assert.Equal("4|office-sensitive|too_large", await db.ScalarAsync<string>("""
+            SELECT jsonb_array_length(messages) || '|' || (messages->1->'media'->>'bucket') || '|' || (messages->2->'media'->>'status')
+              FROM hazem.turns WHERE turn_id = 'wt:00000000-0000-0000-0000-000000000001'
+            """));
+    }
+
+    [Fact]
+    public async Task Media_turn_with_a_url_in_a_reference_is_400()
+    {
+        var turn = MediaTurn("wt:00000000-0000-0000-0000-000000000002");
+        turn["messages"]![1]!["media"]!["key"] = "https://garage:3900/office-sensitive/x.jpg";
+        var (status, body) = await PostTurn(_n8n, turn);
+        Assert.Equal(HttpStatusCode.BadRequest, status);
+        Assert.NotNull(body?["errors"]?["messages[1].media.key"]);
+    }
+
+    [Fact]
+    public async Task Logs_never_contain_captions_transcripts_file_names_or_text()
+    {
+        await db.SetEchoAsync(true, Recipient);
+        await PostTurn(_n8n, MediaTurn("wt:00000000-0000-0000-0000-000000000003"));
+        var all = string.Join("\n", _factory.Logs.Lines);
+        Assert.Contains("wt:00000000-0000-0000-0000-000000000003", all); // the turn was logged
+        Assert.Contains("text,image,document,audio", all);              // types only
+        foreach (var secret in new[] { "CAPTION-SECRET", "TRANSCRIPT-SECRET", "FILENAME-SECRET", "دي بطاقتي", Recipient })
+        {
+            Assert.DoesNotContain(secret, all);
+        }
+    }
+
     // ---------- send results ----------
 
     [Fact]

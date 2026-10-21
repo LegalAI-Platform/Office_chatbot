@@ -3,7 +3,7 @@
   "nodes": [
     {
       "parameters": {
-        "content": "## WA-FORWARD-TURN\nClaims up to 20 waiting text messages (`app.wa_turns_claim`) and runs WA-HANDLE-TURN for each. Started by META-WA-INBOUND after every event, every minute (retries while the API was down), or by hand (tests). Until TASK 03 one turn = one text message; media stays `pending`.",
+        "content": "## WA-FORWARD-TURN\nFirst WA-MEDIA-FETCH (media still waiting to be downloaded), then up to 20 grouped turns (`app.wa_turns_claim`, TASK 03: 8-second quiet period, 60-second maximum, one open turn per client) and WA-HANDLE-TURN for each. Started by META-WA-INBOUND after the quiet period, every minute (retries while the API was down, stuck turns), or by hand (tests).",
         "height": 260,
         "width": 520
       },
@@ -71,7 +71,7 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.7,
       "position": [
-        480,
+        720,
         400
       ],
       "credentials": {
@@ -91,7 +91,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        720,
+        960,
         400
       ]
     },
@@ -122,7 +122,7 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.4,
       "position": [
-        960,
+        1200,
         400
       ],
       "onError": "continueRegularOutput"
@@ -136,9 +136,43 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1200,
+        1440,
         400
       ]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "WaMediaFetch0001",
+          "mode": "id",
+          "cachedResultName": "WA-MEDIA-FETCH"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "4de7c150-5ca9-5bf1-b282-4192faac49ce",
+      "name": "Fetch media",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.4,
+      "position": [
+        600,
+        400
+      ],
+      "executeOnce": true,
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
     }
   ],
   "connections": {
@@ -146,7 +180,7 @@
       "main": [
         [
           {
-            "node": "Claim turns",
+            "node": "Fetch media",
             "type": "main",
             "index": 0
           }
@@ -157,7 +191,7 @@
       "main": [
         [
           {
-            "node": "Claim turns",
+            "node": "Fetch media",
             "type": "main",
             "index": 0
           }
@@ -168,7 +202,7 @@
       "main": [
         [
           {
-            "node": "Claim turns",
+            "node": "Fetch media",
             "type": "main",
             "index": 0
           }
@@ -202,6 +236,17 @@
         [
           {
             "node": "Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch media": {
+      "main": [
+        [
+          {
+            "node": "Claim turns",
             "type": "main",
             "index": 0
           }

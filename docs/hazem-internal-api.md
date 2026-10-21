@@ -1,4 +1,4 @@
-# Internal API between n8n and the .NET backend (DECISIONS v1.3, T-17 to T-20)
+# Internal API between n8n and the .NET backend (DECISIONS v1.3, T-17 to T-20; TASK 03 turn shape)
 
 n8n is the WhatsApp layer (the only thing that talks to Meta); the .NET API is the brain.
 They talk only inside the Docker network `office_net`.
@@ -9,13 +9,15 @@ sequenceDiagram
     participant n8n
     participant API as .NET API
     Meta->>n8n: webhook (signed)
-    n8n->>n8n: wa_process_event (dedupe, 24h window)
-    n8n->>n8n: wa_turns_claim (pending text → processing)
+    n8n->>n8n: wa_process_event (dedupe, 24h window, wa_media row)
+    n8n->>Meta: media: GET /{media_id}, then download at once
+    n8n->>n8n: S3 (office-sensitive / office-media); voice → OpenAI transcript
+    n8n->>n8n: wait 8 s quiet (max 60 s), wa_turns_claim → one turn per client
     n8n->>API: POST /api/hazem/turns
     API-->>n8n: { status, actions[] }
     n8n->>Meta: send each action (idempotency_key)
     n8n->>API: POST /api/hazem/send-results
-    n8n->>n8n: wa_turns_finish (processed)
+    n8n->>n8n: wa_turns_finish(turn_id, processed)
     Note over API,n8n: .NET-initiated sends (reminders, panel)
     API->>n8n: POST /webhook/hazem-internal-send
     n8n->>Meta: send (24h window and template rules apply)
@@ -40,31 +42,52 @@ Base URL: `http://api:8080`.
 
 ### `POST /api/hazem/turns`
 
-One *turn* = what the client said that needs one answer. Until TASK 03 (8-second grouping,
-media, voice) a turn is one text message and `turn_id` is `wa:<wamid>`.
+One *turn* = what the client said that needs one answer (TASK 03): every message the client
+sent until 8 seconds passed without a new one (`whatsapp.group_quiet_seconds`), or at most 60
+seconds after the first (`whatsapp.group_max_seconds`), with every media file already
+downloaded and every voice note already transcribed. `turn_id` is `wt:<uuid>`: opaque, do not
+parse it. Turns from before TASK 03 (`wa:<wamid>`) stay as they are in `hazem.turns`.
 
 ```json
 {
-  "turn_id": "wa:wamid.HBgM...",
+  "turn_id": "wt:0b6c2a7e-…",
   "wa_id": "201001234567",
   "contact_name": "Client name from WhatsApp",
   "messages": [
-    {
-      "wamid": "wamid.HBgM...",
-      "type": "text",
-      "text": "عايز أحجز استشارة",
-      "sent_at": "2026-10-20T10:15:00+03:00",
-      "context_wamid": null
-    }
+    { "wamid": "…", "type": "text", "text": "عايز أحجز استشارة", "sent_at": "2026-10-20T10:15:00+03:00", "context_wamid": null },
+    { "wamid": "…", "type": "image", "caption": "البطاقة", "sent_at": "…", "context_wamid": null,
+      "media": { "status": "stored", "bucket": "office-sensitive", "key": "wa/2026/10/9f1c….jpg",
+                 "mime_type": "image/jpeg", "size_bytes": 123456, "sha256": "…" } },
+    { "wamid": "…", "type": "audio", "sent_at": "…", "context_wamid": null,
+      "media": { "status": "stored", "bucket": "office-media", "key": "wa/2026/10/3d7a….ogg",
+                 "mime_type": "audio/ogg", "size_bytes": 23456, "sha256": "…", "voice": true },
+      "transcript": { "status": "done", "text": "…", "language": "ar" } },
+    { "wamid": "…", "type": "document", "caption": null, "sent_at": "…", "context_wamid": null,
+      "media": { "status": "too_large", "mime_type": "application/pdf", "size_bytes": 73400320, "filename": "…" } },
+    { "wamid": "…", "type": "location", "location": { "latitude": 30.0, "longitude": 31.2, "name": null, "address": null } },
+    { "wamid": "…", "type": "reaction", "reaction": { "emoji": "👍", "message_wamid": "…" } },
+    { "wamid": "…", "type": "interactive", "interactive": { "kind": "button_reply", "id": "…", "title": "…" } },
+    { "wamid": "…", "type": "button", "button": { "payload": "…", "text": "…" } },
+    { "wamid": "…", "type": "unsupported", "original_type": "contacts" }
   ]
 }
 ```
+
+A text message keeps exactly the TASK 02 shape (`wamid`, `type`, `text`, `sent_at`,
+`context_wamid`). Messages are ordered by `sent_at`.
 
 | Field | Rule |
 |---|---|
 | `turn_id` | required, 1–200 characters, unique per turn |
 | `wa_id` | required, 8–15 digits |
-| `messages` | 1–50 items, each with `wamid` and `type`; `text` up to 4096 characters |
+| `messages` | 1–50 items, each with `wamid` and `type` |
+| `type` | `text`, `image`, `document`, `audio`, `video`, `sticker`, `location`, `reaction`, `interactive` (`button_reply` / `list_reply`), `button` (template quick replies), or `unsupported` (any other Meta type, with `original_type`) |
+| `text`, `caption` | up to 4096 characters |
+| `media` | required for `image`, `document`, `audio`, `video`, `sticker`, and only there. `status`: `stored`, `failed`, `too_large` (over `whatsapp.media_max_mb`), `rejected` (type not allowed) — never a download in progress |
+| `media.bucket`, `media.key` | only when `status` is `stored`. Bucket `office-sensitive` for every image and document (they may be ID cards, Urfi papers, receipts or contracts), `office-media` for audio, video and stickers. Key `wa/<yyyy>/<mm>/<random id>.<ext>`: never a phone number, a name, a wamid or the original file name |
+| `media.filename` | the client's document name. **May hold personal data: never log it** |
+| `transcript` | audio only, once transcription finished: `status` `done` or `failed`, `text` up to 16000 characters |
+| URLs | **none, ever** (T-09). No field of a file reference may contain `://`. The API gets references only and has no key to read the files (until a later task gives it one) |
 
 Response `200`:
 
@@ -159,11 +182,18 @@ Response `200` (always, the outcome is in the body):
 | Meta Graph API | only caller | never |
 | Business decisions | never | only place |
 
-## Message states in `app.wa_inbound_messages`
+## Turn and message states
 
-`pending` → `processing` (claimed by `app.wa_turns_claim`) → `processed` / `failed`
-(`app.wa_turns_finish`). A row left in `processing` for more than 5 minutes is claimed again.
-Until TASK 03 only `text` messages are forwarded; media stays `pending` for TASK 03.
+`app.wa_turns`: `processing` (claimed) → `processed` / `failed`, or `pending` (given back after
+the API failed; retried first, with the **same** `turn_id` and the **same** messages). A client
+has at most one open turn (`processing` or `pending`) — a partial unique index — so its replies
+keep their order and new messages wait for the next turn. A turn left `processing` for longer
+than `whatsapp.turn_stale_seconds` (300) is taken again with the same `turn_id`; the API answers
+it as a duplicate with the same actions, and the idempotency keys stop a second send.
+
+`app.wa_inbound_messages` follows its turn: `pending` (waiting, or its turn was given back) →
+`processing` → `processed` / `failed`. `app.wa_media`: `pending` → `downloading` → `stored` /
+`failed` / `too_large` / `rejected`; audio then gets `transcript_status` `done` or `failed`.
 
 ## Testing without Meta
 
@@ -171,4 +201,8 @@ Until TASK 03 only `text` messages are forwarded; media stays `pending` for TASK
   `wamid.DRYRUN-…` and Meta is never called. Keep it `false` (the healthcheck fails otherwise).
 - `echo.enabled = true` and `echo.recipients` in `hazem.settings`: the API answers every text
   turn from those numbers with «تم استلام رسالتك (اختبار) ✅». Off by default.
-- `hazem-e2e` (scripts) runs the whole loop with dummy numbers and both switches, then turns them off.
+- `whatsapp.graph_base_url` and `ai.openai_base_url` point at `meta-stub` (docker compose
+  profile `tests`) during `hazem-e2e` only: a stand-in for Meta's media endpoints and OpenAI
+  transcription that records what it received (never the Authorization value).
+- `hazem-e2e` (scripts) runs the whole loop with dummy numbers, the stub and both switches,
+  then restores every setting it changed. The healthcheck fails while any of them is left on.

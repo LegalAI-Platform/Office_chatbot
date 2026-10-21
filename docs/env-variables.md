@@ -19,9 +19,9 @@ contains `CHANGE_ME`, or has the wrong format.
 | `REDIS_PASSWORD` | redis, tools; n8n credential later | **yes** | 48 hex chars | 01 |
 | `GARAGE_RPC_SECRET` | garage | **yes** | exactly 64 lowercase hex | 01 |
 | `GARAGE_ADMIN_TOKEN` | garage, storage-init, healthcheck | **yes** | 64 hex chars | 01 |
-| `S3_REGION` | tools; n8n S3 credential later | no | `garage` | 01 |
-| `S3_N8N_ACCESS_KEY_ID` | storage-init; n8n S3 credential later | no (identifier) | `GK` + 24 hex | 01 |
-| `S3_N8N_SECRET_ACCESS_KEY` | storage-init; n8n S3 credential later | **yes** | 64 hex | 01 |
+| `S3_REGION` | tools; n8n credential `office-s3` (created by `n8n-import`) | no | `garage` | 01 |
+| `S3_N8N_ACCESS_KEY_ID` | storage-init; n8n credential `office-s3` (created by `n8n-import`) | no (identifier) | `GK` + 24 hex | 01 |
+| `S3_N8N_SECRET_ACCESS_KEY` | storage-init; n8n credential `office-s3` (created by `n8n-import`) | **yes** | 64 hex | 01 |
 | `S3_BACKUP_ACCESS_KEY_ID` | storage-init, backup, restore | no (identifier) | `GK` + 24 hex | 01 |
 | `S3_BACKUP_SECRET_ACCESS_KEY` | storage-init, backup, restore | **yes** | 64 hex | 01 |
 | `N8N_ENCRYPTION_KEY` | n8n | **yes — critical** | 64 hex. Losing or changing it makes stored credentials unreadable | 01 |
@@ -59,6 +59,7 @@ They are entered as **n8n Credentials** (encrypted with `N8N_ENCRYPTION_KEY`), n
 |---|---|
 | WhatsApp permanent access token (`meta-whatsapp-token`) | 02 |
 | Meta App Secret (`meta-whatsapp-trigger`, `meta-app-token`) | 02 |
-| OpenAI API key | 04 |
+| OpenAI API key for voice transcription (`openai-transcription`) | 03 |
+| OpenAI API key for intent classification (.NET, T-08) | 04 |
 | Google Calendar OAuth / service account | 08 |
 | Telegram bot token | monitoring |

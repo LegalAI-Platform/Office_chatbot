@@ -1,0 +1,1079 @@
+{
+  "name": "WA-MEDIA-ONE",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## WA-MEDIA-ONE (TASK 03)\nOne claimed media row (`app.wa_media_claim`). Graph API metadata → `app.wa_media_precheck` (size, allowed type, bucket, key — rules in SQL) → download right away (Meta's URL expires in minutes) → sha256 check → S3 (`office-s3`) → `app.wa_media_stored`.\nAudio only (explicit check, T-09): read back from S3 → OpenAI transcription (`openai-transcription`) → `app.wa_media_transcribed`. No image, PDF or document ever goes to any AI. The media URL is never stored.",
+        "height": 300,
+        "width": 560
+      },
+      "id": "4cf8a69b-6efc-5733-94c2-7613dd965a4c",
+      "name": "Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "9c05476e-6e4c-528e-8950-25b483d9d299",
+      "name": "Start",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        240,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT jsonb_object_agg(key, value) AS cfg FROM app.settings",
+        "options": {}
+      },
+      "id": "40e2f0e3-a2a2-5c52-8d2b-c85eb7a250b4",
+      "name": "Settings",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        480,
+        400
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "CRED:office-postgres-app",
+          "name": "office-postgres-app"
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "30d69e49-abf8-5484-9122-eed4020d6534",
+              "leftValue": "={{ !!$json.cfg['whatsapp.graph_api_version'] && !!$json.cfg['whatsapp.graph_base_url'] }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "a5a64c75-f607-5da6-bf6b-5dd8d3859069",
+      "name": "Graph version set?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        720,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT app.wa_media_failed($1::uuid, $2::jsonb) AS failed",
+        "options": {
+          "queryReplacement": "={{ [ $('Start').first().json.media_id, JSON.stringify({ code: 'NO_GRAPH_SETTINGS' }) ] }}"
+        }
+      },
+      "id": "6261cff5-8fb7-5dd7-bc0a-d4c03477a221",
+      "name": "No Graph settings",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        960,
+        600
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "CRED:office-postgres-app",
+          "name": "office-postgres-app"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Settings').first().json.cfg['whatsapp.graph_base_url'] }}/{{ $('Settings').first().json.cfg['whatsapp.graph_api_version'] }}/{{ $('Start').first().json.meta_media_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "2005ea09-ef52-5838-adcb-c61bb44ea978",
+      "name": "Media info",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        960,
+        400
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CRED:meta-whatsapp-token",
+          "name": "meta-whatsapp-token"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "7e770d0e-912d-5906-b341-4d0216f245b9",
+              "leftValue": "={{ $json.statusCode >= 200 && $json.statusCode < 300 && !!($json.body && $json.body.url) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "62a7d97d-3435-53d4-8ec7-5989162929d2",
+      "name": "Info OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1200,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT app.wa_media_failed($1::uuid, $2::jsonb) AS failed",
+        "options": {
+          "queryReplacement": "={{ [ $('Start').first().json.media_id, JSON.stringify({ code: 'META_MEDIA_INFO', http_status: $json.statusCode || null }) ] }}"
+        }
+      },
+      "id": "7a9e61b1-00f6-5f49-a7b2-8c73444ea627",
+      "name": "Info failed",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1440,
+        600
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "CRED:office-postgres-app",
+          "name": "office-postgres-app"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT app.wa_media_precheck($1::uuid, $2::jsonb) AS p",
+        "options": {
+          "queryReplacement": "={{ [ $('Start').first().json.media_id, JSON.stringify($json.body) ] }}"
+        }
+      },
+      "id": "e9ab7fba-9958-5cf1-986e-2f066c20e2f6",
+      "name": "Precheck",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1440,
+        400
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "CRED:office-postgres-app",
+          "name": "office-postgres-app"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1269c98-1d37-5655-bbb3-919e891bbf71",
+              "leftValue": "={{ $json.p.action === 'download' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "94b4c1e0-8aa1-58b3-bc51-576cadc46064",
+      "name": "Download?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1680,
+        400
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "d7b3fff4-39ee-5192-8286-0e2abb30753f",
+      "name": "Not downloaded",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1920,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Media info').first().json.body.url }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 120000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          }
+        }
+      },
+      "id": "a4cbea98-c100-5cc3-89bb-8e6bf90c8343",
+      "name": "Download",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1920,
+        400
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CRED:meta-whatsapp-token",
+          "name": "meta-whatsapp-token"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "6bbfe226-a431-5f12-9ab7-ae0672880802",
+              "leftValue": "={{ $json.statusCode >= 200 && $json.statusCode < 300 && !!$binary.data }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "98325171-4135-5df8-8934-7ed910108a47",
+      "name": "Downloaded?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2160,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT app.wa_media_failed($1::uuid, $2::jsonb) AS failed",
+        "options": {
+          "queryReplacement": "={{ [ $('Start').first().json.media_id, JSON.stringify({ code: 'DOWNLOAD_FAILED', http_status: $json.statusCode || null }) ] }}"
+        }
+      },
+      "id": "303bc51a-4e93-50a1-b3df-11d6e3fd7fea",
+      "name": "Download failed",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        2400,
+        600
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "CRED:office-postgres-app",
+          "name": "office-postgres-app"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "action": "hash",
+        "type": "SHA256",
+        "binaryData": true,
+        "binaryPropertyName": "data",
+        "dataPropertyName": "sha256_hex",
+        "encoding": "hex"
+      },
+      "id": "f304230c-b8bc-575b-9e49-7135f81f37b6",
+      "name": "sha256 hex",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "8fb261d5-79eb-5324-a698-0dbab408f487",
+              "leftValue": "={{ $json.match === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "0dd81aa9-e70b-5b9c-b4f1-632ec9523f7e",
+      "name": "sha256 matches?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2880,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT app.wa_media_verify($1::uuid, $2) AS v",
+        "options": {
+          "queryReplacement": "={{ [ $('Start').first().json.media_id, $json.sha256_hex ] }}"
+        }
+      },
+      "id": "ca3c73ef-546a-5712-84d7-aa58253c6e41",
+      "name": "Record mismatch",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        3120,
+        600
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "CRED:office-postgres-app",
+          "name": "office-postgres-app"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "bucketName": "={{ $('Precheck').first().json.p.bucket }}",
+        "fileName": "={{ $('Precheck').first().json.p.file_name }}",
+        "binaryData": true,
+        "binaryPropertyName": "data",
+        "additionalFields": {
+          "parentFolderKey": "={{ $('Precheck').first().json.p.folder }}"
+        },
+        "tagsUi": {}
+      },
+      "id": "f524819a-a121-5c06-a7b5-5cee52408d35",
+      "name": "Upload to S3",
+      "type": "n8n-nodes-base.s3",
+      "typeVersion": 1,
+      "position": [
+        3120,
+        400
+      ],
+      "credentials": {
+        "s3": {
+          "id": "CRED:office-s3",
+          "name": "office-s3"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "00349d22-8de6-51f3-ac34-60c7b051a99a",
+              "leftValue": "={{ !$json.error }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "45cabda7-691a-57e3-a765-fd055bff18fb",
+      "name": "Uploaded?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        3360,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT app.wa_media_failed($1::uuid, $2::jsonb) AS failed",
+        "options": {
+          "queryReplacement": "={{ [ $('Start').first().json.media_id, JSON.stringify({ code: 'S3_UPLOAD_FAILED' }) ] }}"
+        }
+      },
+      "id": "97260c35-288c-56c5-b2e7-603da941e9e4",
+      "name": "Upload failed",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        3600,
+        600
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "CRED:office-postgres-app",
+          "name": "office-postgres-app"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT app.wa_media_stored($1::uuid, $2, $3) AS s",
+        "options": {
+          "queryReplacement": "={{ [ $('Start').first().json.media_id, $('Precheck').first().json.p.bucket, $('Precheck').first().json.p.key ] }}"
+        }
+      },
+      "id": "1a5434c0-7cdf-5a14-862e-dc9ab3d0d9ec",
+      "name": "Stored",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        3600,
+        400
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "CRED:office-postgres-app",
+          "name": "office-postgres-app"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "5bc27ae9-3004-5a5b-a379-2e18535bda8b",
+              "leftValue": "={{ $json.s.ok === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "b4f5ec41-9357-5cbf-b4a6-b93571f277fe",
+      "name": "Accepted?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        3840,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "delete",
+        "bucketName": "={{ $('Precheck').first().json.p.bucket }}",
+        "fileKey": "={{ $('Precheck').first().json.p.key }}",
+        "options": {}
+      },
+      "id": "24643dfa-bd3c-5650-835c-70ac18368f1e",
+      "name": "Remove late file",
+      "type": "n8n-nodes-base.s3",
+      "typeVersion": 1,
+      "position": [
+        4080,
+        600
+      ],
+      "credentials": {
+        "s3": {
+          "id": "CRED:office-s3",
+          "name": "office-s3"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "48ce55d0-1470-5575-894d-f77a3f061b7d",
+              "leftValue": "={{ $json.s.transcribe === true && $json.s.kind === 'audio' && String($json.s.mime_type || '').startsWith('audio/') && $('Start').first().json.kind === 'audio' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "b612246f-8208-560a-9ddc-cae5a7ba35aa",
+      "name": "Audio only (T-09)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        4080,
+        400
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "83c96282-3ffe-5bea-935b-4fba2fe66772",
+      "name": "Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        4320,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "bucketName": "={{ $('Precheck').first().json.p.bucket }}",
+        "fileKey": "={{ $('Precheck').first().json.p.key }}",
+        "binaryPropertyName": "data"
+      },
+      "id": "0663ba85-8cb6-5fb0-b4e1-d094f4a5980d",
+      "name": "Read audio back",
+      "type": "n8n-nodes-base.s3",
+      "typeVersion": 1,
+      "position": [
+        4320,
+        400
+      ],
+      "credentials": {
+        "s3": {
+          "id": "CRED:office-s3",
+          "name": "office-s3"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// WhatsApp voice notes are audio/ogg; codecs=opus: send them as audio/ogg named .ogg.\n// audio/mp3 is sent as audio/mpeg. Anything that is not audio never gets here (T-09).\nconst item = $input.first();\nif (!item.binary || !item.binary.data) return [{ json: { no_audio: true } }];\nconst base = String(item.binary.data.mimeType || '').split(';')[0].trim().toLowerCase();\nif (!base.startsWith('audio/')) return [{ json: { no_audio: true } }];\nconst map = { 'audio/ogg': ['audio/ogg', 'ogg'], 'audio/mp3': ['audio/mpeg', 'mp3'], 'audio/mpeg': ['audio/mpeg', 'mp3'],\n  'audio/mp4': ['audio/mp4', 'm4a'], 'audio/aac': ['audio/aac', 'aac'], 'audio/amr': ['audio/amr', 'amr'] };\nconst [mime, ext] = map[base] || [base, 'ogg'];\nitem.binary.data.mimeType = mime;\nitem.binary.data.fileName = 'voice.' + ext;\nitem.binary.data.fileExtension = ext;\nreturn [item];"
+      },
+      "id": "558d4d63-a892-5de2-b429-5726582049bf",
+      "name": "Voice file for OpenAI",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4560,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Settings').first().json.cfg['ai.openai_base_url'] }}/audio/transcriptions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            },
+            {
+              "name": "model",
+              "value": "={{ $('Settings').first().json.cfg['ai.transcription_model'] }}"
+            },
+            {
+              "name": "language",
+              "value": "ar"
+            },
+            {
+              "name": "response_format",
+              "value": "json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "68537ed8-6da8-55dc-aaa5-8c5111f269ee",
+      "name": "Transcribe",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        4800,
+        400
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CRED:openai-transcription",
+          "name": "openai-transcription"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT app.wa_media_transcribed($1::uuid, $2::boolean, $3, $4, $5::jsonb) AS t",
+        "options": {
+          "queryReplacement": "={{ [ $('Start').first().json.media_id, ($json.statusCode >= 200 && $json.statusCode < 300 && !!($json.body && $json.body.text)), ($json.body && $json.body.text) || null, $('Settings').first().json.cfg['ai.transcription_model'], JSON.stringify({ code: 'TRANSCRIPTION_FAILED', http_status: $json.statusCode || null }) ] }}"
+        }
+      },
+      "id": "cfe0c984-8699-5093-9359-4f030369aa37",
+      "name": "Record transcript",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        5040,
+        400
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "CRED:office-postgres-app",
+          "name": "office-postgres-app"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// The Crypto node drops the file: compare here and put the downloaded file back on the item.\n// Meta may announce the sha256 as hex (any case) or as base64 of the digest (same rule as\n// app.wa_media_verify).\nconst hex = String($input.first().json.sha256_hex || '').toLowerCase();\nconst expected = String(($('Media info').first().json.body || {}).sha256 || '');\nlet b64 = '';\ntry { b64 = Buffer.from(hex, 'hex').toString('base64'); } catch (e) { b64 = ''; }\nconst match = hex.length === 64 && (!expected || expected.toLowerCase() === hex || expected === b64);\nreturn [{ json: { sha256_hex: hex, match }, binary: $('Download').first().binary }];"
+      },
+      "id": "c75c67c4-62d0-5bd1-a998-843714b308ab",
+      "name": "Check sha256, keep file",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Settings": {
+      "main": [
+        [
+          {
+            "node": "Graph version set?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Graph version set?": {
+      "main": [
+        [
+          {
+            "node": "Media info",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Graph settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Media info": {
+      "main": [
+        [
+          {
+            "node": "Info OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Info OK?": {
+      "main": [
+        [
+          {
+            "node": "Precheck",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Info failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Precheck": {
+      "main": [
+        [
+          {
+            "node": "Download?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download?": {
+      "main": [
+        [
+          {
+            "node": "Download",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Not downloaded",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download": {
+      "main": [
+        [
+          {
+            "node": "Downloaded?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Downloaded?": {
+      "main": [
+        [
+          {
+            "node": "sha256 hex",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Download failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "sha256 hex": {
+      "main": [
+        [
+          {
+            "node": "Check sha256, keep file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "sha256 matches?": {
+      "main": [
+        [
+          {
+            "node": "Upload to S3",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record mismatch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload to S3": {
+      "main": [
+        [
+          {
+            "node": "Uploaded?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Uploaded?": {
+      "main": [
+        [
+          {
+            "node": "Stored",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Upload failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stored": {
+      "main": [
+        [
+          {
+            "node": "Accepted?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Accepted?": {
+      "main": [
+        [
+          {
+            "node": "Audio only (T-09)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Remove late file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Audio only (T-09)": {
+      "main": [
+        [
+          {
+            "node": "Read audio back",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read audio back": {
+      "main": [
+        [
+          {
+            "node": "Voice file for OpenAI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Voice file for OpenAI": {
+      "main": [
+        [
+          {
+            "node": "Transcribe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transcribe": {
+      "main": [
+        [
+          {
+            "node": "Record transcript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check sha256, keep file": {
+      "main": [
+        [
+          {
+            "node": "sha256 matches?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Cairo",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "WaErrHandler0001"
+  },
+  "pinData": {},
+  "id": "WaMediaOne000001",
+  "tags": []
+}

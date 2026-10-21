@@ -3,7 +3,7 @@
 #
 # Core services start with `docker compose up -d`: postgres, redis, garage, n8n and the
 # .NET backend (api).
-# Optional profiles: panel (Appsmith), tunnel (Cloudflare Quick Tunnel),
+# Optional profiles: panel (Appsmith), tests (meta-stub for hazem-e2e), tunnel (Cloudflare Quick Tunnel),
 #                    tunnel-named (Cloudflare Named Tunnel), tools (one-off commands).
 # Every port is bound to 127.0.0.1 only. n8n is the only service ever exposed
 # to the internet, and only through the tunnel profile. The api has no host port at all.
@@ -207,6 +207,24 @@ services:
       start_period: 20s
     networks: [office_net]
 
+  # TEST ONLY (profile "tests", never started by `up`): stands in for Meta's Graph API media
+  # endpoints and OpenAI transcription. hazem-e2e starts it, points whatsapp.graph_base_url and
+  # ai.openai_base_url at it, and stops it again. It never stores Authorization values.
+  meta-stub:
+    build:
+      context: ./backend
+      dockerfile: tests/Office.TestStub/Dockerfile
+    image: office-meta-stub:local
+    pull_policy: build
+    profiles: ["tests"]
+    restart: "no"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health | grep -q ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks: [office_net]
+
   # Panel: unused until the React panel (TASK 07, DECISIONS v1.3 T-11).
   appsmith:
     image: appsmith/appsmith-ce:v2.4.3
@@ -269,6 +287,8 @@ services:
     profiles: ["tools"]
     volumes:
       - ./n8n/fixtures:/fixtures:ro
+      # wa-db-tests replays them on a throwaway database (TASK 03).
+      - ./database/migrations:/migrations:ro
 
   # SQL migrations for the office database (connects as office_migrator only).
   #   docker compose run --rm migrate up|down|status

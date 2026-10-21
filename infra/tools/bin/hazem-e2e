@@ -1,12 +1,18 @@
 #!/bin/bash
-# Steps of the end-to-end test n8n <-> .NET API (DECISIONS v1.3), driven by scripts/*/hazem-e2e.
-# Each step is one call: hazem-e2e <step>. Dummy numbers 20100000006x only; no call to Meta
-# (whatsapp.dry_run is switched on for the test and off again by "cleanup").
+# Steps of the end-to-end test n8n <-> .NET API (DECISIONS v1.3 + TASK 03), driven by
+# scripts/*/hazem-e2e. Each step is one call: hazem-e2e <step>. Dummy numbers 20100000006x only.
+# Meta and OpenAI are replaced by meta-stub (profile tests); whatsapp.dry_run records sends
+# without Meta. Every setting the test changes is backed up first and restored by "cleanup".
 set -uo pipefail
 source /usr/local/bin/_lib
 
-A=201000000061   # echo recipient
+A=201000000061   # one message -> echo; replay; API -> n8n send
 B=201000000062   # writes while the API is down
+C=201000000063   # two texts and a photo within 8 s -> one turn
+D=201000000064   # PDF, voice note, too large, wrong sha256, forbidden type
+E=201000000065   # turn left processing while n8n restarts
+ALL="'$A','$B','$C','$D','$E'"
+STUB=http://meta-stub:8080
 
 passed=0; failed=0
 assert_eq() {  # assert_eq "description" actual expected
@@ -14,8 +20,8 @@ assert_eq() {  # assert_eq "description" actual expected
   else echo "FAIL  $1 (got '$2', expected '$3')"; failed=$((failed+1)); fi
 }
 q() { psql_super office -c "$1"; }
-# The every-minute schedule in n8n may be handling the same message right now, so states are
-# polled (up to 30 s) instead of read once.
+# n8n's every-minute schedule may be handling the same rows right now, so states are polled
+# (up to 30 s) instead of read once.
 wait_eq() {  # wait_eq "description" "SQL" expected
   local got=""
   for _ in $(seq 1 30); do
@@ -25,93 +31,134 @@ wait_eq() {  # wait_eq "description" "SQL" expected
   done
   assert_eq "$1" "$got" "$3"
 }
-inject() {  # inject WA_ID WAMID TEXT: a Meta text event through app.wa_process_event, as n8n does
-  local ev
-  ev="$(jq -nc --arg wa "$1" --arg id "$2" --arg text "$3" --arg ts "$(date +%s)" '{
+event() {  # event WA_ID WAMID TYPE JSON_FOR_TYPE: a Meta webhook event as the WhatsApp Trigger emits it
+  jq -nc --arg wa "$1" --arg id "$2" --arg type "$3" --argjson b "$4" --arg ts "$(date +%s)" '{
     field: "messages", messaging_product: "whatsapp",
     metadata: {display_phone_number: "15550000000", phone_number_id: "100000000000001"},
     contacts: [{profile: {name: "E2E"}, wa_id: $wa}],
-    messages: [{from: $wa, id: $id, timestamp: $ts, type: "text", text: {body: $text}}]}')"
-  psql_as office_app "$OFFICE_APP_PASSWORD" office -v ev="$ev" <<<"SELECT app.wa_process_event(:'ev'::jsonb);" >/dev/null
+    messages: [{from: $wa, id: $id, timestamp: $ts, type: $type} + {($type): $b}]}'
 }
+inject() {  # inject WA_ID WAMID TYPE JSON_FOR_TYPE [SECONDS_AGO]: through app.wa_process_event, as n8n does
+  psql_as office_app "$OFFICE_APP_PASSWORD" office -v ev="$(event "$1" "$2" "$3" "$4")" \
+    <<<"SELECT app.wa_process_event(:'ev'::jsonb);" >/dev/null
+  # Older messages close their turn without waiting for the 8-second quiet period.
+  [[ -n "${5:-}" ]] && q "UPDATE app.wa_inbound_messages SET received_at = now() - interval '$5 seconds' WHERE wamid = '$2'" >/dev/null
+  return 0
+}
+text() { jq -nc --arg t "$1" '{body: $t}'; }
+turn_of() { echo "(SELECT turn_id FROM app.wa_inbound_messages WHERE wamid = '$1')"; }
+backup_set() {  # backup_set KEY VALUE: remember the original value once, then change it
+  q "INSERT INTO app.settings (key, value, description)
+       SELECT 'e2e.backup.' || key, value, 'hazem-e2e: original value, restored by cleanup'
+         FROM app.settings WHERE key = '$1'
+     ON CONFLICT (key) DO NOTHING;
+     UPDATE app.settings SET value = '$2', updated_by = 'hazem-e2e' WHERE key = '$1';" >/dev/null
+}
+stub_log() { curl -s "$STUB/_log"; }
 finish() { echo "Result: $passed passed, $failed failed."; [[ $failed -eq 0 ]]; }
 
 case "${1:-}" in
   cleanup)
+    # Files this test stored in S3 (dummy numbers only).
+    while IFS='|' read -r bucket key; do
+      [[ -n "$bucket" ]] && s3_as n8n s3 rm "s3://$bucket/$key" >/dev/null 2>&1
+    done < <(q "SELECT w.bucket || '|' || w.object_key FROM app.wa_media w JOIN app.wa_inbound_messages m ON m.id = w.inbound_message_id
+                 WHERE m.wa_id IN ($ALL) AND w.object_key IS NOT NULL")
     q "
       DELETE FROM hazem.send_results WHERE idempotency_key IN
-        (SELECT idempotency_key FROM app.wa_outbound_messages WHERE wa_id IN ('$A', '$B'));
-      DELETE FROM app.wa_outbound_messages WHERE wa_id IN ('$A', '$B');
-      DELETE FROM app.wa_inbound_messages WHERE wa_id IN ('$A', '$B');
-      DELETE FROM app.wa_contact_windows WHERE wa_id IN ('$A', '$B');
-      DELETE FROM app.wa_webhook_events WHERE payload->'contacts'->0->>'wa_id' IN ('$A', '$B');
-      DELETE FROM hazem.turns WHERE wa_id IN ('$A', '$B');
-      DELETE FROM hazem.send_results WHERE turn_id LIKE 'wa:wamid.E2E-%' OR idempotency_key LIKE 'e2e:%'
-         OR idempotency_key LIKE 'hazem:wa:wamid.E2E-%';
+        (SELECT idempotency_key FROM app.wa_outbound_messages WHERE wa_id IN ($ALL));
+      DELETE FROM hazem.send_results WHERE idempotency_key LIKE 'e2e:%';
+      DELETE FROM app.wa_outbound_messages WHERE wa_id IN ($ALL);
+      DELETE FROM app.wa_inbound_messages WHERE wa_id IN ($ALL);
+      DELETE FROM app.wa_turns WHERE wa_id IN ($ALL);
+      DELETE FROM app.wa_contact_windows WHERE wa_id IN ($ALL);
+      DELETE FROM app.wa_webhook_events WHERE payload->'contacts'->0->>'wa_id' IN ($ALL);
+      DELETE FROM hazem.turns WHERE wa_id IN ($ALL);
+      UPDATE app.settings s SET value = b.value, updated_by = 'hazem-e2e'
+        FROM app.settings b WHERE b.key = 'e2e.backup.' || s.key;
+      DELETE FROM app.settings WHERE key LIKE 'e2e.backup.%';
       UPDATE app.settings SET value = 'false', updated_by = 'hazem-e2e' WHERE key = 'whatsapp.dry_run';
       UPDATE hazem.settings SET value = 'false', updated_by = 'hazem-e2e' WHERE key = 'echo.enabled';
       UPDATE hazem.settings SET value = '', updated_by = 'hazem-e2e' WHERE key = 'echo.recipients';" >/dev/null
-    echo "cleaned: dummy rows deleted, dry run and echo switched off"
+    echo "cleaned: dummy rows and files deleted, settings restored, dry run and echo switched off"
     ;;
 
   setup)
     "$0" cleanup >/dev/null
+    backup_set whatsapp.dry_run true
+    backup_set whatsapp.graph_base_url "$STUB"
+    backup_set ai.openai_base_url "$STUB/v1"
+    if [[ -z "$(q "SELECT value FROM app.settings WHERE key = 'whatsapp.graph_api_version'")" ]]; then
+      backup_set whatsapp.graph_api_version v26.0
+    fi
     q "
-      UPDATE app.settings SET value = 'true', updated_by = 'hazem-e2e' WHERE key = 'whatsapp.dry_run';
       UPDATE hazem.settings SET value = 'true', updated_by = 'hazem-e2e' WHERE key = 'echo.enabled';
-      UPDATE hazem.settings SET value = '$A,$B', updated_by = 'hazem-e2e' WHERE key = 'echo.recipients';" >/dev/null
-    inject "$A" wamid.E2E-1 "مرحبا من اختبار e2e"
-    echo "setup: dry run and echo on, wamid.E2E-1 waiting"
+      UPDATE hazem.settings SET value = '$A,$B,$C,$D,$E', updated_by = 'hazem-e2e' WHERE key = 'echo.recipients';" >/dev/null
+    curl -s -X POST "$STUB/_log/reset" >/dev/null || die "meta-stub is not running"
+    inject "$A" wamid.E2E-1 text "$(text "مرحبا من اختبار e2e")" 10
+    echo "setup: stub, dry run and echo on; wamid.E2E-1 waiting"
+    ;;
+
+  remove-test-credentials)
+    # Only the fixed test ids AND names created by n8n/scripts/e2e-credentials.sh add.
+    psql_super n8n -c "
+      DELETE FROM shared_credentials WHERE \"credentialsId\" IN
+        (SELECT id FROM credentials_entity WHERE (id, name) IN (('TestMetaToken001', 'meta-whatsapp-token'), ('TestOpenAiKey001', 'openai-transcription')));
+      DELETE FROM credentials_entity WHERE (id, name) IN (('TestMetaToken001', 'meta-whatsapp-token'), ('TestOpenAiKey001', 'openai-transcription'));" >/dev/null
+    echo "test credentials removed: $(psql_super n8n -c "SELECT count(*) FROM credentials_entity WHERE id IN ('TestMetaToken001', 'TestOpenAiKey001')") left"
     ;;
 
   check-loop)
+    T="$(turn_of wamid.E2E-1)"
     wait_eq "inbound message handed to the API and finished" \
       "SELECT processing_status FROM app.wa_inbound_messages WHERE wamid = 'wamid.E2E-1'" "processed"
     wait_eq "API stored the turn and answered with the echo" \
-      "SELECT status || '/' || responder || '/' || jsonb_array_length(actions) FROM hazem.turns WHERE turn_id = 'wa:wamid.E2E-1'" "processed/echo/1"
+      "SELECT status || '/' || responder || '/' || jsonb_array_length(actions) FROM hazem.turns WHERE turn_id = $T" "processed/echo/1"
     wait_eq "n8n sent the API's action once (dry run, never Meta)" \
-      "SELECT status || '/' || attempts || '/' || (wamid LIKE 'wamid.DRYRUN-%') || '/' || requested_by FROM app.wa_outbound_messages WHERE idempotency_key = 'hazem:wa:wamid.E2E-1:0'" "sent/1/true/hazem-api"
+      "SELECT status || '/' || attempts || '/' || (wamid LIKE 'wamid.DRYRUN-%') || '/' || requested_by FROM app.wa_outbound_messages WHERE idempotency_key = 'hazem:' || $T || ':0'" "sent/1/true/hazem-api"
     wait_eq "the reply quotes the client's message" \
-      "SELECT request_payload->'context'->>'message_id' FROM app.wa_outbound_messages WHERE idempotency_key = 'hazem:wa:wamid.E2E-1:0'" "wamid.E2E-1"
+      "SELECT request_payload->'context'->>'message_id' FROM app.wa_outbound_messages WHERE idempotency_key = 'hazem:' || $T || ':0'" "wamid.E2E-1"
     wait_eq "n8n reported the send result back to the API" \
-      "SELECT ok || '/' || reported_by || '/' || status FROM hazem.send_results WHERE idempotency_key = 'hazem:wa:wamid.E2E-1:0'" "true/n8n/sent"
+      "SELECT ok || '/' || reported_by || '/' || status FROM hazem.send_results WHERE idempotency_key = 'hazem:' || $T || ':0'" "true/n8n/sent"
     finish
     ;;
 
   replay)
-    # As if n8n had stopped half-way: the message is handed over again.
-    q "UPDATE app.wa_inbound_messages SET processing_status = 'pending', processed_at = NULL WHERE wamid = 'wamid.E2E-1'" >/dev/null
-    echo "replay: wamid.E2E-1 is pending again"
+    # As if n8n had stopped half-way: the turn is handed over again (same turn_id).
+    q "UPDATE app.wa_turns SET status = 'pending' WHERE turn_id = $(turn_of wamid.E2E-1);
+       UPDATE app.wa_inbound_messages SET processing_status = 'pending', processed_at = NULL WHERE wamid = 'wamid.E2E-1';" >/dev/null
+    echo "replay: the turn of wamid.E2E-1 is pending again"
     ;;
 
   check-replay)
-    wait_eq "replayed turn finished again" \
-      "SELECT processing_status FROM app.wa_inbound_messages WHERE wamid = 'wamid.E2E-1'" "processed"
+    T="$(turn_of wamid.E2E-1)"
+    wait_eq "replayed turn finished again, with the same turn_id (attempt 2)" \
+      "SELECT m.processing_status || '/' || t.attempts FROM app.wa_inbound_messages m JOIN app.wa_turns t USING (turn_id) WHERE m.wamid = 'wamid.E2E-1'" "processed/2"
     wait_eq "replay: still one turn in the API" \
-      "SELECT count(*) FROM hazem.turns WHERE turn_id = 'wa:wamid.E2E-1'" "1"
+      "SELECT count(*) FROM hazem.turns WHERE turn_id = $T" "1"
     wait_eq "replay: the client still got exactly one reply (1 row, 1 attempt)" \
       "SELECT count(*) || '/' || max(attempts) FROM app.wa_outbound_messages WHERE wa_id = '$A'" "1/1"
     finish
     ;;
 
   inject-b)
-    inject "$B" wamid.E2E-2 "رسالة والـ API واقف"
+    inject "$B" wamid.E2E-2 text "$(text "رسالة والـ API واقف")" 10
     echo "wamid.E2E-2 waiting"
     ;;
 
   check-api-down)
     wait_eq "API down: the message waits as pending (not lost)" \
       "SELECT processing_status || '/' || (last_error->>'code') FROM app.wa_inbound_messages WHERE wamid = 'wamid.E2E-2'" "pending/API_UNAVAILABLE"
-    wait_eq "API down: nothing was sent" \
-      "SELECT count(*) FROM app.wa_outbound_messages WHERE wa_id = '$B'" "0"
+    wait_eq "API down: the turn is given back (pending) and nothing was sent" \
+      "SELECT (SELECT status FROM app.wa_turns WHERE turn_id = $(turn_of wamid.E2E-2)) || '/' || (SELECT count(*) FROM app.wa_outbound_messages WHERE wa_id = '$B')" "pending/0"
     finish
     ;;
 
   check-recovered)
     wait_eq "API back: the waiting message is handled" \
       "SELECT processing_status FROM app.wa_inbound_messages WHERE wamid = 'wamid.E2E-2'" "processed"
-    wait_eq "API back: its reply is sent once" \
-      "SELECT status || '/' || attempts FROM app.wa_outbound_messages WHERE idempotency_key = 'hazem:wa:wamid.E2E-2:0'" "sent/1"
+    wait_eq "API back: same turn_id, its reply is sent once" \
+      "SELECT (SELECT count(*) FROM app.wa_turns WHERE wa_id = '$B') || '/' || (SELECT status || ':' || attempts FROM app.wa_outbound_messages WHERE idempotency_key = 'hazem:' || $(turn_of wamid.E2E-2) || ':0')" "1/sent:1"
     finish
     ;;
 
@@ -140,7 +187,107 @@ case "${1:-}" in
     finish
     ;;
 
+  # ---------------------------------------------------------------- TASK 03
+  group-c)
+    # Real time on purpose: three messages within 8 s must become one turn.
+    inject "$C" wamid.E2E-C1 text "$(text "السلام عليكم")"
+    inject "$C" wamid.E2E-C2 text "$(text "دي صورة البطاقة")"
+    inject "$C" wamid.E2E-C3 image '{"id":"STUB-IMG","mime_type":"image/jpeg","caption":"البطاقة"}'
+    echo "two texts and a photo from $C"
+    ;;
+
+  check-group)
+    T="$(turn_of wamid.E2E-C1)"
+    wait_eq "two texts and a photo within 8 s -> ONE turn with the 3 messages" \
+      "SELECT count(DISTINCT turn_id) || '/' || count(*) FILTER (WHERE processing_status = 'processed') FROM app.wa_inbound_messages WHERE wa_id = '$C'" "1/3"
+    wait_eq "the API received one turn with 3 messages and answered once" \
+      "SELECT (SELECT jsonb_array_length(messages) FROM hazem.turns WHERE turn_id = $T) || '/' || (SELECT count(*) FROM app.wa_outbound_messages WHERE wa_id = '$C')" "3/1"
+    wait_eq "the single reply is about the photo" \
+      "SELECT request_payload->'text'->>'body' FROM app.wa_outbound_messages WHERE wa_id = '$C'" "تم استلام الصورة (اختبار) ✅"
+    expected_sha="$(curl -s -H 'Authorization: Bearer probe' "$STUB/v26.0/STUB-IMG" | jq -r .sha256)"
+    wait_eq "the photo is stored in office-sensitive under wa/yyyy/mm/<id>.jpg with the right sha256" \
+      "SELECT status || '/' || bucket || '/' || (object_key ~ '^wa/[0-9]{4}/[0-9]{2}/[0-9a-f-]{36}\.jpg$') || '/' || (sha256 = '$expected_sha') FROM app.wa_media WHERE meta_media_id = 'STUB-IMG' AND inbound_message_id = (SELECT id FROM app.wa_inbound_messages WHERE wamid = 'wamid.E2E-C3')" "stored/office-sensitive/true/true"
+    key="$(q "SELECT object_key FROM app.wa_media WHERE inbound_message_id = (SELECT id FROM app.wa_inbound_messages WHERE wamid = 'wamid.E2E-C3')")"
+    assert_eq "the file really is in the bucket" \
+      "$(s3_as n8n s3api head-object --bucket office-sensitive --key "$key" 2>/dev/null | jq -r '.ContentLength > 0')" "true"
+    assert_eq "the key holds no phone number and no wamid" \
+      "$([[ "$key" != *"$C"* && "$key" != *wamid* ]] && echo clean || echo leaked)" "clean"
+    finish
+    ;;
+
+  media-d)
+    inject "$D" wamid.E2E-D1 document '{"id":"STUB-PDF","mime_type":"application/pdf","filename":"عقد إيجار.pdf"}'
+    inject "$D" wamid.E2E-D2 audio '{"id":"STUB-OGG","mime_type":"audio/ogg; codecs=opus","voice":true}'
+    inject "$D" wamid.E2E-D3 document '{"id":"STUB-BIG","mime_type":"application/pdf","filename":"كبير.pdf"}'
+    inject "$D" wamid.E2E-D4 image '{"id":"STUB-BADSHA","mime_type":"image/jpeg"}'
+    inject "$D" wamid.E2E-D5 document '{"id":"STUB-EXE","mime_type":"application/x-msdownload","filename":"a.exe"}'
+    echo "PDF, voice, too large, wrong sha256 and forbidden type from $D"
+    ;;
+
+  check-media)
+    T="$(turn_of wamid.E2E-D1)"
+    st() { echo "SELECT w.status || COALESCE('/' || w.bucket, '') FROM app.wa_media w JOIN app.wa_inbound_messages m ON m.id = w.inbound_message_id WHERE m.wamid = '$1'"; }
+    wait_eq "the five files went to the API as one turn" \
+      "SELECT (SELECT count(DISTINCT turn_id) FROM app.wa_inbound_messages WHERE wa_id = '$D') || '/' || COALESCE((SELECT jsonb_array_length(messages) FROM hazem.turns WHERE turn_id = $T), 0)" "1/5"
+    wait_eq "PDF -> stored in office-sensitive" "$(st wamid.E2E-D1)" "stored/office-sensitive"
+    wait_eq "voice note -> stored in office-media" "$(st wamid.E2E-D2)" "stored/office-media"
+    wait_eq "voice note -> transcript from the stub, and it reached the API" \
+      "SELECT (SELECT transcript_status FROM app.wa_media w JOIN app.wa_inbound_messages m ON m.id = w.inbound_message_id WHERE m.wamid = 'wamid.E2E-D2') || '/' || (SELECT x->'transcript'->>'text' FROM hazem.turns t, jsonb_array_elements(t.messages) x WHERE t.turn_id = $T AND x->>'wamid' = 'wamid.E2E-D2')" "done/عايز أحجز ميعاد استشارة يوم الخميس الساعة خمسة"
+    wait_eq "the reply quotes the transcript" \
+      "SELECT request_payload->'text'->>'body' FROM app.wa_outbound_messages WHERE wa_id = '$D'" "تم استلام رسالتك الصوتية (اختبار): عايز أحجز ميعاد استشارة يوم الخميس الساعة خمسة"
+    wait_eq "70 MB file -> too_large, never downloaded, still in the turn" \
+      "SELECT ($(st wamid.E2E-D3)) || '/' || (SELECT x->'media'->>'status' FROM hazem.turns t, jsonb_array_elements(t.messages) x WHERE t.turn_id = $T AND x->>'wamid' = 'wamid.E2E-D3')" "too_large/too_large"
+    wait_eq "wrong sha256 -> failed, not stored, still in the turn" \
+      "SELECT w.status || '/' || (w.last_error->>'code') || '/' || (w.object_key IS NULL) FROM app.wa_media w JOIN app.wa_inbound_messages m ON m.id = w.inbound_message_id WHERE m.wamid = 'wamid.E2E-D4'" "failed/SHA256_MISMATCH/true"
+    wait_eq "forbidden type (application/x-msdownload) -> rejected, nothing stored" \
+      "SELECT w.status || '/' || (w.object_key IS NULL) FROM app.wa_media w JOIN app.wa_inbound_messages m ON m.id = w.inbound_message_id WHERE m.wamid = 'wamid.E2E-D5'" "rejected/true"
+    log="$(stub_log)"
+    assert_eq "too_large and forbidden files were never downloaded" \
+      "$(jq '[.[] | select(.kind == "media-download" and (.mediaId == "STUB-BIG" or .mediaId == "STUB-EXE"))] | length' <<<"$log")" "0"
+    assert_eq "T-09: the OpenAI stub received only the ogg voice note (audio/ogg, OggS)" \
+      "$(jq -c '[.[] | select(.kind == "transcription")] | [length, all(.fileIsOgg == true and (.fileContentType | startswith("audio/ogg"))), (map(.language) | unique)]' <<<"$log")" '[1,true,["ar"]]'
+    assert_eq "no image or PDF ever reached the OpenAI stub" \
+      "$(jq '[.[] | select(.kind == "transcription" and ((.fileContentType // "") | test("image|pdf|application")))] | length' <<<"$log")" "0"
+    assert_eq "the stub log holds no Authorization value" \
+      "$(grep -cE 'Bearer|stub-not-a-real-key' <<<"$log")" "0"
+    wait_eq "no URL in anything the API received" \
+      "SELECT count(*) FROM hazem.turns WHERE wa_id IN ($ALL) AND messages::text LIKE '%://%'" "0"
+    finish
+    ;;
+
+  stale-e)
+    backup_set whatsapp.turn_stale_seconds 20
+    # Inject and claim in ONE transaction, as if n8n had taken the turn and then died: no other
+    # claimer (n8n's schedule) can see the message in between.
+    psql_super office -v ev="$(event "$E" wamid.E2E-E1 text "$(text "رسالة وn8n بيعمل restart")")" <<'SQL' >/dev/null
+BEGIN;
+SELECT app.wa_process_event(:'ev'::jsonb);
+UPDATE app.wa_inbound_messages SET received_at = now() - interval '10 seconds' WHERE wamid = 'wamid.E2E-E1';
+SET LOCAL ROLE office_app;
+SELECT app.wa_turns_claim(20, ARRAY['201000000065']);
+COMMIT;
+SQL
+    echo "turn of wamid.E2E-E1 is processing and nobody will finish it (turn_stale_seconds = 20)"
+    ;;
+
+  check-stale)
+    wait_eq "after n8n restarted, the stuck turn was taken again with the same turn_id (attempt 2)" \
+      "SELECT m.processing_status || '/' || t.attempts || '/' || (SELECT count(*) FROM app.wa_turns WHERE wa_id = '$E') FROM app.wa_inbound_messages m JOIN app.wa_turns t USING (turn_id) WHERE m.wamid = 'wamid.E2E-E1'" "processed/2/1"
+    wait_eq "and the client got exactly one reply" \
+      "SELECT count(*) || '/' || max(attempts) FROM app.wa_outbound_messages WHERE wa_id = '$E'" "1/1"
+    finish
+    ;;
+
+  check-restored)
+    assert_eq "settings back to normal: dry run off, stale 300, real Graph and OpenAI URLs, no backups left" \
+      "$(q "SELECT string_agg(key || '=' || value, ',' ORDER BY key) FROM app.settings WHERE key IN ('whatsapp.dry_run','whatsapp.turn_stale_seconds','whatsapp.graph_base_url','ai.openai_base_url') OR key LIKE 'e2e.backup.%'")" \
+      "ai.openai_base_url=https://api.openai.com/v1,whatsapp.dry_run=false,whatsapp.graph_base_url=https://graph.facebook.com,whatsapp.turn_stale_seconds=300"
+    assert_eq "no test credential left in n8n" \
+      "$(psql_super n8n -c "SELECT count(*) FROM credentials_entity WHERE id IN ('TestMetaToken001', 'TestOpenAiKey001')")" "0"
+    finish
+    ;;
+
   *)
-    die "usage: hazem-e2e setup|check-loop|replay|check-replay|inject-b|check-api-down|check-recovered|check-api-send|check-auth|cleanup"
+    die "usage: hazem-e2e setup|check-loop|replay|check-replay|inject-b|check-api-down|check-recovered|check-api-send|check-auth|group-c|check-group|media-d|check-media|stale-e|check-stale|cleanup|remove-test-credentials|check-restored"
     ;;
 esac

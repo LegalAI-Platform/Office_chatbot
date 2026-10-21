@@ -1,0 +1,194 @@
+{
+  "name": "WA-MEDIA-FETCH",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## WA-MEDIA-FETCH (TASK 03)\nClaims up to 10 media rows to download (`app.wa_media_claim`: pending, or downloading for longer than whatsapp.turn_stale_seconds; at most 3 attempts) and runs WA-MEDIA-ONE for each. Called by META-WA-INBOUND right after PROCESS-EVENT, and by WA-FORWARD-TURN (also every minute).",
+        "height": 300,
+        "width": 560
+      },
+      "id": "1b83d197-e18b-5cf3-8b93-c44224148137",
+      "name": "Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "19e1edd6-92fd-5483-8b36-5b718dc4ca34",
+      "name": "Start",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "63201848-fc5a-54bf-b90b-ff4fa4efef3f",
+      "name": "Manual",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT app.wa_media_claim(10) AS media",
+        "options": {}
+      },
+      "id": "4cfe9660-cd53-5b34-acd6-35a420f935c3",
+      "name": "Claim media",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        480,
+        400
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "CRED:office-postgres-app",
+          "name": "office-postgres-app"
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "jsCode": "return ($input.first().json.media || []).map((m) => ({ json: m }));"
+      },
+      "id": "b095e805-7480-58f8-be2e-bb77f2499690",
+      "name": "One item per file",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "WaMediaOne000001",
+          "mode": "id",
+          "cachedResultName": "WA-MEDIA-ONE"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "c30e9b0e-c521-5fe7-9f85-ec40a4149cdc",
+      "name": "Handle file",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.4,
+      "position": [
+        960,
+        400
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { files: $('One item per file').all().length,\n  failed: $input.all().filter((i) => i.json.error).length } }];"
+      },
+      "id": "a1709dd2-3b66-5a01-b030-6e0dacdc658c",
+      "name": "Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Claim media",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual": {
+      "main": [
+        [
+          {
+            "node": "Claim media",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim media": {
+      "main": [
+        [
+          {
+            "node": "One item per file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "One item per file": {
+      "main": [
+        [
+          {
+            "node": "Handle file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle file": {
+      "main": [
+        [
+          {
+            "node": "Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Cairo",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "WaErrHandler0001"
+  },
+  "pinData": {},
+  "id": "WaMediaFetch0001",
+  "tags": []
+}

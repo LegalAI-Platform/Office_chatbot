@@ -5,7 +5,7 @@ $ErrorActionPreference = 'Stop'
 $Root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 Set-Location $Root
 
-$AllProfiles = @('--profile', 'panel', '--profile', 'tunnel', '--profile', 'tunnel-named', '--profile', 'tools')
+$AllProfiles = @('--profile', 'panel', '--profile', 'tunnel', '--profile', 'tunnel-named', '--profile', 'tools', '--profile', 'tests')
 
 function Fail([string]$Message) {
     Write-Host "ERROR: $Message" -ForegroundColor Red

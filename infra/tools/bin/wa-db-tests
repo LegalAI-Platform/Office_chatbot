@@ -1,5 +1,5 @@
 #!/bin/bash
-# TASK 02 database tests: runs the fake WhatsApp fixtures in /fixtures/whatsapp
+# TASK 02/03 database tests: runs the fake WhatsApp fixtures in /fixtures/whatsapp
 # through app.wa_process_event / wa_outbound_prepare / wa_outbound_result as
 # office_app (the role n8n uses) and checks the results. No call to Meta.
 # Test rows use dummy numbers 2010000000xx and are deleted before and after.
@@ -24,6 +24,7 @@ cleanup() {
     DELETE FROM app.wa_message_statuses WHERE wamid LIKE 'wamid.TEST-%';
     DELETE FROM app.wa_outbound_messages WHERE wa_id LIKE '2010000000%';
     DELETE FROM app.wa_inbound_messages WHERE wa_id LIKE '2010000000%';
+    DELETE FROM app.wa_turns WHERE wa_id LIKE '2010000000%';
     DELETE FROM app.wa_contact_windows WHERE wa_id LIKE '2010000000%';
     DELETE FROM hazem.turns WHERE wa_id LIKE '2010000000%';
     DELETE FROM app.wa_webhook_events WHERE phone_number_id = '100000000000001' OR payload->>'message_template_name' = 'hello_world' AND payload->>'message_template_id' = '999000111';
@@ -120,59 +121,240 @@ q "SELECT app.wa_outbound_result('$out9', true, '{\"messages\":[{\"id\":\"wamid.
 process 13_status_failed_other.json >/dev/null
 assert_eq "failed status stores Meta's error" "$(q "SELECT status||'/'||(last_error->0->>'code') FROM app.wa_outbound_messages WHERE wamid='wamid.TEST-OUT-2'")" "failed/131026"
 
-echo "== Hand-off to the API (DECISIONS v1.3)"
-H=201000000071
-hand_event() {  # hand_event WAMID TYPE: one message from $H, as the WhatsApp Trigger emits it
-  jq -nc --arg id "$1" --arg type "$2" --arg wa "$H" '{
+echo "== Grouping into turns (TASK 03)"
+# Most checks run inside ONE transaction that is rolled back: now() is fixed for the whole
+# transaction, received_at is backdated instead of sleeping, and the every-minute
+# WA-FORWARD-TURN in n8n never sees these rows. Lines printed as "=value" are the results.
+tx() {
+  psql_super office <<SQL | sed -n 's/^=//p'
+BEGIN;
+$1
+ROLLBACK;
+SQL
+}
+# msg WA WAMID TYPE SECONDS_AGO [JSON_FOR_TYPE]: one Meta message, received SECONDS_AGO ago.
+msg() {
+  local body="${5:-}"
+  [[ -z "$body" && "$3" == text ]] && body="{\"body\":\"t $2\"}"
+  [[ -z "$body" ]] && body="{\"id\":\"MEDIA-$2\",\"mime_type\":\"image/jpeg\",\"sha256\":\"ab\"}"
+  local ev
+  ev="$(jq -nc --arg wa "$1" --arg id "$2" --arg type "$3" --argjson b "$body" '{
     field: "messages", messaging_product: "whatsapp",
     metadata: {display_phone_number: "15550000000", phone_number_id: "100000000000001"},
-    contacts: [{profile: {name: "Hand-off"}, wa_id: $wa}],
-    messages: [({from: $wa, id: $id, timestamp: "1760900000", type: $type}
-      + (if $type == "text" then {text: {body: "hand-off test"}} else {audio: {id: "MEDIA-HAND-1", mime_type: "audio/ogg"}} end))]}'
+    contacts: [{profile: {name: "Grouping"}, wa_id: $wa}],
+    messages: [{from: $wa, id: $id, timestamp: "1760900000", type: $type} + {($type): $b}]}')"
+  printf "SELECT app.wa_process_event(\$ev\$%s\$ev\$::jsonb);\n" "$ev"
+  printf "UPDATE app.wa_inbound_messages SET received_at = now() - interval '%s seconds' WHERE wamid = '%s';\n" "$4" "$2"
 }
-# Insert and claim in one transaction, so the every-minute WA-FORWARD-TURN in n8n cannot take
-# these rows first.
-r="$(app -v t="$(hand_event wamid.TEST-HAND-1 text)" -v a="$(hand_event wamid.TEST-HAND-AUDIO audio)" <<'SQL' | tail -1
-BEGIN;
-SELECT app.wa_process_event(:'t'::jsonb);
-SELECT app.wa_process_event(:'a'::jsonb);
-SELECT app.wa_turns_claim(10, ARRAY['201000000071']);
-COMMIT;
-SQL
-)"
-assert_eq "claim returns the waiting text message as a turn" \
-  "$(jq -r '"\(length)/\(.[0].turn_id)/\(.[0].messages[0].text)"' <<<"$r")" "1/wa:wamid.TEST-HAND-1/hand-off test"
-assert_eq "media is not handed over before TASK 03 (stays pending)" \
-  "$(q "SELECT processing_status FROM app.wa_inbound_messages WHERE wamid='wamid.TEST-HAND-AUDIO'")" "pending"
-assert_eq "claimed message is marked processing" \
-  "$(q "SELECT processing_status FROM app.wa_inbound_messages WHERE wamid='wamid.TEST-HAND-1'")" "processing"
-assert_eq "a claimed message is not claimed twice" \
-  "$(q "SELECT app.wa_turns_claim(10, ARRAY['201000000071'])")" "[]"
-assert_eq "finish marks it processed" \
-  "$(q "SELECT app.wa_turns_finish(ARRAY['wamid.TEST-HAND-1'], 'processed')")/$(q "SELECT processing_status||'/'||(processed_at IS NOT NULL) FROM app.wa_inbound_messages WHERE wamid='wamid.TEST-HAND-1'")" "1/processed/true"
-assert_eq "finish never changes a message that is no longer processing" \
-  "$(q "SELECT app.wa_turns_finish(ARRAY['wamid.TEST-HAND-1'], 'pending')")" "0"
-# A message left in 'processing' for 6 minutes (n8n stopped half-way). The trigger keeps
-# updated_at current, so the superuser backdates it with triggers off, then claims as office_app.
-r="$(psql_super office <<'SQL' | tail -1
-BEGIN;
-SET LOCAL session_replication_role = replica;
-UPDATE app.wa_inbound_messages SET processing_status = 'processing', updated_at = now() - interval '6 minutes'
- WHERE wamid = 'wamid.TEST-HAND-1';
-SET LOCAL session_replication_role = origin;
-SET LOCAL ROLE office_app;
-SELECT jsonb_array_length(app.wa_turns_claim(10, ARRAY['201000000071']));
-COMMIT;
-SQL
-)"
-assert_eq "a message stuck in processing for 5+ minutes is claimed again" "$r" "1"
-if q "SELECT app.wa_turns_finish(ARRAY['wamid.TEST-HAND-1'], 'done')" >/dev/null 2>&1; then
-  assert_eq "finish refuses an unknown status" "accepted" "refused"
+claim() { echo "SELECT app.wa_turns_claim(20, ARRAY[$1]) AS c \\gset"; }
+turns_of() { echo "SELECT '=' || COALESCE(string_agg(((t->>'turn_id') LIKE 'wt:%')::text || ':' || (SELECT string_agg(x->>'wamid', ',' ORDER BY o) FROM jsonb_array_elements(t->'messages') WITH ORDINALITY a(x, o)), ' | '), 'none') FROM jsonb_array_elements(:'c'::jsonb) t;"; }
+
+r="$(tx "$(msg 201000000081 wamid.G-1 text 14)$(msg 201000000081 wamid.G-2 text 12)$(msg 201000000081 wamid.G-3 text 10)
+$(claim "'201000000081'")
+$(turns_of)")"
+assert_eq "3 messages within 8 s make ONE turn, in order" "$r" "true:wamid.G-1,wamid.G-2,wamid.G-3"
+
+r="$(tx "$(msg 201000000082 wamid.G-4 text 3)
+$(claim "'201000000082'")
+$(turns_of)")"
+assert_eq "no turn before the 8-second quiet period" "$r" "none"
+
+r="$(tx "$(msg 201000000083 wamid.G-5 text 9)
+$(claim "'201000000083'")
+SELECT '=' || jsonb_array_length(:'c'::jsonb);
+$(msg 201000000083 wamid.G-6 text 0)
+$(claim "'201000000083'")
+SELECT '=' || jsonb_array_length(:'c'::jsonb);
+SELECT app.wa_turns_finish((SELECT turn_id FROM app.wa_turns WHERE wa_id = '201000000083'), 'processed');
+UPDATE app.wa_inbound_messages SET received_at = now() - interval '9 seconds' WHERE wamid = 'wamid.G-6';
+$(claim "'201000000083'")
+$(turns_of)
+SELECT '=' || count(*) FROM app.wa_turns WHERE wa_id = '201000000083';")"
+assert_eq "message, 9 s, message -> 2 turns (the second waits for the first to finish)" "$(tr '\n' ' ' <<<"$r")" "1 0 true:wamid.G-6 2 "
+
+r="$(tx "$(for i in $(seq 0 12); do msg 201000000084 "wamid.G-M$i" text $((62 - i * 5)); done)
+$(claim "'201000000084'")
+SELECT '=' || jsonb_array_length(:'c'::jsonb) || '/' || jsonb_array_length(:'c'::jsonb->0->'messages');")"
+assert_eq "a client writing every 5 s gets a turn at 60 s (all 13 messages)" "$r" "1/13"
+
+r="$(tx "$(msg 201000000085 wamid.G-A text 10)$(msg 201000000086 wamid.G-B text 10)
+$(claim "'201000000085','201000000086'")
+SELECT '=' || string_agg(t->>'wa_id' || ':' || jsonb_array_length(t->'messages'), ',' ORDER BY t->>'wa_id') FROM jsonb_array_elements(:'c'::jsonb) t;")"
+assert_eq "two clients at the same time -> two separate turns" "$r" "201000000085:1,201000000086:1"
+
+r="$(tx "$(msg 201000000087 wamid.G-P1 text 10)
+$(claim "'201000000087'")
+$(msg 201000000087 wamid.G-P2 text 10)
+$(claim "'201000000087'")
+SELECT '=' || jsonb_array_length(:'c'::jsonb) || '/' || (SELECT processing_status || ':' || (turn_id IS NULL) FROM app.wa_inbound_messages WHERE wamid = 'wamid.G-P2');")"
+assert_eq "while a turn is processing, the client's new messages wait" "$r" "0/pending:true"
+
+r="$(tx "$(msg 201000000088 wamid.G-R1 text 10)
+$(claim "'201000000088'")
+SELECT '=' || (:'c'::jsonb->0->>'turn_id') AS first \\gset
+SELECT app.wa_turns_finish(substr(:'first', 2), 'pending', '{\"code\":\"API_UNAVAILABLE\"}');
+$(msg 201000000088 wamid.G-R2 text 10)
+$(claim "'201000000088'")
+SELECT '=' || ((:'c'::jsonb->0->>'turn_id') = substr(:'first', 2)) || '/' || (SELECT string_agg(x->>'wamid', ',') FROM jsonb_array_elements(:'c'::jsonb->0->'messages') x)
+       || '/' || (SELECT processing_status FROM app.wa_inbound_messages WHERE wamid = 'wamid.G-R2');")"
+assert_eq "a turn given back (pending) is retried first: same turn_id, same messages; new ones wait" "$r" "true/wamid.G-R1/pending"
+
+r="$(tx "$(msg 201000000089 wamid.G-S1 text 10)
+$(claim "'201000000089'")
+SELECT (:'c'::jsonb->0->>'turn_id') AS first \\gset
+$(msg 201000000089 wamid.G-S2 text 10)
+$(claim "'201000000089'")
+SELECT '=' || jsonb_array_length(:'c'::jsonb);
+UPDATE app.wa_turns SET claimed_at = now() - interval '301 seconds' WHERE turn_id = :'first';
+$(claim "'201000000089'")
+SELECT '=' || ((:'c'::jsonb->0->>'turn_id') = :'first') || '/' || jsonb_array_length(:'c'::jsonb->0->'messages')
+       || '/' || (SELECT attempts FROM app.wa_turns WHERE turn_id = :'first');")"
+assert_eq "a turn stuck in processing past turn_stale_seconds is retried with the same id and messages" "$(tr '\n' ' ' <<<"$r")" "0 true/1/2 "
+
+r="$(tx "$(msg 201000000090 wamid.G-T1 text 10 '{"body":"x"}')
+UPDATE app.wa_inbound_messages SET sent_at = now() - interval '1 hour', received_at = now() - interval '2 seconds' WHERE wamid = 'wamid.G-T1';
+$(claim "'201000000090'")
+SELECT '=' || jsonb_array_length(:'c'::jsonb);")"
+assert_eq "time rules use received_at: an old sent_at with a new received_at is still in the quiet period" "$r" "0"
+
+r="$(tx "$(msg 201000000091 wamid.G-T2 text 10 '{"body":"عايز أحجز"}')
+$(claim "'201000000091'")
+SELECT '=' || (SELECT string_agg(k, ',' ORDER BY k) FROM jsonb_object_keys(:'c'::jsonb->0->'messages'->0) k)
+       || '|' || (:'c'::jsonb->0->'messages'->0->>'text') || '|' || ((:'c'::jsonb->0->>'turn_id') LIKE 'wt:%');")"
+assert_eq "a lone text message keeps the TASK 02 shape (only turn_id changes)" "$r" "context_wamid,sent_at,text,type,wamid|عايز أحجز|true"
+
+r="$(tx "SELECT app.wa_process_event(\$ev\$$(jq -nc '{field:"messages",metadata:{phone_number_id:"100000000000001"},messages:[{from:"201000000092",id:"wamid.G-GRP",timestamp:"1760900000",type:"text",text:{body:"g"},group_id:"120363000000000000"}]}')\$ev\$::jsonb);
+UPDATE app.wa_inbound_messages SET received_at = now() - interval '30 seconds' WHERE wamid = 'wamid.G-GRP';
+$(claim "'201000000092'")
+SELECT '=' || jsonb_array_length(:'c'::jsonb) || '/' || (SELECT processing_status FROM app.wa_inbound_messages WHERE wamid = 'wamid.G-GRP');")"
+assert_eq "group messages never join a turn" "$r" "0/ignored_group"
+
+echo "== Media in turns (TASK 03)"
+IMG='{"id":"MEDIA-IMG","mime_type":"image/jpeg","sha256":"aa"}'
+r="$(tx "$(msg 201000000093 wamid.G-IMG image 10 "$IMG")
+$(claim "'201000000093'")
+SELECT '=' || jsonb_array_length(:'c'::jsonb);
+SELECT app.wa_media_claim(5, ARRAY['201000000093']) AS mc \\gset
+SELECT app.wa_media_precheck((:'mc'::jsonb->0->>'media_id')::uuid, '{\"url\":\"http://stub/x\",\"mime_type\":\"image/jpeg\",\"file_size\":\"100\",\"sha256\":\"aa\"}') AS pc \\gset
+SELECT '=' || (:'pc'::jsonb->>'bucket') || '/' || ((:'pc'::jsonb->>'key') ~ '^wa/[0-9]{4}/[0-9]{2}/[0-9a-f-]{36}\\.jpg$');
+SELECT app.wa_media_verify((:'mc'::jsonb->0->>'media_id')::uuid, 'aa');
+SELECT app.wa_media_stored((:'mc'::jsonb->0->>'media_id')::uuid, :'pc'::jsonb->>'bucket', :'pc'::jsonb->>'key');
+$(claim "'201000000093'")
+SELECT '=' || jsonb_array_length(:'c'::jsonb) || '/' || (:'c'::jsonb->0->'messages'->0->'media'->>'status')
+       || '/' || (:'c'::jsonb->0->'messages'->0->'media' ? 'key');")"
+assert_eq "media still downloading holds the turn; once stored the turn goes, image -> office-sensitive, key has no wamid" \
+  "$(tr '\n' ' ' <<<"$r")" "0 office-sensitive/true 1/stored/true "
+
+r="$(tx "$(msg 201000000094 wamid.G-SLOW image 61 "$IMG")
+SELECT app.wa_media_claim(5, ARRAY['201000000094']) AS mc \\gset
+$(claim "'201000000094'")
+SELECT '=' || (:'c'::jsonb->0->'messages'->0->'media'->>'status') || '/' || (SELECT status || ':' || (last_error->>'code') FROM app.wa_media WHERE meta_media_id = 'MEDIA-IMG');
+SELECT '=' || (app.wa_media_stored((:'mc'::jsonb->0->>'media_id')::uuid, 'office-sensitive', 'wa/x.jpg')->>'ok') || '/' || (SELECT status FROM app.wa_media WHERE meta_media_id = 'MEDIA-IMG');")"
+assert_eq "60 s without the download: the turn goes with media failed and wa_media is failed (timeout) in the same transaction" \
+  "$(head -1 <<<"$r")" "failed/failed:TIMEOUT"
+assert_eq "a download finishing after the timeout is refused and stays failed" "$(sed -n 2p <<<"$r")" "false/failed"
+
+r="$(tx "$(msg 201000000095 wamid.G-BIG document 1 '{"id":"MEDIA-BIG","mime_type":"application/pdf","filename":"عقد.pdf"}')
+$(msg 201000000095 wamid.G-EXE document 1 '{"id":"MEDIA-EXE","mime_type":"application/x-msdownload","filename":"a.exe"}')
+$(msg 201000000095 wamid.G-OGG audio 1 '{"id":"MEDIA-OGG","mime_type":"audio/ogg; codecs=opus","voice":true}')
+SELECT app.wa_media_claim(5, ARRAY['201000000095']) AS mc \\gset
+SELECT '=' || string_agg(m->>'kind' || ':' || (app.wa_media_precheck((m->>'media_id')::uuid,
+         CASE m->>'meta_media_id' WHEN 'MEDIA-BIG' THEN '{\"url\":\"u\",\"mime_type\":\"application/pdf\",\"file_size\":\"73400320\"}'
+                                  WHEN 'MEDIA-EXE' THEN '{\"url\":\"u\",\"mime_type\":\"application/x-msdownload\",\"file_size\":\"10\"}'
+                                  ELSE '{\"url\":\"u\",\"mime_type\":\"audio/ogg; codecs=opus\",\"file_size\":\"10\"}' END::jsonb)->>'action'), ',' ORDER BY m->>'meta_media_id')
+  FROM jsonb_array_elements(:'mc'::jsonb) m;
+SELECT '=' || string_agg(meta_media_id || ':' || status, ',' ORDER BY meta_media_id) FROM app.wa_media WHERE meta_media_id IN ('MEDIA-BIG','MEDIA-EXE');")"
+assert_eq "precheck: >50 MB -> too_large, executable -> rejected, voice ogg -> download" "$(head -1 <<<"$r")" "document:too_large,document:rejected,audio:download"
+assert_eq "too_large and rejected are final (never downloaded)" "$(sed -n 2p <<<"$r")" "MEDIA-BIG:too_large,MEDIA-EXE:rejected"
+
+r="$(tx "$(msg 201000000096 wamid.G-SHA image 10 "$IMG")
+SELECT app.wa_media_claim(5, ARRAY['201000000096']) AS mc \\gset
+SELECT app.wa_media_precheck((:'mc'::jsonb->0->>'media_id')::uuid, '{\"url\":\"u\",\"mime_type\":\"image/jpeg\",\"file_size\":\"5\",\"sha256\":\"aa\"}');
+SELECT '=' || (app.wa_media_verify((:'mc'::jsonb->0->>'media_id')::uuid, 'bb')->>'reason');
+SELECT '=' || status FROM app.wa_media WHERE meta_media_id = 'MEDIA-IMG';")"
+assert_eq "sha256 mismatch -> failed" "$(tr '
+' '/' <<<"$r")" "sha256_mismatch/failed/"
+
+r="$(tx "$(msg 201000000097 wamid.G-VOICE audio 10 '{"id":"MEDIA-V","mime_type":"audio/ogg; codecs=opus","voice":true}')
+SELECT app.wa_media_claim(5, ARRAY['201000000097']) AS mc \\gset
+SELECT app.wa_media_precheck((:'mc'::jsonb->0->>'media_id')::uuid, '{\"url\":\"u\",\"mime_type\":\"audio/ogg; codecs=opus\",\"file_size\":\"5\"}') AS pc \\gset
+SELECT app.wa_media_verify((:'mc'::jsonb->0->>'media_id')::uuid, 'cc');
+SELECT '=' || (app.wa_media_stored((:'mc'::jsonb->0->>'media_id')::uuid, :'pc'::jsonb->>'bucket', :'pc'::jsonb->>'key')->>'transcribe') || '/' || (:'pc'::jsonb->>'bucket');
+$(claim "'201000000097'")
+SELECT '=' || jsonb_array_length(:'c'::jsonb);
+SELECT app.wa_media_transcribed((:'mc'::jsonb->0->>'media_id')::uuid, true, 'عايز أحجز ميعاد', 'whisper-1');
+$(claim "'201000000097'")
+SELECT '=' || (:'c'::jsonb->0->'messages'->0->'transcript'->>'status') || '/' || (:'c'::jsonb->0->'messages'->0->'transcript'->>'text')
+       || '/' || (:'c'::jsonb->0->'messages'->0->'media'->>'voice') || '/' || (:'c'::jsonb->0->'messages'->0->'media'->>'mime_type');")"
+assert_eq "voice: stored in office-media, the turn waits for the transcript, then carries it" \
+  "$(tr '\n' ' ' <<<"$r")" "true/office-media 0 done/عايز أحجز ميعاد/true/audio/ogg "
+
+r="$(tx "$(msg 201000000098 wamid.G-URL image 10 "$IMG")
+UPDATE app.wa_media SET status = 'stored', bucket = 'office-sensitive', object_key = 'wa/2026/10/x.jpg' WHERE meta_media_id = 'MEDIA-IMG';
+$(claim "'201000000098'")
+SELECT '=' || (position('://' in :'c') = 0);")"
+assert_eq "no URL in what the API receives" "$r" "true"
+
+echo "== Concurrency (TASK 03, committed rows)"
+# A guard session holds the client's lock: a claim must skip it at once, not wait.
+psql_super office -c "
+  $(msg 201000000099 wamid.G-L1 text 10)
+  $(msg 201000000099 wamid.G-L2 text 10)" >/dev/null
+psql_super office -c "SELECT pg_advisory_lock(hashtext('wa-turn:201000000099')), pg_sleep(4)" >/dev/null 2>&1 &
+guard=$!
+sleep 1
+start=$(date +%s%N)
+r="$(q "SELECT jsonb_array_length(app.wa_turns_claim(20, ARRAY['201000000099']))")"
+ms=$(( ($(date +%s%N) - start) / 1000000 ))
+assert_eq "a locked client is skipped at once (claim took ${ms} ms)" "$r/$([[ $ms -lt 1500 ]] && echo fast || echo slow)" "0/fast"
+wait $guard
+# Two claims at the same moment (plus, possibly, n8n's schedule): every message in exactly one turn.
+q "SELECT app.wa_turns_claim(20, ARRAY['201000000099'])" >/tmp/claim-a &
+q "SELECT app.wa_turns_claim(20, ARRAY['201000000099'])" >/tmp/claim-b &
+wait
+assert_eq "two claims at the same time: one turn, each message in it once" \
+  "$(q "SELECT count(DISTINCT turn_id) || '/' || count(*) FILTER (WHERE turn_id IS NOT NULL) FROM app.wa_inbound_messages WHERE wa_id = '201000000099'")" "1/2"
+
+echo "== Rows in flight when 0004 is applied (throwaway database)"
+if [[ -d /migrations ]]; then
+  tdb="office_t3_$(date +%s)"
+  psql_super postgres -c "CREATE DATABASE $tdb OWNER office_migrator" >/dev/null
+  psql_super "$tdb" -c "REVOKE CREATE ON SCHEMA public FROM PUBLIC" >/dev/null
+  up_part() { sed -n '/^-- migrate:up/,/^-- migrate:down/p' "$1"; }
+  for f in /migrations/0001_*.sql /migrations/0002_*.sql /migrations/0003_*.sql; do
+    up_part "$f" | psql_as office_migrator "$OFFICE_MIGRATOR_PASSWORD" "$tdb" >/dev/null
+  done
+  psql_super "$tdb" -c "
+    $(msg 201000000080 wamid.G-OLD text 30)
+    UPDATE app.wa_inbound_messages SET processing_status = 'processing' WHERE wamid = 'wamid.G-OLD';" >/dev/null
+  up_part /migrations/0004_*.sql | psql_as office_migrator "$OFFICE_MIGRATOR_PASSWORD" "$tdb" >/dev/null
+  r="$(psql_super "$tdb" -c "SELECT processing_status FROM app.wa_inbound_messages WHERE wamid = 'wamid.G-OLD'")"
+  r="$r/$(psql_super "$tdb" -c "SELECT jsonb_array_length(app.wa_turns_claim(20))")"
+  r="$r:$(psql_super "$tdb" -c "SELECT count(*) FROM app.wa_inbound_messages WHERE wamid = 'wamid.G-OLD' AND turn_id LIKE 'wt:%'")"
+  psql_super postgres -c "DROP DATABASE $tdb WITH (FORCE)" >/dev/null
+  assert_eq "a text message processing under the 0003 scheme goes back to pending and is grouped again" "$r" "pending/1:1"
 else
-  assert_eq "finish refuses an unknown status" "refused" "refused"
+  assert_eq "migrations mounted at /migrations" "missing" "present"
 fi
-assert_eq "dry run exists and is off; the old echo setting is gone" \
-  "$(q "SELECT string_agg(key||'='||value, ',' ORDER BY key) FROM app.settings WHERE key IN ('whatsapp.dry_run','whatsapp.echo_test_enabled')")" "whatsapp.dry_run=false"
+
+echo "== Permissions (TASK 03)"
+if psql_as office_api "$OFFICE_API_PASSWORD" office -c "SELECT 1 FROM app.wa_media LIMIT 1" >/dev/null 2>&1; then
+  assert_eq "office_api cannot read app.wa_media" "allowed" "denied"
+else
+  assert_eq "office_api cannot read app.wa_media" "denied" "denied"
+fi
+if psql_as office_app "$OFFICE_APP_PASSWORD" office -c "SELECT 1 FROM hazem.send_results LIMIT 1" >/dev/null 2>&1; then
+  assert_eq "office_app cannot read hazem.*" "allowed" "denied"
+else
+  assert_eq "office_app cannot read hazem.*" "denied" "denied"
+fi
+if psql_as office_readonly "$OFFICE_READONLY_PASSWORD" office -c "SELECT app.wa_media_claim(1)" >/dev/null 2>&1; then
+  assert_eq "office_readonly cannot claim media" "allowed" "denied"
+else
+  assert_eq "office_readonly cannot claim media" "denied" "denied"
+fi
+r="$(psql_super office -c "SELECT string_agg(key || '=' || value, ',' ORDER BY key) FROM app.settings WHERE key IN ('whatsapp.dry_run','whatsapp.echo_test_enabled','whatsapp.turn_stale_seconds')")"
+assert_eq "dry run off, stale limit 300, old echo setting gone" "$r" "whatsapp.dry_run=false,whatsapp.turn_stale_seconds=300"
 
 echo "== Permissions"
 if psql_as office_readonly "$OFFICE_READONLY_PASSWORD" office -c "SELECT app.wa_process_event('{}'::jsonb)" >/dev/null 2>&1; then

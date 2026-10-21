@@ -28,3 +28,4 @@ backend/**/obj/
 backend/.nuget-packages/
 backend/**/TestResults/
 *.user
+.vs/

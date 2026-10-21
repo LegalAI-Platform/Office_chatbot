@@ -3,5 +3,7 @@
 .nuget-packages/
 **/TestResults/
 tests/
+# ...except the test stub, built by its own Dockerfile (profile tests).
+!tests/Office.TestStub/
 .config/
 *.user

@@ -110,7 +110,22 @@
 
 > لو n8n عرض **Test** أو **Retry** وطلع خطأ، ما تقلقش. الـ agent هيتأكد منهم بعدين.
 
-### 3.4 (اختياري) Telegram للتنبيهات
+### 3.4 `openai-transcription` (تفريغ الفويس، TASK 03) 🔒
+من غير الـ credential ده، الفويس بيتحفظ عادي، بس بيوصل لـ .NET **من غير نص**.
+1. من https://platform.openai.com ← **API keys** ← **Create new secret key**. يُفضّل مفتاح
+   منفصل للفويس بس (T-08)، عشان تعرف تكلفته وتقدر تقفله لوحده. 🔒 **ما تبعتهوش في الشات.**
+2. في n8n اعمل credential من نوع **Header Auth**:
+   - **Name** = `Authorization`
+   - **Value** = `Bearer ` وبعدها المفتاح.
+   - **اسم الـ credential لازم يبقى بالظبط:** `openai-transcription`
+3. **Save**، وبعدها شغّل `n8n-import` مرة، عشان الـ workflows تربط نفسها بيه.
+4. الموديل في `ai.transcription_model` (الافتراضي `whisper-1`). ثبّته بعد ما تجرّب على
+   فويسات حقيقية بالعامية المصرية، وقول في الشات لو عايز تغيّره.
+
+> الـ agent والاختبارات **عمرهم ما بيقروا أو بيغيّروا** الـ credential ده. الاختبار بيعمل
+> credential مؤقت بس لو مش موجود، وبيمسحه في الآخر.
+
+### 3.5 (اختياري) Telegram للتنبيهات
 لو عاوز تنبيه على Telegram لما حاجة تفشل:
 1. على Telegram كلّم **@BotFather** ← `/newbot` ← انسخ الـ token 🔒.
 2. ابعت أي رسالة للبوت الجديد من حسابك.
@@ -168,6 +183,7 @@
 - [ ] 3.1: credential `meta-whatsapp-trigger` اتعمل في n8n.
 - [ ] 3.2: credential `meta-whatsapp-token` اتعمل في n8n.
 - [ ] 3.3: credential `meta-app-token` اتعمل في n8n.
-- [ ] 3.4 (اختياري): `ops-telegram` اتعمل.
+- [ ] 3.4: credential `openai-transcription` اتعمل في n8n (للفويس، TASK 03).
+- [ ] 3.5 (اختياري): `ops-telegram` اتعمل.
 - [ ] 4.1: Business Verification بدأ. الحالة: ________
 - [ ] 5: ⛔ لسه. رقم المكتب ما اتلمسش.

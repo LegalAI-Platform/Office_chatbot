@@ -13,7 +13,10 @@ using Serilog.Formatting.Compact;
 // It never talks to Meta and has no access to the WhatsApp tables.
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Host.UseSerilog((ctx, cfg) => cfg
+// Serilog writes the JSON console log; other providers (only tests add one, to prove that no
+// message text reaches the logs) also receive every event.
+builder.Logging.ClearProviders();
+builder.Host.UseSerilog(writeToProviders: true, configureLogger: (ctx, cfg) => cfg
     .ReadFrom.Configuration(ctx.Configuration)
     .MinimumLevel.Information()
     .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)

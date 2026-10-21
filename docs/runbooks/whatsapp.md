@@ -44,11 +44,60 @@ back with `N8N_HTTP_403`.
    then `docker compose up -d api` (re-reads `.env`).
 3. To change a token: new value in `.env`, then step 2. Both sides always read it from `.env`.
 
+## A turn stuck in processing (TASK 03)
+
+Symptom: the healthcheck says a turn is in `processing` for more than 10 minutes, or a client
+waits for an answer. Normally nothing is needed: after `whatsapp.turn_stale_seconds` (300) the
+every-minute WA-FORWARD-TURN takes it again with the **same** `turn_id`, and nothing is sent
+twice (the API returns the same actions, n8n's idempotency keys stop a second send).
+1. Look at it: `SELECT turn_id, status, attempts, claimed_at, last_error FROM app.wa_turns WHERE status IN ('processing','pending') ORDER BY claimed_at;`
+2. Is n8n running and is WA-FORWARD-TURN published? (`n8n-import` publishes it and restarts n8n.)
+3. Many attempts and `last_error.code = API_UNAVAILABLE`: see "The .NET API is down".
+4. Never delete the turn by hand: the client's later messages wait behind it on purpose.
+
+## A media file failed (TASK 03)
+
+`SELECT w.status, w.last_error, w.attempts FROM app.wa_media w JOIN app.wa_inbound_messages m ON m.id = w.inbound_message_id WHERE m.wamid = '<wamid>';`
+
+| `last_error.code` | Meaning | What to do |
+|---|---|---|
+| `TIMEOUT` (stage download) | not downloaded within `group_max_seconds`; the turn went without it | check `meta-whatsapp-token` and n8n's executions of WA-MEDIA-ONE |
+| `META_MEDIA_INFO` / `DOWNLOAD_FAILED` | Meta refused (http_status 401/190 = token, 404 = expired media) | fix the token; an expired media cannot be fetched again: ask the client to resend |
+| `SHA256_MISMATCH` | the file differs from what Meta announced | nothing stored; ask the client to resend |
+| `S3_UPLOAD_FAILED` | Garage refused | `healthcheck` (n8n key write checks), `logs garage` |
+| `TOO_MANY_ATTEMPTS` | three claims failed | as above |
+| `NO_GRAPH_SETTINGS` | `whatsapp.graph_api_version` is empty | set it in `app.settings` |
+| `TOO_LARGE` / `MIME_NOT_ALLOWED` | over `media_max_mb` / type not allowed | by design; the API decides what to tell the client (TASK 04) |
+
+## Voice transcription failed, or the OpenAI key was revoked (TASK 03)
+
+Symptom: `wa_media.transcript_status = 'failed'` with `last_error.code = TRANSCRIPTION_FAILED`
+(`http_status` 401 = key missing or revoked, 429 = quota) or `TIMEOUT` (stage transcription).
+The turn still reaches the API, without text. The original audio stays in `office-media`.
+1. 401: create a new key at OpenAI, then n8n → Credentials → `openai-transcription` → `Bearer <new key>`
+   → Save (owner only, docs/meta-setup.md 3.4). If the credential did not exist before, run `n8n-import` once.
+2. Model problems: `ai.transcription_model` in `app.settings`.
+3. Notes that already failed are not transcribed again automatically.
+
+## Test stub vs real services (TASK 03)
+
+`hazem-e2e` points `whatsapp.graph_base_url` and `ai.openai_base_url` at `meta-stub` and
+restores the original values at the end, even when it fails. If a test was killed half-way:
+1. `docker compose run --rm tools hazem-e2e cleanup` (restores every setting it backed up as
+   `e2e.backup.*`, switches dry run and the echo off, deletes the dummy rows and files).
+2. `docker compose run --rm tools hazem-e2e remove-test-credentials`, then `n8n-import`.
+3. `docker compose --profile tests rm -sf meta-stub`.
+4. `healthcheck`: real URLs, `turn_stale_seconds = 300`, dry run off, no test credential, stub stopped.
+Never point the two URLs at the stub by hand outside a test.
+
 ## End-to-end test without Meta
 
 `hazem-e2e`: message → n8n → API → reply (dry run) → result back; same turn twice; API down and
-back; API → n8n send; wrong tokens. Uses dummy numbers 20100000006x and switches dry run and the
-API echo off again at the end. `backend-test` runs the .NET unit and integration tests.
+back; API → n8n send; wrong tokens; TASK 03: two texts and a photo grouped into one turn, PDF,
+voice note (stub transcript), too large, wrong sha256, forbidden type, a turn stuck while n8n
+restarts. Uses dummy numbers 20100000006x and `meta-stub`; restores every setting, removes its
+temporary credentials and checks n8n's credentials are exactly as before.
+`backend-test` runs the .NET unit and integration tests; `wa-tests` the SQL rules and the harness.
 
 ## Access token expired or revoked (Meta error 190)
 

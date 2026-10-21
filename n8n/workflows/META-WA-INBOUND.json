@@ -13,7 +13,7 @@
         0
       ],
       "parameters": {
-        "content": "## META-WA-INBOUND\nWhatsApp Trigger: verifies X-Hub-Signature-256 with the App Secret (credential meta-whatsapp-trigger), answers Meta's verification, and registers the webhook subscription on activation. Kept thin: every event goes to META-WA-PROCESS-EVENT, then WA-FORWARD-TURN hands new text messages to the API.\nOnly ONE trigger per Meta App. After the tunnel URL changes run scripts/*/tunnel-refresh.",
+        "content": "## META-WA-INBOUND\nWhatsApp Trigger: verifies X-Hub-Signature-256 with the App Secret (credential meta-whatsapp-trigger), answers Meta's verification, and registers the webhook subscription on activation. Kept thin: every event goes to META-WA-PROCESS-EVENT, then WA-MEDIA-FETCH downloads new media at once (Meta's URLs expire), waits whatsapp.group_quiet_seconds + 1 s, and WA-FORWARD-TURN hands the grouped turn to the API.\nOnly ONE trigger per Meta App. After the tunnel URL changes run scripts/*/tunnel-refresh.",
         "height": 220,
         "width": 520
       }
@@ -83,7 +83,7 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.4,
       "position": [
-        720,
+        1440,
         300
       ],
       "parameters": {
@@ -107,6 +107,76 @@
           "waitForSubWorkflow": true
         }
       }
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "WaMediaFetch0001",
+          "mode": "id",
+          "cachedResultName": "WA-MEDIA-FETCH"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "b8bbbf11-ee64-531f-b2ff-070c65a28cb8",
+      "name": "Fetch media",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.4,
+      "position": [
+        720,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT app.wa_setting_int('whatsapp.group_quiet_seconds', 8) + 1 AS wait_seconds",
+        "options": {}
+      },
+      "id": "58ed298c-16d6-5b27-9a77-683a4aa88813",
+      "name": "Quiet period",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        960,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "CRED:office-postgres-app",
+          "name": "office-postgres-app"
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "amount": "={{ $json.wait_seconds }}",
+        "unit": "seconds"
+      },
+      "id": "966ca3e7-cae5-5add-bd63-7d1b72030e3b",
+      "name": "Wait quiet period",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1200,
+        300
+      ],
+      "webhookId": "f42b07b3-a5f2-5bcd-bf91-2fa9aa22b3de"
     }
   ],
   "connections": {
@@ -122,6 +192,39 @@
       ]
     },
     "Process events": {
+      "main": [
+        [
+          {
+            "node": "Fetch media",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch media": {
+      "main": [
+        [
+          {
+            "node": "Quiet period",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Quiet period": {
+      "main": [
+        [
+          {
+            "node": "Wait quiet period",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait quiet period": {
       "main": [
         [
           {

@@ -16,7 +16,8 @@ flowchart LR
         N8N <-->|X-Hazem-Token| API[.NET API<br/>no host port]
         API -->|office_api<br/>schema hazem| PGO
         N8N -. TASK 03+ .-> REDIS[(Redis 7.4)]
-        N8N -. n8n key, TASK 03+ .-> S3[(Garage S3<br/>office-media<br/>office-sensitive)]
+        N8N -->|credential office-s3<br/>n8n key| S3[(Garage S3<br/>office-media<br/>office-sensitive)]
+        STUB[meta-stub<br/>profile: tests] -. hazem-e2e only .- N8N
         MIG[dbmate<br/>office_migrator] --> PGO
         TOOLS[office-tools<br/>preflight, storage-init,<br/>healthcheck, backup, restore] --> PGN
         TOOLS --> PGO
@@ -59,8 +60,8 @@ only needs its endpoint and keys changed.
 
 | Bucket | Content | Access |
 |---|---|---|
-| `office-media` | voice notes, regular images and files | n8n key: read + write |
-| `office-sensitive` | ID cards, Urfi documents, payment receipts | n8n key: read + write |
+| `office-media` | voice notes, videos, stickers (TASK 03) | n8n key: read + write |
+| `office-sensitive` | every image and document from clients (TASK 03): they may be ID cards, Urfi documents, receipts or contracts | n8n key: read + write |
 | `office-backups` | PostgreSQL dumps, expire after 30 days | backup key: read + write + owner |
 
 | Access key | `office-media` | `office-sensitive` | `office-backups` |
@@ -88,11 +89,17 @@ any AI provider** (OpenAI or other). Workflows in later tasks:
 - never pass their binary data, URLs or extracted text to an AI node;
 - send the AI only the text messages it needs for intent classification (T-07).
 
+TASK 03: n8n writes the files (credential `office-s3`, created by `n8n-import` from
+`S3_N8N_*`) under `wa/<yyyy>/<mm>/<media row id>.<ext>` — never a phone number, name, wamid or
+original file name. The API has no S3 key: it only receives the bucket and key
+([hazem-internal-api.md](hazem-internal-api.md)). Rules: [whatsapp-integration.md](whatsapp-integration.md#media-buckets-task-03-fixed-safety-rule-not-a-business-decision).
+
 ## Network exposure
 
 - Every published port is bound to `127.0.0.1`.
 - Only n8n can be reached from the internet, and only through cloudflared (profiles `tunnel`
   or `tunnel-named`), which forwards to `http://n8n:5678` and nothing else.
+- `meta-stub` (profile `tests`, test only) has no published port and runs only during `hazem-e2e`.
 - The .NET API has **no** published port: only n8n (and the tools container) reach it, at
   `http://api:8080` inside `office_net`. n8n's internal webhook `hazem-internal-send` is reachable
   through the tunnel like any n8n webhook, so it is protected by the `X-Hazem-Token` header.

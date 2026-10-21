@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Office.Infrastructure.N8n;
 
 namespace Office.IntegrationTests;
@@ -18,6 +19,7 @@ public sealed class ApiFactory(TestDatabase db) : WebApplicationFactory<Program>
     public const string N8nUrl = "http://n8n.test/webhook/hazem-internal-send";
 
     public FakeN8n N8n { get; } = new();
+    public MemoryLogs Logs { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -26,6 +28,7 @@ public sealed class ApiFactory(TestDatabase db) : WebApplicationFactory<Program>
         builder.UseSetting("Hazem:ApiToken", ApiToken);
         builder.UseSetting("Hazem:N8nInternalSendUrl", N8nUrl);
         builder.UseSetting("Hazem:N8nInternalSendToken", N8nToken);
+        builder.ConfigureLogging(l => l.AddProvider(Logs));
         builder.ConfigureTestServices(services =>
             services.AddHttpClient(N8nWhatsAppGateway.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => N8n));
     }
@@ -66,5 +69,27 @@ public sealed class FakeN8n : HttpMessageHandler
                 ["status"] = "sent",
             }.ToJsonString(), Encoding.UTF8, "application/json"),
         };
+    }
+}
+
+/// <summary>Keeps every formatted log line written by the API, so a test can read them.</summary>
+public sealed class MemoryLogs : ILoggerProvider
+{
+    public ConcurrentQueue<string> Lines { get; } = new();
+
+    public ILogger CreateLogger(string categoryName) => new Logger(this);
+
+    public void Dispose()
+    {
+    }
+
+    private sealed class Logger(MemoryLogs owner) : ILogger
+    {
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+            owner.Lines.Enqueue(formatter(state, exception) + (exception is null ? "" : " " + exception));
     }
 }

@@ -14,6 +14,8 @@ check() {  # check "description" command...
   fi
 }
 expect_fail() { ! "$@"; }
+warned=0
+warn() { echo "WARN  $*"; warned=$((warned+1)); }
 sql_equals() {  # sql_equals DB "SQL" EXPECTED
   [[ "$(psql_super "$1" -c "$2")" == "$3" ]]
 }
@@ -113,10 +115,10 @@ check "office_readonly may not run them" \
   sql_equals office "SELECT has_function_privilege('office_readonly', 'app.wa_process_event(jsonb)', 'EXECUTE')::text" "false"
 check "dry run is off (whatsapp.dry_run = false: real sends reach Meta)" \
   sql_equals office "SELECT value FROM app.settings WHERE key = 'whatsapp.dry_run'" "false"
-check "n8n has the 15 workflows (TASK 02 + v1.3 hand-off)" \
-  sql_equals n8n "SELECT count(*) FROM workflow_entity WHERE id IN ('WaCfgGet00000001','WaErrHandler0001','WaInbound0000001','WaProcEvent00001','WaSendMsg0000001','WaSendTpl0000001','WaSubCheck000001','WaSubDelete00001','WaTplSubmit00001','WaTplSync0000001','WaTestHarness001','WaFwdTurn0000001','WaHandleTurn0001','WaSendAction0001','WaIntSend0000001')" "15"
-check "n8n has the credentials from .env (office-postgres-app, hazem-api, hazem-internal-send)" \
-  sql_equals n8n "SELECT count(*) FROM credentials_entity WHERE name IN ('office-postgres-app','hazem-api','hazem-internal-send')" "3"
+check "n8n has the 17 workflows (TASK 02, v1.3 hand-off, TASK 03 media)" \
+  sql_equals n8n "SELECT count(*) FROM workflow_entity WHERE id IN ('WaCfgGet00000001','WaErrHandler0001','WaInbound0000001','WaProcEvent00001','WaSendMsg0000001','WaSendTpl0000001','WaSubCheck000001','WaSubDelete00001','WaTplSubmit00001','WaTplSync0000001','WaTestHarness001','WaFwdTurn0000001','WaHandleTurn0001','WaSendAction0001','WaIntSend0000001','WaMediaFetch0001','WaMediaOne000001')" "17"
+check "n8n has the credentials from .env (office-postgres-app, hazem-api, hazem-internal-send, office-s3)" \
+  sql_equals n8n "SELECT count(*) FROM credentials_entity WHERE name IN ('office-postgres-app','hazem-api','hazem-internal-send','office-s3')" "4"
 
 echo "== n8n <-> .NET API (DECISIONS v1.3)"
 api_status() {  # api_status URL [curl args...] -> HTTP status of a POST with a JSON body {}
@@ -133,10 +135,35 @@ check "n8n internal send webhook is live and refuses a request without the token
   test "$(api_status http://n8n:5678/webhook/hazem-internal-send)" = 403
 check "API echo test is switched off" \
   sql_equals office "SELECT value FROM hazem.settings WHERE key = 'echo.enabled'" "false"
-check "no text message waiting for the API for more than 10 minutes" \
-  sql_equals office "SELECT count(*) FROM app.wa_inbound_messages WHERE message_type = 'text' AND processing_status IN ('pending', 'processing') AND received_at < now() - interval '10 minutes'" "0"
+check "no message waiting for the API for more than 10 minutes" \
+  sql_equals office "SELECT count(*) FROM app.wa_inbound_messages WHERE NOT is_group AND processing_status IN ('pending', 'processing') AND received_at < now() - interval '10 minutes'" "0"
+
+echo "== Messages, media and voice (TASK 03)"
+check "tables wa_turns and wa_media exist" \
+  sql_equals office "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'app' AND table_name IN ('wa_turns', 'wa_media')" "2"
+check "office_app can write wa_turns and wa_media (rolled back)" \
+  psql_as office_app "$OFFICE_APP_PASSWORD" office -c 'BEGIN; DELETE FROM app.wa_media WHERE false; DELETE FROM app.wa_turns WHERE false; ROLLBACK;'
+check "office_api cannot read wa_media or wa_turns" \
+  expect_fail psql_as office_api "$OFFICE_API_PASSWORD" office -c 'SELECT 1 FROM app.wa_media UNION ALL SELECT 1 FROM app.wa_turns LIMIT 1'
+check "office_readonly cannot claim turns or media" \
+  sql_equals office "SELECT (has_function_privilege('office_readonly', 'app.wa_turns_claim(int, text[])', 'EXECUTE') OR has_function_privilege('office_readonly', 'app.wa_media_claim(int, text[])', 'EXECUTE'))::text" "false"
+check "real Meta and OpenAI URLs, turn_stale_seconds = 300 (test values never left behind)" \
+  sql_equals office "SELECT string_agg(key || '=' || value, ',' ORDER BY key) FROM app.settings WHERE key IN ('whatsapp.graph_base_url', 'ai.openai_base_url', 'whatsapp.turn_stale_seconds') OR key LIKE 'e2e.backup.%'" "ai.openai_base_url=https://api.openai.com/v1,whatsapp.graph_base_url=https://graph.facebook.com,whatsapp.turn_stale_seconds=300"
+check "no turn stuck in processing for more than 10 minutes" \
+  sql_equals office "SELECT count(*) FROM app.wa_turns WHERE status = 'processing' AND claimed_at < now() - interval '10 minutes'" "0"
+check "no download stuck for more than 10 minutes" \
+  sql_equals office "SELECT count(*) FROM app.wa_media WHERE status = 'downloading' AND claimed_at < now() - interval '10 minutes'" "0"
+check "no test credential (TestMetaToken001, TestOpenAiKey001) left in n8n" \
+  sql_equals n8n "SELECT count(*) FROM credentials_entity WHERE id IN ('TestMetaToken001', 'TestOpenAiKey001')" "0"
+check "meta-stub (test only) is not running" \
+  expect_fail getent hosts meta-stub
+if [[ "$(psql_super n8n -c "SELECT count(*) FROM credentials_entity WHERE name = 'openai-transcription'")" != "1" ]]; then
+  warn "n8n credential openai-transcription does not exist yet: voice notes reach the API without a transcript (docs/meta-setup.md, owner only)"
+fi
 
 echo "== Migrations"
+check "migration 0004 (grouping, media, voice) is applied" \
+  sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0004'" "1"
 check "migration 0003 (API schema hazem) is applied" \
   sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0003'" "1"
 check "migration 0002 (WhatsApp) is applied" \
@@ -149,5 +176,5 @@ check "function app.set_updated_at() exists" \
   sql_equals office "SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'app' AND p.proname = 'set_updated_at'" "1"
 
 echo
-echo "Result: $passed passed, $failed failed."
+echo "Result: $passed passed, $failed failed.$([[ $warned -gt 0 ]] && echo " $warned warning(s).")"
 [[ $failed -eq 0 ]]

@@ -5,8 +5,9 @@ WhatsApp assistant ("Hazem") for the law office of Ustaz Saad Fathy Saad.
 **.NET API** (ASP.NET Core, `backend/`) is the brain, and PostgreSQL holds the data.
 
 Done so far: **TASK 01** (infrastructure), **TASK 02** (Meta WhatsApp Cloud API in n8n; live
-tests with Meta pending the project owner's Meta setup) and the **n8n ↔ .NET hand-off**
-(DECISIONS v1.3; the API only answers with a test echo until TASK 04).
+tests with Meta pending the project owner's Meta setup), the **n8n ↔ .NET hand-off**
+(DECISIONS v1.3) and **TASK 03** (messages grouped into turns after 8 quiet seconds, media
+downloaded to S3, voice notes transcribed). The API only answers with a test echo until TASK 04.
 
 - All decisions: [docs/decisions/DECISIONS-v1.3.md](docs/decisions/DECISIONS-v1.3.md)
 - n8n ↔ .NET API contract: [docs/hazem-internal-api.md](docs/hazem-internal-api.md)
@@ -20,8 +21,9 @@ tests with Meta pending the project owner's Meta setup) and the **n8n ↔ .NET h
 TASK 02 commands: `n8n-import` / `n8n-export` (workflows and the credentials from `.env`),
 `wa-tests` (database rules and the workflow harness, no Meta needed), `tunnel-refresh` /
 `tunnel-down` (Quick Tunnel + Meta webhook).
-v1.3 commands: `backend-test` (.NET unit and integration tests), `hazem-e2e` (the whole loop
-n8n → API → n8n without Meta).
+v1.3 / TASK 03 commands: `backend-test` (.NET unit and integration tests), `hazem-e2e` (the
+whole loop n8n → API → n8n with grouping, media and voice, against a test stub instead of Meta
+and OpenAI).
 
 ## Services
 
@@ -33,6 +35,7 @@ n8n → API → n8n without Meta).
 | Redis 7.4.11 | 127.0.0.1:6379 | Debounce, dedup, locks, rate limits (later tasks) | core |
 | Garage v2.4.1 (S3) | http://127.0.0.1:3900 | Object storage: `office-media`, `office-sensitive`, `office-backups` | core |
 | Appsmith CE v2.4.3 | http://127.0.0.1:8080 | Unused: the panel will be React on the API (TASK 07) | `panel` profile |
+| meta-stub (.NET, test only) | none | Stand-in for Meta media and OpenAI transcription during `hazem-e2e` | `tests` profile, started by `hazem-e2e` only |
 | cloudflared 2026.9.3 | public https URL | Exposes **n8n only** for the Meta webhook | `tunnel` / `tunnel-named` profile |
 
 Every port is bound to `127.0.0.1`. Nothing is reachable from the network except n8n,
@@ -100,7 +103,7 @@ Every script below exists in two versions: `scripts\windows\<name>.ps1` and
 | `n8n-import` | Credentials from `.env` + workflows into n8n; restarts n8n when a schedule or webhook was published |
 | `wa-tests` | WhatsApp database rules + n8n harness (no Meta) |
 | `backend-test [-Docker]` | .NET tests; uses a throwaway database (needs `up`) |
-| `hazem-e2e` | Whole loop n8n ↔ API without Meta (dry run), then switches the test settings off |
+| `hazem-e2e` | Whole loop n8n ↔ API without Meta or OpenAI (stub, dry run), then restores every setting and removes its temporary credentials |
 | `backup` | Dump `office` and `n8n` to `office-backups` |
 | `restore ...` | Restore a dump into a new database and verify it |
 | `reset` | **Deletes all data.** Only with `ENVIRONMENT=test` and after typing `RESET` |

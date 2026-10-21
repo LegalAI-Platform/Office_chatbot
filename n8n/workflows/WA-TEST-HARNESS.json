@@ -13,7 +13,7 @@
         0
       ],
       "parameters": {
-        "content": "## WA-TEST-HARNESS (tests only, run with `n8n execute`)\nRuns fixtures through the real n8n wiring without Meta: PROCESS-EVENT, the 24h-window guard, the template guard and input validation. Uses dummy numbers 2010000000xx and deletes its rows at the end.",
+        "content": "## WA-TEST-HARNESS (tests only, run with `n8n execute`)\nRuns fixtures through the real n8n wiring without Meta: PROCESS-EVENT, the 24h-window guard, the template guard and input validation. Uses dummy numbers 2010000000xx and deletes its rows at the end.\nTASK 03: an image event creates exactly one wa_media row (pending), even when the same event arrives twice.",
         "height": 220,
         "width": 520
       }
@@ -40,7 +40,7 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "DELETE FROM app.wa_outbound_messages WHERE idempotency_key LIKE 'harness:%';\nDELETE FROM app.wa_inbound_messages WHERE wamid LIKE 'wamid.HARNESS-%';\nDELETE FROM app.wa_webhook_events WHERE payload->>'harness' = 'true';\nDELETE FROM app.wa_contact_windows WHERE wa_id IN ('201000000011', '201000000012');\nSELECT 1 AS ok",
+        "query": "DELETE FROM app.wa_outbound_messages WHERE idempotency_key LIKE 'harness:%';\nDELETE FROM app.wa_inbound_messages WHERE wamid LIKE 'wamid.HARNESS-%';\nDELETE FROM app.wa_turns WHERE wa_id IN ('201000000011', '201000000012', '201000000013');\nDELETE FROM app.wa_webhook_events WHERE payload->>'harness' = 'true';\nDELETE FROM app.wa_contact_windows WHERE wa_id IN ('201000000011', '201000000012', '201000000013');\nSELECT 1 AS ok",
         "options": {}
       },
       "credentials": {
@@ -401,7 +401,7 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT\n (SELECT count(*) FROM app.wa_inbound_messages WHERE wamid = 'wamid.HARNESS-1')::int AS inbound_rows,\n (SELECT count(*) FROM app.wa_webhook_events WHERE payload->>'harness' = 'true')::int AS event_rows,\n (SELECT count(*) FROM app.wa_contact_windows WHERE wa_id = '201000000011')::int AS window_rows,\n (SELECT jsonb_object_agg(idempotency_key, jsonb_build_object('status', status, 'attempts', attempts))\n    FROM app.wa_outbound_messages WHERE idempotency_key LIKE 'harness:%') AS outbound",
+        "query": "SELECT\n (SELECT count(*) FROM app.wa_inbound_messages WHERE wamid = 'wamid.HARNESS-1')::int AS inbound_rows,\n (SELECT count(*) FROM app.wa_webhook_events WHERE payload->>'harness' = 'true')::int AS event_rows,\n (SELECT count(*) FROM app.wa_media w JOIN app.wa_inbound_messages m ON m.id = w.inbound_message_id WHERE m.wamid = 'wamid.HARNESS-IMG-1')::int AS media_rows,\n (SELECT w.status || '/' || w.kind || '/' || w.meta_media_id FROM app.wa_media w JOIN app.wa_inbound_messages m ON m.id = w.inbound_message_id WHERE m.wamid = 'wamid.HARNESS-IMG-1') AS media_state,\n (SELECT count(*) FROM app.wa_contact_windows WHERE wa_id = '201000000011')::int AS window_rows,\n (SELECT jsonb_object_agg(idempotency_key, jsonb_build_object('status', status, 'attempts', attempts))\n    FROM app.wa_outbound_messages WHERE idempotency_key LIKE 'harness:%') AS outbound",
         "options": {}
       },
       "credentials": {
@@ -460,6 +460,12 @@
               "name": "database",
               "value": "={{ $json }}",
               "type": "object"
+            },
+            {
+              "id": "46ff2d92-f566-50eb-a6f8-355e059beefb",
+              "name": "image_process",
+              "value": "={{ $('Process image').first().json.result }}",
+              "type": "object"
             }
           ]
         },
@@ -477,7 +483,7 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "DELETE FROM app.wa_outbound_messages WHERE idempotency_key LIKE 'harness:%';\nDELETE FROM app.wa_inbound_messages WHERE wamid LIKE 'wamid.HARNESS-%';\nDELETE FROM app.wa_webhook_events WHERE payload->>'harness' = 'true';\nDELETE FROM app.wa_contact_windows WHERE wa_id IN ('201000000011', '201000000012');\nSELECT 1 AS cleaned",
+        "query": "DELETE FROM app.wa_outbound_messages WHERE idempotency_key LIKE 'harness:%';\nDELETE FROM app.wa_inbound_messages WHERE wamid LIKE 'wamid.HARNESS-%';\nDELETE FROM app.wa_turns WHERE wa_id IN ('201000000011', '201000000012', '201000000013');\nDELETE FROM app.wa_webhook_events WHERE payload->>'harness' = 'true';\nDELETE FROM app.wa_contact_windows WHERE wa_id IN ('201000000011', '201000000012', '201000000013');\nSELECT 1 AS cleaned",
         "options": {}
       },
       "credentials": {
@@ -502,6 +508,98 @@
         "jsonOutput": "={{ JSON.stringify($('Summary').first().json) }}",
         "options": {}
       }
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\"harness\": \"true\", \"messaging_product\": \"whatsapp\", \"field\": \"messages\", \"metadata\": {\"display_phone_number\": \"15550000000\", \"phone_number_id\": \"100000000000001\"}, \"contacts\": [{\"profile\": {\"name\": \"Harness\"}, \"wa_id\": \"201000000013\"}], \"messages\": [{\"from\": \"201000000013\", \"id\": \"wamid.HARNESS-IMG-1\", \"timestamp\": \"1760900000\", \"type\": \"image\", \"image\": {\"id\": \"MEDIA-HARNESS-1\", \"mime_type\": \"image/jpeg\", \"sha256\": \"aa\"}}]}",
+        "options": {}
+      },
+      "id": "937e03cd-96f2-53b0-96ec-3c72bc5fee08",
+      "name": "Image event",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1440,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "WaProcEvent00001",
+          "mode": "id",
+          "cachedResultName": "META-WA-PROCESS-EVENT"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "873fc6c4-8d80-5d6f-b788-656deb60d7a0",
+      "name": "Process image",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.4,
+      "position": [
+        1680,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify($('Image event').first().json) }}",
+        "options": {}
+      },
+      "id": "3620e0e2-58c7-5966-9cd7-600af3e9cc02",
+      "name": "Same image again",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1920,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "WaProcEvent00001",
+          "mode": "id",
+          "cachedResultName": "META-WA-PROCESS-EVENT"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "95903ac2-87cb-5a38-b741-126074f3f933",
+      "name": "Process image again",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.4,
+      "position": [
+        2160,
+        500
+      ]
     }
   ],
   "connections": {
@@ -564,7 +662,7 @@
       "main": [
         [
           {
-            "node": "Stale window",
+            "node": "Image event",
             "type": "main",
             "index": 0
           }
@@ -675,6 +773,50 @@
         [
           {
             "node": "Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Image event": {
+      "main": [
+        [
+          {
+            "node": "Process image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process image": {
+      "main": [
+        [
+          {
+            "node": "Same image again",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Same image again": {
+      "main": [
+        [
+          {
+            "node": "Process image again",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process image again": {
+      "main": [
+        [
+          {
+            "node": "Stale window",
             "type": "main",
             "index": 0
           }

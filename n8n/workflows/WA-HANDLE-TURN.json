@@ -200,9 +200,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT app.wa_turns_finish(ARRAY(SELECT jsonb_array_elements_text($1::jsonb)), 'processed') AS finished",
+        "query": "SELECT app.wa_turns_finish($1, 'processed') AS finished",
         "options": {
-          "queryReplacement": "={{ [ JSON.stringify($('Summarize').first().json.wamids) ] }}"
+          "queryReplacement": "={{ [ $('Summarize').first().json.turn_id ] }}"
         }
       },
       "id": "8bcf27fb-c916-5d80-a168-a29967334374",
@@ -258,9 +258,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT app.wa_turns_finish(ARRAY(SELECT jsonb_array_elements_text($1::jsonb)), 'failed', $2::jsonb) AS finished",
+        "query": "SELECT app.wa_turns_finish($1, 'failed', $2::jsonb) AS finished",
         "options": {
-          "queryReplacement": "={{ [ JSON.stringify($('Start').first().json.messages.map((m) => m.wamid)), JSON.stringify({ code: 'API_REJECTED', http_status: $json.statusCode, body: $json.body }) ] }}"
+          "queryReplacement": "={{ [ $('Start').first().json.turn_id, JSON.stringify({ code: 'API_REJECTED', http_status: $json.statusCode, body: $json.body }) ] }}"
         }
       },
       "id": "cda6ce33-f1bc-54a4-a536-5b9fbd09b6e2",
@@ -294,9 +294,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT app.wa_turns_finish(ARRAY(SELECT jsonb_array_elements_text($1::jsonb)), 'pending', $2::jsonb) AS finished",
+        "query": "SELECT app.wa_turns_finish($1, 'pending', $2::jsonb) AS finished",
         "options": {
-          "queryReplacement": "={{ [ JSON.stringify($('Start').first().json.messages.map((m) => m.wamid)), JSON.stringify({ code: 'API_UNAVAILABLE', http_status: $('Ask the API').first().json.statusCode || null }) ] }}"
+          "queryReplacement": "={{ [ $('Start').first().json.turn_id, JSON.stringify({ code: 'API_UNAVAILABLE', http_status: $('Ask the API').first().json.statusCode || null }) ] }}"
         }
       },
       "id": "fc13c252-25bb-5290-885f-08fd1233fc7c",

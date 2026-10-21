@@ -4,7 +4,8 @@ let input = '';
 process.stdin.on('data', (d) => { input += d; });
 process.stdin.on('end', () => {
   let r;
-  try { r = JSON.parse(input); } catch { console.log('FAIL  harness produced no JSON'); process.exit(1); }
+  // Windows PowerShell 5.1 prepends a BOM when it pipes text into docker.
+  try { r = JSON.parse(input.replace(/^\uFEFF/, '')); } catch { console.log('FAIL  harness produced no JSON'); process.exit(1); }
   const checks = [
     ['n8n: event processed through META-WA-PROCESS-EVENT', r.first_process && r.first_process.messages_new === 1],
     ['n8n: same event again is a duplicate', r.second_process && r.second_process.duplicate_event === true],
@@ -13,7 +14,10 @@ process.stdin.on('end', () => {
     ['n8n: invalid input refused with INVALID_INPUT', r.send_invalid_input && r.send_invalid_input.error_code === 'INVALID_INPUT'],
     ['n8n: refused messages never reached Meta (attempts = 0)', r.database && r.database.outbound
       && Object.values(r.database.outbound).every((o) => o.attempts === 0)],
-    ['n8n: exactly one inbound row and one event row', r.database && r.database.inbound_rows === 1 && r.database.event_rows === 1],
+    ['n8n: exactly one inbound row per message, one event row per event', r.database && r.database.inbound_rows === 1 && r.database.event_rows === 2],
+    ['n8n: image event -> one wa_media row, pending (TASK 03)', r.image_process && r.image_process.media_new === 1
+      && r.database && r.database.media_state === 'pending/image/MEDIA-HARNESS-1'],
+    ['n8n: the same image event twice -> still one wa_media row', r.database && r.database.media_rows === 1],
   ];
   let failed = 0;
   for (const [name, ok] of checks) {
