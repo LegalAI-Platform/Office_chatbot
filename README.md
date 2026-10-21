@@ -9,7 +9,7 @@ tests with Meta pending the project owner's Meta setup), the **n8n ↔ .NET hand
 (DECISIONS v1.3) and **TASK 03** (messages grouped into turns after 8 quiet seconds, media
 downloaded to S3, voice notes transcribed). The API only answers with a test echo until TASK 04.
 
-- All decisions: [docs/decisions/DECISIONS-v1.3.md](docs/decisions/DECISIONS-v1.3.md)
+- All decisions: [docs/decisions/DECISIONS-v1.4.md](docs/decisions/DECISIONS-v1.4.md)
 - n8n ↔ .NET API contract: [docs/hazem-internal-api.md](docs/hazem-internal-api.md)
 - Backend: [backend/README.md](backend/README.md)
 - Architecture and permissions: [docs/infrastructure.md](docs/infrastructure.md)

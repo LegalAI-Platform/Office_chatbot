@@ -1,5 +1,5 @@
 {
-  "_comment": "M-03 templates from docs/decisions/DECISIONS-v1.0.md. Source of truth for META-WA-TEMPLATES-SUBMIT. Texts marked 'adjusted' were changed only because Meta rejects a body that starts or ends with a variable.",
+  "_comment": "M-03 templates from docs/decisions/DECISIONS-v1.4.md (10 templates). Source of truth for META-WA-TEMPLATES-SUBMIT (its 'Template definitions' node holds the same list). Texts marked 'adjusted' were changed only because Meta rejects a body that starts or ends with a variable. Removed in v1.4: booking_followup, staff_contact_10am, payment_confirmed_booking, payment_rejected, urgent_10am.",
   "templates": [
     {
       "name": "reminder_day_before",
@@ -9,8 +9,30 @@
       "components": [
         {
           "type": "BODY",
-          "text": "تذكير بميعاد حضرتك مع الأستاذ سعد بكرة {{1}} الساعة {{2}}. نوع الاستشارة: {{3}}. التفاصيل: {{4}}. لو محتاج تغيّر الميعاد ابعتلنا هنا.",
-          "example": { "body_text": [["الثلاثاء 21 أكتوبر", "6 مساءً", "مقابلة في المكتب", "المكتب في الدقي، والعنوان على الخريطة"]] }
+          "text": "تذكير بميعاد حضرتك مع الأستاذ سعد بكرة {{1}} الساعة {{2}}. نوع الاستشارة: {{3}}. التفاصيل: {{4}}. من فضلك أكّد حضورك بالزرار تحت.",
+          "example": {
+            "body_text": [
+              [
+                "الثلاثاء 21 أكتوبر",
+                "6 مساءً",
+                "مقابلة في المكتب",
+                "المكتب في الدقي، والعنوان على الخريطة"
+              ]
+            ]
+          }
+        },
+        {
+          "type": "BUTTONS",
+          "buttons": [
+            {
+              "type": "QUICK_REPLY",
+              "text": "هحضر ✅"
+            },
+            {
+              "type": "QUICK_REPLY",
+              "text": "تغيير أو إلغاء"
+            }
+          ]
         }
       ]
     },
@@ -23,24 +45,16 @@
         {
           "type": "BODY",
           "text": "ميعاد حضرتك مع الأستاذ سعد النهارده الساعة {{1}}. نوع الاستشارة: {{2}}. التفاصيل: {{3}}. في انتظار حضرتك.",
-          "example": { "body_text": [["6 مساءً", "استشارة بالتليفون", "الأستاذ هيكلم حضرتك على نفس الرقم"]] }
+          "example": {
+            "body_text": [
+              [
+                "6 مساءً",
+                "استشارة بالتليفون",
+                "الأستاذ هيكلم حضرتك على نفس الرقم"
+              ]
+            ]
+          }
         }
-      ]
-    },
-    {
-      "name": "booking_followup",
-      "language": "ar",
-      "category": "UTILITY",
-      "components": [
-        { "type": "BODY", "text": "لسه حابب تحجز مع الأستاذ؟" }
-      ]
-    },
-    {
-      "name": "staff_contact_10am",
-      "language": "ar",
-      "category": "UTILITY",
-      "components": [
-        { "type": "BODY", "text": "صباح الخير، معاك مكتب الأستاذ سعد فتحي سعد بخصوص طلب حضرتك." }
       ]
     },
     {
@@ -48,19 +62,70 @@
       "language": "ar",
       "category": "UTILITY",
       "components": [
-        { "type": "BODY", "text": "معلش اتأخرنا على حضرتك، هنكلمك خلال دقايق." }
+        {
+          "type": "BODY",
+          "text": "معلش اتأخرنا على حضرتك، هنكلمك خلال دقايق."
+        }
       ]
     },
     {
-      "name": "payment_confirmed_booking",
+      "name": "booking_confirmed",
       "language": "ar",
       "category": "UTILITY",
       "adjusted": "added 'التفاصيل:' and a closing sentence so the body does not end with {{3}}",
       "components": [
         {
           "type": "BODY",
-          "text": "تم تأكيد ميعاد حضرتك يوم {{1}} الساعة {{2}} ✅. التفاصيل: {{3}}. لو محتاج أي حاجة ابعتلنا هنا.",
-          "example": { "body_text": [["الثلاثاء 21 أكتوبر", "6 مساءً", "استشارة بالتليفون، والأستاذ هيكلم حضرتك"]] }
+          "text": "تم حجز ميعاد حضرتك يوم {{1}} الساعة {{2}} ✅. التفاصيل: {{3}}. لو محتاج أي حاجة ابعتلنا هنا.",
+          "example": {
+            "body_text": [
+              [
+                "الثلاثاء 21 أكتوبر",
+                "6 مساءً",
+                "استشارة بالتليفون، والأستاذ هيكلم حضرتك"
+              ]
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "payment_reminder",
+      "language": "ar",
+      "category": "UTILITY",
+      "adjusted": "added a closing sentence so the body does not end with {{4}}",
+      "components": [
+        {
+          "type": "BODY",
+          "text": "ميعاد حضرتك {{1}} الساعة {{2}}. مستنيين صورة تحويل {{3}} جنيه على {{4}}. بعد التحويل ابعتلنا الصورة هنا.",
+          "example": {
+            "body_text": [
+              [
+                "الثلاثاء 21 أكتوبر",
+                "6 مساءً",
+                "500",
+                "InstaPay"
+              ]
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "booking_cancelled_by_office",
+      "language": "ar",
+      "category": "UTILITY",
+      "components": [
+        {
+          "type": "BODY",
+          "text": "نعتذر لحضرتك، الأستاذ عنده ظرف في ميعاد {{1}}. تحب ميعاد تاني ولا استرداد كامل؟",
+          "example": {
+            "body_text": [
+              [
+                "الثلاثاء 21 أكتوبر الساعة 6 مساءً"
+              ]
+            ]
+          }
         }
       ]
     },
@@ -71,21 +136,36 @@
       "components": [
         {
           "type": "BODY",
-          "text": "وصلنا {{1}} جنيه من {{2}}. محتاجين باقي المبلغ {{3}} جنيه عشان نأكد الميعاد.",
-          "example": { "body_text": [["300", "500", "200"]] }
+          "text": "وصلنا {{1}} جنيه من {{2}}. محتاجين باقي المبلغ {{3}} جنيه عشان نأكد الخدمة.",
+          "example": {
+            "body_text": [
+              [
+                "300",
+                "500",
+                "200"
+              ]
+            ]
+          }
         }
       ]
     },
     {
-      "name": "payment_rejected",
+      "name": "payment_not_received",
       "language": "ar",
       "category": "UTILITY",
-      "adjusted": "added 'في مواعيد العمل' so the body does not end with {{1}}",
+      "adjusted": "added 'في مواعيد العمل' so the body does not end with {{2}}",
       "components": [
         {
           "type": "BODY",
-          "text": "نعتذر لحضرتك، الإيصال ما اتقبلش. ممكن تبعت إيصال تاني أو تكلمنا على {{1}} في مواعيد العمل.",
-          "example": { "body_text": [["01000000000"]] }
+          "text": "التحويل الخاص بميعاد {{1}} ما وصلش. ممكن تبعت صورة التحويل أو تكلمنا على {{2}} في مواعيد العمل.",
+          "example": {
+            "body_text": [
+              [
+                "الثلاثاء 21 أكتوبر الساعة 6 مساءً",
+                "01000000000"
+              ]
+            ]
+          }
         }
       ]
     },
@@ -98,7 +178,14 @@
         {
           "type": "BODY",
           "text": "تم رد مبلغ {{1}} جنيه لحضرتك على {{2}}. شكرًا لحضرتك.",
-          "example": { "body_text": [["500", "InstaPay"]] }
+          "example": {
+            "body_text": [
+              [
+                "500",
+                "InstaPay"
+              ]
+            ]
+          }
         }
       ]
     },
@@ -111,16 +198,14 @@
         {
           "type": "BODY",
           "text": "الخدمة المطلوبة ({{1}}) جاهزة، وهتوصل حضرتك هنا حالًا.",
-          "example": { "body_text": [["مراجعة العقد"]] }
+          "example": {
+            "body_text": [
+              [
+                "مراجعة العقد"
+              ]
+            ]
+          }
         }
-      ]
-    },
-    {
-      "name": "urgent_10am",
-      "language": "ar",
-      "category": "UTILITY",
-      "components": [
-        { "type": "BODY", "text": "صباح الخير، بخصوص طلب حضرتك العاجل، الأستاذ هيتواصل مع حضرتك." }
       ]
     }
   ]
