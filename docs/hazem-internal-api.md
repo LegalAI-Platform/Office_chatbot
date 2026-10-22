@@ -167,6 +167,8 @@ For the panel (TASK 07) and for n8n when a staff member writes from the WhatsApp
 - `staff_replied`: the conversation becomes `human_handoff` and Hazem is silent; Hazem comes back
   by itself when the client writes 12 hours after the last staff message (B-12.2).
 - `hand_back`: «رجّع لحازم» → `bot_active`.
+- `at` is optional (empty = now). It may be in the past (a late report) but not more than 5
+  minutes ahead of the API's clock: a future time would keep Hazem silent long past 12 hours → `400`.
 - `200 { "state": "human_handoff" }`, `404` unknown number, `409 { state, error }` when the
   transition is not allowed (e.g. `hand_back` while Hazem already answers), `400` bad body.
 

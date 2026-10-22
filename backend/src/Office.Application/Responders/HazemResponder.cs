@@ -261,7 +261,10 @@ public sealed class HazemResponder(
                 _ => ClientType.NewClient,
             };
 
-        /// <summary>Colleagues, press and vendors (B-14.4): a neutral reply and a task, every turn.</summary>
+        /// <summary>
+        /// Colleagues, press and vendors (B-14.4): a neutral reply and a task once per request; later
+        /// messages wait for the staff member who has the task (no repeated reply, no new task).
+        /// </summary>
         private bool AnswerByType()
         {
             var key = Intake.ClientType switch
@@ -276,8 +279,11 @@ public sealed class HazemResponder(
                 return false;
             }
 
-            plan.Say(key);
-            plan.Task(PendingTask.ExternalContact);
+            if (Intake.State != IntakeState.HandedToStaff)
+            {
+                HandToOffice(key, PendingTask.ExternalContact);
+            }
+
             return true;
         }
 
@@ -313,6 +319,13 @@ public sealed class HazemResponder(
                     plan.Task(PendingTask.ExistingClientMessage, list.ExistingClient?.StaffId);
                     Check(Intake.MoveTo(IntakeState.HandedToStaff));
                     break;
+                case Intent.Urgent:
+                    // An urgent message from a listed client is most likely about their own case
+                    // («الجلسة بكرة»): their staff member gets it at once, never the new-client price.
+                    plan.Say(TextKeys.ExistingMatter);
+                    plan.Task(PendingTask.UrgentRequest, list.ExistingClient?.StaffId);
+                    Check(Intake.MoveTo(IntakeState.HandedToStaff));
+                    break;
                 case var i when IsNewMatter(i):
                     // A new matter under the same person: a new intake on the new-client path.
                     var closed = Intake;
@@ -346,7 +359,7 @@ public sealed class HazemResponder(
         }
 
         private static bool IsNewMatter(Intent i) =>
-            i is Intent.ConsultationRequest or Intent.ServiceByName or Intent.Urgent or Intent.PriceQuestion
+            i is Intent.ConsultationRequest or Intent.ServiceByName or Intent.PriceQuestion
                 or Intent.LegalQuestion or Intent.DescribeMatter;
 
         /// <summary>B-02. True when Hazem can carry on (a full name, or the one extra ask is used up).</summary>

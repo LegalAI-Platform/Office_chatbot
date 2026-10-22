@@ -147,6 +147,25 @@ public sealed class Task05aFlowTests
         Assert.Equal([TextKeys.ColleagueReceived], keys);
         Assert.Equal(ClientType.Colleague, S.Intake.ClientType);
         Assert.Equal(PendingTask.ExternalContact, Assert.Single(d.Effects!.Tasks).Kind);
+
+        // Later messages wait for the staff member who has the task: no repeated reply, no new task.
+        var (again, d2) = await Say("بخصوص القضية المشتركة", R("existing_matter", role: "lawyer_colleague"));
+        Assert.Empty(again);
+        Assert.Empty(d2.Effects!.Tasks);
+    }
+
+    [Fact]
+    public async Task An_urgent_message_from_a_listed_client_goes_to_their_staff_not_the_new_client_price()
+    {
+        _list = new ListMatch(false, false, new ExistingClientEntry("محمد أحمد علي حسن", Staff));
+        var intake = (await Say("السلام عليكم", R("greeting"))).D.Effects!.State.Intake.Id;
+        var (keys, d) = await Say("الجلسة بكرة الحقوني", R("urgent", matter: "criminal"));
+        Assert.Equal([TextKeys.ExistingMatter], keys);
+        Assert.DoesNotContain(TextKeys.UrgentPrice, keys);
+        var task = Assert.Single(d.Effects!.Tasks);
+        Assert.Equal((PendingTask.UrgentRequest, (Guid?)Staff), (task.Kind, task.StaffId));
+        Assert.Equal((intake, ClientType.ExistingClient), (S.Intake.Id, S.Intake.ClientType));
+        Assert.Empty(d.Effects.State.ClosedIntakes);
     }
 
     // ---------- B-13 source ----------

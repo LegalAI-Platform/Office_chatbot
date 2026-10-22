@@ -90,6 +90,48 @@ public sealed class Task05aApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal("201033333333", await db.ScalarAsync<string>("SELECT string_agg(wa_id, ',') FROM hazem.list_entries WHERE list_kind = 'blocked'"));
     }
 
+    [Theory]
+    [InlineData("name,phone\nج,01033333333\nغلط,0103\n")] // one bad line
+    [InlineData("name,phone\nغلط,abc\n")]                // no good line at all
+    [InlineData("name,telephone\nج,01033333333\n")]      // no phone column
+    public async Task Replace_with_a_bad_file_changes_nothing(string csv)
+    {
+        await Import("blocked", "name,phone\nأ,01011111111\nب,01022222222\n");
+        var r = await Import("blocked", csv, replace: true);
+        Assert.Equal(0, r.Imported);
+        Assert.NotEmpty(r.Rejected);
+        Assert.Equal("201011111111,201022222222", await db.ScalarAsync<string>(
+            "SELECT string_agg(wa_id, ',' ORDER BY wa_id) FROM hazem.list_entries WHERE list_kind = 'blocked'"));
+    }
+
+    [Fact]
+    public async Task A_quoted_cell_with_a_line_break_stays_one_row()
+    {
+        var r = await Import("existing_client", "name,phone,staff\n\"محمد أحمد\nعلي حسن\",01044444444,أ. محمود\nسارة,01055555555,\n");
+        Assert.Equal((2, 0), (r.Imported, r.Rejected.Count));
+        Assert.Equal("محمد أحمد\nعلي حسن", await db.ScalarAsync<string>(
+            "SELECT name FROM hazem.list_entries WHERE wa_id = '201044444444'"));
+    }
+
+    [Fact]
+    public async Task Tasks_overdue_marks_only_open_tasks_past_their_due_time()
+    {
+        await Say("السلام عليكم");
+        await db.ExecAsync($"""
+            INSERT INTO hazem.staff_tasks (person_id, turn_id, type, state, due_at)
+            SELECT p.id, t.turn_id, 'complaint', t.state, t.due_at
+              FROM hazem.persons p,
+                   (VALUES ('a', 'open', now() - interval '1 hour'), ('b', 'in_progress', now() - interval '1 hour'),
+                           ('c', 'done', now() - interval '1 hour'), ('d', 'open', now() + interval '1 hour'))
+                   AS t(turn_id, state, due_at)
+             WHERE p.wa_id = '{Client}'
+            """);
+        using var scope = _factory.Services.CreateScope();
+        Assert.Equal(2, await scope.ServiceProvider.GetRequiredService<TaskMaintenance>().MarkOverdueAsync(Ct));
+        Assert.Equal("a:overdue,b:overdue,c:done,d:open", await db.ScalarAsync<string>(
+            "SELECT string_agg(turn_id || ':' || state, ',' ORDER BY turn_id) FROM hazem.staff_tasks WHERE type = 'complaint'"));
+    }
+
     // ---------- the flow on real data ----------
 
     [Fact]
@@ -165,6 +207,20 @@ public sealed class Task05aApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Unauthorized,
             (await anonymous.PostAsJsonAsync("/api/hazem/staff-events", new { wa_id = Client, @event = "hand_back" }, Ct)).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await StaffEvent("delete_everything")).StatusCode);
+    }
+
+    [Fact]
+    public async Task A_staff_event_in_the_future_is_refused()
+    {
+        await Say("السلام عليكم");
+        var future = await _n8n.PostAsJsonAsync("/api/hazem/staff-events",
+            new { wa_id = Client, @event = "staff_replied", at = DateTimeOffset.UtcNow.AddDays(60) }, Ct);
+        Assert.Equal(HttpStatusCode.BadRequest, future.StatusCode);
+        Assert.Equal("bot_active", await db.ScalarAsync<string>(
+            $"SELECT c.state FROM hazem.conversations c JOIN hazem.persons p ON p.id = c.person_id WHERE p.wa_id = '{Client}'"));
+        var lateReport = await _n8n.PostAsJsonAsync("/api/hazem/staff-events",
+            new { wa_id = Client, @event = "staff_replied", at = DateTimeOffset.UtcNow.AddMinutes(-30) }, Ct);
+        Assert.Equal(HttpStatusCode.OK, lateReport.StatusCode);
     }
 
     // ---------- migration 0008 ----------

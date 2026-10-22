@@ -2,6 +2,7 @@ using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Office.Application.Common;
 using Office.Domain.Common;
+using Office.Domain.Tasks;
 using Office.Infrastructure.Persistence;
 
 namespace Office.Infrastructure.Lists;
@@ -86,6 +87,15 @@ public sealed class ListImporter(HazemDbContext db)
             imported++;
         }
 
+        if (replace && (rejected.Count > 0 || imported == 0))
+        {
+            // Swapping a whole list from a file with bad lines (or none good) would silently drop
+            // people from it: nothing changes, the owner fixes the file and runs it again.
+            await tx.RollbackAsync(ct);
+            rejected.Add(new Rejected(0, "--replace: nothing was changed; the list stays as it was until every line is valid"));
+            return new Result(0, rejected);
+        }
+
         await tx.CommitAsync(ct);
         return new Result(imported, rejected);
     }
@@ -97,16 +107,29 @@ public sealed class ListImporter(HazemDbContext db)
         return await db.Database.SqlQuery<Guid>($"SELECT id AS \"Value\" FROM hazem.staff WHERE name = {name}").SingleAsync(ct);
     }
 
-    /// <summary>RFC 4180-style CSV: commas, quoted fields with "" inside, one record per line.</summary>
+    /// <summary>
+    /// RFC 4180-style CSV: commas, quoted fields with "" inside. A quoted cell may hold line breaks
+    /// (Alt+Enter in Excel): the record goes on to the next line. Reported by its first line.
+    /// </summary>
     private static IEnumerable<(int Line, List<string> Fields)> ReadRows(TextReader reader)
     {
         var lineNo = 0;
+        var fields = new List<string>();
+        var sb = new StringBuilder();
+        var quoted = false;
+        var recordLine = 0;
         while (reader.ReadLine() is { } line)
         {
             lineNo++;
-            var fields = new List<string>();
-            var sb = new StringBuilder();
-            var quoted = false;
+            if (quoted)
+            {
+                sb.Append('\n'); // the line break inside the quoted cell
+            }
+            else
+            {
+                recordLine = lineNo;
+            }
+
             for (var i = 0; i < line.Length; i++)
             {
                 var ch = line[i];
@@ -141,15 +164,36 @@ public sealed class ListImporter(HazemDbContext db)
                 }
             }
 
+            if (quoted)
+            {
+                continue;
+            }
+
             fields.Add(sb.ToString());
-            yield return (lineNo, fields);
+            sb.Clear();
+            yield return (recordLine, fields);
+            fields = [];
+        }
+
+        if (quoted)
+        {
+            // An unclosed quote at the end of the file: keep what was read, it is reported by its line.
+            fields.Add(sb.ToString());
+            yield return (recordLine, fields);
         }
     }
 }
 
-/// <summary>S-05: tasks past their due time become overdue (alerts and apologies come with the panel).</summary>
+/// <summary>
+/// S-05: tasks past their due time become overdue (alerts and apologies come with the panel).
+/// One SQL update, with the states taken from the domain rule (<see cref="StaffTask.MayBecomeOverdue"/>).
+/// </summary>
 public sealed class TaskMaintenance(HazemDbContext db)
 {
-    public Task<int> MarkOverdueAsync(CancellationToken ct) => db.Database.ExecuteSqlRawAsync(
-        "UPDATE hazem.staff_tasks SET state = 'overdue' WHERE state IN ('open', 'in_progress') AND due_at < now()", ct);
+    private static readonly string[] From = StaffTask.MayBecomeOverdue.Select(s => StateName.Of(s)).ToArray();
+
+    private static readonly string Overdue = StateName.Of(StaffTaskState.Overdue);
+
+    public Task<int> MarkOverdueAsync(CancellationToken ct) => db.Database.ExecuteSqlInterpolatedAsync(
+        $"UPDATE hazem.staff_tasks SET state = {Overdue} WHERE state = ANY({From}) AND due_at < now()", ct);
 }

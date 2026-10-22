@@ -113,7 +113,9 @@ Three lists: `existing_client` (name, phone, staff in charge), `lawyer_direct`, 
 1. In Excel: columns **name, phone, staff** (staff only for clients) with that header row.
    File → Save As → **CSV UTF-8 (Comma delimited)**. Phones may be written any way
    (`010…`, `+20…`, Arabic digits, spaces, dashes).
-2. Copy it into the api container and import (`--replace` swaps the whole list in one go):
+2. Copy it into the api container and import (`--replace` swaps the whole list in one go, and
+   only when **every** line is valid: with one refused line nothing changes and the old list
+   stays). A cell written on two lines in Excel (Alt+Enter) is read as one cell:
 
 ```powershell
 docker compose cp clients.csv api:/tmp/clients.csv

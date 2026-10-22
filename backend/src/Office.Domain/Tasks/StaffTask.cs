@@ -62,7 +62,11 @@ public sealed class StaffTask
 
     /// <summary>due_at passed: overdue (then an alert to the lawyer and an apology to the client).</summary>
     public Result CheckOverdue(DateTimeOffset now) =>
-        now > DueAt && State is StaffTaskState.Open or StaffTaskState.InProgress ? Move(StaffTaskState.Overdue, Actor.System) : Result.Ok;
+        now > DueAt && MayBecomeOverdue.Contains(State) ? Move(StaffTaskState.Overdue, Actor.System) : Result.Ok;
+
+    /// <summary>The states S-05 moves to overdue (also used by the bulk SQL update, tasks-overdue).</summary>
+    public static readonly IReadOnlyList<StaffTaskState> MayBecomeOverdue =
+        Machine.Transitions.Where(t => t.To == StaffTaskState.Overdue && t.By.Contains(Actor.System)).Select(t => t.From).ToArray();
 
     private Result Move(StaffTaskState to, Actor by)
     {

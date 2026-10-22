@@ -39,6 +39,10 @@ ALTER TABLE hazem.persons
   ADD COLUMN source_raw    jsonb,
   ADD COLUMN first_seen_at timestamptz;
 
+-- People who wrote before this migration: their first contact is when they were made, and the
+-- source stays NULL (unknown) — a later message must not be recorded as their first contact.
+UPDATE hazem.persons SET first_seen_at = created_at WHERE first_seen_at IS NULL;
+
 ALTER TABLE hazem.conversations
   ADD COLUMN abuse_warnings int NOT NULL DEFAULT 0 CHECK (abuse_warnings >= 0);
 
@@ -102,7 +106,8 @@ INSERT INTO hazem.settings (key, value, description) VALUES
 INSERT INTO hazem.approved_texts (key, version, text, max_chars, active, source, updated_by) VALUES
   ('existing_or_new', 1, 'حضرتك بتتابع موضوع قائم مع المكتب، ولا عايز استشارة في موضوع جديد؟', 300, true, 'DECISIONS v1.5 B-04', 'migration 0008'),
   ('ask_topic', 1, 'ولو تحب، قولّي باختصار الموضوع عن إيه عشان الأستاذ يبقى عارفه.', 300, true, 'DECISIONS v1.5 B-25', 'migration 0008'),
-  ('topic_received', 1, 'تمام، وصلت ✅', 300, true, 'DECISIONS v1.5 B-25', 'migration 0008');
+  ('topic_received', 1, 'تمام، وصلت ✅', 300, true, 'DECISIONS v1.5 B-25', 'migration 0008')
+ON CONFLICT (key, version) DO UPDATE SET active = true; -- kept by an earlier down (used in a reply)
 
 -- Proposed in TASK 05a and approved by the owner as proposed (2026-10-22, in chat): active.
 INSERT INTO hazem.approved_texts (key, version, text, max_chars, active, source, updated_by) VALUES
@@ -110,7 +115,8 @@ INSERT INTO hazem.approved_texts (key, version, text, max_chars, active, source,
   ('lawyer_direct_received', 1, 'أهلًا بحضرتك، رسالتك وصلت للأستاذ سعد.', 300, true, 'proposal TASK 05a', 'owner approval 2026-10-22'),
   ('colleague_received', 1, 'أهلًا بحضرتك يا أستاذ، رسالتك وصلت للمكتب.', 300, true, 'proposal TASK 05a', 'owner approval 2026-10-22'),
   ('press_received', 1, 'أهلًا بحضرتك، رسالتك وصلت للمكتب.', 300, true, 'proposal TASK 05a', 'owner approval 2026-10-22'),
-  ('vendor_received', 1, 'أهلًا بحضرتك، رسالتك وصلت للمكتب.', 300, true, 'proposal TASK 05a', 'owner approval 2026-10-22');
+  ('vendor_received', 1, 'أهلًا بحضرتك، رسالتك وصلت للمكتب.', 300, true, 'proposal TASK 05a', 'owner approval 2026-10-22')
+ON CONFLICT (key, version) DO UPDATE SET active = true;
 
 -- ---------------------------------------------------------------------------
 -- B-13: the API now receives the Meta referral of a message (ad / link), without image or video
@@ -133,9 +139,15 @@ $$;
 DROP FUNCTION IF EXISTS app.wa_message_json(uuid);
 ALTER FUNCTION app.wa_message_json_0004(uuid) RENAME TO wa_message_json;
 
-DELETE FROM hazem.approved_texts WHERE source IN ('proposal TASK 05a', 'DECISIONS v1.5 B-04', 'DECISIONS v1.5 B-25')
-  AND key IN ('existing_or_new', 'ask_topic', 'topic_received', 'abuse_warning', 'lawyer_direct_received',
-              'colleague_received', 'press_received', 'vendor_received');
+-- A text already used in a reply (turn_replies' foreign key) is kept, switched off; the rest go.
+UPDATE hazem.approved_texts SET active = false
+ WHERE source IN ('proposal TASK 05a', 'DECISIONS v1.5 B-04', 'DECISIONS v1.5 B-25')
+   AND key IN ('existing_or_new', 'ask_topic', 'topic_received', 'abuse_warning', 'lawyer_direct_received',
+               'colleague_received', 'press_received', 'vendor_received');
+DELETE FROM hazem.approved_texts t WHERE t.source IN ('proposal TASK 05a', 'DECISIONS v1.5 B-04', 'DECISIONS v1.5 B-25')
+  AND t.key IN ('existing_or_new', 'ask_topic', 'topic_received', 'abuse_warning', 'lawyer_direct_received',
+                'colleague_received', 'press_received', 'vendor_received')
+  AND NOT EXISTS (SELECT 1 FROM hazem.turn_replies r WHERE r.text_key = t.key AND r.text_version = t.version);
 DELETE FROM hazem.settings WHERE key IN ('handoff.enabled', 'source.link_codes');
 
 CREATE TABLE hazem.pending_tasks (
