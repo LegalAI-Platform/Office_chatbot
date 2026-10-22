@@ -106,6 +106,7 @@ async Task<JsonNode> ClassifyEval()
     int total = 0, correct = 0, serviceChecked = 0, serviceCorrect = 0;
     long latency = 0, inputTokens = 0, outputTokens = 0;
     var mistakes = new JsonArray();
+    var serviceMistakes = new JsonArray();
     using var input = Option("--file") is { Length: > 0 } file ? new StreamReader(file) : new StreamReader(Console.OpenStandardInput());
     while (total < limit && await input.ReadLineAsync(ct) is { } line)
     {
@@ -143,7 +144,15 @@ async Task<JsonNode> ClassifyEval()
         if ((string?)sample["service"] is { } service)
         {
             serviceChecked++;
-            serviceCorrect += c.Service is { } s && Classification.Code(s) == service ? 1 : 0;
+            var gotService = c.Service is { } s ? Classification.Code(s) : null;
+            if (gotService == service)
+            {
+                serviceCorrect++;
+            }
+            else
+            {
+                serviceMistakes.Add(new JsonObject { ["id"] = sample["id"]?.DeepClone(), ["expected"] = service, ["got"] = gotService });
+            }
         }
     }
 
@@ -169,6 +178,7 @@ async Task<JsonNode> ClassifyEval()
         ["input_tokens"] = inputTokens,
         ["output_tokens"] = outputTokens,
         ["mistakes"] = mistakes,
+        ["service_mistakes"] = serviceMistakes,
     };
     if (double.TryParse(Option("--input-price"), System.Globalization.CultureInfo.InvariantCulture, out var inPrice)
         && double.TryParse(Option("--output-price"), System.Globalization.CultureInfo.InvariantCulture, out var outPrice))

@@ -19,7 +19,8 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
     : IIntentClassifier
 {
     public const string HttpClientName = "openai";
-    public const string PromptVersion = "classify-v1";
+    /// <summary>The prompt in use: Ai/prompts/{PromptVersion}.md. Older versions stay in the folder as history.</summary>
+    public const string PromptVersion = "classify-v3";
     public const string StubEnabledKey = "ai.stub_enabled";
     public const string StubBaseUrlKey = "ai.stub_base_url";
 
@@ -33,8 +34,8 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
 
     private static readonly Lazy<string> Prompt = new(() =>
     {
-        using var s = typeof(OpenAiIntentClassifier).Assembly.GetManifestResourceStream("Office.Infrastructure.Ai.prompts.classify-v1.md")
-            ?? throw new InvalidOperationException("embedded prompt classify-v1.md is missing");
+        using var s = typeof(OpenAiIntentClassifier).Assembly.GetManifestResourceStream($"Office.Infrastructure.Ai.prompts.{PromptVersion}.md")
+            ?? throw new InvalidOperationException($"embedded prompt {PromptVersion}.md is missing");
         using var r = new StreamReader(s);
         return r.ReadToEnd();
     });

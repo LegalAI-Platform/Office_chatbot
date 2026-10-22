@@ -1,0 +1,40 @@
+{"id":1001,"text":"مساء النور","intent":"greeting"}
+{"id":1002,"text":"هاي","intent":"greeting"}
+{"id":1003,"text":"حد معايا؟","intent":"other"}
+{"id":1004,"text":"انا رامي سمير فوزي عبد الحميد","intent":"provide_name"}
+{"id":1005,"text":"نادية ابراهيم","intent":"provide_name"}
+{"id":1006,"text":"محتاج ميعاد مع الاستاذ الاسبوع ده","intent":"consultation_request"}
+{"id":1007,"text":"ينفع اكلم الاستاذ فيديو بخصوص مشكلة شغل","intent":"consultation_request","consultation_mode":"phone_video"}
+{"id":1008,"text":"عاوز اجي المكتب اتكلم مع حضرتكم","intent":"consultation_request","consultation_mode":"office"}
+{"id":1009,"text":"momken a3ml esteshara","intent":"consultation_request"}
+{"id":1010,"text":"عايزكم تكتبولي عقد ايجار محل","intent":"service_by_name","service":"contract_drafting"}
+{"id":1011,"text":"معايا عقد شراكة عايز حد يبص عليه","intent":"service_by_name","service":"document_review"}
+{"id":1012,"text":"عايز ابعت انذار لجاري","intent":"service_by_name","service":"formal_notice"}
+{"id":1013,"text":"احنا متجوزين عرفي وعايزين نطلق","intent":"service_by_name","service":"urf_divorce"}
+{"id":1014,"text":"عايزين نكتب كتاب عرفي","intent":"service_by_name","service":"urf_marriage"}
+{"id":1015,"text":"عندي قضية نفقة وعايز محامي يتابعها","intent":"service_by_name","service":"case_representation"}
+{"id":1016,"text":"ممكن رأي قانوني مكتوب في موضوع ميراث","intent":"service_by_name","service":"written_opinion"}
+{"id":1017,"text":"ابني اتمسك امبارح ومحتاج محامي دلوقتي","intent":"urgent"}
+{"id":1018,"text":"الموضوع مايستناش لبكره","intent":"urgent"}
+{"id":1019,"text":"عايز مراجعة عقد النهارده ضروري","intent":"urgent","service":"document_review"}
+{"id":1020,"text":"المقابلة في المكتب بكام","intent":"price_question","service":"consultation_office"}
+{"id":1021,"text":"صياغة عقد بيع بتتكلف قد ايه","intent":"price_question","service":"contract_drafting"}
+{"id":1022,"text":"كام سعر الطلاق العرفي","intent":"price_question","service":"urf_divorce"}
+{"id":1023,"text":"اسعاركم","intent":"price_question"}
+{"id":1024,"text":"المستأجر مش بيدفع اقدر اطرده؟","intent":"legal_question"}
+{"id":1025,"text":"الحكم الغيابي ينفع يتلغي؟","intent":"legal_question"}
+{"id":1026,"text":"ليا حق في معاش ابويا؟","intent":"legal_question"}
+{"id":1027,"text":"في جديد في قضية الشقة اللي الاستاذ رافعها؟","intent":"existing_matter"}
+{"id":1028,"text":"الاستاذ قالي الجلسة اتأجلت لامتى؟","intent":"existing_matter"}
+{"id":1029,"text":"ابعتلي حد من المكتب يكلمني","intent":"human_request"}
+{"id":1030,"text":"انا عايز اكلم انسان مش برنامج","intent":"human_request"}
+{"id":1031,"text":"مش هلحق ميعاد بكره خليه بعده","intent":"reschedule_or_cancel"}
+{"id":1032,"text":"لغيلي الاستشارة لو سمحت","intent":"reschedule_or_cancel"}
+{"id":1033,"text":"متشكرين يا فندم","intent":"thanks_or_closing"}
+{"id":1034,"text":"تمام كده","intent":"thanks_or_closing"}
+{"id":1035,"text":"ممكن تبعتلي اللوكيشن","intent":"other"}
+{"id":1036,"text":"انتو بتشتغلو قضايا ايه","intent":"other"}
+{"id":1037,"text":"السلام عليكم انا ابو احمد وعايز ميعاد","intent":"consultation_request"}
+{"id":1038,"text":"عايز اعرف اتعاب المحامي في قضية طلاق","intent":"price_question","service":"case_representation"}
+{"id":1039,"text":"الاستشارة اونلاين بكام","intent":"price_question","service":"consultation_phone_video"}
+{"id":1040,"text":"شكرا بس عايز اغير الميعاد","intent":"reschedule_or_cancel"}
