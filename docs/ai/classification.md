@@ -32,9 +32,9 @@ fields. It never writes a word the client sees: every reply is an approved text
 
 - OpenAI Chat Completions, **Structured Outputs** (`response_format: json_schema`, `strict: true`,
   `additionalProperties: false`, every field required, enums = the lists above), `temperature: 0`.
-- Prompt: `backend/src/Office.Infrastructure/Ai/prompts/classify-v2.md` (v1 kept as history), embedded in the build.
-  Its version (`classify-v2`) is saved with every classification. **Change the prompt = a new
-  file (`classify-v3.md` next) and a new `PromptVersion`**, then run `classify-eval` again.
+- Prompt: `backend/src/Office.Infrastructure/Ai/prompts/classify-v3.md` (v1 and v2 kept as history), embedded in the build.
+  Its version (`classify-v3`) is saved with every classification. **Change the prompt = a new
+  file (`classify-v4.md` next) and a new `PromptVersion`**, then run `classify-eval` again.
 - Model: `OPENAI_MODEL`. Empty = `gpt-4.1-mini`, **a starting point only**. The final model is
   chosen by the owner after `classify-eval` (T-08).
 - Key: `HAZEM_OPENAI_API_KEY` in `.env` — the .NET key, separate from n8n's voice key. It may be
