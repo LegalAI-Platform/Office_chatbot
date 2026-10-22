@@ -91,27 +91,27 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
         await Say("السلام عليكم");
         await Say("محمد أحمد علي حسن");
         _factory.OpenAi.Down = true;
-        Assert.Equal([Offer], Texts(await Say("عايز أحجز")));
+        Assert.Equal(["معلش مش واضحلي المطلوب. ممكن تكتبلي حضرتك محتاج إيه؟"], Texts(await Say("عايز أحجز"))); // «unclear» (0007)
         Assert.Equal("other|error", await db.ScalarAsync<string>(
             "SELECT intent || '|' || fallback_reason FROM hazem.classifications ORDER BY created_at DESC LIMIT 1"));
     }
 
     [Fact]
-    public async Task Human_request_records_a_task_and_sends_nothing_until_its_text_is_approved()
+    public async Task Human_request_records_a_task_and_sends_nothing_while_its_text_is_inactive()
     {
         await Say("السلام عليكم");
         await Say("محمد أحمد علي حسن");
-        Assert.Empty(Texts(await Say("عايز أكلم موظف")));
+        Assert.Equal(["تمام، هبلّغ المكتب إن حضرتك عايز تكلم حد."], Texts(await Say("عايز أكلم موظف"))); // approved (0007)
         Assert.Equal("human_requested|open", await db.ScalarAsync<string>("SELECT kind || '|' || status FROM hazem.pending_tasks"));
 
-        await db.ExecAsync("UPDATE hazem.approved_texts SET active = true WHERE key = 'human_request'");
+        await db.ExecAsync("UPDATE hazem.approved_texts SET active = false WHERE key = 'human_request'");
         try
         {
-            Assert.Equal(["تمام، هبلّغ المكتب إن حضرتك عايز تكلم حد."], Texts(await Say("عايز أكلم موظف تاني")));
+            Assert.Empty(Texts(await Say("عايز أكلم موظف تاني")));
         }
         finally
         {
-            await db.ExecAsync("UPDATE hazem.approved_texts SET active = false WHERE key = 'human_request'");
+            await db.ExecAsync("UPDATE hazem.approved_texts SET active = true WHERE key = 'human_request'");
         }
     }
 
@@ -166,7 +166,16 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
     {
         await Say("السلام عليكم");
         await Say("محمد أحمد علي حسن");
-        Assert.Empty(Texts(await Say("شكرا")));
+        await db.ExecAsync("UPDATE hazem.approved_texts SET active = false WHERE key = 'thanks'");
+        try
+        {
+            Assert.Empty(Texts(await Say("شكرا")));
+        }
+        finally
+        {
+            await db.ExecAsync("UPDATE hazem.approved_texts SET active = true WHERE key = 'thanks'");
+        }
+
         var logs = string.Join("\n", _factory.Logs.Lines);
         Assert.Contains("text thanks not sent: inactive_or_missing", logs);
         Assert.DoesNotContain("شكرا", logs);
@@ -204,7 +213,7 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
         var decisions = await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.5.md"), Ct);
         await using var c = new NpgsqlConnection(db.ApiConnectionString);
         await c.OpenAsync(Ct);
-        await using var cmd = new NpgsqlCommand("SELECT key, text FROM hazem.approved_texts WHERE active", c);
+        await using var cmd = new NpgsqlCommand("SELECT key, text FROM hazem.approved_texts WHERE active AND source LIKE 'DECISIONS%'", c);
         await using var r = await cmd.ExecuteReaderAsync(Ct);
         var count = 0;
         while (await r.ReadAsync(Ct))
@@ -217,8 +226,16 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
     }
 
     [Fact]
-    public async Task No_active_text_has_an_open_placeholder() =>
-        Assert.Equal(0L, await db.ScalarAsync<long>(@"SELECT count(*) FROM hazem.approved_texts WHERE active AND text ~ '\{\{|\['"));
+    public async Task No_active_text_has_an_open_office_placeholder() =>
+        Assert.Equal(0L, await db.ScalarAsync<long>(
+            @"SELECT count(*) FROM hazem.approved_texts WHERE active AND regexp_replace(text, '\{\{[a-z_]+\}\}', '', 'g') ~ '\{\{|\['"));
+
+    [Fact]
+    public async Task Migration_0007_activated_exactly_the_23_proposals_approved_by_the_owner() =>
+        Assert.Equal("23|23", await db.ScalarAsync<string>("""
+            SELECT count(*) FILTER (WHERE active) || '|' || count(*) FROM hazem.approved_texts
+             WHERE source LIKE 'proposal TASK 04%' AND updated_by = 'owner approval 2026-10-22'
+            """));
 
     [Theory]
     [InlineData("persons")]

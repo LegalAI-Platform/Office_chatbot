@@ -176,8 +176,8 @@ check "classifier on the real OpenAI URL (OPENAI_BASE_URL empty or the default)"
   bash -c '[[ -z "${OPENAI_BASE_URL:-}" || "$OPENAI_BASE_URL" == "https://api.openai.com/v1" ]]'
 check "no AI test stub left behind (ai.stub_enabled = false, ai.stub_base_url empty)" \
   sql_equals office "SELECT string_agg(key || '=' || value, ',' ORDER BY key) FROM hazem.settings WHERE key IN ('ai.stub_enabled', 'ai.stub_base_url')" "ai.stub_base_url=,ai.stub_enabled=false"
-check "no active approved text has an unfilled placeholder ({{...}} or [...])" \
-  sql_equals office "SELECT count(*) FROM hazem.approved_texts WHERE active AND text ~ '\{\{|\['" "0"
+check "no active approved text has an unfilled office placeholder ({{OFFICE_ADDRESS}}, [..]; system slots like {{media}} are filled by Hazem)" \
+  sql_equals office "SELECT count(*) FROM hazem.approved_texts WHERE active AND regexp_replace(text, '\{\{[a-z_]+\}\}', '', 'g') ~ '\{\{|\['" "0"
 check "the classification log has no column for client text or names" \
   sql_equals office "SELECT count(*) FROM information_schema.columns WHERE table_schema = 'hazem' AND table_name = 'classifications' AND column_name ~ '(text|name|message)' AND column_name <> 'full_name_present'" "0"
 if [[ -z "${HAZEM_OPENAI_API_KEY:-}" ]]; then

@@ -69,6 +69,8 @@ sent_texts() {  # sent_texts WA_ID: every text n8n sent to that number, in order
 WELCOME="أهلًا بحضرتك في مكتب الأستاذ سعد فتحي سعد للمحاماة، معاك حازم. ممكن اسم حضرتك رباعي؟"
 OFFER="الأستاذ يقدر يشوف الموضوع مع حضرتك في استشارة: بالتليفون بـ500 أو في المكتب بـ1,000."
 LEGAL="الأستاذ هو اللي هيجاوب حضرتك على ده في الاستشارة."
+UNCLEAR="معلش مش واضحلي المطلوب. ممكن تكتبلي حضرتك محتاج إيه؟"   # approved by the owner (migration 0007)
+UNCLEAR="معلش مش واضحلي المطلوب. ممكن تكتبلي حضرتك محتاج إيه؟"   # approved by the owner (0007)
 stub_log() { curl -s "$STUB/_log"; }
 finish() { echo "Result: $passed passed, $failed failed."; [[ $failed -eq 0 ]]; }
 
@@ -378,8 +380,8 @@ SQL
     ;;
 
   check-hazem-fallback)
-    wait_eq "AI down: the client still gets an answer (the offer, as the unclear fallback)" \
-      "SELECT string_agg(request_payload->'text'->>'body', ' || ') FROM app.wa_outbound_messages WHERE wa_id = '$F' AND idempotency_key LIKE 'hazem:' || (SELECT turn_id FROM app.wa_inbound_messages WHERE wamid = 'wamid.E2E-F4') || ':%'" "$OFFER"
+    wait_eq "AI down: the client still gets an answer (the approved «unclear» text)" \
+      "SELECT string_agg(request_payload->'text'->>'body', ' || ') FROM app.wa_outbound_messages WHERE wa_id = '$F' AND idempotency_key LIKE 'hazem:' || (SELECT turn_id FROM app.wa_inbound_messages WHERE wamid = 'wamid.E2E-F4') || ':%'" "$UNCLEAR"
     wait_eq "AI down: classified as other with the reason" \
       "SELECT intent || '/' || fallback_reason FROM hazem.classifications WHERE turn_id = (SELECT turn_id FROM app.wa_inbound_messages WHERE wamid = 'wamid.E2E-F4')" "other/error"
     curl -s -X POST "$STUB/_ai/up" >/dev/null
