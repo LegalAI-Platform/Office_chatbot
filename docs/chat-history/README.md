@@ -15,6 +15,10 @@ cleaned before it was added:
 | `2026-10-22-main-chat-al-shat-al-harfi.zip` | «الشات الحرفي بكل التفاصيل»: TASK 00–02, the first .NET attempt |
 | `2026-10-22-side-chat-backend-and-tasks.zip` | «هو انت هتعمل ال باك اند ب اي ؟؟»: back to n8n, v1.3 (n8n + .NET), TASK 03, v1.4, TASK 04 prompt |
 
+The session after these (TASK 04 execution, PRs #1–#3, TASK 05a, DECISIONS v1.5/v1.6) is not
+exported here: it held a pasted API key. Its handoff, without secrets, is
+`docs/sessions/2026-10-22-sessioncloudchatamin-handoff.md`.
+
 Each zip holds `transcript.jsonl` (one JSON object per message) and the session metadata.
 The decisions themselves live in `docs/decisions/` and the summaries in `docs/sessions/`;
 read those first. The raw, uncleaned exports stay only on the owner's machine.
