@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json.Nodes;
 using Npgsql;
+using Office.Infrastructure.Ai;
 
 namespace Office.IntegrationTests;
 
@@ -151,7 +152,7 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
         await Say("محمد أحمد علي حسن");
         var rows = await db.ScalarAsync<string>("SELECT string_agg(row_to_json(c)::text, '\n') FROM hazem.classifications c");
         Assert.Contains("\"full_name_present\":true", rows);
-        Assert.Contains("\"prompt_version\":\"classify-v1\"", rows);
+        Assert.Contains($"\"prompt_version\":\"{OpenAiIntentClassifier.PromptVersion}\"", rows);
         var logs = string.Join("\n", _factory.Logs.Lines);
         foreach (var secret in new[] { "TEXT-SECRET", "محمد", "CONTACT-SECRET", Client, ApiFactory.OpenAiKey })
         {

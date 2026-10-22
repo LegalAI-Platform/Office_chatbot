@@ -32,9 +32,9 @@ fields. It never writes a word the client sees: every reply is an approved text
 
 - OpenAI Chat Completions, **Structured Outputs** (`response_format: json_schema`, `strict: true`,
   `additionalProperties: false`, every field required, enums = the lists above), `temperature: 0`.
-- Prompt: `backend/src/Office.Infrastructure/Ai/prompts/classify-v1.md`, embedded in the build.
-  Its version (`classify-v1`) is saved with every classification. **Change the prompt = a new
-  file `classify-v2.md` and a new `PromptVersion`**, then run `classify-eval` again.
+- Prompt: `backend/src/Office.Infrastructure/Ai/prompts/classify-v2.md` (v1 kept as history), embedded in the build.
+  Its version (`classify-v2`) is saved with every classification. **Change the prompt = a new
+  file (`classify-v3.md` next) and a new `PromptVersion`**, then run `classify-eval` again.
 - Model: `OPENAI_MODEL`. Empty = `gpt-4.1-mini`, **a starting point only**. The final model is
   chosen by the owner after `classify-eval` (T-08).
 - Key: `HAZEM_OPENAI_API_KEY` in `.env` — the .NET key, separate from n8n's voice key. It may be
@@ -88,4 +88,34 @@ Options: `--model gpt-…` (try another model without changing `.env`), `--limit
 cost. The output: accuracy overall and per intent, the confusion matrix, the mistakes by sample
 id, fallbacks, average latency and tokens. The real key is used; the test stub is ignored.
 
-**The final model needs this run with a real key** (not done in TASK 04: there is no key yet).
+The output also lists `service_mistakes` (expected vs. got service, by sample id).
+
+### Results (2026-10-22, `gpt-4.1-mini`, 156 samples, real key)
+
+| Prompt | Intent accuracy | Service accuracy | Avg latency | Tokens in / out | Fallbacks |
+|---|---|---|---|---|---|
+| `classify-v1` | 94.9% (8 wrong) | 73.3% | 895 ms | 146k / 4.3k | 0 |
+| `classify-v2` | 98.7% (2 wrong) | 83.3% | 868 ms | 235k / 4.3k | 0 |
+| **`classify-v3`** (in use) | **100%** | **100%** | 918 ms | 260k / 4.3k | 0 |
+
+**Hold-out set** (`docs/ai/eval-holdout.jsonl`, 40 new messages written after v2, in other words
+than the first set, never used to tune a prompt): v2 = 97.5% intent / 100% service, v3 = 97.5% /
+100%. The one miss in both: «انتو بتشتغلو قضايا ايه» → `legal_question` (expected `other`); the
+reply is the B-20 sentence + the offer, which is acceptable. **Do not tune prompts on the
+hold-out set**, or it stops measuring anything; add new hold-out samples instead.
+
+- v3 adds: «الو / مين معايا» are not greetings; «العاجلة» as the name of the service is a price
+  question, not urgency; a price question about a named thing always carries its service; with
+  two services, the first one written.
+
+- v2 adds explicit rules: every Urfi wish is a service (also when phrased as a question), "take my
+  case" is `case_representation` (not an existing matter), urgency wins, "talk to the lawyer about
+  my problem" is a consultation, and a synonym table for `service`.
+- Remaining misses are harmless for the reply: «الاستشارة العاجلة بكام» → `urgent` (the reply is the
+  urgent price + the offer anyway); «الو» → greeting; «الاستشارة بكام» with no service → the offer,
+  which carries the prices.
+- v2 is about 60% longer (≈1,500 input tokens per turn); still a few cents per 1,000 turns at
+  `gpt-4.1-mini` prices — check OpenAI's current price page.
+- **Caution:** the samples were written by us and v2's rules were written after seeing v1's
+  mistakes, so real clients may score lower. Re-run on real (anonymised, owner-approved) samples
+  once Meta is live.

@@ -158,7 +158,7 @@ public sealed class UnderstandingTests
         var outcome = await classifier.ClassifyAsync("ينفع أطلق؟", Settings, CancellationToken.None);
 
         Assert.Equal("legal_question", outcome.Answer?.Intent);
-        Assert.Equal((321, 12, "classify-v1"), (outcome.InputTokens!.Value, outcome.OutputTokens!.Value, outcome.PromptVersion));
+        Assert.Equal((321, 12, OpenAiIntentClassifier.PromptVersion), (outcome.InputTokens!.Value, outcome.OutputTokens!.Value, outcome.PromptVersion));
         var body = JsonNode.Parse(Assert.Single(http.Calls).Body)!;
         Assert.Equal(0, (int)body["temperature"]!);
         Assert.Equal("json_schema", (string?)body["response_format"]!["type"]);
