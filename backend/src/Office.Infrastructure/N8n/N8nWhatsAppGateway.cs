@@ -1,7 +1,8 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
-using Office.Core.Hazem;
+using Office.Application.Ports;
+using Office.Infrastructure.Json;
 
 namespace Office.Infrastructure.N8n;
 

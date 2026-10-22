@@ -7,6 +7,8 @@
 #   5. two texts and a photo within 8 s -> one turn, one reply; the photo in office-sensitive
 #   6. PDF, voice note (transcribed by the stub), too large, wrong sha256, forbidden type
 #   7. a turn left processing while n8n restarts -> taken again, one reply
+#   8. TASK 04: Hazem answers from approved texts (welcome, name, offer, B-20), a photo never
+#      reaches the AI, a phone number is masked, and the AI stub down still gets an answer
 # Meta and OpenAI are the meta-stub container (profile tests). If meta-whatsapp-token or
 # openai-transcription do not exist, temporary ones (fixed test ids) are created and removed
 # again; existing (real) credentials are never touched. Everything is restored at the end.
@@ -93,3 +95,17 @@ docker compose up -d --wait n8n >/dev/null 2>&1
 sleep 22   # whatsapp.turn_stale_seconds is 20 during this step
 forward
 step check-stale || failed=1
+
+echo "==== 8. TASK 04: Hazem understands (AI stub) and answers from approved texts"
+step hazem-setup
+forward
+step check-hazem-welcome || failed=1
+step hazem-name
+forward
+step check-hazem-offer || failed=1
+step hazem-legal
+forward
+step check-hazem-legal || failed=1
+step hazem-ai-down
+forward
+step check-hazem-fallback || failed=1

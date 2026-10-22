@@ -1,4 +1,8 @@
-using Office.Core.Hazem;
+using Office.Api.Contracts;
+using Office.Application.Ports;
+using Office.Application.Responders;
+using Office.Application.Turns;
+using Office.Application.UseCases;
 
 namespace Office.UnitTests;
 
@@ -118,15 +122,15 @@ public sealed class TurnShapeTests
     public void Echo_for_voice_quotes_the_first_60_characters()
     {
         var text = string.Concat(Enumerable.Repeat("أ", 80));
-        var action = Assert.Single(TurnResponder.Decide(Turn(Text(), Voice(new TurnTranscript("done", text, "ar"))), Echo).Actions);
-        Assert.Equal(TurnResponder.EchoVoicePrefix + text[..60], action.Text);
+        var action = Assert.Single(EchoResponder.Decide(Turn(Text(), Voice(new TurnTranscript("done", text, "ar"))).ToTurn(), Echo).Actions);
+        Assert.Equal(EchoResponder.EchoVoicePrefix + text[..60], action.Text);
         Assert.Equal("wamid.v", action.ContextWamid);
     }
 
     [Fact]
     public void Echo_for_media_names_the_type_once_per_turn()
     {
-        var action = Assert.Single(TurnResponder.Decide(Turn(Text("wamid.1"), Text("wamid.2"), Image(StoredImage)), Echo).Actions);
+        var action = Assert.Single(EchoResponder.Decide(Turn(Text("wamid.1"), Text("wamid.2"), Image(StoredImage)).ToTurn(), Echo).Actions);
         Assert.Equal("تم استلام الصورة (اختبار) ✅", action.Text);
         Assert.Equal("hazem:wt:1:0", action.IdempotencyKey);
     }
@@ -134,11 +138,11 @@ public sealed class TurnShapeTests
     [Fact]
     public void Echo_for_a_failed_transcript_falls_back_to_the_media_name()
     {
-        var action = Assert.Single(TurnResponder.Decide(Turn(Voice(new TurnTranscript("failed", null, "ar"))), Echo).Actions);
+        var action = Assert.Single(EchoResponder.Decide((Turn(Voice(new TurnTranscript("failed", null, "ar")))).ToTurn(), Echo).Actions);
         Assert.Equal("تم استلام الرسالة الصوتية (اختبار) ✅", action.Text);
     }
 
     [Fact]
     public void Without_echo_media_gets_no_answer() =>
-        Assert.Empty(TurnResponder.Decide(Turn(Image(StoredImage)), new HazemSettings(new Dictionary<string, string>())).Actions);
+        Assert.Empty(EchoResponder.Decide((Turn(Image(StoredImage))).ToTurn(), new HazemSettings(new Dictionary<string, string>())).Actions);
 }

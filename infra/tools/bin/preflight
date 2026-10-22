@@ -49,6 +49,12 @@ for v in HAZEM_API_TOKEN N8N_INTERNAL_SEND_TOKEN; do
   [[ "${!v:-}" =~ ^[A-Za-z0-9_-]{32,}$ ]] || err "$v must be at least 32 letters, digits, '_' or '-'"
 done
 [[ "${HAZEM_API_TOKEN:-}" != "${N8N_INTERNAL_SEND_TOKEN:-}" ]] || err "HAZEM_API_TOKEN and N8N_INTERNAL_SEND_TOKEN must be different"
+# TASK 04: the .NET OpenAI key may be empty (classification off); when set it must be a real value.
+if [[ -n "${HAZEM_OPENAI_API_KEY:-}" ]]; then
+  [[ "$HAZEM_OPENAI_API_KEY" == *CHANGE_ME* ]] && err "HAZEM_OPENAI_API_KEY still contains CHANGE_ME"
+  [[ "$HAZEM_OPENAI_API_KEY" =~ ^[A-Za-z0-9_-]{20,}$ ]] || err "HAZEM_OPENAI_API_KEY must be at least 20 letters, digits, '_' or '-'"
+fi
+[[ -z "${OPENAI_BASE_URL:-}" || "$OPENAI_BASE_URL" =~ ^https?://[^[:space:]]+$ ]] || err "OPENAI_BASE_URL must be an http(s) URL"
 [[ "${GARAGE_RPC_SECRET:-}" =~ ^[0-9a-f]{64}$ ]] || err "GARAGE_RPC_SECRET must be exactly 64 lowercase hex characters"
 
 for v in S3_N8N_ACCESS_KEY_ID S3_BACKUP_ACCESS_KEY_ID; do

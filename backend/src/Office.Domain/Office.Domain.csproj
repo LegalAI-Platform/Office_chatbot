@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Entities, state machines (DECISIONS S-01..S-06) and value objects. No dependency at all:
+       no EF Core, no ASP.NET Core, no HTTP. -->
+  <PropertyGroup>
+    <RootNamespace>Office.Domain</RootNamespace>
+  </PropertyGroup>
+</Project>

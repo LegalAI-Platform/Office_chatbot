@@ -3,7 +3,10 @@ using System.Net.Http.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
-using Office.Core.Hazem;
+using Office.Application.Ports;
+using Office.Application.Responders;
+using Office.Application.Turns;
+using Office.Application.UseCases;
 using Office.Infrastructure.N8n;
 
 namespace Office.IntegrationTests;
@@ -21,6 +24,7 @@ public sealed class HazemApiTests(TestDatabase db) : IAsyncLifetime
     {
         await db.ExecAsync("TRUNCATE hazem.turns, hazem.send_results");
         await db.SetEchoAsync(false, "");
+        await db.SetAsync("responder", "echo"); // these are the TASK 02/03 echo tests (TASK 04: responder setting)
         _factory = new ApiFactory(db);
         _n8n = _factory.CreateN8nClient();
     }
@@ -107,7 +111,7 @@ public sealed class HazemApiTests(TestDatabase db) : IAsyncLifetime
         var (_, first) = await PostTurn(_n8n, Turn("wa:echo"));
         var action = Assert.Single(first!["actions"]!.AsArray())!;
         Assert.Equal("send_text", (string?)action["type"]);
-        Assert.Equal(TurnResponder.EchoText, (string?)action["text"]);
+        Assert.Equal(EchoResponder.EchoText, (string?)action["text"]);
         Assert.Equal("hazem:wa:echo:0", (string?)action["idempotency_key"]);
         Assert.Equal("wamid.wa:echo", (string?)action["context_wamid"]);
 
@@ -174,7 +178,7 @@ public sealed class HazemApiTests(TestDatabase db) : IAsyncLifetime
         var (status, body) = await PostTurn(_n8n, MediaTurn("wt:00000000-0000-0000-0000-000000000001"));
         Assert.Equal(HttpStatusCode.OK, status);
         var action = Assert.Single(body!["actions"]!.AsArray())!;
-        Assert.StartsWith(TurnResponder.EchoVoicePrefix + "TRANSCRIPT-SECRET", (string?)action["text"]);
+        Assert.StartsWith(EchoResponder.EchoVoicePrefix + "TRANSCRIPT-SECRET", (string?)action["text"]);
         Assert.Equal("4|office-sensitive|too_large", await db.ScalarAsync<string>("""
             SELECT jsonb_array_length(messages) || '|' || (messages->1->'media'->>'bucket') || '|' || (messages->2->'media'->>'status')
               FROM hazem.turns WHERE turn_id = 'wt:00000000-0000-0000-0000-000000000001'
@@ -237,8 +241,8 @@ public sealed class HazemApiTests(TestDatabase db) : IAsyncLifetime
     public async Task Outbound_send_calls_n8n_with_its_own_token_and_records_the_result()
     {
         using var scope = _factory.Services.CreateScope();
-        var result = await scope.ServiceProvider.GetRequiredService<OutboundService>().SendAsync(
-            new OutboundMessage(TurnAction.SendText, Recipient, "test:outbound:1", "integration-test", Text: "hello"), Ct);
+        var result = await scope.ServiceProvider.GetRequiredService<SendOutbound>().SendAsync(
+            new OutboundMessage(ActionType.SendText, Recipient, "test:outbound:1", "integration-test", Text: "hello"), Ct);
 
         Assert.True(result.Ok);
         var call = Assert.Single(_factory.N8n.Requests);
@@ -256,8 +260,8 @@ public sealed class HazemApiTests(TestDatabase db) : IAsyncLifetime
     {
         _factory.N8n.Responder = _ => new HttpResponseMessage(HttpStatusCode.Forbidden);
         using var scope = _factory.Services.CreateScope();
-        var result = await scope.ServiceProvider.GetRequiredService<OutboundService>().SendAsync(
-            new OutboundMessage(TurnAction.SendText, Recipient, "test:outbound:403", "integration-test", Text: "hello"), Ct);
+        var result = await scope.ServiceProvider.GetRequiredService<SendOutbound>().SendAsync(
+            new OutboundMessage(ActionType.SendText, Recipient, "test:outbound:403", "integration-test", Text: "hello"), Ct);
 
         Assert.False(result.Ok);
         Assert.Equal("N8N_HTTP_403", result.ErrorCode);

@@ -5,7 +5,8 @@ ENV DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1
 
 # Restore first so package downloads are cached between code changes.
 COPY global.json NuGet.config Directory.Build.props Directory.Packages.props Office.sln ./
-COPY src/Office.Core/Office.Core.csproj src/Office.Core/
+COPY src/Office.Domain/Office.Domain.csproj src/Office.Domain/
+COPY src/Office.Application/Office.Application.csproj src/Office.Application/
 COPY src/Office.Infrastructure/Office.Infrastructure.csproj src/Office.Infrastructure/
 COPY src/Office.Api/Office.Api.csproj src/Office.Api/
 COPY src/Office.Cli/Office.Cli.csproj src/Office.Cli/

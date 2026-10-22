@@ -1,0 +1,240 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json.Nodes;
+using Npgsql;
+
+namespace Office.IntegrationTests;
+
+/// <summary>
+/// TASK 04 through the real API and database: responder hazem, OpenAI faked at the HTTP boundary.
+/// Same collection as HazemApiTests: they share the settings table, so they never run at once.
+/// </summary>
+[Collection(nameof(HazemApiTests))]
+public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
+{
+    private const string Client = "201000000071";
+    private const string Welcome = "أهلًا بحضرتك في مكتب الأستاذ سعد فتحي سعد للمحاماة، معاك حازم. ممكن اسم حضرتك رباعي؟";
+    private const string Offer = "الأستاذ يقدر يشوف الموضوع مع حضرتك في استشارة: بالتليفون بـ500 أو في المكتب بـ1,000.";
+    private ApiFactory _factory = null!;
+    private HttpClient _n8n = null!;
+    private int _n;
+    private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    public async ValueTask InitializeAsync()
+    {
+        await db.ExecAsync("""
+            TRUNCATE hazem.turns, hazem.send_results, hazem.turn_replies, hazem.classifications, hazem.pending_tasks;
+            DELETE FROM hazem.intakes; DELETE FROM hazem.conversations; DELETE FROM hazem.persons;
+            """);
+        await db.SetAsync("responder", "hazem");
+        await db.SetAsync("hazem.recipients", Client);
+        await db.SetAsync("hazem.open_to_all", "false");
+        _factory = new ApiFactory(db);
+        _n8n = _factory.CreateN8nClient();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _n8n.Dispose();
+        await _factory.DisposeAsync();
+        await db.SetAsync("responder", "hazem");
+        await db.SetAsync("hazem.recipients", "");
+    }
+
+    private async Task<JsonNode> Post(JsonArray messages, string waId = Client)
+    {
+        var r = await _n8n.PostAsJsonAsync("/api/hazem/turns", new JsonObject
+        {
+            ["turn_id"] = $"wt:00000000-0000-0000-0004-{++_n:D12}",
+            ["wa_id"] = waId,
+            ["contact_name"] = "CONTACT-SECRET",
+            ["messages"] = messages,
+        }, Ct);
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        return (await r.Content.ReadFromJsonAsync<JsonNode>(Ct))!;
+    }
+
+    private Task<JsonNode> Say(string text, string waId = Client) => Post(new JsonArray(new JsonObject
+    {
+        ["wamid"] = $"wamid.T04-{_n + 1}", ["type"] = "text", ["text"] = text, ["sent_at"] = "2026-10-22T12:00:00+03:00", ["context_wamid"] = null,
+    }), waId);
+
+    private static List<string?> Texts(JsonNode response) => response["actions"]!.AsArray().Select(a => (string?)a!["text"]).ToList();
+
+    [Fact]
+    public async Task Booking_request_then_the_name_gets_the_offer_without_asking_again()
+    {
+        Assert.Equal([Welcome], Texts(await Say("السلام عليكم عايز أحجز استشارة")));
+        Assert.Equal([Offer], Texts(await Say("محمد أحمد علي حسن")));
+
+        Assert.Equal("محمد أحمد علي حسن|true|bot_active|offer_sent|new_client|", await db.ScalarAsync<string>($"""
+            SELECT p.name_normalized || '|' || p.full_name_provided || '|' || c.state || '|' || i.state || '|' || i.client_type || '|' || COALESCE(i.pending_intent, '')
+              FROM hazem.persons p JOIN hazem.conversations c ON c.person_id = p.id JOIN hazem.intakes i ON i.person_id = p.id
+             WHERE p.wa_id = '{Client}'
+            """));
+        Assert.Equal("welcome_ask_name:1,consultation_offer:1", await db.ScalarAsync<string>(
+            "SELECT string_agg(text_key || ':' || text_version, ',' ORDER BY created_at, idempotency_key) FROM hazem.turn_replies"));
+    }
+
+    [Fact]
+    public async Task Legal_question_gets_b20_and_the_offer()
+    {
+        await Say("السلام عليكم");
+        await Say("محمد أحمد علي حسن");
+        Assert.Equal(["الأستاذ هو اللي هيجاوب حضرتك على ده في الاستشارة.", Offer], Texts(await Say("ينفع أطلق؟")));
+    }
+
+    [Fact]
+    public async Task Ai_down_still_answers()
+    {
+        await Say("السلام عليكم");
+        await Say("محمد أحمد علي حسن");
+        _factory.OpenAi.Down = true;
+        Assert.Equal([Offer], Texts(await Say("عايز أحجز")));
+        Assert.Equal("other|error", await db.ScalarAsync<string>(
+            "SELECT intent || '|' || fallback_reason FROM hazem.classifications ORDER BY created_at DESC LIMIT 1"));
+    }
+
+    [Fact]
+    public async Task Human_request_records_a_task_and_sends_nothing_until_its_text_is_approved()
+    {
+        await Say("السلام عليكم");
+        await Say("محمد أحمد علي حسن");
+        Assert.Empty(Texts(await Say("عايز أكلم موظف")));
+        Assert.Equal("human_requested|open", await db.ScalarAsync<string>("SELECT kind || '|' || status FROM hazem.pending_tasks"));
+
+        await db.ExecAsync("UPDATE hazem.approved_texts SET active = true WHERE key = 'human_request'");
+        try
+        {
+            Assert.Equal(["تمام، هبلّغ المكتب إن حضرتك عايز تكلم حد."], Texts(await Say("عايز أكلم موظف تاني")));
+        }
+        finally
+        {
+            await db.ExecAsync("UPDATE hazem.approved_texts SET active = false WHERE key = 'human_request'");
+        }
+    }
+
+    [Fact]
+    public async Task T09_a_photo_reaches_no_ai_and_the_ai_never_sees_numbers_or_file_fields()
+    {
+        await Post(new JsonArray(new JsonObject
+        {
+            ["wamid"] = "wamid.T04-img", ["type"] = "image", ["caption"] = null, ["sent_at"] = "2026-10-22T12:00:00+03:00",
+            ["media"] = new JsonObject
+            {
+                ["status"] = "stored", ["bucket"] = "office-sensitive", ["key"] = "wa/2026/10/abc.jpg",
+                ["mime_type"] = "image/jpeg", ["size_bytes"] = 10, ["sha256"] = "ab", ["filename"] = "FILENAME-SECRET.jpg",
+            },
+        }));
+        Assert.Empty(_factory.OpenAi.Requests);
+
+        await Post(new JsonArray(
+            new JsonObject { ["wamid"] = "wamid.T04-t", ["type"] = "text", ["text"] = "عايز أحجز رقمي 01012345678", ["sent_at"] = "2026-10-22T12:00:00+03:00" },
+            new JsonObject
+            {
+                ["wamid"] = "wamid.T04-d", ["type"] = "document", ["caption"] = "العقد", ["sent_at"] = "2026-10-22T12:00:01+03:00",
+                ["media"] = new JsonObject { ["status"] = "stored", ["bucket"] = "office-sensitive", ["key"] = "wa/2026/10/KEY-SECRET.pdf", ["filename"] = "FILENAME-SECRET.pdf", ["mime_type"] = "application/pdf" },
+            }));
+        var (auth, seen) = Assert.Single(_factory.OpenAi.Requests);
+        Assert.Equal("Bearer " + ApiFactory.OpenAiKey, auth);
+        Assert.Equal("عايز أحجز رقمي [رقم]\nالعقد", seen);
+        foreach (var leak in new[] { "0101", "KEY-SECRET", "FILENAME-SECRET", "office-sensitive", "application/pdf", "wa/2026" })
+        {
+            Assert.DoesNotContain(leak, seen);
+        }
+    }
+
+    [Fact]
+    public async Task Classification_log_and_api_logs_hold_no_client_text_and_no_name()
+    {
+        await Say("السلام عليكم TEXT-SECRET");
+        await Say("محمد أحمد علي حسن");
+        var rows = await db.ScalarAsync<string>("SELECT string_agg(row_to_json(c)::text, '\n') FROM hazem.classifications c");
+        Assert.Contains("\"full_name_present\":true", rows);
+        Assert.Contains("\"prompt_version\":\"classify-v1\"", rows);
+        var logs = string.Join("\n", _factory.Logs.Lines);
+        foreach (var secret in new[] { "TEXT-SECRET", "محمد", "CONTACT-SECRET", Client, ApiFactory.OpenAiKey })
+        {
+            Assert.DoesNotContain(secret, rows);
+            Assert.DoesNotContain(secret, logs);
+        }
+    }
+
+    [Fact]
+    public async Task A_number_outside_hazem_recipients_gets_no_answer()
+    {
+        Assert.Empty(Texts(await Say("السلام عليكم", waId: "201000000079")));
+        Assert.Empty(_factory.OpenAi.Requests);
+        Assert.Equal(0L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.persons"));
+    }
+
+    [Fact]
+    public async Task Replayed_turn_returns_the_same_actions_and_changes_nothing_twice()
+    {
+        var turn = new JsonObject
+        {
+            ["turn_id"] = "wt:00000000-0000-0000-0004-999999999999", ["wa_id"] = Client,
+            ["messages"] = new JsonArray(new JsonObject { ["wamid"] = "wamid.T04-r", ["type"] = "text", ["text"] = "السلام عليكم" }),
+        };
+        var results = await Task.WhenAll(Enumerable.Range(0, 6).Select(_ => _n8n.PostAsJsonAsync("/api/hazem/turns", turn, Ct)));
+        Assert.All(results, r => Assert.Equal(HttpStatusCode.OK, r.StatusCode));
+        Assert.Equal("1|1|1|1", await db.ScalarAsync<string>("""
+            SELECT (SELECT count(*) FROM hazem.turns) || '|' || (SELECT count(*) FROM hazem.persons) || '|' ||
+                   (SELECT count(*) FROM hazem.turn_replies) || '|' || (SELECT name_asks FROM hazem.intakes)
+            """));
+    }
+
+    // ---------- migration 0005 ----------
+
+    [Fact]
+    public async Task Every_active_text_is_word_for_word_in_decisions_v14()
+    {
+        var decisions = await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.4.md"), Ct);
+        await using var c = new NpgsqlConnection(db.ApiConnectionString);
+        await c.OpenAsync(Ct);
+        await using var cmd = new NpgsqlCommand("SELECT key, text FROM hazem.approved_texts WHERE active", c);
+        await using var r = await cmd.ExecuteReaderAsync(Ct);
+        var count = 0;
+        while (await r.ReadAsync(Ct))
+        {
+            count++;
+            Assert.True(decisions.Contains(r.GetString(1), StringComparison.Ordinal), $"{r.GetString(0)} is not word for word in DECISIONS v1.4");
+        }
+
+        Assert.Equal(8, count);
+    }
+
+    [Fact]
+    public async Task No_active_text_has_an_open_placeholder() =>
+        Assert.Equal(0L, await db.ScalarAsync<long>(@"SELECT count(*) FROM hazem.approved_texts WHERE active AND text ~ '\{\{|\['"));
+
+    [Theory]
+    [InlineData("persons")]
+    [InlineData("approved_texts")]
+    [InlineData("classifications")]
+    public async Task Office_app_is_blocked_and_readonly_can_read_the_new_tables(string table)
+    {
+        await using (var app = new NpgsqlConnection(db.AppConnectionString))
+        {
+            await app.OpenAsync(Ct);
+            await using var cmd = new NpgsqlCommand($"SELECT count(*) FROM hazem.{table}", app);
+            Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, (await Assert.ThrowsAsync<PostgresException>(() => cmd.ExecuteScalarAsync(Ct))).SqlState);
+        }
+
+        Assert.True(await db.ScalarAsync<bool>($"SELECT has_table_privilege('office_readonly', 'hazem.{table}', 'SELECT') AND NOT has_table_privilege('office_readonly', 'hazem.{table}', 'INSERT') AND has_table_privilege('office_api', 'hazem.{table}', 'INSERT')"));
+    }
+
+    private static string RepoFile(params string[] parts)
+    {
+        for (var dir = new DirectoryInfo(Environment.GetEnvironmentVariable("OFFICE_TEST_REPO_DIR") ?? AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+        {
+            var candidate = Path.Combine([dir.FullName, .. parts]);
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        throw new InvalidOperationException($"{Path.Combine(parts)} not found; set OFFICE_TEST_REPO_DIR.");
+    }
+}

@@ -4,12 +4,17 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Office.Core\Office.Core.csproj" />
+    <ProjectReference Include="..\Office.Application\Office.Application.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <!-- Hosting, options and HttpClient factory; also used by Office.Cli. -->
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The classification prompt (its version is logged with every classification). -->
+    <EmbeddedResource Include="Ai\prompts\*.md" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,5 +1,9 @@
 using System.Collections.Concurrent;
-using Office.Core.Hazem;
+using Office.Api.Contracts;
+using Office.Application.Ports;
+using Office.Application.Responders;
+using Office.Application.Turns;
+using Office.Application.UseCases;
 
 namespace Office.UnitTests;
 
@@ -46,30 +50,30 @@ public sealed class HazemRulesTests
     [Fact]
     public void Echo_is_off_by_default()
     {
-        var (responder, actions) = TurnResponder.Decide(Turn(), new HazemSettings(new Dictionary<string, string>()));
-        Assert.Equal(TurnResponder.None, responder);
+        var (responder, actions, _, _) = EchoResponder.Decide((Turn()).ToTurn(), new HazemSettings(new Dictionary<string, string>()));
+        Assert.Equal(TurnDecision.None, responder);
         Assert.Empty(actions);
     }
 
     [Fact]
     public void Echo_answers_a_listed_number_once_with_a_stable_key()
     {
-        var (responder, actions) = TurnResponder.Decide(Turn(), Settings(echo: true, recipients: $"201000000099, {Recipient}"));
-        Assert.Equal(TurnResponder.Echo, responder);
+        var (responder, actions, _, _) = EchoResponder.Decide((Turn()).ToTurn(), Settings(echo: true, recipients: $"201000000099, {Recipient}"));
+        Assert.Equal(EchoResponder.ResponderName, responder);
         var action = Assert.Single(actions);
-        Assert.Equal(TurnAction.SendText, action.Type);
-        Assert.Equal(TurnResponder.EchoText, action.Text);
+        Assert.Equal(ActionType.SendText, action.Type);
+        Assert.Equal(EchoResponder.EchoText, action.Text);
         Assert.Equal("hazem:wa:wamid.1:0", action.IdempotencyKey);
         Assert.Equal("wamid.1", action.ContextWamid);
     }
 
     [Fact]
     public void Echo_never_answers_a_number_that_is_not_listed() =>
-        Assert.Empty(TurnResponder.Decide(Turn(waId: "201000000077"), Settings(echo: true)).Actions);
+        Assert.Empty(EchoResponder.Decide((Turn(waId: "201000000077")).ToTurn(), Settings(echo: true)).Actions);
 
     [Fact]
     public void Echo_ignores_turns_without_text() =>
-        Assert.Empty(TurnResponder.Decide(Turn(text: null), Settings(echo: true)).Actions);
+        Assert.Empty(EchoResponder.Decide((Turn(text: null)).ToTurn(), Settings(echo: true)).Actions);
 
     [Fact]
     public void Phone_numbers_are_masked_in_logs() => Assert.Equal("*********041", TurnRules.Mask(Recipient));
@@ -79,14 +83,14 @@ public sealed class HazemRulesTests
     {
         var store = new MemoryTurnStore();
         var settings = new MutableSettings(Settings(echo: true));
-        var service = new TurnService(store, settings);
+        var service = new HandleTurn(store, settings, new EchoOnly());
 
-        var first = await service.HandleAsync(Turn(), CancellationToken.None);
+        var first = await service.HandleAsync(Turn().ToTurn(), CancellationToken.None);
         settings.Current = Settings(echo: false); // a later change must not alter a replayed turn
-        var second = await service.HandleAsync(Turn(), CancellationToken.None);
+        var second = await service.HandleAsync(Turn().ToTurn(), CancellationToken.None);
 
-        Assert.Equal(TurnResponse.Processed, first.Status);
-        Assert.Equal(TurnResponse.Duplicate, second.Status);
+        Assert.Equal(TurnStatus.Processed, first.Status);
+        Assert.Equal(TurnStatus.Duplicate, second.Status);
         Assert.Equal(first.Actions, second.Actions);
         Assert.Single(store.Rows);
     }
@@ -95,8 +99,13 @@ public sealed class HazemRulesTests
     public async Task Race_between_two_identical_turns_ends_as_one_duplicate()
     {
         var store = new MemoryTurnStore { LoseNextInsert = true };
-        var response = await new TurnService(store, new MutableSettings(Settings(echo: true))).HandleAsync(Turn(), CancellationToken.None);
-        Assert.Equal(TurnResponse.Duplicate, response.Status);
+        var response = await new HandleTurn(store, new MutableSettings(Settings(echo: true)), new EchoOnly()).HandleAsync(Turn().ToTurn(), CancellationToken.None);
+        Assert.Equal(TurnStatus.Duplicate, response.Status);
+    }
+
+    private sealed class EchoOnly : IResponderSelector
+    {
+        public ITurnResponder Select(HazemSettings settings) => new EchoResponder();
     }
 
     private sealed class MutableSettings(HazemSettings current) : ISettingsReader
@@ -115,7 +124,7 @@ public sealed class HazemRulesTests
         public Task<StoredTurn?> FindAsync(string turnId, CancellationToken ct) =>
             Task.FromResult(Rows.TryGetValue(turnId, out var t) ? t : null);
 
-        public Task<bool> TryAddAsync(StoredTurn turn, CancellationToken ct)
+        public Task<bool> TryAddAsync(StoredTurn turn, Office.Application.Conversations.TurnEffects? effects, CancellationToken ct)
         {
             if (LoseNextInsert)
             {

@@ -11,7 +11,9 @@ B=201000000062   # writes while the API is down
 C=201000000063   # two texts and a photo within 8 s -> one turn
 D=201000000064   # PDF, voice note, too large, wrong sha256, forbidden type
 E=201000000065   # turn left processing while n8n restarts
-ALL="'$A','$B','$C','$D','$E'"
+F=201000000066   # TASK 04: booking request -> name -> offer; legal question; AI down
+G=201000000067   # TASK 04: a photo without words never reaches the AI
+ALL="'$A','$B','$C','$D','$E','$F','$G'"
 STUB=http://meta-stub:8080
 
 passed=0; failed=0
@@ -54,6 +56,19 @@ backup_set() {  # backup_set KEY VALUE: remember the original value once, then c
      ON CONFLICT (key) DO NOTHING;
      UPDATE app.settings SET value = '$2', updated_by = 'hazem-e2e' WHERE key = '$1';" >/dev/null
 }
+hazem_backup_set() {  # same as backup_set, for hazem.settings (the API's settings)
+  q "INSERT INTO hazem.settings (key, value, description)
+       SELECT 'e2e.backup.' || key, value, 'hazem-e2e: original value, restored by cleanup'
+         FROM hazem.settings WHERE key = '$1'
+     ON CONFLICT (key) DO NOTHING;
+     UPDATE hazem.settings SET value = '$2', updated_by = 'hazem-e2e' WHERE key = '$1';" >/dev/null
+}
+sent_texts() {  # sent_texts WA_ID: every text n8n sent to that number, in order, joined by " || "
+  q "SELECT string_agg(request_payload->'text'->>'body', ' || ' ORDER BY created_at, idempotency_key) FROM app.wa_outbound_messages WHERE wa_id = '$1'"
+}
+WELCOME="أهلًا بحضرتك في مكتب الأستاذ سعد فتحي سعد للمحاماة، معاك حازم. ممكن اسم حضرتك رباعي؟"
+OFFER="الأستاذ يقدر يشوف الموضوع مع حضرتك في استشارة: بالتليفون بـ500 أو في المكتب بـ1,000."
+LEGAL="الأستاذ هو اللي هيجاوب حضرتك على ده في الاستشارة."
 stub_log() { curl -s "$STUB/_log"; }
 finish() { echo "Result: $passed passed, $failed failed."; [[ $failed -eq 0 ]]; }
 
@@ -65,6 +80,18 @@ case "${1:-}" in
     done < <(q "SELECT w.bucket || '|' || w.object_key FROM app.wa_media w JOIN app.wa_inbound_messages m ON m.id = w.inbound_message_id
                  WHERE m.wa_id IN ($ALL) AND w.object_key IS NOT NULL")
     q "
+      DELETE FROM hazem.turn_replies WHERE turn_id IN (SELECT turn_id FROM hazem.turns WHERE wa_id IN ($ALL));
+      DELETE FROM hazem.classifications WHERE turn_id IN (SELECT turn_id FROM hazem.turns WHERE wa_id IN ($ALL));
+      DELETE FROM hazem.pending_tasks WHERE person_id IN (SELECT id FROM hazem.persons WHERE wa_id IN ($ALL));
+      DELETE FROM hazem.intakes WHERE person_id IN (SELECT id FROM hazem.persons WHERE wa_id IN ($ALL));
+      DELETE FROM hazem.conversations WHERE person_id IN (SELECT id FROM hazem.persons WHERE wa_id IN ($ALL));
+      DELETE FROM hazem.persons WHERE wa_id IN ($ALL);
+      UPDATE hazem.settings s SET value = b.value, updated_by = 'hazem-e2e'
+        FROM hazem.settings b WHERE b.key = 'e2e.backup.' || s.key;
+      DELETE FROM hazem.settings WHERE key LIKE 'e2e.backup.%';
+      UPDATE hazem.settings SET value = 'hazem', updated_by = 'hazem-e2e' WHERE key = 'responder';
+      UPDATE hazem.settings SET value = 'false', updated_by = 'hazem-e2e' WHERE key = 'ai.stub_enabled';
+      UPDATE hazem.settings SET value = '', updated_by = 'hazem-e2e' WHERE key = 'ai.stub_base_url';
       DELETE FROM hazem.send_results WHERE idempotency_key IN
         (SELECT idempotency_key FROM app.wa_outbound_messages WHERE wa_id IN ($ALL));
       DELETE FROM hazem.send_results WHERE idempotency_key LIKE 'e2e:%';
@@ -80,7 +107,7 @@ case "${1:-}" in
       UPDATE app.settings SET value = 'false', updated_by = 'hazem-e2e' WHERE key = 'whatsapp.dry_run';
       UPDATE hazem.settings SET value = 'false', updated_by = 'hazem-e2e' WHERE key = 'echo.enabled';
       UPDATE hazem.settings SET value = '', updated_by = 'hazem-e2e' WHERE key = 'echo.recipients';" >/dev/null
-    echo "cleaned: dummy rows and files deleted, settings restored, dry run and echo switched off"
+    echo "cleaned: dummy rows and files deleted, settings restored, dry run, echo and the AI stub switched off, responder hazem"
     ;;
 
   setup)
@@ -91,6 +118,8 @@ case "${1:-}" in
     if [[ -z "$(q "SELECT value FROM app.settings WHERE key = 'whatsapp.graph_api_version'")" ]]; then
       backup_set whatsapp.graph_api_version v26.0
     fi
+    # Steps 1-7 are the TASK 02/03 loop: they still run with the test echo (TASK 04: responder).
+    hazem_backup_set responder echo
     q "
       UPDATE hazem.settings SET value = 'true', updated_by = 'hazem-e2e' WHERE key = 'echo.enabled';
       UPDATE hazem.settings SET value = '$A,$B,$C,$D,$E', updated_by = 'hazem-e2e' WHERE key = 'echo.recipients';" >/dev/null
@@ -278,16 +307,99 @@ SQL
     finish
     ;;
 
+  # ---------------------------------------------------------------- TASK 04
+  hazem-setup)
+    # Hazem itself answers from now on; the classifier talks to the stub with a dummy key.
+    # HAZEM_OPENAI_API_KEY in .env is never read or changed: the API ignores it while
+    # ai.stub_enabled is true (and honours ai.stub_* only when ENVIRONMENT=test).
+    hazem_backup_set responder hazem
+    hazem_backup_set hazem.recipients "$F,$G"
+    hazem_backup_set ai.stub_enabled true
+    hazem_backup_set ai.stub_base_url "$STUB/v1"
+    curl -s -X POST "$STUB/_log/reset" >/dev/null && curl -s -X POST "$STUB/_ai/up" >/dev/null || die "meta-stub is not running"
+    inject "$F" wamid.E2E-F1 text "$(text "السلام عليكم عايز أحجز استشارة")" 10
+    inject "$G" wamid.E2E-G1 image '{"id":"STUB-IMG","mime_type":"image/jpeg"}' 10
+    echo "responder hazem for $F and $G; a booking request and a photo without words waiting"
+    ;;
+
+  check-hazem-welcome)
+    wait_eq "new number asking to book -> the welcome and the name question (B-01)" \
+      "SELECT COALESCE((SELECT string_agg(request_payload->'text'->>'body', ' || ') FROM app.wa_outbound_messages WHERE wa_id = '$F'), '')" "$WELCOME"
+    wait_eq "the booking request is kept for after the name (B-01.4)" \
+      "SELECT i.state || '/' || COALESCE(i.pending_intent, '') FROM hazem.intakes i JOIN hazem.persons p ON p.id = i.person_id WHERE p.wa_id = '$F'" "awaiting_name/consultation_request"
+    wait_eq "a photo without words from a new number -> the welcome too" \
+      "SELECT COALESCE((SELECT string_agg(request_payload->'text'->>'body', ' || ') FROM app.wa_outbound_messages WHERE wa_id = '$G'), '')" "$WELCOME"
+    log="$(stub_log)"
+    assert_eq "T-09: the photo turn never reached the AI stub (one classification only, the text)" \
+      "$(jq '[.[] | select(.kind == "classification")] | length' <<<"$log")" "1"
+    assert_eq "the AI got Structured Outputs (strict) and only the client's words" \
+      "$(jq -c '[.[] | select(.kind == "classification")][0] | [.strict, .text]' <<<"$log")" '[true,"السلام عليكم عايز أحجز استشارة"]'
+    finish
+    ;;
+
+  hazem-name)
+    inject "$F" wamid.E2E-F2 text "$(text "محمد أحمد علي حسن")" 10
+    echo "the name from $F"
+    ;;
+
+  check-hazem-offer)
+    wait_eq "after the name: the consultation offer, without asking again" \
+      "SELECT COALESCE((SELECT string_agg(request_payload->'text'->>'body', ' || ' ORDER BY created_at) FROM app.wa_outbound_messages WHERE wa_id = '$F'), '')" "$WELCOME || $OFFER"
+    wait_eq "the person has a full name and the request is at offer_sent" \
+      "SELECT p.full_name_provided || '/' || i.state || '/' || i.client_type FROM hazem.persons p JOIN hazem.intakes i ON i.person_id = p.id WHERE p.wa_id = '$F'" "true/offer_sent/new_client"
+    wait_eq "every reply recorded with its approved text key and version" \
+      "SELECT string_agg(r.text_key || ':' || r.text_version, ',' ORDER BY r.created_at) FROM hazem.turn_replies r JOIN hazem.turns t USING (turn_id) WHERE t.wa_id = '$F'" "welcome_ask_name:1,consultation_offer:1"
+    finish
+    ;;
+
+  hazem-legal)
+    inject "$F" wamid.E2E-F3 text "$(text "ينفع أطلق؟ كلمني على 01012345678")" 10
+    echo "a legal question with a phone number from $F"
+    ;;
+
+  check-hazem-legal)
+    wait_eq "legal question -> the B-20 text, then the offer" \
+      "SELECT string_agg(request_payload->'text'->>'body', ' || ' ORDER BY idempotency_key) FROM app.wa_outbound_messages WHERE wa_id = '$F' AND idempotency_key LIKE 'hazem:' || (SELECT turn_id FROM app.wa_inbound_messages WHERE wamid = 'wamid.E2E-F3') || ':%'" "$LEGAL || $OFFER"
+    log="$(stub_log)"
+    assert_eq "the phone number never reached the AI: replaced by [رقم]" \
+      "$(jq -r '[.[] | select(.kind == "classification")] | last | .text' <<<"$log")" "ينفع أطلق؟ كلمني على [رقم]"
+    assert_eq "no digits of a phone, no file field and no Authorization value in anything the stub got" \
+      "$(grep -cE '0101|office-sensitive|wa/20|Bearer|not-a-real-key' <<<"$log")" "0"
+    wait_eq "the classification log holds no client text" \
+      "SELECT count(*) FROM hazem.classifications c JOIN hazem.turns t USING (turn_id) WHERE t.wa_id = '$F' AND row_to_json(c)::text ~ '(أطلق|0101|محمد)'" "0"
+    finish
+    ;;
+
+  hazem-ai-down)
+    curl -s -X POST "$STUB/_ai/down" >/dev/null || die "meta-stub is not running"
+    inject "$F" wamid.E2E-F4 text "$(text "عايز أحجز")" 10
+    echo "the AI stub answers 503; a booking request from $F"
+    ;;
+
+  check-hazem-fallback)
+    wait_eq "AI down: the client still gets an answer (the offer, as the unclear fallback)" \
+      "SELECT string_agg(request_payload->'text'->>'body', ' || ') FROM app.wa_outbound_messages WHERE wa_id = '$F' AND idempotency_key LIKE 'hazem:' || (SELECT turn_id FROM app.wa_inbound_messages WHERE wamid = 'wamid.E2E-F4') || ':%'" "$OFFER"
+    wait_eq "AI down: classified as other with the reason" \
+      "SELECT intent || '/' || fallback_reason FROM hazem.classifications WHERE turn_id = (SELECT turn_id FROM app.wa_inbound_messages WHERE wamid = 'wamid.E2E-F4')" "other/error"
+    curl -s -X POST "$STUB/_ai/up" >/dev/null
+    finish
+    ;;
+
   check-restored)
     assert_eq "settings back to normal: dry run off, stale 300, real Graph and OpenAI URLs, no backups left" \
       "$(q "SELECT string_agg(key || '=' || value, ',' ORDER BY key) FROM app.settings WHERE key IN ('whatsapp.dry_run','whatsapp.turn_stale_seconds','whatsapp.graph_base_url','ai.openai_base_url') OR key LIKE 'e2e.backup.%'")" \
       "ai.openai_base_url=https://api.openai.com/v1,whatsapp.dry_run=false,whatsapp.graph_base_url=https://graph.facebook.com,whatsapp.turn_stale_seconds=300"
+    assert_eq "Hazem settings back: responder hazem, AI stub off, no backups left" \
+      "$(q "SELECT string_agg(key || '=' || value, ',' ORDER BY key) FROM hazem.settings WHERE key IN ('responder','ai.stub_enabled','ai.stub_base_url','echo.enabled') OR key LIKE 'e2e.backup.%'")" \
+      "ai.stub_base_url=,ai.stub_enabled=false,echo.enabled=false,responder=hazem"
+    assert_eq "no test number left in the API's tables" \
+      "$(q "SELECT count(*) FROM hazem.persons WHERE wa_id IN ($ALL)")" "0"
     assert_eq "no test credential left in n8n" \
       "$(psql_super n8n -c "SELECT count(*) FROM credentials_entity WHERE id IN ('TestMetaToken001', 'TestOpenAiKey001')")" "0"
     finish
     ;;
 
   *)
-    die "usage: hazem-e2e setup|check-loop|replay|check-replay|inject-b|check-api-down|check-recovered|check-api-send|check-auth|group-c|check-group|media-d|check-media|stale-e|check-stale|cleanup|remove-test-credentials|check-restored"
+    die "usage: hazem-e2e setup|check-loop|replay|check-replay|inject-b|check-api-down|check-recovered|check-api-send|check-auth|group-c|check-group|media-d|check-media|stale-e|check-stale|cleanup|remove-test-credentials|check-restored|hazem-setup|check-hazem-welcome|hazem-name|check-hazem-offer|hazem-legal|check-hazem-legal|hazem-ai-down|check-hazem-fallback"
     ;;
 esac

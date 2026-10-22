@@ -198,6 +198,10 @@ services:
       Hazem__ApiToken: ${HAZEM_API_TOKEN}
       Hazem__N8nInternalSendUrl: http://n8n:5678/webhook/hazem-internal-send
       Hazem__N8nInternalSendToken: ${N8N_INTERNAL_SEND_TOKEN}
+      # TASK 04 (T-07/T-08): intent classification. An empty key = classification off.
+      Hazem__OpenAiApiKey: ${HAZEM_OPENAI_API_KEY:-}
+      Hazem__OpenAiModel: ${OPENAI_MODEL:-gpt-4.1-mini}
+      Hazem__OpenAiBaseUrl: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
     healthcheck:
       # Process only; /health/ready (database and migration 0003) is checked by the healthcheck job.
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health/live | grep -q Healthy"]

@@ -83,6 +83,9 @@ public sealed class TestDatabase : IAsyncLifetime
         await Exec(c, sql);
     }
 
+    public Task SetAsync(string key, string value) =>
+        ExecAsync($"UPDATE hazem.settings SET value = '{value.Replace("'", "''", StringComparison.Ordinal)}' WHERE key = '{key}'");
+
     public Task SetEchoAsync(bool enabled, string recipients) => ExecAsync($"""
         UPDATE hazem.settings SET value = '{(enabled ? "true" : "false")}' WHERE key = 'echo.enabled';
         UPDATE hazem.settings SET value = '{recipients}' WHERE key = 'echo.recipients';

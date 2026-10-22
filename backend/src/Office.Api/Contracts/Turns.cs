@@ -1,7 +1,10 @@
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Office.Application.Common;
+using Office.Application.Ports;
+using Office.Application.Turns;
 
-namespace Office.Core.Hazem;
+namespace Office.Api.Contracts;
 
 // Contract: docs/hazem-internal-api.md. JSON is snake_case (turn_id, wa_id, ...).
 
@@ -63,26 +66,6 @@ public sealed record TurnResponse(string TurnId, string Status, IReadOnlyList<Tu
     public const string Processed = "processed";
     public const string Duplicate = "duplicate";
 }
-
-/// <summary>A turn as stored in hazem.turns.</summary>
-public sealed record StoredTurn(
-    string TurnId,
-    string WaId,
-    string? ContactName,
-    IReadOnlyList<TurnMessage> Messages,
-    string Status,
-    string Responder,
-    IReadOnlyList<TurnAction> Actions);
-
-/// <summary>Outcome of one send, reported by n8n (POST /api/hazem/send-results) or by the API itself.</summary>
-public sealed record SendResult(
-    string? IdempotencyKey,
-    bool Ok,
-    string? OutboundId = null,
-    string? Wamid = null,
-    string? Status = null,
-    string? ErrorCode = null,
-    string? ErrorMessage = null);
 
 public sealed record SendResultsRequest(string? TurnId, IReadOnlyList<SendResult>? Results);
 
@@ -281,6 +264,44 @@ public static partial class TurnRules
     }
 
     /// <summary>Keeps only the last 3 digits of a phone number, for logs.</summary>
-    public static string Mask(string? waId) =>
-        string.IsNullOrEmpty(waId) || waId.Length <= 3 ? "***" : new string('*', waId.Length - 3) + waId[^3..];
+    public static string Mask(string? waId) => LogMask.Phone(waId);
+}
+
+/// <summary>
+/// HTTP contract ↔ application types. Called only after <see cref="TurnRules.Validate(TurnRequest?)"/>
+/// passed, so required fields are present and every type/status string is a known one.
+/// </summary>
+public static class TurnMapping
+{
+    public static Turn ToTurn(this TurnRequest r) =>
+        new(r.TurnId!, r.WaId!, r.ContactName, r.Messages!.Select(ToMessage).ToList());
+
+    private static IncomingMessage ToMessage(TurnMessage m) => new(
+        m.Wamid!,
+        Parse<MessageType>(m.Type!),
+        m.Text,
+        m.SentAt,
+        m.ContextWamid,
+        m.Caption,
+        m.Media is { } media
+            ? new MediaRef(Parse<MediaStatus>(media.Status!), media.Bucket, media.Key, media.MimeType, media.SizeBytes, media.Sha256, media.Filename, media.Voice)
+            : null,
+        m.Transcript is { } t ? new Transcript(t.Status!, t.Text, t.Language) : null,
+        m.Location is { } l ? new Location(l.Latitude, l.Longitude, l.Name, l.Address) : null,
+        m.Reaction is { } x ? new Reaction(x.Emoji, x.MessageWamid) : null,
+        m.Interactive is { } i ? new Interactive(i.Kind, i.Id, i.Title) : null,
+        m.Button is { } b ? new Button(b.Payload, b.Text) : null,
+        m.OriginalType);
+
+    /// <summary>"too_large" → TooLarge (the contract's snake_case names).</summary>
+    private static T Parse<T>(string value) where T : struct, Enum =>
+        Enum.Parse<T>(value.Replace("_", "", StringComparison.Ordinal), ignoreCase: true);
+
+    public static TurnResponse ToResponse(this TurnResult r) =>
+        new(r.TurnId, r.Status == TurnStatus.Processed ? TurnResponse.Processed : TurnResponse.Duplicate,
+            r.Actions.Select(ToAction).ToList());
+
+    private static TurnAction ToAction(OutboundAction a) => new(
+        a.Type == ActionType.SendText ? TurnAction.SendText : TurnAction.SendTemplate,
+        a.IdempotencyKey, a.Text, a.ContextWamid, a.TemplateName, a.Language, a.Components);
 }

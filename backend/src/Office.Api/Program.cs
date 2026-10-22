@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Office.Api.Hazem;
-using Office.Core.Hazem;
+using Office.Infrastructure.Json;
 using Office.Infrastructure;
 using Office.Infrastructure.Persistence;
 using Serilog;

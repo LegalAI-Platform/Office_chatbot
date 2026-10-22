@@ -34,7 +34,20 @@ contains `CHANGE_ME`, or has the wrong format.
 | `HAZEM_API_TOKEN` | api; n8n credential `hazem-api` (n8n → API, header `X-Hazem-Token`) | **yes** | 64 hex chars; different from the next one | v1.3 |
 | `N8N_INTERNAL_SEND_TOKEN` | api; n8n credential `hazem-internal-send` (API → n8n internal send webhook) | **yes** | 64 hex chars | v1.3 |
 | `CLOUDFLARE_TUNNEL_TOKEN` | tunnel-named | **yes** | empty = Quick Tunnel | 01 / 02 |
-| `OPENAI_MODEL` | n8n workflows | no | empty until sample tests (T-08) | 04 |
+| `HAZEM_OPENAI_API_KEY` | api (`Hazem__OpenAiApiKey`): intent classification | **yes** | The .NET key from OpenAI, separate from n8n's voice key (T-08). **May be empty**: classification off, Hazem answers text as unclear, healthcheck WARN. Not made by `gen-secrets`. Never printed or logged | 04 |
+| `OPENAI_MODEL` | api (`Hazem__OpenAiModel`) | no | empty = `gpt-4.1-mini`, a starting point; the owner picks the final model with `classify-eval` ([ai/classification.md](ai/classification.md)) | 04 |
+| `OPENAI_BASE_URL` | api (`Hazem__OpenAiBaseUrl`) | no | empty = `https://api.openai.com/v1` (healthcheck checks it). Tests never change it: `hazem-e2e` uses `hazem.settings ai.stub_*` | 04 |
+
+## Non-secret API settings: `hazem.settings`
+
+| Key | Value |
+|---|---|
+| `responder` | `hazem` (TASK 04). `echo` only inside `hazem-e2e` for the TASK 02/03 loop; the healthcheck fails otherwise |
+| `hazem.recipients` | comma-separated `wa_id` list Hazem answers (test numbers) |
+| `hazem.open_to_all` | `false`. `true` = Hazem answers **every** number — the owner's decision only (CLAUDE.md); healthcheck WARN |
+| `ai.min_confidence` | `0.6`: below it a turn is treated as unclear |
+| `ai.stub_enabled`, `ai.stub_base_url` | `false` / empty. Only inside `hazem-e2e`, and honoured only when `ENVIRONMENT=test` |
+| `echo.enabled`, `echo.recipients` | the TASK 02/03 test echo (`false` / empty) |
 
 ## Non-secret WhatsApp settings: `app.settings`, not `.env`
 

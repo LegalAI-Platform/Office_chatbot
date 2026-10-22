@@ -1,11 +1,17 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
-using Office.Core.Hazem;
+using Office.Application.Conversations;
+using Office.Application.Ports;
+using Office.Application.Responders;
+using Office.Application.Turns;
+using Office.Infrastructure.Json;
 
 namespace Office.Infrastructure.Persistence;
 
 public sealed class TurnStore(HazemDbContext db) : ITurnStore
 {
+    public const string Processed = "processed";
+
     public async Task<StoredTurn?> FindAsync(string turnId, CancellationToken ct)
     {
         var row = await db.Turns.AsNoTracking().FirstOrDefaultAsync(t => t.TurnId == turnId, ct);
@@ -15,24 +21,37 @@ public sealed class TurnStore(HazemDbContext db) : ITurnStore
                 row.TurnId,
                 row.WaId,
                 row.ContactName,
-                JsonSerializer.Deserialize<List<TurnMessage>>(row.Messages, HazemJson.Options) ?? [],
-                row.Status,
+                JsonSerializer.Deserialize<List<IncomingMessage>>(row.Messages, HazemJson.Options) ?? [],
                 row.Responder,
-                JsonSerializer.Deserialize<List<TurnAction>>(row.Actions, HazemJson.Options) ?? []);
+                JsonSerializer.Deserialize<List<OutboundAction>>(row.Actions, HazemJson.Options) ?? []);
     }
 
-    public async Task<bool> TryAddAsync(StoredTurn turn, CancellationToken ct)
+    public async Task<bool> TryAddAsync(StoredTurn turn, TurnEffects? effects, CancellationToken ct)
     {
         var messages = JsonSerializer.Serialize(turn.Messages, HazemJson.Options);
         var actions = JsonSerializer.Serialize(turn.Actions, HazemJson.Options);
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
         // ON CONFLICT instead of catching a unique violation: two identical requests at the
-        // same moment both stay healthy, and exactly one of them inserts.
+        // same moment both stay healthy, and exactly one of them inserts. The loser waits for the
+        // winner's commit here, then inserts nothing and saves none of its effects.
         var inserted = await db.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO hazem.turns (turn_id, wa_id, contact_name, messages, status, responder, actions)
-            VALUES ({turn.TurnId}, {turn.WaId}, {turn.ContactName}, {messages}::jsonb, {turn.Status}, {turn.Responder}, {actions}::jsonb)
+            VALUES ({turn.TurnId}, {turn.WaId}, {turn.ContactName}, {messages}::jsonb, {Processed}, {turn.Responder}, {actions}::jsonb)
             ON CONFLICT (turn_id) DO NOTHING
             """, ct);
-        return inserted == 1;
+        if (inserted != 1)
+        {
+            await tx.RollbackAsync(ct);
+            return false;
+        }
+
+        if (effects is not null)
+        {
+            await ConversationStore.SaveAsync(db, turn.TurnId, effects, ct);
+        }
+
+        await tx.CommitAsync(ct);
+        return true;
     }
 }
 

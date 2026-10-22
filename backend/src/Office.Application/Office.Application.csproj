@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Use cases and the ports they need (interfaces). Must not reference EF Core, ASP.NET Core
+       or HTTP clients: Office.Infrastructure implements the ports. -->
+  <PropertyGroup>
+    <RootNamespace>Office.Application</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Office.Domain\Office.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Office.UnitTests" />
+  </ItemGroup>
+</Project>
