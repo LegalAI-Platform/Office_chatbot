@@ -15,7 +15,7 @@ public interface IApprovedTexts
 /// <summary>The keys Hazem uses in TASK 04 (seeded by migration 0005; docs/approved-texts-proposal.md).</summary>
 public static class TextKeys
 {
-    // From DECISIONS v1.4, word for word (active).
+    // From DECISIONS (v1.4, unchanged in v1.5), word for word (active).
     public const string WelcomeAskName = "welcome_ask_name";
     public const string ConsultationOffer = "consultation_offer";
     public const string LegalQuestion = "legal_question";

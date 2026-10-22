@@ -187,9 +187,9 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
     // ---------- migration 0005 ----------
 
     [Fact]
-    public async Task Every_active_text_is_word_for_word_in_decisions_v14()
+    public async Task Every_active_text_is_word_for_word_in_decisions()
     {
-        var decisions = await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.4.md"), Ct);
+        var decisions = await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.5.md"), Ct);
         await using var c = new NpgsqlConnection(db.ApiConnectionString);
         await c.OpenAsync(Ct);
         await using var cmd = new NpgsqlCommand("SELECT key, text FROM hazem.approved_texts WHERE active", c);
@@ -198,7 +198,7 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
         while (await r.ReadAsync(Ct))
         {
             count++;
-            Assert.True(decisions.Contains(r.GetString(1), StringComparison.Ordinal), $"{r.GetString(0)} is not word for word in DECISIONS v1.4");
+            Assert.True(decisions.Contains(r.GetString(1), StringComparison.Ordinal), $"{r.GetString(0)} is not word for word in DECISIONS v1.5");
         }
 
         Assert.Equal(8, count);

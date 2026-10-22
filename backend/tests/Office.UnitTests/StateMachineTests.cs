@@ -7,7 +7,7 @@ using Office.Domain.Urf;
 namespace Office.UnitTests;
 
 /// <summary>
-/// S-01..S-06 (DECISIONS v1.4 part 4). For every machine: every allowed transition passes for
+/// S-01..S-06 (DECISIONS v1.5 part 4, unchanged since v1.4). For every machine: every allowed transition passes for
 /// each actor allowed to make it and is refused for every other actor; every pair that is not in
 /// the table is refused. Then the rules DECISIONS writes as "ممنوع", one test each.
 /// </summary>
