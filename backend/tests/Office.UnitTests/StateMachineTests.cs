@@ -164,6 +164,14 @@ public sealed class StateMachineTests
     }
 
     [Fact]
+    public void A_stored_name_is_restored_as_is_even_if_todays_rules_would_refuse_it()
+    {
+        var n = PersonName.Restore("محمد؟ عبد الله أحمد علي", "محمد؟ عبد الله أحمد علي");
+        Assert.False(PersonName.TryParse(n.Raw, out _));
+        Assert.Equal(("محمد؟ عبد الله أحمد علي", 4, true), (n.Raw, n.Parts, n.IsFull));
+    }
+
+    [Fact]
     public void Call_phone_is_for_calls_only_and_never_changes_the_wa_id()
     {
         var p = Client();

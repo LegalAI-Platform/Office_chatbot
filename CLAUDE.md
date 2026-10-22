@@ -33,9 +33,13 @@ unless the owner asks.
 - **T-07:** the AI classifies; replies come from approved texts. No free-form AI replies,
   no legal opinions, no invented prices.
 - **Secrets:** never print, log, commit or ask for them in chat. `.env` (gitignored) holds the
-  local ones; Meta and OpenAI keys live only in n8n Credentials, entered by the owner.
+  local ones; Meta keys and n8n's voice key (`openai-transcription`) live only in n8n Credentials,
+  entered by the owner. The .NET classification key is `HAZEM_OPENAI_API_KEY` in `.env` (T-08),
+  also entered by the owner only.
 - Never touch the office's real WhatsApp number or send to anyone outside
-  `whatsapp.test_recipients` without the owner's explicit approval.
+  `whatsapp.test_recipients` without the owner's explicit approval. Enforced for every send by
+  `app.wa_outbound_prepare` (migration 0006, `whatsapp.send_restricted`); Hazem itself answers
+  only `hazem.settings hazem.recipients` until `hazem.open_to_all` is set by the owner.
 - `exports/` holds personal chat data: never read it into docs, never commit it.
 - Commit only when the owner asks. Do not claim something works without running it.
 - If two Claude sessions work in this folder at once, coordinate: they share the same files,

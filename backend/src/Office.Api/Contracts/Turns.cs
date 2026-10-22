@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using Office.Application.Common;
 using Office.Application.Ports;
 using Office.Application.Turns;
+using Office.Domain.Common;
 
 namespace Office.Api.Contracts;
 
@@ -294,8 +295,7 @@ public static class TurnMapping
         m.OriginalType);
 
     /// <summary>"too_large" → TooLarge (the contract's snake_case names).</summary>
-    private static T Parse<T>(string value) where T : struct, Enum =>
-        Enum.Parse<T>(value.Replace("_", "", StringComparison.Ordinal), ignoreCase: true);
+    private static T Parse<T>(string value) where T : struct, Enum => StateName.Parse<T>(value);
 
     public static TurnResponse ToResponse(this TurnResult r) =>
         new(r.TurnId, r.Status == TurnStatus.Processed ? TurnResponse.Processed : TurnResponse.Duplicate,

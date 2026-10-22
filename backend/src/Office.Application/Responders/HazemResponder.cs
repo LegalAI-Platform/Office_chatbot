@@ -91,6 +91,15 @@ public sealed class HazemResponder(
 
         if (intake.State == IntakeState.AwaitingName)
         {
+            if (c is null)
+            {
+                // A photo or file instead of the name is not a refusal (B-02): answer the file and
+                // ask again without using up the one extra ask.
+                AnswerMediaOnly(turn, plan);
+                plan.Say(TextKeys.AskNameAgain, TextKeys.WelcomeAskName);
+                return;
+            }
+
             if (!HandleName(turn, s, c, plan))
             {
                 return; // asked for the name again
@@ -126,16 +135,18 @@ public sealed class HazemResponder(
     }
 
     /// <summary>B-02. True when Hazem can carry on (a full name, or the one extra ask is used up).</summary>
-    private static bool HandleName(Turn turn, ClientState s, Classification? c, Plan plan)
+    private static bool HandleName(Turn turn, ClientState s, Classification c, Plan plan)
     {
         PersonName? name = null;
-        if (c?.FullName is { } extracted && PersonName.TryParse(extracted, out var fromAi))
+        if (c.FullName is { } extracted && PersonName.TryParse(extracted, out var fromAi))
         {
             name = fromAi;
         }
-        else if (c is null or { Intent: Intent.ProvideName or Intent.Other } && PersonName.TryParse(PlainText(turn), out var typed))
+        else if ((c.Intent == Intent.ProvideName || c.IsFallback) && NameGuess.TryRead(PlainText(turn), out var typed))
         {
-            name = typed; // the AI is down or unsure: a short letters-only message is taken as the name
+            // The AI says it is a name but did not extract it, or the AI is down/unsure: a short
+            // letters-only message with no everyday words («عايز», «مش», «استشارة»…) is the name.
+            name = typed;
         }
 
         if (name is not null && s.Person.GiveName(name))

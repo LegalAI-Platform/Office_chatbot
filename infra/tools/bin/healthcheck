@@ -187,7 +187,18 @@ if [[ "$(psql_super office -c "SELECT value FROM hazem.settings WHERE key = 'haz
   warn "hazem.open_to_all is true: Hazem answers EVERY number (the owner's decision only, CLAUDE.md)"
 fi
 
+echo "== Who may receive messages (CLAUDE.md, migration 0006)"
+check "every send is limited to whatsapp.test_recipients unless the owner decided otherwise (setting exists)" \
+  sql_equals office "SELECT count(*) FROM app.settings WHERE key = 'whatsapp.send_restricted' AND value IN ('true', 'false')" "1"
+check "no wa-db-tests backup left behind" \
+  sql_equals office "SELECT count(*) FROM app.settings WHERE key LIKE 'wadb.backup.%'" "0"
+if [[ "$(psql_super office -c "SELECT value FROM app.settings WHERE key = 'whatsapp.send_restricted'")" == "false" ]]; then
+  warn "whatsapp.send_restricted is false: messages may go to ANY number (the owner's decision only, CLAUDE.md)"
+fi
+
 echo "== Migrations"
+check "migration 0006 (sends only to test recipients) is applied" \
+  sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0006'" "1"
 check "migration 0005 (Hazem conversations, texts, classifications) is applied" \
   sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0005'" "1"
 check "migration 0004 (grouping, media, voice) is applied" \

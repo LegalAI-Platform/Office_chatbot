@@ -59,6 +59,8 @@ public sealed class UnderstandingTests
     [InlineData("الرقم القومي 29801011234567", "الرقم القومي [رقم_قومي]")]
     [InlineData("ابعت على a.b@example.com", "ابعت على [ايميل]")]
     [InlineData("عندي 3 قضايا من 2019", "عندي 3 قضايا من 2019")]
+    [InlineData("الجلسة 12-10-2026 ورقمي 010-1234-5678", "الجلسة 12-10-2026 ورقمي [رقم]")]
+    [InlineData("الجلسة ٢٠٢٦-١٠-١٢", "الجلسة ٢٠٢٦-١٠-١٢")]
     public void Phones_ids_and_emails_are_replaced_before_the_ai(string input, string expected) =>
         Assert.Equal(expected, AiInput.Redact(input));
 

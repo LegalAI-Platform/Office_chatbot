@@ -161,6 +161,17 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_text_that_cannot_be_sent_is_logged_by_key_and_reason()
+    {
+        await Say("السلام عليكم");
+        await Say("محمد أحمد علي حسن");
+        Assert.Empty(Texts(await Say("شكرا")));
+        var logs = string.Join("\n", _factory.Logs.Lines);
+        Assert.Contains("text thanks not sent: inactive_or_missing", logs);
+        Assert.DoesNotContain("شكرا", logs);
+    }
+
+    [Fact]
     public async Task A_number_outside_hazem_recipients_gets_no_answer()
     {
         Assert.Empty(Texts(await Say("السلام عليكم", waId: "201000000079")));

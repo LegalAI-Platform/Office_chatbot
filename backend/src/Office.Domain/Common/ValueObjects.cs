@@ -76,6 +76,23 @@ public sealed partial record PersonName
             return false;
         }
 
+        name = new PersonName(text.Trim(), normalized, CountParts(words));
+        return true;
+    }
+
+    /// <summary>
+    /// A name already accepted and saved. Never re-validated: a later, stricter rule must not
+    /// turn a stored name into «no name» and erase it on the next save.
+    /// </summary>
+    public static PersonName Restore(string raw, string? normalized)
+    {
+        var n = string.IsNullOrWhiteSpace(normalized) ? Normalize(raw) : normalized;
+        return new PersonName(raw, n, CountParts(n.Split(' ', StringSplitOptions.RemoveEmptyEntries)));
+    }
+
+    /// <summary>«عبد»/«أبو» + the next word count as one name.</summary>
+    private static int CountParts(string[] words)
+    {
         var parts = 0;
         for (var i = 0; i < words.Length; i++)
         {
@@ -86,8 +103,7 @@ public sealed partial record PersonName
             }
         }
 
-        name = new PersonName(text.Trim(), normalized, parts);
-        return true;
+        return parts;
     }
 
     public static string Normalize(string text)

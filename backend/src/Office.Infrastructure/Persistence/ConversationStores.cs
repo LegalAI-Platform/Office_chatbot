@@ -17,7 +17,7 @@ public sealed class ConversationStore(HazemDbContext db) : IConversationStore
         }
 
         var person = Person.Load(p.Id, WaId.From(p.WaId),
-            p.NameRaw is not null && PersonName.TryParse(p.NameRaw, out var name) ? name : null,
+            p.NameRaw is null ? null : PersonName.Restore(p.NameRaw, p.NameNormalized), // never re-validated
             p.FullNameProvided, p.PreferredCallPhone);
 
         var c = await db.Conversations.AsNoTracking().FirstOrDefaultAsync(x => x.PersonId == p.Id, ct);

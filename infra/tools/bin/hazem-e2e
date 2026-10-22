@@ -113,6 +113,7 @@ case "${1:-}" in
   setup)
     "$0" cleanup >/dev/null
     backup_set whatsapp.dry_run true
+    backup_set whatsapp.test_recipients "$A,$B,$C,$D,$E,$F,$G"   # 0006: only test numbers get sends
     backup_set whatsapp.graph_base_url "$STUB"
     backup_set ai.openai_base_url "$STUB/v1"
     if [[ -z "$(q "SELECT value FROM app.settings WHERE key = 'whatsapp.graph_api_version'")" ]]; then

@@ -72,6 +72,7 @@ public sealed class FakeOpenAi : HttpMessageHandler
             : text.Contains("أطلق", StringComparison.Ordinal) ? ("legal_question", null, null)
             : text.Contains("موظف", StringComparison.Ordinal) ? ("human_request", null, null)
             : text.Contains("السلام", StringComparison.Ordinal) ? ("greeting", null, null)
+            : text.Contains("شكرا", StringComparison.Ordinal) ? ("thanks_or_closing", null, null)
             : text.Split(' ').Length >= 4 ? ("provide_name", (string?)null, (string?)text)
             : ("other", null, null);
         var content = new JsonObject

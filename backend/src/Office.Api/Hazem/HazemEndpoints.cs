@@ -23,13 +23,21 @@ public static class HazemEndpoints
                 return Results.ValidationProblem(errors);
             }
 
-            var response = (await turns.HandleAsync(request!.ToTurn(), ct)).ToResponse();
+            var result = await turns.HandleAsync(request!.ToTurn(), ct);
+            var response = result.ToResponse();
             // Never log message text, captions, transcripts, file names or the full phone number:
-            // only the turn id, the message types and counts.
-            loggers.CreateLogger("Office.Api.Hazem.Turns").LogInformation(
+            // only the turn id, the message types and counts, and why a text was not sent (keys and
+            // reasons only — Notes never hold a text).
+            var log = loggers.CreateLogger("Office.Api.Hazem.Turns");
+            log.LogInformation(
                 "Turn {TurnId} from {WaId}: {Status}, {MessageCount} message(s) [{MessageTypes}], {ActionCount} action(s)",
                 response.TurnId, TurnRules.Mask(request!.WaId), response.Status, request.Messages!.Count,
                 string.Join(",", request.Messages.Select(m => m!.Type)), response.Actions.Count);
+            if (result.Notes is { Count: > 0 } notes)
+            {
+                log.LogWarning("Turn {TurnId}: {Notes}", response.TurnId, string.Join("; ", notes));
+            }
+
             return Results.Ok(response);
         });
 

@@ -200,6 +200,49 @@ public sealed class HazemFlowTests
     }
 
     [Fact]
+    public async Task A_refusal_is_never_saved_as_the_name()
+    {
+        await Say("السلام عليكم");
+        await Say("مش هقول اسمي");
+        Assert.Equal([TextKeys.ConsultationOffer], (await Say("مش هقول اسمي")).Keys);
+        var p = _store.Rows[Number].Person;
+        Assert.Null(p.Name);
+        Assert.Equal(false, p.FullNameProvided);
+    }
+
+    [Theory]
+    [InlineData("عايز احجز استشارة")]
+    [InlineData("مش هقول اسمي")]
+    [InlineData("السلام عليكم يا استاذ")]
+    public async Task Ai_down_a_request_or_refusal_is_not_taken_as_a_name(string text)
+    {
+        await Say("السلام عليكم");
+        _ai.Down = true;
+        await Say(text);
+        Assert.Null(_store.Rows[Number].Person.Name);
+    }
+
+    [Fact]
+    public async Task Ai_down_a_name_after_اسمي_is_taken()
+    {
+        await Say("السلام عليكم");
+        _ai.Down = true;
+        await Say("اسمي منى سعيد عبد الله حسن");
+        Assert.Equal("منى سعيد عبد الله حسن", _store.Rows[Number].Person.Name?.Normalized);
+        Assert.True(_store.Rows[Number].Person.HasFullName);
+    }
+
+    [Fact]
+    public async Task A_photo_instead_of_the_name_does_not_use_up_the_extra_ask()
+    {
+        await Say("السلام عليكم");
+        Assert.Equal([TextKeys.WelcomeAskName], (await Send(Image())).Keys); // asked again, not counted
+        Assert.Equal(1, _store.Rows[Number].Intake.NameAsks);
+        Assert.Equal([TextKeys.WelcomeAskName], (await Say("محمد أحمد")).Keys); // still the one extra ask
+        Assert.Null(_store.Rows[Number].Person.FullNameProvided);
+    }
+
+    [Fact]
     public async Task Ai_down_a_typed_name_is_still_taken()
     {
         await Say("السلام عليكم");
@@ -371,6 +414,7 @@ public sealed class HazemFlowTests
                 _ when t.Contains("أحجز", StringComparison.Ordinal) => R("consultation_request"),
                 _ when t.Contains("شكرا", StringComparison.Ordinal) => R("thanks_or_closing"),
                 _ when t.Contains("السلام", StringComparison.Ordinal) || t.Contains("صباح", StringComparison.Ordinal) => R("greeting"),
+                _ when t.StartsWith("مش ", StringComparison.Ordinal) => R("other"), // a refusal: the AI does not call it a name
                 _ when PersonName.TryParse(t, out _) => new("provide_name", null, "unknown", t, 0.9),
                 _ => R("other"),
             };

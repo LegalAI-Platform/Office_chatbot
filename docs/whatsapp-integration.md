@@ -62,6 +62,7 @@ executions not saved (they contain customer data), failed ones kept (pruned afte
 | `DUPLICATE` | same `idempotency_key` again: the first result is returned | no |
 | `OUTSIDE_24H_WINDOW` | free-form text ≥ 24 h after the customer's last message (or Meta 131047) | no (local check) |
 | `TEMPLATE_NOT_APPROVED` | template not `APPROVED` in `app.wa_templates` | no |
+| `NOT_TEST_RECIPIENT` | 0006: `whatsapp.send_restricted` is `true` and the number is not in `whatsapp.test_recipients` (checked after the window and template rules) | no |
 | `TOKEN_INVALID` | Meta 190: token expired/revoked; the workflow stops so the error handler alerts | yes |
 | `RATE_LIMIT` | Meta 130429 / 131056 / 80007 / 4 | yes |
 | `UNDELIVERABLE` / `RECIPIENT_NOT_ALLOWED` | Meta 131026 / 131030 (test number: recipient not in its list) | yes |
@@ -86,7 +87,8 @@ recorded as failed and the caller decides (with a new idempotency key if it real
 | `whatsapp.waba_id` | WhatsApp Business Account ID |
 | `whatsapp.phone_number_id` | phone number ID that sends |
 | `whatsapp.graph_api_version` | `v26.0` (latest in Meta's changelog, 2026-10) |
-| `whatsapp.test_recipients` | comma-separated `wa_id` list allowed on Meta's test number (digits only) |
+| `whatsapp.test_recipients` | comma-separated `wa_id` list allowed on Meta's test number (digits only). **Migration 0006: while `whatsapp.send_restricted` is `true`, every send (Hazem, CLI, templates, later reminders and the panel) goes only to these numbers**; any other number is refused with `NOT_TEST_RECIPIENT` and never reaches Meta |
+| `whatsapp.send_restricted` | `true` (0006). `false` = messages may go to any number: **the owner's explicit decision only** (CLAUDE.md); the healthcheck warns while it is `false` |
 | `whatsapp.group_quiet_seconds` | `8`: a turn closes after this long without a new message from the client |
 | `whatsapp.group_max_seconds` | `60`: a turn closes this long after its first message, and unfinished downloads/transcripts become `failed` (TIMEOUT) |
 | `whatsapp.turn_stale_seconds` | `300`: a turn left `processing` (or a download left `downloading`) this long is taken again. Shorter only inside `hazem-e2e`; the healthcheck checks it |

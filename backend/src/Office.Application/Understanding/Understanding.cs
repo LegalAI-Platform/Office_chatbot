@@ -192,7 +192,9 @@ public static partial class AiInput
         // Arabic-Indic digits count too. A 14-digit run is a national ID; 8 or more otherwise
         // (spaces or dashes inside allowed) is a phone number.
         text = NationalId().Replace(text, NationalIdMask);
-        return Phone().Replace(text, PhoneMask);
+        // A date such as 12-10-2026 or 2026/10/12 is not a phone number: the AI keeps it (it can
+        // point to a hearing or an urgent matter). Amounts of 8+ digits stay masked: privacy first.
+        return Phone().Replace(text, m => Date().IsMatch(m.Value) ? m.Value : PhoneMask);
     }
 
     [GeneratedRegex(@"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")]
@@ -203,4 +205,7 @@ public static partial class AiInput
 
     [GeneratedRegex(@"(?<![0-9٠-٩])\+?[0-9٠-٩](?:[ \-]?[0-9٠-٩]){7,}(?![0-9٠-٩])")]
     private static partial Regex Phone();
+
+    [GeneratedRegex(@"^(?:[0-9٠-٩]{1,2}-[0-9٠-٩]{1,2}-[0-9٠-٩]{4}|[0-9٠-٩]{4}-[0-9٠-٩]{1,2}-[0-9٠-٩]{1,2})$")]
+    private static partial Regex Date();
 }
