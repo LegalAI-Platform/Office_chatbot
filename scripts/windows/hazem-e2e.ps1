@@ -6,6 +6,10 @@
 #   5. two texts and a photo within 8 s -> one turn, one reply; the photo in office-sensitive
 #   6. PDF, voice note (transcribed by the stub), too large, wrong sha256, forbidden type
 #   7. a turn left processing while n8n restarts -> taken again, one reply
+#   8. TASK 04: Hazem answers from approved texts (welcome, name, offer, B-20), a photo never
+#      reaches the AI, a phone number is masked, and the AI stub down still gets an answer
+#   9. TASK 05a: a listed client gets the neutral reply and a task for their staff, a blocked number
+#      gets nothing (muted), a topic told first means no topic question after the name
 # Meta and OpenAI are the meta-stub container (profile tests). If meta-whatsapp-token or
 # openai-transcription do not exist, temporary ones (fixed test ids) are created and removed
 # again; existing (real) credentials are never touched. Everything is restored at the end.
@@ -100,6 +104,14 @@ try {
     Step @('hazem-ai-down') | Out-Null
     Forward
     Check 'check-hazem-fallback'
+
+    Write-Host "==== 9. TASK 05a: lists (B-14, B-04), the topic (B-25), the source (B-13)"
+    Step @('hazem05-setup') | Out-Null
+    Forward
+    Check 'check-hazem05'
+    Step @('hazem05-name') | Out-Null
+    Forward
+    Check 'check-hazem05-name'
 } catch {
     Write-Host "FAIL  $_"; $script:failed = $true
 } finally {

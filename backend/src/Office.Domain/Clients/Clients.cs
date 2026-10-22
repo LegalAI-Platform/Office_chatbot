@@ -26,8 +26,36 @@ public sealed class Person
 
     public static Person New(WaId waId) => new(Guid.NewGuid(), waId);
 
-    public static Person Load(Guid id, WaId waId, PersonName? name, bool? fullNameProvided, string? preferredCallPhone) =>
-        new(id, waId) { Name = name, FullNameProvided = fullNameProvided, PreferredCallPhone = preferredCallPhone };
+    /// <summary>B-13: ad / link / direct. Recorded once, never asked, never changes the path.</summary>
+    public string? Source { get; private set; }
+
+    /// <summary>B-13: what the source looked like (ad id and headline, or the link code), as JSON.</summary>
+    public string? SourceRaw { get; private set; }
+
+    public DateTimeOffset? FirstSeenAt { get; private set; }
+
+    public static Person Load(Guid id, WaId waId, PersonName? name, bool? fullNameProvided, string? preferredCallPhone,
+        string? source = null, string? sourceRaw = null, DateTimeOffset? firstSeenAt = null) =>
+        new(id, waId)
+        {
+            Name = name,
+            FullNameProvided = fullNameProvided,
+            PreferredCallPhone = preferredCallPhone,
+            Source = source,
+            SourceRaw = sourceRaw,
+            FirstSeenAt = firstSeenAt,
+        };
+
+    /// <summary>B-13: the first contact only; later turns never change the source.</summary>
+    public void FirstSeen(string source, string? raw, DateTimeOffset at)
+    {
+        if (FirstSeenAt is not null)
+        {
+            return;
+        }
+
+        (Source, SourceRaw, FirstSeenAt) = (source, raw, at);
+    }
 
     /// <summary>Records the name; true when it is a full (four-part) name.</summary>
     public bool GiveName(PersonName name)
@@ -105,8 +133,28 @@ public sealed class Conversation
     /// <summary>A group chat: ignored for good.</summary>
     public static Conversation StartForGroup(Person person) => new(Guid.NewGuid(), person.Id, ConversationState.Ignored, null);
 
-    public static Conversation Load(Guid id, Guid personId, ConversationState state, DateTimeOffset? lastStaffMessageAt) =>
-        new(id, personId, state, lastStaffMessageAt);
+    /// <summary>S-01: abusive turns already warned about (one warning, then muted).</summary>
+    public int AbuseWarnings { get; private set; }
+
+    public static Conversation Load(Guid id, Guid personId, ConversationState state, DateTimeOffset? lastStaffMessageAt,
+        int abuseWarnings = 0) =>
+        new(id, personId, state, lastStaffMessageAt) { AbuseWarnings = abuseWarnings };
+
+    /// <summary>
+    /// S-01: insults or spam. The first time Hazem warns (true); the next time the conversation is
+    /// muted for good (false), and only the manager can unmute it.
+    /// </summary>
+    public bool AbuseSeen()
+    {
+        if (AbuseWarnings == 0)
+        {
+            AbuseWarnings = 1;
+            return true;
+        }
+
+        Mute(Actor.System);
+        return false;
+    }
 
     /// <summary>B-12.1: any staff message to the client silences Hazem.</summary>
     public Result StaffReplied(DateTimeOffset at)
@@ -216,10 +264,29 @@ public sealed class Intake
 
     public bool IsClassified => State is not (IntakeState.New or IntakeState.AwaitingName or IntakeState.Identifying);
 
+    /// <summary>B-14.4: the first non-client role the sender showed (lawyer_colleague, press, vendor).</summary>
+    public string? SenderRole { get; private set; }
+
+    /// <summary>B-04: the «موضوع قائم ولا جديد؟» question was asked (once only).</summary>
+    public bool ExistingQuestionAsked { get; private set; }
+
+    /// <summary>B-25: the topic of the request (closed list), for the office only.</summary>
+    public string? MatterType { get; private set; }
+
+    public string? MatterSubtype { get; private set; }
+
+    /// <summary>B-25: the one optional question was asked.</summary>
+    public bool MatterAsked { get; private set; }
+
+    public const string UnclearMatter = "unclear";
+
+    public bool MatterKnown => MatterType is not null && MatterType != UnclearMatter;
+
     public static Intake Open(Person person) => new(Guid.NewGuid(), person.Id);
 
     public static Intake Load(Guid id, Guid personId, IntakeState state, ClientType? clientType, int nameAsks,
-        PendingRequest? pending, int unclearInARow) =>
+        PendingRequest? pending, int unclearInARow, string? senderRole = null, bool existingQuestionAsked = false,
+        string? matterType = null, string? matterSubtype = null, bool matterAsked = false) =>
         new(id, personId)
         {
             State = state,
@@ -227,7 +294,38 @@ public sealed class Intake
             NameAsks = nameAsks,
             Pending = pending,
             UnclearInARow = unclearInARow,
+            SenderRole = senderRole,
+            ExistingQuestionAsked = existingQuestionAsked,
+            MatterType = matterType,
+            MatterSubtype = matterSubtype,
+            MatterAsked = matterAsked,
         };
+
+    /// <summary>B-14.4: keeps the first non-client role seen.</summary>
+    public void NoteSenderRole(string? role)
+    {
+        if (role is not null && role != "client")
+        {
+            SenderRole ??= role;
+        }
+    }
+
+    /// <summary>B-25: the first clear topic stays; «unclear» never overwrites a known one.</summary>
+    public void RecordMatter(string? type, string? subtype)
+    {
+        if (type is null || type == UnclearMatter || MatterKnown)
+        {
+            MatterType ??= type;
+            return;
+        }
+
+        MatterType = type;
+        MatterSubtype = subtype;
+    }
+
+    public void MarkMatterAsked() => MatterAsked = true;
+
+    public void MarkExistingQuestionAsked() => ExistingQuestionAsked = true;
 
     /// <summary>B-01.1: welcome and ask for the name. Counts every ask (B-02: two at most).</summary>
     public Result AskForName()

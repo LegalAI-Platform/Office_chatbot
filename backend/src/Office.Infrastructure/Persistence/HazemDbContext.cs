@@ -42,6 +42,7 @@ public sealed class HazemDbContext(DbContextOptions<HazemDbContext> options) : D
         b.Entity<PersonRow>(e =>
         {
             e.ToTable("persons");
+            e.Property(x => x.SourceRaw).HasColumnType("jsonb");
             e.HasKey(x => x.Id);
         });
 
@@ -62,12 +63,19 @@ public sealed class HazemDbContext(DbContextOptions<HazemDbContext> options) : D
             e.ToTable("approved_texts");
             e.HasKey(x => new { x.Key, x.Version });
         });
+
+        b.Entity<ListEntryRow>(e =>
+        {
+            e.ToTable("list_entries");
+            e.HasKey(x => x.Id);
+        });
     }
 
     public DbSet<PersonRow> Persons => Set<PersonRow>();
     public DbSet<ConversationRow> Conversations => Set<ConversationRow>();
     public DbSet<IntakeRow> Intakes => Set<IntakeRow>();
     public DbSet<ApprovedTextRow> ApprovedTexts => Set<ApprovedTextRow>();
+    public DbSet<ListEntryRow> ListEntries => Set<ListEntryRow>();
 }
 
 public sealed class PersonRow
@@ -78,6 +86,9 @@ public sealed class PersonRow
     public string? NameNormalized { get; set; }
     public bool? FullNameProvided { get; set; }
     public string? PreferredCallPhone { get; set; }
+    public string? Source { get; set; }
+    public string? SourceRaw { get; set; }
+    public DateTimeOffset? FirstSeenAt { get; set; }
 }
 
 public sealed class ConversationRow
@@ -86,6 +97,7 @@ public sealed class ConversationRow
     public Guid PersonId { get; set; }
     public required string State { get; set; }
     public DateTimeOffset? LastStaffMessageAt { get; set; }
+    public int AbuseWarnings { get; set; }
 }
 
 public sealed class IntakeRow
@@ -99,6 +111,20 @@ public sealed class IntakeRow
     public string? PendingService { get; set; }
     public string? PendingConsultationMode { get; set; }
     public int UnclearInARow { get; set; }
+    public string? SenderRole { get; set; }
+    public bool ExistingQuestionAsked { get; set; }
+    public string? MatterType { get; set; }
+    public string? MatterSubtype { get; set; }
+    public bool MatterAsked { get; set; }
+}
+
+public sealed class ListEntryRow
+{
+    public Guid Id { get; set; }
+    public required string ListKind { get; set; }
+    public required string WaId { get; set; }
+    public string? Name { get; set; }
+    public Guid? StaffId { get; set; }
 }
 
 public sealed class ApprovedTextRow

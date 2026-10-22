@@ -3,6 +3,11 @@
 n8n is the WhatsApp layer (the only thing that talks to Meta); the .NET API is the brain.
 They talk only inside the Docker network `office_net`.
 
+> **TASK 05a (additive only):** a message may carry an optional `referral` (B-13) —
+> `{ "source_type": "ad", "source_id": "1202…", "headline": "…" }`, never an image or video link
+> (n8n's `app.wa_message_json`, migration 0008). Old turns stay valid. And a new endpoint for the
+> panel / n8n: `POST /api/hazem/staff-events` (below).
+>
 > **TASK 04: the contract did not change.** Same requests, same responses, same errors; only
 > what the API decides to answer changed (approved texts instead of the test echo). An answer
 > may now hold more than one `send_text` action (e.g. the B-20 text then the consultation
@@ -149,6 +154,21 @@ What happened to each action n8n tried to send.
 
 Response `200`: `{ "recorded": 1 }`. Recording the same key again updates it (idempotent).
 Error codes are the ones in [whatsapp-integration.md](whatsapp-integration.md#error-codes).
+
+### `POST /api/hazem/staff-events` (TASK 05a, B-12)
+
+For the panel (TASK 07) and for n8n when a staff member writes from the WhatsApp Business app
+(TASK 05b). Same `X-Hazem-Token`.
+
+```json
+{ "wa_id": "201001234567", "event": "staff_replied", "at": "2026-10-22T14:00:00+03:00" }
+```
+
+- `staff_replied`: the conversation becomes `human_handoff` and Hazem is silent; Hazem comes back
+  by itself when the client writes 12 hours after the last staff message (B-12.2).
+- `hand_back`: «رجّع لحازم» → `bot_active`.
+- `200 { "state": "human_handoff" }`, `404` unknown number, `409 { state, error }` when the
+  transition is not allowed (e.g. `hand_back` while Hazem already answers), `400` bad body.
 
 ## .NET → n8n
 

@@ -71,6 +71,10 @@ public static class DependencyInjection
         services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<IConversationStore, ConversationStore>();
         services.AddScoped<IApprovedTexts, ApprovedTextStore>();
+        services.AddScoped<IClientLists, ClientListStore>();
+        services.AddScoped<StaffEvents>();
+        services.AddScoped<Lists.ListImporter>();
+        services.AddScoped<Lists.TaskMaintenance>();
         services.AddScoped<ITurnResponder, HazemResponder>();
         services.AddScoped<ITurnResponder, EchoResponder>();
         services.AddScoped<IResponderSelector, ResponderSelector>();

@@ -48,6 +48,8 @@ contains `CHANGE_ME`, or has the wrong format.
 | `ai.min_confidence` | `0.6`: below it a turn is treated as unclear |
 | `ai.stub_enabled`, `ai.stub_base_url` | `false` / empty. Only inside `hazem-e2e`, and honoured only when `ENVIRONMENT=test` |
 | `echo.enabled`, `echo.recipients` | the TASK 02/03 test echo (`false` / empty) |
+| `handoff.enabled` | `false` (TASK 05a). `true` = «موظف» hands the conversation to the staff and Hazem goes silent (B-12). Stays `false` until the panel (TASK 07): nobody would answer the client. The healthcheck fails while it is `true` |
+| `source.link_codes` | comma-separated codes put in wa.me links (e.g. `FB-OCT`); a first message containing one is recorded as source `link` (B-13) |
 
 ## Non-secret WhatsApp settings: `app.settings`, not `.env`
 

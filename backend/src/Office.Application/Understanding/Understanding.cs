@@ -22,6 +22,51 @@ public enum Intent
     RescheduleOrCancel,
     ThanksOrClosing,
     Other,
+
+    /// <summary>B-25: the client tells their problem without asking anything.</summary>
+    DescribeMatter,
+
+    /// <summary>S-01: insults, threats or spam.</summary>
+    Abusive,
+}
+
+/// <summary>B-25: the topic of the request (for the office only, never told to the client).</summary>
+public enum MatterType
+{
+    PersonalStatus,
+    Inheritance,
+    Rent,
+    RealEstate,
+    Criminal,
+    ChequesTrustReceipts,
+    Labor,
+    Commercial,
+    CivilCompensation,
+    Urfi,
+    Unclear,
+}
+
+/// <summary>B-25: details for personal status and Urfi only.</summary>
+public enum MatterSubtype
+{
+    Divorce,
+    Khula,
+    Alimony,
+    Custody,
+    Visitation,
+    Marriage,
+    UrfMarriage,
+    UrfDivorce,
+    UrfProof,
+}
+
+/// <summary>B-14.4: who is writing, from their own words.</summary>
+public enum SenderRole
+{
+    Client,
+    LawyerColleague,
+    Press,
+    Vendor,
 }
 
 /// <summary>Service codes: B-23 rows, plus the three Urfi paths of B-11.</summary>
@@ -49,7 +94,15 @@ public enum ConsultationMode
 }
 
 /// <summary>What the model answered, before any check (strings, as they came).</summary>
-public sealed record RawClassification(string? Intent, string? Service, string? ConsultationMode, string? FullName, double? Confidence);
+public sealed record RawClassification(
+    string? Intent,
+    string? Service,
+    string? ConsultationMode,
+    string? FullName,
+    double? Confidence,
+    string? MatterType = null,
+    string? MatterSubtype = null,
+    string? SenderRole = null);
 
 /// <summary>One call to the classifier: the answer, or why there is none, plus what it cost.</summary>
 public sealed record ClassifierOutcome(
@@ -81,7 +134,10 @@ public sealed record Classification(
     string? FullName,
     double Confidence,
     string? FallbackReason,
-    ClassifierOutcome? Call)
+    ClassifierOutcome? Call,
+    MatterType? Matter = null,
+    MatterSubtype? Subtype = null,
+    SenderRole Role = SenderRole.Client)
 {
     public const string UnknownValue = "unknown_value";
     public const string LowConfidence = "low_confidence";
@@ -120,7 +176,12 @@ public sealed record Classification(
 
         Service? service = a.Service is null ? null : Parse<Service>(a.Service);
         var mode = a.ConsultationMode is null ? ConsultationMode.Unknown : Parse<ConsultationMode>(a.ConsultationMode);
-        return new(intent, service, mode, string.IsNullOrWhiteSpace(a.FullName) ? null : a.FullName.Trim(), a.Confidence.Value, null, call);
+        // The secondary fields (B-25, B-14.4) never fail the turn: a value outside their lists is dropped.
+        MatterType? matter = TryEnum<MatterType>(a.MatterType, out var mt) ? mt : null;
+        MatterSubtype? subtype = TryEnum<MatterSubtype>(a.MatterSubtype, out var ms) ? ms : null;
+        var role = TryEnum<SenderRole>(a.SenderRole, out var sr) ? sr : SenderRole.Client;
+        return new(intent, service, mode, string.IsNullOrWhiteSpace(a.FullName) ? null : a.FullName.Trim(), a.Confidence.Value, null, call,
+            matter, subtype, role);
     }
 
     public static string Code<T>(T value)

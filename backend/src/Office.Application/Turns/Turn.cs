@@ -45,7 +45,8 @@ public sealed record IncomingMessage(
     Reaction? Reaction = null,
     Interactive? Interactive = null,
     Button? Button = null,
-    string? OriginalType = null)
+    string? OriginalType = null,
+    Referral? Referral = null)
 {
     public bool IsMedia => Type is MessageType.Image or MessageType.Document or MessageType.Audio or MessageType.Video or MessageType.Sticker;
 }
@@ -74,6 +75,9 @@ public sealed record Reaction(string? Emoji, string? MessageWamid);
 public sealed record Interactive(string? Kind, string? Id, string? Title);
 
 public sealed record Button(string? Payload, string? Text);
+
+/// <summary>B-13: Meta's referral when the client came from an ad or a post (no image or video links).</summary>
+public sealed record Referral(string? SourceType, string? SourceId, string? Headline);
 
 public enum ActionType
 {

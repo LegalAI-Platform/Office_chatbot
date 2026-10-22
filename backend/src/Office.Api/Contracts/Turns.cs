@@ -25,7 +25,8 @@ public sealed record TurnMessage(
     TurnReaction? Reaction = null,
     TurnInteractive? Interactive = null,
     TurnButton? Button = null,
-    string? OriginalType = null);
+    string? OriginalType = null,
+    TurnReferral? Referral = null);
 
 /// <summary>Where n8n stored a file (TASK 03). Never a URL and never the file itself (T-09).</summary>
 public sealed record TurnMedia(
@@ -47,6 +48,9 @@ public sealed record TurnReaction(string? Emoji, string? MessageWamid);
 public sealed record TurnInteractive(string? Kind, string? Id, string? Title);
 
 public sealed record TurnButton(string? Payload, string? Text);
+
+/// <summary>B-13 (TASK 05a, optional): Meta's referral of a message from an ad or a post.</summary>
+public sealed record TurnReferral(string? SourceType, string? SourceId, string? Headline);
 
 /// <summary>Something n8n must do for this turn. Unused fields are left null.</summary>
 public sealed record TurnAction(
@@ -144,6 +148,13 @@ public static partial class TurnRules
         else if (m.Media is { } media)
         {
             ValidateMedia(media, $"{at}.media", errors);
+        }
+
+        if (m.Referral is { } referral
+            && (referral.SourceType is { Length: > 50 } || referral.SourceId is { Length: > 100 } || referral.Headline is { Length: > 200 }
+                || new[] { referral.SourceType, referral.SourceId }.Any(v => v?.Contains("://", StringComparison.Ordinal) == true)))
+        {
+            errors[$"{at}.referral"] = ["source_type ≤ 50, source_id ≤ 100, headline ≤ 200 characters, no URL"];
         }
 
         if (m.Transcript is { } transcript)
@@ -292,7 +303,8 @@ public static class TurnMapping
         m.Reaction is { } x ? new Reaction(x.Emoji, x.MessageWamid) : null,
         m.Interactive is { } i ? new Interactive(i.Kind, i.Id, i.Title) : null,
         m.Button is { } b ? new Button(b.Payload, b.Text) : null,
-        m.OriginalType);
+        m.OriginalType,
+        m.Referral is { } r ? new Referral(r.SourceType, r.SourceId, r.Headline) : null);
 
     /// <summary>"too_large" → TooLarge (the contract's snake_case names).</summary>
     private static T Parse<T>(string value) where T : struct, Enum => StateName.Parse<T>(value);
@@ -305,3 +317,6 @@ public static class TurnMapping
         a.Type == ActionType.SendText ? TurnAction.SendText : TurnAction.SendTemplate,
         a.IdempotencyKey, a.Text, a.ContextWamid, a.TemplateName, a.Language, a.Components);
 }
+
+/// <summary>POST /api/hazem/staff-events (TASK 05a, B-12).</summary>
+public sealed record StaffEventRequest(string? WaId, string? Event, DateTimeOffset? At);

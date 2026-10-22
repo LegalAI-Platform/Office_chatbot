@@ -12,7 +12,7 @@ machines S-01..S-06; Hazem classifies each turn with the AI — text only — an
 approved texts only; [docs/ai/classification.md](docs/ai/classification.md)). Hazem answers only
 the numbers in `hazem.settings hazem.recipients` until the owner opens it to everyone.
 
-- All decisions: [docs/decisions/DECISIONS-v1.5.md](docs/decisions/DECISIONS-v1.5.md)
+- All decisions: [docs/decisions/DECISIONS-v1.6.md](docs/decisions/DECISIONS-v1.6.md)
 - n8n ↔ .NET API contract: [docs/hazem-internal-api.md](docs/hazem-internal-api.md)
 - Backend: [backend/README.md](backend/README.md)
 - Architecture and permissions: [docs/infrastructure.md](docs/infrastructure.md)

@@ -41,6 +41,27 @@ public static class HazemEndpoints
             return Results.Ok(response);
         });
 
+        // B-12 from the panel (TASK 07) or n8n (TASK 05b): a staff member wrote, or handed back.
+        group.MapPost("/staff-events", async (StaffEventRequest? request, StaffEvents events, CancellationToken ct) =>
+        {
+            if (request is null || !TurnRules.IsValidWaId(request.WaId)
+                || request.Event is not (StaffEvents.StaffReplied or StaffEvents.HandBack))
+            {
+                return Results.ValidationProblem(new Dictionary<string, string[]>
+                {
+                    ["body"] = ["wa_id (8-15 digits) and event (staff_replied | hand_back) are required"],
+                });
+            }
+
+            var (outcome, state, error) = await events.ApplyAsync(request.WaId!, request.Event, request.At ?? DateTimeOffset.UtcNow, ct);
+            return outcome switch
+            {
+                StaffEvents.Outcome.UnknownNumber => Results.NotFound(),
+                StaffEvents.Outcome.Refused => Results.Conflict(new { state, error }),
+                _ => Results.Ok(new { state }),
+            };
+        });
+
         group.MapPost("/send-results", async (SendResultsRequest? request, RecordSendResults results, CancellationToken ct) =>
         {
             var errors = TurnRules.Validate(request);

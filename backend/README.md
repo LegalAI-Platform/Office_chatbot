@@ -1,4 +1,4 @@
-# Backend (.NET API) — DECISIONS v1.5
+# Backend (.NET API) — DECISIONS v1.6
 
 The brain of Hazem. n8n is the WhatsApp layer and hands every client *turn* to this API;
 the API decides what to answer and n8n sends it. The API never talks to Meta and has no
@@ -18,7 +18,13 @@ Office.Api ──► Office.Infrastructure ──► Office.Application ──�
 | `src/Office.Application` | Use cases `HandleTurn`, `RecordSendResults`, `SendOutbound`; ports `ITurnStore`, `IConversationStore`, `IIntentClassifier`, `IApprovedTexts`, `IWhatsAppGateway`, `ISettingsReader` (+ `TimeProvider`); `ITurnResponder` with `HazemResponder` (TASK 04 flow) and `EchoResponder` (test echo), chosen by `hazem.settings responder`; `AiInput` (the only builder of what the AI sees, T-09); `Classification` (closed lists, fallback); `ReplyComposer`/`TextRenderer` (approved texts only, B-21 split, part-5 placeholders refused) |
 | `src/Office.Infrastructure` | EF Core on schema `hazem` (role `office_api`); the turn and everything it changed are saved in one transaction; `OpenAiIntentClassifier` (Structured Outputs, prompt `Ai/prompts/classify-v1.md`); `N8nWhatsAppGateway` |
 | `src/Office.Api` | `POST /api/hazem/turns`, `POST /api/hazem/send-results` (header `X-Hazem-Token`), `/health/live`, `/health/ready`. `Contracts/`: the HTTP DTOs, their validation (`TurnRules`) and the mapping to application types |
-| `src/Office.Cli` | `send-test --to <wa_id>` (only `echo.recipients`), `classify-eval` (owner only, real key: [docs/ai/classification.md](../docs/ai/classification.md)) |
+| `src/Office.Cli` | `send-test --to <wa_id>` (only `echo.recipients`), `classify-eval` (real key: [docs/ai/classification.md](../docs/ai/classification.md)), `import-lists` (B-14 lists from CSV), `tasks-overdue` (S-05), `unmute` (S-01, the manager) |
+
+**TASK 05a additions:** `IClientLists` (B-14 lists, `hazem.list_entries`), `StaffEvents`
+(`POST /api/hazem/staff-events`, B-12), real staff tasks with a B-06 due time (`OfficeHours`,
+`hazem.staff_tasks`), the client's source (B-13, from Meta's referral), the topic of the request
+(B-25, `Intake.MatterType`), abuse (S-01: one warning, then muted), and `classify-v4` (two new
+intents, the topic and the sender role in the same call).
 | `tests/Office.UnitTests` | Domain (every transition of S-01..S-06), understanding (AI input, fallback, OpenAI call faked), approved texts, the conversation flow with fakes, the old contract rules |
 | `tests/Office.IntegrationTests` | Real API + throwaway PostgreSQL database built from `database/migrations`; n8n and OpenAI faked over HTTP |
 | `tests/Office.TestStub` | Meta media, OpenAI transcription and OpenAI classification stand-in for `hazem-e2e` |
