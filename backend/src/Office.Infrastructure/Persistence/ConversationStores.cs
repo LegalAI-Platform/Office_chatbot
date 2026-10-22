@@ -18,12 +18,12 @@ public sealed class ConversationStore(HazemDbContext db) : IConversationStore
 
         var person = Person.Load(p.Id, WaId.From(p.WaId),
             p.NameRaw is null ? null : PersonName.Restore(p.NameRaw, p.NameNormalized), // never re-validated
-            p.FullNameProvided, p.PreferredCallPhone);
+            p.FullNameProvided, p.PreferredCallPhone, p.Source, p.SourceRaw, p.FirstSeenAt);
 
         var c = await db.Conversations.AsNoTracking().FirstOrDefaultAsync(x => x.PersonId == p.Id, ct);
         var conversation = c is null
             ? Conversation.Start(person)
-            : Conversation.Load(c.Id, c.PersonId, StateName.Parse<ConversationState>(c.State), c.LastStaffMessageAt);
+            : Conversation.Load(c.Id, c.PersonId, StateName.Parse<ConversationState>(c.State), c.LastStaffMessageAt, c.AbuseWarnings);
 
         var i = await db.Intakes.AsNoTracking().FirstOrDefaultAsync(x => x.PersonId == p.Id && x.State != "closed", ct);
         var intake = i is null
@@ -31,47 +31,45 @@ public sealed class ConversationStore(HazemDbContext db) : IConversationStore
             : Intake.Load(i.Id, i.PersonId, StateName.Parse<IntakeState>(i.State),
                 i.ClientType is null ? null : StateName.Parse<ClientType>(i.ClientType), i.NameAsks,
                 i.PendingIntent is null ? null : new PendingRequest(i.PendingIntent, i.PendingService, i.PendingConsultationMode),
-                i.UnclearInARow);
+                i.UnclearInARow, i.SenderRole, i.ExistingQuestionAsked, i.MatterType, i.MatterSubtype, i.MatterAsked);
 
         return new ClientState(person, conversation, intake);
     }
+
+    public async Task SaveConversationAsync(Conversation conversation, CancellationToken ct) =>
+        await SaveConversation(db, conversation, ct);
 
     /// <summary>Called by <see cref="TurnStore"/> inside the turn's transaction.</summary>
     internal static async Task SaveAsync(HazemDbContext db, string turnId, TurnEffects e, CancellationToken ct)
     {
         var (person, conversation, intake) = (e.State.Person, e.State.Conversation, e.State.Intake);
         await db.Database.ExecuteSqlInterpolatedAsync($"""
-            INSERT INTO hazem.persons (id, wa_id, name_raw, name_normalized, full_name_provided, preferred_call_phone)
-            VALUES ({person.Id}, {person.WaId.Value}, {person.Name?.Raw}, {person.Name?.Normalized}, {person.FullNameProvided}, {person.PreferredCallPhone})
+            INSERT INTO hazem.persons (id, wa_id, name_raw, name_normalized, full_name_provided, preferred_call_phone,
+                                       source, source_raw, first_seen_at)
+            VALUES ({person.Id}, {person.WaId.Value}, {person.Name?.Raw}, {person.Name?.Normalized}, {person.FullNameProvided},
+                    {person.PreferredCallPhone}, {person.Source}, {person.SourceRaw}::jsonb, {person.FirstSeenAt})
             ON CONFLICT (id) DO UPDATE SET
               name_raw = EXCLUDED.name_raw, name_normalized = EXCLUDED.name_normalized,
-              full_name_provided = EXCLUDED.full_name_provided, preferred_call_phone = EXCLUDED.preferred_call_phone
+              full_name_provided = EXCLUDED.full_name_provided, preferred_call_phone = EXCLUDED.preferred_call_phone,
+              source = EXCLUDED.source, source_raw = EXCLUDED.source_raw, first_seen_at = EXCLUDED.first_seen_at
             """, ct);
 
-        await db.Database.ExecuteSqlInterpolatedAsync($"""
-            INSERT INTO hazem.conversations (id, person_id, state, last_staff_message_at)
-            VALUES ({conversation.Id}, {person.Id}, {StateName.Of(conversation.State)}, {conversation.LastStaffMessageAt})
-            ON CONFLICT (id) DO UPDATE SET state = EXCLUDED.state, last_staff_message_at = EXCLUDED.last_staff_message_at
-            """, ct);
+        await SaveConversation(db, conversation, ct);
 
-        var pending = intake.Pending;
-        var clientType = intake.ClientType is { } t ? StateName.Of(t) : null;
-        await db.Database.ExecuteSqlInterpolatedAsync($"""
-            INSERT INTO hazem.intakes (id, person_id, state, client_type, name_asks, pending_intent, pending_service,
-                                       pending_consultation_mode, unclear_in_a_row)
-            VALUES ({intake.Id}, {person.Id}, {StateName.Of(intake.State)}, {clientType}, {intake.NameAsks},
-                    {pending?.Intent}, {pending?.Service}, {pending?.ConsultationMode}, {intake.UnclearInARow})
-            ON CONFLICT (id) DO UPDATE SET
-              state = EXCLUDED.state, client_type = EXCLUDED.client_type, name_asks = EXCLUDED.name_asks,
-              pending_intent = EXCLUDED.pending_intent, pending_service = EXCLUDED.pending_service,
-              pending_consultation_mode = EXCLUDED.pending_consultation_mode, unclear_in_a_row = EXCLUDED.unclear_in_a_row
-            """, ct);
+        // A closed request first: only one open intake per person may exist (intakes_one_open_idx).
+        foreach (var closed in e.State.ClosedIntakes)
+        {
+            await SaveIntake(db, person, closed, ct);
+        }
+
+        await SaveIntake(db, person, intake, ct);
 
         foreach (var task in e.Tasks)
         {
             await db.Database.ExecuteSqlInterpolatedAsync($"""
-                INSERT INTO hazem.pending_tasks (person_id, turn_id, kind) VALUES ({person.Id}, {turnId}, {task.Kind})
-                ON CONFLICT (turn_id, kind) DO NOTHING
+                INSERT INTO hazem.staff_tasks (person_id, intake_id, turn_id, type, staff_id, due_at)
+                VALUES ({person.Id}, {intake.Id}, {turnId}, {task.Kind}, {task.StaffId}, {task.DueAt})
+                ON CONFLICT (turn_id, type) DO NOTHING
                 """, ct);
         }
 
@@ -79,9 +77,11 @@ public sealed class ConversationStore(HazemDbContext db) : IConversationStore
         {
             await db.Database.ExecuteSqlInterpolatedAsync($"""
                 INSERT INTO hazem.classifications (turn_id, intent, confidence, service, consultation_mode, full_name_present,
-                                                   model, prompt_version, latency_ms, input_tokens, output_tokens, fallback_reason)
+                                                   model, prompt_version, latency_ms, input_tokens, output_tokens, fallback_reason,
+                                                   matter_type, matter_subtype, sender_role)
                 VALUES ({c.TurnId}, {c.Intent}, {(decimal)Math.Round(c.Confidence, 3)}, {c.Service}, {c.ConsultationMode}, {c.FullNamePresent},
-                        {c.Model}, {c.PromptVersion}, {c.LatencyMs}, {c.InputTokens}, {c.OutputTokens}, {c.FallbackReason})
+                        {c.Model}, {c.PromptVersion}, {c.LatencyMs}, {c.InputTokens}, {c.OutputTokens}, {c.FallbackReason},
+                        {c.MatterType}, {c.MatterSubtype}, {c.SenderRole})
                 ON CONFLICT (turn_id) DO NOTHING
                 """, ct);
         }
@@ -95,6 +95,35 @@ public sealed class ConversationStore(HazemDbContext db) : IConversationStore
                 """, ct);
         }
     }
+
+    private static Task SaveConversation(HazemDbContext db, Conversation conversation, CancellationToken ct) =>
+        db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO hazem.conversations (id, person_id, state, last_staff_message_at, abuse_warnings)
+            VALUES ({conversation.Id}, {conversation.PersonId}, {StateName.Of(conversation.State)}, {conversation.LastStaffMessageAt},
+                    {conversation.AbuseWarnings})
+            ON CONFLICT (id) DO UPDATE SET state = EXCLUDED.state, last_staff_message_at = EXCLUDED.last_staff_message_at,
+              abuse_warnings = EXCLUDED.abuse_warnings
+            """, ct);
+
+    private static Task SaveIntake(HazemDbContext db, Person person, Intake intake, CancellationToken ct)
+    {
+        var pending = intake.Pending;
+        var clientType = intake.ClientType is { } t ? StateName.Of(t) : null;
+        return db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO hazem.intakes (id, person_id, state, client_type, name_asks, pending_intent, pending_service,
+                                       pending_consultation_mode, unclear_in_a_row, sender_role, existing_question_asked,
+                                       matter_type, matter_subtype, matter_asked)
+            VALUES ({intake.Id}, {person.Id}, {StateName.Of(intake.State)}, {clientType}, {intake.NameAsks},
+                    {pending?.Intent}, {pending?.Service}, {pending?.ConsultationMode}, {intake.UnclearInARow},
+                    {intake.SenderRole}, {intake.ExistingQuestionAsked}, {intake.MatterType}, {intake.MatterSubtype}, {intake.MatterAsked})
+            ON CONFLICT (id) DO UPDATE SET
+              state = EXCLUDED.state, client_type = EXCLUDED.client_type, name_asks = EXCLUDED.name_asks,
+              pending_intent = EXCLUDED.pending_intent, pending_service = EXCLUDED.pending_service,
+              pending_consultation_mode = EXCLUDED.pending_consultation_mode, unclear_in_a_row = EXCLUDED.unclear_in_a_row,
+              sender_role = EXCLUDED.sender_role, existing_question_asked = EXCLUDED.existing_question_asked,
+              matter_type = EXCLUDED.matter_type, matter_subtype = EXCLUDED.matter_subtype, matter_asked = EXCLUDED.matter_asked
+            """, ct);
+    }
 }
 
 public sealed class ApprovedTextStore(HazemDbContext db) : IApprovedTexts
@@ -102,4 +131,23 @@ public sealed class ApprovedTextStore(HazemDbContext db) : IApprovedTexts
     public async Task<IReadOnlyDictionary<string, ApprovedText>> GetActiveAsync(CancellationToken ct) =>
         await db.ApprovedTexts.AsNoTracking().Where(t => t.Active)
             .ToDictionaryAsync(t => t.Key, t => new ApprovedText(t.Key, t.Version, t.Text, t.MaxChars, t.Active), StringComparer.Ordinal, ct);
+}
+
+/// <summary>B-14 lists (hazem.list_entries), imported from the office's files.</summary>
+public sealed class ClientListStore(HazemDbContext db) : IClientLists
+{
+    public async Task<ListMatch> FindAsync(string waId, CancellationToken ct)
+    {
+        var rows = await db.ListEntries.AsNoTracking().Where(x => x.WaId == waId).ToListAsync(ct);
+        if (rows.Count == 0)
+        {
+            return ListMatch.None;
+        }
+
+        var client = rows.FirstOrDefault(r => r.ListKind == "existing_client");
+        return new ListMatch(
+            rows.Any(r => r.ListKind == "blocked"),
+            rows.Any(r => r.ListKind == "lawyer_direct"),
+            client is null ? null : new ExistingClientEntry(client.Name, client.StaffId));
+    }
 }

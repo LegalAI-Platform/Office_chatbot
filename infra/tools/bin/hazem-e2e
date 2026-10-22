@@ -13,7 +13,10 @@ D=201000000064   # PDF, voice note, too large, wrong sha256, forbidden type
 E=201000000065   # turn left processing while n8n restarts
 F=201000000066   # TASK 04: booking request -> name -> offer; legal question; AI down
 G=201000000067   # TASK 04: a photo without words never reaches the AI
-ALL="'$A','$B','$C','$D','$E','$F','$G'"
+H=201000000068   # TASK 05a: a listed existing client asks about their case
+I=201000000069   # TASK 05a: a blocked number
+K=201000000070   # TASK 05a: a client who tells the topic first (B-25)
+ALL="'$A','$B','$C','$D','$E','$F','$G','$H','$I','$K'"
 STUB=http://meta-stub:8080
 
 passed=0; failed=0
@@ -69,6 +72,10 @@ sent_texts() {  # sent_texts WA_ID: every text n8n sent to that number, in order
 WELCOME="أهلًا بحضرتك في مكتب الأستاذ سعد فتحي سعد للمحاماة، معاك حازم. ممكن اسم حضرتك رباعي؟"
 OFFER="الأستاذ يقدر يشوف الموضوع مع حضرتك في استشارة: بالتليفون بـ500 أو في المكتب بـ1,000."
 LEGAL="الأستاذ هو اللي هيجاوب حضرتك على ده في الاستشارة."
+UNCLEAR="معلش مش واضحلي المطلوب. ممكن تكتبلي حضرتك محتاج إيه؟"   # approved by the owner (migration 0007)
+ASK_TOPIC="ولو تحب، قولّي باختصار الموضوع عن إيه عشان الأستاذ يبقى عارفه."   # B-25 (0008)
+EXISTING="رسالة حضرتك وصلت للمكتب، وهتتبلّغ للمسؤول عن موضوعك."         # approved (0007), the neutral B-04 reply
+UNCLEAR="معلش مش واضحلي المطلوب. ممكن تكتبلي حضرتك محتاج إيه؟"   # approved by the owner (0007)
 stub_log() { curl -s "$STUB/_log"; }
 finish() { echo "Result: $passed passed, $failed failed."; [[ $failed -eq 0 ]]; }
 
@@ -82,7 +89,9 @@ case "${1:-}" in
     q "
       DELETE FROM hazem.turn_replies WHERE turn_id IN (SELECT turn_id FROM hazem.turns WHERE wa_id IN ($ALL));
       DELETE FROM hazem.classifications WHERE turn_id IN (SELECT turn_id FROM hazem.turns WHERE wa_id IN ($ALL));
-      DELETE FROM hazem.pending_tasks WHERE person_id IN (SELECT id FROM hazem.persons WHERE wa_id IN ($ALL));
+      DELETE FROM hazem.staff_tasks WHERE person_id IN (SELECT id FROM hazem.persons WHERE wa_id IN ($ALL));
+      DELETE FROM hazem.list_entries WHERE wa_id IN ($ALL);
+      DELETE FROM hazem.staff WHERE name = 'e2e-staff';
       DELETE FROM hazem.intakes WHERE person_id IN (SELECT id FROM hazem.persons WHERE wa_id IN ($ALL));
       DELETE FROM hazem.conversations WHERE person_id IN (SELECT id FROM hazem.persons WHERE wa_id IN ($ALL));
       DELETE FROM hazem.persons WHERE wa_id IN ($ALL);
@@ -113,7 +122,7 @@ case "${1:-}" in
   setup)
     "$0" cleanup >/dev/null
     backup_set whatsapp.dry_run true
-    backup_set whatsapp.test_recipients "$A,$B,$C,$D,$E,$F,$G"   # 0006: only test numbers get sends
+    backup_set whatsapp.test_recipients "$A,$B,$C,$D,$E,$F,$G,$H,$I,$K"   # 0006: only test numbers get sends
     backup_set whatsapp.graph_base_url "$STUB"
     backup_set ai.openai_base_url "$STUB/v1"
     if [[ -z "$(q "SELECT value FROM app.settings WHERE key = 'whatsapp.graph_api_version'")" ]]; then
@@ -345,11 +354,11 @@ SQL
 
   check-hazem-offer)
     wait_eq "after the name: the consultation offer, without asking again" \
-      "SELECT COALESCE((SELECT string_agg(request_payload->'text'->>'body', ' || ' ORDER BY created_at) FROM app.wa_outbound_messages WHERE wa_id = '$F'), '')" "$WELCOME || $OFFER"
+      "SELECT COALESCE((SELECT string_agg(request_payload->'text'->>'body', ' || ' ORDER BY created_at, idempotency_key) FROM app.wa_outbound_messages WHERE wa_id = '$F'), '')" "$WELCOME || $OFFER || $ASK_TOPIC"
     wait_eq "the person has a full name and the request is at offer_sent" \
       "SELECT p.full_name_provided || '/' || i.state || '/' || i.client_type FROM hazem.persons p JOIN hazem.intakes i ON i.person_id = p.id WHERE p.wa_id = '$F'" "true/offer_sent/new_client"
     wait_eq "every reply recorded with its approved text key and version" \
-      "SELECT string_agg(r.text_key || ':' || r.text_version, ',' ORDER BY r.created_at) FROM hazem.turn_replies r JOIN hazem.turns t USING (turn_id) WHERE t.wa_id = '$F'" "welcome_ask_name:1,consultation_offer:1"
+      "SELECT string_agg(r.text_key || ':' || r.text_version, ',' ORDER BY r.created_at, r.idempotency_key) FROM hazem.turn_replies r JOIN hazem.turns t USING (turn_id) WHERE t.wa_id = '$F'" "welcome_ask_name:1,consultation_offer:1,ask_topic:1"
     finish
     ;;
 
@@ -378,11 +387,50 @@ SQL
     ;;
 
   check-hazem-fallback)
-    wait_eq "AI down: the client still gets an answer (the offer, as the unclear fallback)" \
-      "SELECT string_agg(request_payload->'text'->>'body', ' || ') FROM app.wa_outbound_messages WHERE wa_id = '$F' AND idempotency_key LIKE 'hazem:' || (SELECT turn_id FROM app.wa_inbound_messages WHERE wamid = 'wamid.E2E-F4') || ':%'" "$OFFER"
+    wait_eq "AI down: the client still gets an answer (the approved «unclear» text)" \
+      "SELECT string_agg(request_payload->'text'->>'body', ' || ') FROM app.wa_outbound_messages WHERE wa_id = '$F' AND idempotency_key LIKE 'hazem:' || (SELECT turn_id FROM app.wa_inbound_messages WHERE wamid = 'wamid.E2E-F4') || ':%'" "$UNCLEAR"
     wait_eq "AI down: classified as other with the reason" \
       "SELECT intent || '/' || fallback_reason FROM hazem.classifications WHERE turn_id = (SELECT turn_id FROM app.wa_inbound_messages WHERE wamid = 'wamid.E2E-F4')" "other/error"
     curl -s -X POST "$STUB/_ai/up" >/dev/null
+    finish
+    ;;
+
+  # ---------------------------------------------------------------- TASK 05a
+  hazem05-setup)
+    hazem_backup_set hazem.recipients "$F,$G,$H,$I,$K"
+    # The office's lists, as import-lists would write them (dummy numbers only).
+    q "INSERT INTO hazem.staff (name) VALUES ('e2e-staff') ON CONFLICT (name) DO NOTHING;
+       INSERT INTO hazem.list_entries (list_kind, wa_id, name, staff_id, import_batch)
+         SELECT 'existing_client', '$H', 'محمد أحمد علي حسن', id, gen_random_uuid() FROM hazem.staff WHERE name = 'e2e-staff';
+       INSERT INTO hazem.list_entries (list_kind, wa_id, name, import_batch) VALUES ('blocked', '$I', 'x', gen_random_uuid());" >/dev/null
+    inject "$H" wamid.E2E-H1 text "$(text "الجلسة الجاية امتى؟")" 10
+    inject "$I" wamid.E2E-I1 text "$(text "السلام عليكم")" 10
+    inject "$K" wamid.E2E-K1 text "$(text "السلام عليكم عندي خناقة على ورث مع اخويا")" 10
+    echo "a listed client, a blocked number and a client who tells the topic"
+    ;;
+
+  check-hazem05)
+    wait_eq "B-04: the listed client gets the neutral reply, no name question, no «[المسؤول]»" \
+      "SELECT COALESCE((SELECT string_agg(request_payload->'text'->>'body', ' || ') FROM app.wa_outbound_messages WHERE wa_id = '$H'), '')" "$EXISTING"
+    wait_eq "B-04: a task for the staff member in charge, with a B-06 due time" \
+      "SELECT t.type || '/' || s.name || '/' || (t.due_at > t.created_at) FROM hazem.staff_tasks t JOIN hazem.staff s ON s.id = t.staff_id JOIN hazem.persons p ON p.id = t.person_id WHERE p.wa_id = '$H'" "existing_client_message/e2e-staff/true"
+    wait_eq "B-14: the blocked number got nothing and its conversation is muted" \
+      "SELECT (SELECT count(*) FROM app.wa_outbound_messages WHERE wa_id = '$I') || '/' || (SELECT c.state FROM hazem.conversations c JOIN hazem.persons p ON p.id = c.person_id WHERE p.wa_id = '$I')" "0/muted"
+    wait_eq "B-25: the topic told in the first message is kept (welcome first, B-01)" \
+      "SELECT i.matter_type || '/' || i.state FROM hazem.intakes i JOIN hazem.persons p ON p.id = i.person_id WHERE p.wa_id = '$K'" "inheritance/awaiting_name"
+    wait_eq "B-13: a client with no referral is direct" \
+      "SELECT source FROM hazem.persons WHERE wa_id = '$K'" "direct"
+    finish
+    ;;
+
+  hazem05-name)
+    inject "$K" wamid.E2E-K2 text "$(text "محمد أحمد علي حسن")" 10
+    echo "the name from $K"
+    ;;
+
+  check-hazem05-name)
+    wait_eq "B-25: the topic is known, so the offer comes without the topic question" \
+      "SELECT string_agg(request_payload->'text'->>'body', ' || ' ORDER BY idempotency_key) FROM app.wa_outbound_messages WHERE wa_id = '$K' AND idempotency_key LIKE 'hazem:' || (SELECT turn_id FROM app.wa_inbound_messages WHERE wamid = 'wamid.E2E-K2') || ':%'" "$OFFER"
     finish
     ;;
 
@@ -401,6 +449,6 @@ SQL
     ;;
 
   *)
-    die "usage: hazem-e2e setup|check-loop|replay|check-replay|inject-b|check-api-down|check-recovered|check-api-send|check-auth|group-c|check-group|media-d|check-media|stale-e|check-stale|cleanup|remove-test-credentials|check-restored|hazem-setup|check-hazem-welcome|hazem-name|check-hazem-offer|hazem-legal|check-hazem-legal|hazem-ai-down|check-hazem-fallback"
+    die "usage: hazem-e2e setup|check-loop|replay|check-replay|inject-b|check-api-down|check-recovered|check-api-send|check-auth|group-c|check-group|media-d|check-media|stale-e|check-stale|cleanup|remove-test-credentials|check-restored|hazem-setup|check-hazem-welcome|hazem-name|check-hazem-offer|hazem-legal|check-hazem-legal|hazem-ai-down|check-hazem-fallback|hazem05-setup|check-hazem05|hazem05-name|check-hazem05-name"
     ;;
 esac

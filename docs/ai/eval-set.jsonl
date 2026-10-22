@@ -154,3 +154,51 @@
 {"id":154,"text":"3ayez a7gez ma3ad fel maktab","intent":"consultation_request","consultation_mode":"office"}
 {"id":155,"text":"ازيك يا حازم عايز استشارة","intent":"consultation_request"}
 {"id":156,"text":"الاستاذ موجود النهارده؟ محتاج اقابله ضروري","intent":"urgent"}
+{"id":157,"text":"مراتي سابت البيت وعايزة خلع وواخدة العيال","intent":"describe_matter","matter_type":"personal_status","sender_role":"client"}
+{"id":158,"text":"أنا مضيت على إيصال أمانة والراجل اللي معاه الإيصال بيهددني يرفع عليا قضية","intent":"describe_matter","matter_type":"cheques_trust_receipts"}
+{"id":159,"text":"خناقة على ورث مع اخواتي البنات","intent":"describe_matter","matter_type":"inheritance"}
+{"id":160,"text":"صاحب الشقة عايز يطردني والعقد لسه مخلصش","intent":"describe_matter","matter_type":"rent"}
+{"id":161,"text":"الشركة رفدتني من غير ما تديني مستحقاتي","intent":"describe_matter","matter_type":"labor"}
+{"id":162,"text":"اشتريت شقة والبايع رافض يسجلها باسمي","intent":"describe_matter","matter_type":"real_estate"}
+{"id":163,"text":"ابني اتعمله محضر سرقة وهو مظلوم","intent":"describe_matter","matter_type":"criminal"}
+{"id":164,"text":"عربية خبطتني ومحتاج تعويض","intent":"describe_matter","matter_type":"civil_compensation"}
+{"id":165,"text":"شريكي في المحل بيسرق من الفلوس","intent":"describe_matter","matter_type":"commercial"}
+{"id":166,"text":"جوزي مش بيصرف على العيال من ٣ شهور","intent":"describe_matter","matter_type":"personal_status"}
+{"id":167,"text":"اتجوزت عرفي والراجل اختفى","intent":"describe_matter","matter_type":"urfi"}
+{"id":168,"text":"عندي مشكلة كبيرة ومش عارف ابدأ منين","intent":"describe_matter","matter_type":"unclear"}
+{"id":169,"text":"طليقي مش راضي يخليني اشوف ولادي","intent":"describe_matter","matter_type":"personal_status"}
+{"id":170,"text":"كتبت شيك لواحد ومكنش فيه رصيد ورفع عليا جنحة","intent":"describe_matter","matter_type":"cheques_trust_receipts"}
+{"id":171,"text":"ابويا مات وعمي واخد البيت كله","intent":"describe_matter","matter_type":"inheritance"}
+{"id":172,"text":"يا حرامية يا نصابين","intent":"abusive"}
+{"id":173,"text":"انتو شوية ولاد ****","intent":"abusive"}
+{"id":174,"text":"هوديكم في داهية لو مارديتوش","intent":"abusive"}
+{"id":175,"text":"اكسب ٥٠٠٠ جنيه يوميا من البيت اضغط على اللينك","intent":"abusive"}
+{"id":176,"text":"انتو مكتب فاشل وانا هاشتكيكم في كل حتة","intent":"abusive"}
+{"id":177,"text":"انا مستاء جدا من التأخير في الرد","intent":"other"}
+{"id":178,"text":"السلام عليكم انا المحامي احمد سمير من مكتب النور","intent":"greeting","sender_role":"lawyer_colleague"}
+{"id":179,"text":"مساء الخير يا استاذ، زميل محامي وعايز اسأل على قضية مشتركة","intent":"existing_matter","sender_role":"lawyer_colleague"}
+{"id":180,"text":"انا صحفي في جريدة المصري وعايز تصريح من الاستاذ","intent":"other","sender_role":"press"}
+{"id":181,"text":"معاك فلان من قناة الحياة عايزين نعمل لقاء مع الاستاذ","intent":"other","sender_role":"press"}
+{"id":182,"text":"انا مندوب شركة برمجيات ومعانا برنامج لادارة مكاتب المحاماة","intent":"other","sender_role":"vendor"}
+{"id":183,"text":"عرض خاص على اجهزة الكمبيوتر للمكاتب","intent":"other","sender_role":"vendor"}
+{"id":184,"text":"عايز احجز استشارة في موضوع ميراث","intent":"consultation_request","matter_type":"inheritance"}
+{"id":185,"text":"ينفع اطلق مراتي وهي حامل؟","intent":"legal_question","matter_type":"personal_status","sender_role":"client"}
+{"id":186,"text":"المستأجر مش بيدفع من سنة اعمل ايه؟","intent":"legal_question","matter_type":"rent"}
+{"id":187,"text":"عايز محامي يمسك قضية الشيك بتاعتي","intent":"service_by_name","service":"case_representation","matter_type":"cheques_trust_receipts"}
+{"id":188,"text":"مستعجل اخويا اتقبض عليه امبارح","intent":"urgent","matter_type":"criminal"}
+{"id":189,"text":"الاستشارة بكام","intent":"price_question","service":"consultation_phone_video","sender_role":"client"}
+{"id":190,"text":"عايزة اعمل قضية نفقة","intent":"service_by_name","service":"case_representation","matter_type":"personal_status"}
+{"id":191,"text":"جوزي طلقني غيابي وعايزة حقوقي","intent":"describe_matter","matter_type":"personal_status"}
+{"id":192,"text":"ممكن اعرف ازاي احجز؟ عندي مشكلة في عقد ايجار","intent":"consultation_request","matter_type":"rent"}
+{"id":193,"text":"صاحب الشغل مش مديني مرتبي","intent":"describe_matter","matter_type":"labor"}
+{"id":194,"text":"اخويا باع الارض من غير ما ياخد رأينا","intent":"describe_matter","matter_type":"real_estate"}
+{"id":195,"text":"عايز ارفع قضية تعويض على المستشفى","intent":"service_by_name","service":"case_representation","matter_type":"civil_compensation"}
+{"id":196,"text":"انا عندي شركة وعايز اراجع عقد مع مورد","intent":"service_by_name","service":"document_review","matter_type":"commercial"}
+{"id":197,"text":"جوزي في الحجز من امبارح ومش عارفة اعمل ايه","intent":"urgent","matter_type":"criminal"}
+{"id":198,"text":"عندي جلسة بكرة ومحامي سابني","intent":"urgent"}
+{"id":199,"text":"اخويا اتحكم عليه حبس والتنفيذ بكرة","intent":"urgent","matter_type":"criminal"}
+{"id":200,"text":"البوليس واقف تحت البيت ومعاهم امر ضبط لجوزي","intent":"urgent","matter_type":"criminal"}
+{"id":201,"text":"ابني في القسم دلوقتي","intent":"urgent","matter_type":"criminal"}
+{"id":202,"text":"اتحكم عليا غيابي من سنتين وعايز اعرف اعمل ايه","intent":"legal_question","matter_type":"criminal"}
+{"id":203,"text":"عملولي محضر الشهر اللي فات","intent":"describe_matter","matter_type":"criminal"}
+{"id":204,"text":"صاحب البيت جايب الشرطة بكرة عشان يطردنا","intent":"urgent","matter_type":"rent"}

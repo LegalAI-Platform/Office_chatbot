@@ -162,8 +162,8 @@ if [[ "$(psql_super n8n -c "SELECT count(*) FROM credentials_entity WHERE name =
 fi
 
 echo "== Hazem understands and answers (TASK 04)"
-check "tables persons, conversations, intakes, approved_texts, turn_replies, classifications, pending_tasks exist" \
-  sql_equals office "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'hazem' AND table_name IN ('persons', 'conversations', 'intakes', 'approved_texts', 'turn_replies', 'classifications', 'pending_tasks')" "7"
+check "tables persons, conversations, intakes, approved_texts, turn_replies, classifications, staff_tasks exist" \
+  sql_equals office "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'hazem' AND table_name IN ('persons', 'conversations', 'intakes', 'approved_texts', 'turn_replies', 'classifications', 'staff_tasks')" "7"
 check "office_api can write the TASK 04 tables (rolled back)" \
   psql_as office_api "$OFFICE_API_PASSWORD" office -c 'BEGIN; DELETE FROM hazem.persons WHERE false; DELETE FROM hazem.classifications WHERE false; DELETE FROM hazem.turn_replies WHERE false; ROLLBACK;'
 check "office_app (n8n) cannot read persons, texts or classifications" \
@@ -176,8 +176,8 @@ check "classifier on the real OpenAI URL (OPENAI_BASE_URL empty or the default)"
   bash -c '[[ -z "${OPENAI_BASE_URL:-}" || "$OPENAI_BASE_URL" == "https://api.openai.com/v1" ]]'
 check "no AI test stub left behind (ai.stub_enabled = false, ai.stub_base_url empty)" \
   sql_equals office "SELECT string_agg(key || '=' || value, ',' ORDER BY key) FROM hazem.settings WHERE key IN ('ai.stub_enabled', 'ai.stub_base_url')" "ai.stub_base_url=,ai.stub_enabled=false"
-check "no active approved text has an unfilled placeholder ({{...}} or [...])" \
-  sql_equals office "SELECT count(*) FROM hazem.approved_texts WHERE active AND text ~ '\{\{|\['" "0"
+check "no active approved text has an unfilled office placeholder ({{OFFICE_ADDRESS}}, [..]; system slots like {{media}} are filled by Hazem)" \
+  sql_equals office "SELECT count(*) FROM hazem.approved_texts WHERE active AND regexp_replace(text, '\{\{[a-z_]+\}\}', '', 'g') ~ '\{\{|\['" "0"
 check "the classification log has no column for client text or names" \
   sql_equals office "SELECT count(*) FROM information_schema.columns WHERE table_schema = 'hazem' AND table_name = 'classifications' AND column_name ~ '(text|name|message)' AND column_name <> 'full_name_present'" "0"
 if [[ -z "${HAZEM_OPENAI_API_KEY:-}" ]]; then
@@ -186,6 +186,16 @@ fi
 if [[ "$(psql_super office -c "SELECT value FROM hazem.settings WHERE key = 'hazem.open_to_all'")" == "true" ]]; then
   warn "hazem.open_to_all is true: Hazem answers EVERY number (the owner's decision only, CLAUDE.md)"
 fi
+
+echo "== Who is writing, tasks and topics (TASK 05a)"
+check "tables staff, list_entries, staff_tasks exist" \
+  sql_equals office "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'hazem' AND table_name IN ('staff', 'list_entries', 'staff_tasks')" "3"
+check "office_app (n8n) cannot read the office lists or the staff tasks" \
+  expect_fail psql_as office_app "$OFFICE_APP_PASSWORD" office -c 'SELECT 1 FROM hazem.list_entries UNION ALL SELECT 1 FROM hazem.staff_tasks LIMIT 1'
+check "handoff.enabled = false until the panel (TASK 07): nobody would answer a client handed over" \
+  sql_equals office "SELECT value FROM hazem.settings WHERE key = 'handoff.enabled'" "false"
+check "no active approved text promises a contact time (B-06 promises wait for the panel)" \
+  sql_equals office "SELECT count(*) FROM hazem.approved_texts WHERE active AND text ~ '(خلال ساعة|الساعة 10|هيتواصل|هيرد عليك)'" "0"
 
 echo "== Who may receive messages (CLAUDE.md, migration 0006)"
 check "every send is limited to whatsapp.test_recipients unless the owner decided otherwise (setting exists)" \
@@ -197,6 +207,10 @@ if [[ "$(psql_super office -c "SELECT value FROM app.settings WHERE key = 'whats
 fi
 
 echo "== Migrations"
+check "migration 0008 (lists, staff tasks, sources, topics) is applied" \
+  sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0008'" "1"
+check "migration 0007 (owner-approved texts) is applied" \
+  sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0007'" "1"
 check "migration 0006 (sends only to test recipients) is applied" \
   sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0006'" "1"
 check "migration 0005 (Hazem conversations, texts, classifications) is applied" \

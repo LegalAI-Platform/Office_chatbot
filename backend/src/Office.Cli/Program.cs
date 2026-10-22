@@ -13,6 +13,7 @@ using Office.Application.UseCases;
 using Office.Infrastructure;
 using Office.Infrastructure.Ai;
 using Office.Infrastructure.Json;
+using Office.Infrastructure.Lists;
 
 // Office.Cli — operational commands, run inside the api container:
 //   docker compose exec api dotnet /app/cli/Office.Cli.dll <command>
@@ -27,6 +28,11 @@ using Office.Infrastructure.Json;
 //                                         The owner runs it (T-08); it never runs in the tests.
 //     docker compose cp docs/ai/eval-set.jsonl api:/tmp/eval-set.jsonl
 //     docker compose exec api dotnet /app/cli/Office.Cli.dll classify-eval --file /tmp/eval-set.jsonl
+//   import-lists --kind blocked|lawyer_direct|existing_client --file <csv> [--replace]
+//                                         B-14 lists from CSV UTF-8 (name,phone[,staff]); bad lines are
+//                                         reported by line number, never with the whole number
+//   tasks-overdue                         marks staff tasks past due_at as overdue (S-05)
+//   unmute --to <wa_id>                   the manager brings a muted conversation back (S-01)
 
 var command = args.FirstOrDefault() ?? "help";
 string? Option(string name)
@@ -51,10 +57,13 @@ try
     {
         "send-test" => await SendTest(),
         "classify-eval" => await ClassifyEval(),
+        "import-lists" => await ImportLists(),
+        "tasks-overdue" => await TasksOverdue(),
+        "unmute" => await Unmute(),
         _ => new JsonObject
         {
             ["ok"] = false,
-            ["usage"] = "send-test --to WA_ID [--text TEXT] | classify-eval [--model M] [--limit N] [--input-price USD --output-price USD] < eval-set.jsonl",
+            ["usage"] = "send-test --to WA_ID [--text TEXT] | classify-eval [--file F] [--model M] [--limit N] [--input-price USD --output-price USD] | import-lists --kind K --file CSV [--replace] | tasks-overdue | unmute --to WA_ID",
         },
     };
 
@@ -82,6 +91,31 @@ async Task<JsonNode> SendTest()
     return JsonSerializer.SerializeToNode(result, HazemJson.Options)!;
 }
 
+async Task<JsonNode> ImportLists()
+{
+    var kind = Option("--kind") ?? throw new ArgumentException("--kind blocked|lawyer_direct|existing_client is required");
+    var file = Option("--file") ?? throw new ArgumentException("--file <csv> is required");
+    using var reader = new StreamReader(file, System.Text.Encoding.UTF8);
+    var r = await sp.GetRequiredService<ListImporter>().ImportAsync(kind, reader, args.Contains("--replace"), ct);
+    return new JsonObject
+    {
+        ["ok"] = r.Rejected.Count == 0,
+        ["kind"] = kind,
+        ["imported"] = r.Imported,
+        ["rejected"] = new JsonArray(r.Rejected.Select(x => (JsonNode)new JsonObject { ["line"] = x.Line, ["reason"] = x.Reason }).ToArray()),
+    };
+}
+
+async Task<JsonNode> TasksOverdue() =>
+    new JsonObject { ["ok"] = true, ["marked_overdue"] = await sp.GetRequiredService<TaskMaintenance>().MarkOverdueAsync(ct) };
+
+async Task<JsonNode> Unmute()
+{
+    var to = Option("--to") ?? throw new ArgumentException("--to <wa_id> is required");
+    var (outcome, error) = await sp.GetRequiredService<StaffEvents>().UnmuteAsync(to, ct);
+    return new JsonObject { ["ok"] = outcome == StaffEvents.Outcome.Done, ["wa_id"] = LogMask.Phone(to), ["result"] = outcome.ToString(), ["error"] = error };
+}
+
 async Task<JsonNode> ClassifyEval()
 {
     var options = sp.GetRequiredService<IOptions<HazemOptions>>().Value;
@@ -103,7 +137,8 @@ async Task<JsonNode> ClassifyEval()
 
     var confusion = new SortedDictionary<string, SortedDictionary<string, int>>(StringComparer.Ordinal);
     var failures = new SortedDictionary<string, int>(StringComparer.Ordinal);
-    int total = 0, correct = 0, serviceChecked = 0, serviceCorrect = 0;
+    int total = 0, correct = 0, serviceChecked = 0, serviceCorrect = 0, matterChecked = 0, matterCorrect = 0, roleChecked = 0, roleCorrect = 0;
+    var otherMistakes = new JsonArray();
     long latency = 0, inputTokens = 0, outputTokens = 0;
     var mistakes = new JsonArray();
     var serviceMistakes = new JsonArray();
@@ -139,6 +174,35 @@ async Task<JsonNode> ClassifyEval()
         else
         {
             mistakes.Add(new JsonObject { ["id"] = sample["id"]?.DeepClone(), ["expected"] = expected, ["got"] = got });
+        }
+
+        // B-25 topic and B-14.4 role: scored only on samples that carry them.
+        if ((string?)sample["matter_type"] is { } matter)
+        {
+            matterChecked++;
+            var gotMatter = c.Matter is { } m ? Classification.Code(m) : null;
+            if (gotMatter == matter)
+            {
+                matterCorrect++;
+            }
+            else
+            {
+                otherMistakes.Add(new JsonObject { ["id"] = sample["id"]?.DeepClone(), ["field"] = "matter_type", ["expected"] = matter, ["got"] = gotMatter });
+            }
+        }
+
+        if ((string?)sample["sender_role"] is { } role)
+        {
+            roleChecked++;
+            var gotRole = Classification.Code(c.Role);
+            if (gotRole == role)
+            {
+                roleCorrect++;
+            }
+            else
+            {
+                otherMistakes.Add(new JsonObject { ["id"] = sample["id"]?.DeepClone(), ["field"] = "sender_role", ["expected"] = role, ["got"] = gotRole });
+            }
         }
 
         if ((string?)sample["service"] is { } service)
@@ -179,6 +243,9 @@ async Task<JsonNode> ClassifyEval()
         ["output_tokens"] = outputTokens,
         ["mistakes"] = mistakes,
         ["service_mistakes"] = serviceMistakes,
+        ["matter_accuracy"] = matterChecked == 0 ? null : Math.Round((double)matterCorrect / matterChecked, 3),
+        ["sender_role_accuracy"] = roleChecked == 0 ? null : Math.Round((double)roleCorrect / roleChecked, 3),
+        ["other_mistakes"] = otherMistakes,
     };
     if (double.TryParse(Option("--input-price"), System.Globalization.CultureInfo.InvariantCulture, out var inPrice)
         && double.TryParse(Option("--output-price"), System.Globalization.CultureInfo.InvariantCulture, out var outPrice))

@@ -38,3 +38,23 @@
 {"id":1038,"text":"عايز اعرف اتعاب المحامي في قضية طلاق","intent":"price_question","service":"case_representation"}
 {"id":1039,"text":"الاستشارة اونلاين بكام","intent":"price_question","service":"consultation_phone_video"}
 {"id":1040,"text":"شكرا بس عايز اغير الميعاد","intent":"reschedule_or_cancel"}
+{"id":1041,"text":"جوزي اتجوز عليا ومش عايزة اكمل معاه","intent":"describe_matter","matter_type":"personal_status"}
+{"id":1042,"text":"المالك قطع عننا الميه عشان نسيب الشقة","intent":"describe_matter","matter_type":"rent"}
+{"id":1043,"text":"البنك بيطالبني بشيك انا ممضتهوش","intent":"describe_matter","matter_type":"cheques_trust_receipts"}
+{"id":1044,"text":"اخواتي الولاد واخدين نصيبنا في الارض","intent":"describe_matter","matter_type":"inheritance"}
+{"id":1045,"text":"اتفصلت من المصنع بعد ١٠ سنين شغل","intent":"describe_matter","matter_type":"labor"}
+{"id":1046,"text":"جاري بنى على حتة من ارضي","intent":"describe_matter","matter_type":"real_estate"}
+{"id":1047,"text":"البوليس جه البيت ومعاه امر ضبط لابويا","intent":"urgent","matter_type":"criminal"}
+{"id":1048,"text":"عايز اعرف حقي في الحضانة لو اتجوزت تاني","intent":"legal_question","matter_type":"personal_status"}
+{"id":1049,"text":"عايز احجز معاد بخصوص مشكلة في الشركة مع شريكي","intent":"consultation_request","matter_type":"commercial"}
+{"id":1050,"text":"دكتور غلط في عملية لامي وعايزين حقنا","intent":"describe_matter","matter_type":"civil_compensation"}
+{"id":1051,"text":"يا كذابين يا بتوع فلوس","intent":"abusive"}
+{"id":1052,"text":"خصم ٧٠٪ على كل المنتجات ادخل دلوقتي","intent":"abusive"}
+{"id":1053,"text":"معاك الاستاذ كريم المحامي بالنقض","intent":"greeting","sender_role":"lawyer_colleague"}
+{"id":1054,"text":"انا من موقع اخباري وعايزين رأي الاستاذ في قانون الايجارات","intent":"other","sender_role":"press"}
+{"id":1055,"text":"احنا شركة دعاية وعندنا باقات للمحامين","intent":"other","sender_role":"vendor"}
+{"id":1056,"text":"انا زعلان عشان محدش رد عليا امبارح","intent":"other"}
+{"id":1057,"text":"مراتي رافعة عليا قضية نفقة وعايز حد يترافع عني","intent":"service_by_name","service":"case_representation","matter_type":"personal_status"}
+{"id":1058,"text":"اتجوزنا عرفي وعايزين نوثق","intent":"service_by_name","service":"urf_proof","matter_type":"urfi"}
+{"id":1059,"text":"عندي موضوع حساس شوية","intent":"describe_matter","matter_type":"unclear"}
+{"id":1060,"text":"مضيت ايصالات امانة لمعرض العربيات وبيهددوني","intent":"describe_matter","matter_type":"cheques_trust_receipts"}

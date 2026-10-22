@@ -106,6 +106,47 @@ SELECT fallback_reason, count(*) FROM hazem.classifications
   `docker compose up -d api`. Never paste the key in a chat or a log.
 - `timeout` / `error` for a while: OpenAI is down; the answers keep going out.
 
+## Importing the office's lists (TASK 05a, B-14)
+
+Three lists: `existing_client` (name, phone, staff in charge), `lawyer_direct`, `blocked`.
+
+1. In Excel: columns **name, phone, staff** (staff only for clients) with that header row.
+   File → Save As → **CSV UTF-8 (Comma delimited)**. Phones may be written any way
+   (`010…`, `+20…`, Arabic digits, spaces, dashes).
+2. Copy it into the api container and import (`--replace` swaps the whole list in one go, and
+   only when **every** line is valid: with one refused line nothing changes and the old list
+   stays). A cell written on two lines in Excel (Alt+Enter) is read as one cell:
+
+```powershell
+docker compose cp clients.csv api:/tmp/clients.csv
+docker compose exec api dotnet /app/cli/Office.Cli.dll import-lists --kind existing_client --file /tmp/clients.csv --replace
+```
+
+3. The output says how many lines were imported and lists refused lines by **line number** (the
+   number itself is never printed). Fix them in Excel and import again. Delete the CSV afterwards:
+   it holds personal data.
+
+A listed client whose name has four parts is never asked for the name (B-01.5). A blocked number
+gets no answer at all and its conversation is muted.
+
+## Insults and spam (S-01) — unmuting a client
+
+Hazem warns once (text `abuse_warning`, after the owner approves it) and records a `complaint`
+task; the next time the conversation is muted for good. Only the manager brings it back:
+
+```powershell
+docker compose exec api dotnet /app/cli/Office.Cli.dll unmute --to 2010XXXXXXXX
+```
+
+## Overdue staff tasks (S-05)
+
+Every task has a due time from B-06. `tasks-overdue` marks the late ones (run it by hand, or every
+few minutes later). Alerts to the lawyer and apologies to the client come with the panel (TASK 07).
+
+```powershell
+docker compose exec api dotnet /app/cli/Office.Cli.dll tasks-overdue
+```
+
 ## Changing the classification model (TASK 04, T-08)
 
 1. Run `classify-eval` with the candidate (`--model …`, [docs/ai/classification.md](../ai/classification.md)).

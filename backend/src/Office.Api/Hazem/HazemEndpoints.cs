@@ -11,6 +11,9 @@ namespace Office.Api.Hazem;
 /// <summary>Endpoints n8n calls (docs/hazem-internal-api.md). Every one needs X-Hazem-Token.</summary>
 public static class HazemEndpoints
 {
+    /// <summary>How far ahead of the API's clock a staff event's time may be.</summary>
+    public static readonly TimeSpan StaffEventClockSkew = TimeSpan.FromMinutes(5);
+
     public static void MapHazemApi(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/hazem").AddEndpointFilter<HazemTokenFilter>();
@@ -39,6 +42,38 @@ public static class HazemEndpoints
             }
 
             return Results.Ok(response);
+        });
+
+        // B-12 from the panel (TASK 07) or n8n (TASK 05b): a staff member wrote, or handed back.
+        group.MapPost("/staff-events", async (StaffEventRequest? request, StaffEvents events, TimeProvider clock, CancellationToken ct) =>
+        {
+            if (request is null || !TurnRules.IsValidWaId(request.WaId)
+                || request.Event is not (StaffEvents.StaffReplied or StaffEvents.HandBack))
+            {
+                return Results.ValidationProblem(new Dictionary<string, string[]>
+                {
+                    ["body"] = ["wa_id (8-15 digits) and event (staff_replied | hand_back) are required"],
+                });
+            }
+
+            // A time in the future would keep Hazem silent past B-12's 12 hours (a wrong clock or a
+            // typo could mean months): a few minutes of clock difference are allowed, no more.
+            var now = clock.GetUtcNow();
+            if (request.At is { } at && at > now + StaffEventClockSkew)
+            {
+                return Results.ValidationProblem(new Dictionary<string, string[]>
+                {
+                    ["at"] = ["at must not be in the future"],
+                });
+            }
+
+            var (outcome, state, error) = await events.ApplyAsync(request.WaId!, request.Event, request.At ?? now, ct);
+            return outcome switch
+            {
+                StaffEvents.Outcome.UnknownNumber => Results.NotFound(),
+                StaffEvents.Outcome.Refused => Results.Conflict(new { state, error }),
+                _ => Results.Ok(new { state }),
+            };
         });
 
         group.MapPost("/send-results", async (SendResultsRequest? request, RecordSendResults results, CancellationToken ct) =>

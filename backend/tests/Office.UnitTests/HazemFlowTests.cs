@@ -32,7 +32,7 @@ public sealed class HazemFlowTests
     private HazemSettings _settings = new(new Dictionary<string, string> { [HazemResponder.RecipientsKey] = Number });
     private int _turn;
 
-    private HazemResponder Hazem => new(_store, _ai, new FakeTexts(_texts), TimeProvider.System);
+    private HazemResponder Hazem => new(_store, _ai, new FakeTexts(_texts), new NoLists(), TimeProvider.System);
 
     /// <summary>Sends one text turn, saves its effects like the real store, returns the text keys sent.</summary>
     private async Task<(List<string> Keys, TurnDecision Decision)> Say(string text, string waId = Number) =>
@@ -366,6 +366,13 @@ public sealed class HazemFlowTests
 
         public Task<ClientState?> LoadAsync(string waId, CancellationToken ct) =>
             Task.FromResult(Rows.TryGetValue(waId, out var s) ? s : null);
+
+        public Task SaveConversationAsync(Conversation conversation, CancellationToken ct) => Task.CompletedTask;
+    }
+
+    private sealed class NoLists : IClientLists
+    {
+        public Task<ListMatch> FindAsync(string waId, CancellationToken ct) => Task.FromResult(ListMatch.None);
     }
 
     private sealed class FakeTexts(Dictionary<string, ApprovedText> texts) : IApprovedTexts

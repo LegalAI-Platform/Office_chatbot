@@ -16,6 +16,7 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
     private const string Client = "201000000071";
     private const string Welcome = "أهلًا بحضرتك في مكتب الأستاذ سعد فتحي سعد للمحاماة، معاك حازم. ممكن اسم حضرتك رباعي؟";
     private const string Offer = "الأستاذ يقدر يشوف الموضوع مع حضرتك في استشارة: بالتليفون بـ500 أو في المكتب بـ1,000.";
+    private const string AskTopic = "ولو تحب، قولّي باختصار الموضوع عن إيه عشان الأستاذ يبقى عارفه.";
     private ApiFactory _factory = null!;
     private HttpClient _n8n = null!;
     private int _n;
@@ -24,7 +25,8 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
     public async ValueTask InitializeAsync()
     {
         await db.ExecAsync("""
-            TRUNCATE hazem.turns, hazem.send_results, hazem.turn_replies, hazem.classifications, hazem.pending_tasks;
+            TRUNCATE hazem.turns, hazem.send_results, hazem.turn_replies, hazem.classifications, hazem.staff_tasks, hazem.list_entries;
+            DELETE FROM hazem.staff;
             DELETE FROM hazem.intakes; DELETE FROM hazem.conversations; DELETE FROM hazem.persons;
             """);
         await db.SetAsync("responder", "hazem");
@@ -66,14 +68,14 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
     public async Task Booking_request_then_the_name_gets_the_offer_without_asking_again()
     {
         Assert.Equal([Welcome], Texts(await Say("السلام عليكم عايز أحجز استشارة")));
-        Assert.Equal([Offer], Texts(await Say("محمد أحمد علي حسن")));
+        Assert.Equal([Offer, AskTopic], Texts(await Say("محمد أحمد علي حسن"))); // B-25: the topic is still unknown
 
         Assert.Equal("محمد أحمد علي حسن|true|bot_active|offer_sent|new_client|", await db.ScalarAsync<string>($"""
             SELECT p.name_normalized || '|' || p.full_name_provided || '|' || c.state || '|' || i.state || '|' || i.client_type || '|' || COALESCE(i.pending_intent, '')
               FROM hazem.persons p JOIN hazem.conversations c ON c.person_id = p.id JOIN hazem.intakes i ON i.person_id = p.id
              WHERE p.wa_id = '{Client}'
             """));
-        Assert.Equal("welcome_ask_name:1,consultation_offer:1", await db.ScalarAsync<string>(
+        Assert.Equal("welcome_ask_name:1,consultation_offer:1,ask_topic:1", await db.ScalarAsync<string>(
             "SELECT string_agg(text_key || ':' || text_version, ',' ORDER BY created_at, idempotency_key) FROM hazem.turn_replies"));
     }
 
@@ -91,27 +93,27 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
         await Say("السلام عليكم");
         await Say("محمد أحمد علي حسن");
         _factory.OpenAi.Down = true;
-        Assert.Equal([Offer], Texts(await Say("عايز أحجز")));
+        Assert.Equal(["معلش مش واضحلي المطلوب. ممكن تكتبلي حضرتك محتاج إيه؟"], Texts(await Say("عايز أحجز"))); // «unclear» (0007)
         Assert.Equal("other|error", await db.ScalarAsync<string>(
             "SELECT intent || '|' || fallback_reason FROM hazem.classifications ORDER BY created_at DESC LIMIT 1"));
     }
 
     [Fact]
-    public async Task Human_request_records_a_task_and_sends_nothing_until_its_text_is_approved()
+    public async Task Human_request_records_a_task_and_sends_nothing_while_its_text_is_inactive()
     {
         await Say("السلام عليكم");
         await Say("محمد أحمد علي حسن");
-        Assert.Empty(Texts(await Say("عايز أكلم موظف")));
-        Assert.Equal("human_requested|open", await db.ScalarAsync<string>("SELECT kind || '|' || status FROM hazem.pending_tasks"));
+        Assert.Equal(["تمام، هبلّغ المكتب إن حضرتك عايز تكلم حد."], Texts(await Say("عايز أكلم موظف"))); // approved (0007)
+        Assert.Equal("human_requested|open", await db.ScalarAsync<string>("SELECT type || '|' || state FROM hazem.staff_tasks"));
 
-        await db.ExecAsync("UPDATE hazem.approved_texts SET active = true WHERE key = 'human_request'");
+        await db.ExecAsync("UPDATE hazem.approved_texts SET active = false WHERE key = 'human_request'");
         try
         {
-            Assert.Equal(["تمام، هبلّغ المكتب إن حضرتك عايز تكلم حد."], Texts(await Say("عايز أكلم موظف تاني")));
+            Assert.Empty(Texts(await Say("عايز أكلم موظف تاني")));
         }
         finally
         {
-            await db.ExecAsync("UPDATE hazem.approved_texts SET active = false WHERE key = 'human_request'");
+            await db.ExecAsync("UPDATE hazem.approved_texts SET active = true WHERE key = 'human_request'");
         }
     }
 
@@ -166,7 +168,16 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
     {
         await Say("السلام عليكم");
         await Say("محمد أحمد علي حسن");
-        Assert.Empty(Texts(await Say("شكرا")));
+        await db.ExecAsync("UPDATE hazem.approved_texts SET active = false WHERE key = 'thanks'");
+        try
+        {
+            Assert.Empty(Texts(await Say("شكرا")));
+        }
+        finally
+        {
+            await db.ExecAsync("UPDATE hazem.approved_texts SET active = true WHERE key = 'thanks'");
+        }
+
         var logs = string.Join("\n", _factory.Logs.Lines);
         Assert.Contains("text thanks not sent: inactive_or_missing", logs);
         Assert.DoesNotContain("شكرا", logs);
@@ -201,24 +212,32 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
     [Fact]
     public async Task Every_active_text_is_word_for_word_in_decisions()
     {
-        var decisions = await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.5.md"), Ct);
+        var decisions = await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.6.md"), Ct);
         await using var c = new NpgsqlConnection(db.ApiConnectionString);
         await c.OpenAsync(Ct);
-        await using var cmd = new NpgsqlCommand("SELECT key, text FROM hazem.approved_texts WHERE active", c);
+        await using var cmd = new NpgsqlCommand("SELECT key, text FROM hazem.approved_texts WHERE active AND source LIKE 'DECISIONS%'", c);
         await using var r = await cmd.ExecuteReaderAsync(Ct);
         var count = 0;
         while (await r.ReadAsync(Ct))
         {
             count++;
-            Assert.True(decisions.Contains(r.GetString(1), StringComparison.Ordinal), $"{r.GetString(0)} is not word for word in DECISIONS v1.5");
+            Assert.True(decisions.Contains(r.GetString(1), StringComparison.Ordinal), $"{r.GetString(0)} is not word for word in DECISIONS v1.6");
         }
 
-        Assert.Equal(8, count);
+        Assert.Equal(11, count); // 8 (TASK 04) + B-04 question + the two B-25 texts (TASK 05a)
     }
 
     [Fact]
-    public async Task No_active_text_has_an_open_placeholder() =>
-        Assert.Equal(0L, await db.ScalarAsync<long>(@"SELECT count(*) FROM hazem.approved_texts WHERE active AND text ~ '\{\{|\['"));
+    public async Task No_active_text_has_an_open_office_placeholder() =>
+        Assert.Equal(0L, await db.ScalarAsync<long>(
+            @"SELECT count(*) FROM hazem.approved_texts WHERE active AND regexp_replace(text, '\{\{[a-z_]+\}\}', '', 'g') ~ '\{\{|\['"));
+
+    [Fact]
+    public async Task Migration_0007_activated_exactly_the_23_proposals_approved_by_the_owner() =>
+        Assert.Equal("23|23", await db.ScalarAsync<string>("""
+            SELECT count(*) FILTER (WHERE active) || '|' || count(*) FROM hazem.approved_texts
+             WHERE source LIKE 'proposal TASK 04%' AND updated_by = 'owner approval 2026-10-22'
+            """));
 
     [Theory]
     [InlineData("persons")]

@@ -115,6 +115,8 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request) =>
     var content = new JsonObject
     {
         ["intent"] = intent, ["service"] = null, ["consultation_mode"] = "unknown", ["full_name"] = name, ["confidence"] = 0.95,
+        ["matter_type"] = text.Contains("ورث", StringComparison.Ordinal) ? "inheritance" : null,
+        ["matter_subtype"] = null, ["sender_role"] = "client",
     }.ToJsonString();
     return Results.Json(new
     {
@@ -167,7 +169,9 @@ internal sealed record Received(
 internal static class StubAi
 {
     public static (string Intent, string? Name) Classify(string text) =>
-        text.Contains("أطلق", StringComparison.Ordinal) ? ("legal_question", null)
+        text.Contains("الجلسة", StringComparison.Ordinal) ? ("existing_matter", null)
+        : text.Contains("ورث", StringComparison.Ordinal) ? ("describe_matter", null)
+        : text.Contains("أطلق", StringComparison.Ordinal) ? ("legal_question", null)
         : text.Contains("أحجز", StringComparison.Ordinal) ? ("consultation_request", null)
         : text.Contains("السلام", StringComparison.Ordinal) ? ("greeting", null)
         : text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length >= 4 ? ("provide_name", text.Trim())

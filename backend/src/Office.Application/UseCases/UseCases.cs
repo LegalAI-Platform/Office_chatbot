@@ -1,3 +1,4 @@
+using Office.Application.Conversations;
 using Office.Application.Ports;
 using Office.Application.Responders;
 using Office.Application.Turns;
@@ -49,6 +50,58 @@ public sealed class SendOutbound(IWhatsAppGateway gateway, ISendResultStore resu
         var result = await gateway.SendAsync(message, ct) with { IdempotencyKey = message.IdempotencyKey };
         await results.UpsertAsync(null, [result], ReportedByApi, ct);
         return result;
+    }
+}
+
+/// <summary>
+/// B-12 from the outside (TASK 05a): the panel (TASK 07) or n8n (TASK 05b) says a staff member
+/// wrote to the client, or handed the conversation back to Hazem.
+/// </summary>
+public sealed class StaffEvents(IConversationStore conversations)
+{
+    public const string StaffReplied = "staff_replied";
+    public const string HandBack = "hand_back";
+
+    public enum Outcome
+    {
+        Done,
+        UnknownNumber,
+        Refused,
+    }
+
+    public async Task<(Outcome Outcome, string? State, string? Error)> ApplyAsync(string waId, string evt, DateTimeOffset at, CancellationToken ct)
+    {
+        if (await conversations.LoadAsync(waId, ct) is not { } s)
+        {
+            return (Outcome.UnknownNumber, null, null);
+        }
+
+        var r = evt == StaffReplied ? s.Conversation.StaffReplied(at) : s.Conversation.HandBackToHazem();
+        if (!r.IsOk)
+        {
+            return (Outcome.Refused, Domain.Common.StateName.Of(s.Conversation.State), r.Error!.Code);
+        }
+
+        await conversations.SaveConversationAsync(s.Conversation, ct);
+        return (Outcome.Done, Domain.Common.StateName.Of(s.Conversation.State), null);
+    }
+
+    /// <summary>S-01: only the manager brings a muted conversation back (CLI until the panel).</summary>
+    public async Task<(Outcome Outcome, string? Error)> UnmuteAsync(string waId, CancellationToken ct)
+    {
+        if (await conversations.LoadAsync(waId, ct) is not { } s)
+        {
+            return (Outcome.UnknownNumber, null);
+        }
+
+        var r = s.Conversation.Unmute(Domain.Common.Actor.Manager);
+        if (!r.IsOk)
+        {
+            return (Outcome.Refused, r.Error!.Code);
+        }
+
+        await conversations.SaveConversationAsync(s.Conversation, ct);
+        return (Outcome.Done, null);
     }
 }
 

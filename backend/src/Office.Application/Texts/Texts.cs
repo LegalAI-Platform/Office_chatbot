@@ -24,6 +24,16 @@ public static class TextKeys
     public const string WrittenOpinion = "written_opinion";
     public const string UrfUnclear = "urf_unclear";
     public const string UrfProof = "urf_proof";
+    public const string ExistingOrNew = "existing_or_new";   // B-04 (TASK 05a)
+    public const string AskTopic = "ask_topic";              // B-25
+    public const string TopicReceived = "topic_received";    // B-25
+
+    // Proposed in TASK 05a (inactive until approved).
+    public const string AbuseWarning = "abuse_warning";
+    public const string LawyerDirectReceived = "lawyer_direct_received";
+    public const string ColleagueReceived = "colleague_received";
+    public const string PressReceived = "press_received";
+    public const string VendorReceived = "vendor_received";
 
     // Proposed, waiting for the owner (inactive until approved).
     public const string AskNameAgain = "ask_name_again";

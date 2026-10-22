@@ -4,26 +4,55 @@ using Office.Domain.Clients;
 
 namespace Office.Application.Conversations;
 
-/// <summary>The person, conversation and current intake of one number (null for a number never seen).</summary>
-public sealed record ClientState(Person Person, Conversation Conversation, Intake Intake);
+/// <summary>
+/// The person, conversation and current intake of one number (null for a number never seen).
+/// <see cref="ClosedIntakes"/>: requests closed during this turn (B-04: an existing client's new matter).
+/// </summary>
+public sealed record ClientState(Person Person, Conversation Conversation, Intake Intake)
+{
+    public List<Intake> ClosedIntakes { get; init; } = [];
+}
 
 public interface IConversationStore
 {
     Task<ClientState?> LoadAsync(string waId, CancellationToken ct);
+
+    /// <summary>Saves the conversation alone (staff events, unmute), outside a turn.</summary>
+    Task SaveConversationAsync(Conversation conversation, CancellationToken ct);
+}
+
+/// <summary>B-14: where a number is on the office lists (several at once is possible).</summary>
+public sealed record ListMatch(bool Blocked, bool LawyerDirect, ExistingClientEntry? ExistingClient)
+{
+    public static ListMatch None { get; } = new(false, false, null);
+}
+
+/// <summary>B-04: an existing client and the staff member in charge (both from the office's file).</summary>
+public sealed record ExistingClientEntry(string? Name, Guid? StaffId);
+
+public interface IClientLists
+{
+    Task<ListMatch> FindAsync(string waId, CancellationToken ct);
 }
 
 /// <summary>
-/// A task for the office (TASK 04 placeholder for S-05): one row in hazem.pending_tasks, no staff,
-/// no panel and no due time yet. Hazem never promises the client a contact time for it (B-06).
+/// A staff task (S-05; hazem.staff_tasks). <see cref="DueAt"/> follows B-06. Nobody is alerted
+/// until the panel (TASK 07), so Hazem never promises the client a contact time for it.
 /// </summary>
-public sealed record PendingTask(string Kind)
+public sealed record PendingTask(string Kind, DateTimeOffset DueAt, Guid? StaffId = null)
 {
+    // S-05 types
     public const string ExistingClientMessage = "existing_client_message";
     public const string HumanRequested = "human_requested";
+    public const string Complaint = "complaint";
+
+    // TASK 04 / 05a additions (documented in the reports)
     public const string UnclearMessage = "unclear_message";
     public const string UrgentRequest = "urgent_request";
     public const string ServiceRequest = "service_request";
     public const string RescheduleOrCancel = "reschedule_or_cancel";
+    public const string LawyerDirectMessage = "lawyer_direct_message";
+    public const string ExternalContact = "external_contact";
 }
 
 /// <summary>hazem.classifications: no client text and no name, only what the AI decided and what it cost.</summary>
@@ -39,7 +68,10 @@ public sealed record ClassificationRecord(
     int? LatencyMs,
     int? InputTokens,
     int? OutputTokens,
-    string? FallbackReason)
+    string? FallbackReason,
+    string? MatterType = null,
+    string? MatterSubtype = null,
+    string? SenderRole = null)
 {
     public static ClassificationRecord From(string turnId, Classification c) => new(
         turnId,
@@ -53,7 +85,10 @@ public sealed record ClassificationRecord(
         c.Call?.LatencyMs,
         c.Call?.InputTokens,
         c.Call?.OutputTokens,
-        c.FallbackReason);
+        c.FallbackReason,
+        c.Matter is { } m ? Classification.Code(m) : null,
+        c.Subtype is { } st ? Classification.Code(st) : null,
+        Classification.Code(c.Role));
 }
 
 /// <summary>Everything a Hazem turn changes, saved in the same transaction as the turn itself.</summary>

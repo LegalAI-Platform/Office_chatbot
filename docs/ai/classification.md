@@ -20,7 +20,9 @@ fields. It never writes a word the client sees: every reply is an approved text
 | `human_request` | wants a person | text (proposed) + task (no handoff until TASK 05) |
 | `reschedule_or_cancel` | change or cancel | text (proposed) + task (booking: TASK 08) |
 | `thanks_or_closing` | thanks / bye | thanks text (proposed) → else nothing |
-| `other` | anything else, or the fallback | "unclear" (proposed) → else the offer; the 2nd in a row → task |
+| `other` | anything else, or the fallback | "unclear" (approved, 0007); the 2nd in a row → task |
+| `describe_matter` (05a) | tells the problem without asking | the offer (+ the B-25 question when the topic is still unknown); after that question: «تمام، وصلت ✅» |
+| `abusive` (05a) | insults, threats, spam | once: `abuse_warning` (proposed) + task `complaint`; then muted for good |
 
 `service`: `consultation_phone_video`, `consultation_office`, `consultation_urgent`,
 `document_review`, `contract_drafting`, `formal_notice`, `urf_marriage`, `urf_divorce`,
@@ -32,9 +34,9 @@ fields. It never writes a word the client sees: every reply is an approved text
 
 - OpenAI Chat Completions, **Structured Outputs** (`response_format: json_schema`, `strict: true`,
   `additionalProperties: false`, every field required, enums = the lists above), `temperature: 0`.
-- Prompt: `backend/src/Office.Infrastructure/Ai/prompts/classify-v3.md` (v1 and v2 kept as history), embedded in the build.
-  Its version (`classify-v3`) is saved with every classification. **Change the prompt = a new
-  file (`classify-v4.md` next) and a new `PromptVersion`**, then run `classify-eval` again.
+- Prompt: `backend/src/Office.Infrastructure/Ai/prompts/classify-v6.md` (v1..v5 kept as history), embedded in the build.
+  Its version (`classify-v6`) is saved with every classification. **Change the prompt = a new
+  file (`classify-v7.md` next) and a new `PromptVersion`**, then run `classify-eval` again.
 - Model: `OPENAI_MODEL`. Empty = `gpt-4.1-mini`, **a starting point only**. The final model is
   chosen by the owner after `classify-eval` (T-08).
 - Key: `HAZEM_OPENAI_API_KEY` in `.env` — the .NET key, separate from n8n's voice key. It may be
@@ -103,6 +105,36 @@ than the first set, never used to tune a prompt): v2 = 97.5% intent / 100% servi
 100%. The one miss in both: «انتو بتشتغلو قضايا ايه» → `legal_question` (expected `other`); the
 reply is the B-20 sentence + the offer, which is acceptable. **Do not tune prompts on the
 hold-out set**, or it stops measuring anything; add new hold-out samples instead.
+
+### TASK 05a: the topic (B-25), the sender role (B-14.4), two new intents
+
+`describe_matter` (the client tells the problem without asking) and `abusive` (S-01); in the same
+call `matter_type` / `matter_subtype` (the B-25 list) and `sender_role`. 40 new samples in the set
+(196 in all) and 20 new hold-out samples (60), written before any v4 run.
+
+| Prompt | Set | Intent | Service | Topic | Sender role | Tokens in (per turn) |
+|---|---|---|---|---|---|---|
+| `classify-v4` | 196 | 97.4% | 97.1% | 100% | 77.8% | ≈2,470 |
+| `classify-v5` | 196 | 99.5% | 100% | 100% | 100% | ≈2,730 |
+| **`classify-v6`** (in use, DECISIONS v1.6) | 204 | **99.0%** | **100%** | 97.1% | **100%** | ≈2,800 |
+| `classify-v4` | hold-out 60 | 91.7% | 100% | 100% | 66.7% | |
+| `classify-v5` | hold-out 60 | 95.0% | 93.3% | 100% | 100% | |
+| **`classify-v6`** | hold-out 60 | **96.7%** | 93.3% | **100%** | **100%** | |
+
+**v6 (DECISIONS v1.6, B-09):** urgent also when the client describes an arrest or detention, the
+police at home, or a hearing / investigation / execution today or tomorrow, without saying
+"urgent"; a report or an old ruling alone is not urgent. Urgent accuracy: 100% on both sets
+(8 new samples 197–204 for the rule). «البوليس جه البيت ومعاه أمر ضبط» is now urgent.
+
+- v5 adds (from the 196-sample misses only): someone introducing themselves as a lawyer, a
+  journalist or a company is not giving a client name and is not asking for a person; «…وعايز
+  حقوقي» after a story is still telling; «عقد عرفي» alone is `urf_unclear`.
+- Hold-out misses: «البوليس جه البيت ومعاه أمر ضبط» → `describe_matter` (labelled urgent; by the
+  owner's decision a message is urgent only when the client SAYS so, so this answer follows the
+  rule); «انا زعلان عشان محدش رد عليا» → `describe_matter` (expected `other`); «انتو بتشتغلو قضايا
+  ايه» → `legal_question`; «نكتب كتاب عرفي» → `contract_drafting` (expected `urf_marriage`).
+- Cost per turn grows with the prompt (≈2,700 input tokens); still around a cent per 10 turns or
+  less at `gpt-4.1-mini` prices — check OpenAI's price page.
 
 - v3 adds: «الو / مين معايا» are not greetings; «العاجلة» as the name of the service is a price
   question, not urgency; a price question about a named thing always carries its service; with
