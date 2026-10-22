@@ -37,7 +37,77 @@ public sealed class HazemDbContext(DbContextOptions<HazemDbContext> options) : D
             e.ToTable("send_results");
             e.HasKey(x => x.IdempotencyKey);
         });
+
+        // Migration 0005 (TASK 04). Read through EF; written with SQL inside the turn's transaction.
+        b.Entity<PersonRow>(e =>
+        {
+            e.ToTable("persons");
+            e.HasKey(x => x.Id);
+        });
+
+        b.Entity<ConversationRow>(e =>
+        {
+            e.ToTable("conversations");
+            e.HasKey(x => x.Id);
+        });
+
+        b.Entity<IntakeRow>(e =>
+        {
+            e.ToTable("intakes");
+            e.HasKey(x => x.Id);
+        });
+
+        b.Entity<ApprovedTextRow>(e =>
+        {
+            e.ToTable("approved_texts");
+            e.HasKey(x => new { x.Key, x.Version });
+        });
     }
+
+    public DbSet<PersonRow> Persons => Set<PersonRow>();
+    public DbSet<ConversationRow> Conversations => Set<ConversationRow>();
+    public DbSet<IntakeRow> Intakes => Set<IntakeRow>();
+    public DbSet<ApprovedTextRow> ApprovedTexts => Set<ApprovedTextRow>();
+}
+
+public sealed class PersonRow
+{
+    public Guid Id { get; set; }
+    public required string WaId { get; set; }
+    public string? NameRaw { get; set; }
+    public string? NameNormalized { get; set; }
+    public bool? FullNameProvided { get; set; }
+    public string? PreferredCallPhone { get; set; }
+}
+
+public sealed class ConversationRow
+{
+    public Guid Id { get; set; }
+    public Guid PersonId { get; set; }
+    public required string State { get; set; }
+    public DateTimeOffset? LastStaffMessageAt { get; set; }
+}
+
+public sealed class IntakeRow
+{
+    public Guid Id { get; set; }
+    public Guid PersonId { get; set; }
+    public required string State { get; set; }
+    public string? ClientType { get; set; }
+    public int NameAsks { get; set; }
+    public string? PendingIntent { get; set; }
+    public string? PendingService { get; set; }
+    public string? PendingConsultationMode { get; set; }
+    public int UnclearInARow { get; set; }
+}
+
+public sealed class ApprovedTextRow
+{
+    public required string Key { get; set; }
+    public int Version { get; set; }
+    public required string Text { get; set; }
+    public int MaxChars { get; set; }
+    public bool Active { get; set; }
 }
 
 public sealed class SettingRow

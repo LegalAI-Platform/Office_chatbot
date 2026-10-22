@@ -22,8 +22,9 @@ else
   # Copy the sources inside the container so host bin/obj folders are never reused, and skip
   # Visual Studio's .vs folder (its files are locked while the solution is open).
   docker run --rm --network office_net "${env_args[@]}" \
-    -e OFFICE_TEST_PG_HOST=postgres -e OFFICE_TEST_MIGRATIONS_DIR=/migrations \
+    -e OFFICE_TEST_PG_HOST=postgres -e OFFICE_TEST_MIGRATIONS_DIR=/migrations -e OFFICE_TEST_REPO_DIR=/repo \
     -e DOTNET_CLI_TELEMETRY_OPTOUT=1 -e DOTNET_NOLOGO=1 \
     -v "$ROOT/backend:/src:ro" -v "$ROOT/database/migrations:/migrations:ro" -v office_nuget:/root/.nuget/packages \
+    -v "$ROOT/docs/decisions:/repo/docs/decisions:ro" \
     "$SDK_IMAGE" sh -c 'mkdir /work && find /src -mindepth 1 -maxdepth 1 ! -name .vs ! -name .nuget-packages -exec cp -r {} /work/ \; && cd /work && find . -name bin -o -name obj | xargs rm -rf && rm -f NuGet.config && dotnet test --solution Office.sln'
 fi

@@ -7,9 +7,12 @@ WhatsApp assistant ("Hazem") for the law office of Ustaz Saad Fathy Saad.
 Done so far: **TASK 01** (infrastructure), **TASK 02** (Meta WhatsApp Cloud API in n8n; live
 tests with Meta pending the project owner's Meta setup), the **n8n ↔ .NET hand-off**
 (DECISIONS v1.3) and **TASK 03** (messages grouped into turns after 8 quiet seconds, media
-downloaded to S3, voice notes transcribed). The API only answers with a test echo until TASK 04.
+downloaded to S3, voice notes transcribed) and **TASK 04** (backend in layers with the state
+machines S-01..S-06; Hazem classifies each turn with the AI — text only — and answers from
+approved texts only; [docs/ai/classification.md](docs/ai/classification.md)). Hazem answers only
+the numbers in `hazem.settings hazem.recipients` until the owner opens it to everyone.
 
-- All decisions: [docs/decisions/DECISIONS-v1.4.md](docs/decisions/DECISIONS-v1.4.md)
+- All decisions: [docs/decisions/DECISIONS-v1.5.md](docs/decisions/DECISIONS-v1.5.md)
 - n8n ↔ .NET API contract: [docs/hazem-internal-api.md](docs/hazem-internal-api.md)
 - Backend: [backend/README.md](backend/README.md)
 - Architecture and permissions: [docs/infrastructure.md](docs/infrastructure.md)
@@ -103,7 +106,7 @@ Every script below exists in two versions: `scripts\windows\<name>.ps1` and
 | `n8n-import` | Credentials from `.env` + workflows into n8n; restarts n8n when a schedule or webhook was published |
 | `wa-tests` | WhatsApp database rules + n8n harness (no Meta) |
 | `backend-test [-Docker]` | .NET tests; uses a throwaway database (needs `up`) |
-| `hazem-e2e` | Whole loop n8n ↔ API without Meta or OpenAI (stub, dry run), then restores every setting and removes its temporary credentials |
+| `hazem-e2e` | Whole loop n8n ↔ API without Meta or OpenAI (stub, dry run), including Hazem's TASK 04 answers, then restores every setting and removes its temporary credentials |
 | `backup` | Dump `office` and `n8n` to `office-backups` |
 | `restore ...` | Restore a dump into a new database and verify it |
 | `reset` | **Deletes all data.** Only with `ENVIRONMENT=test` and after typing `RESET` |

@@ -87,15 +87,63 @@ restores the original values at the end, even when it fails. If a test was kille
    `e2e.backup.*`, switches dry run and the echo off, deletes the dummy rows and files).
 2. `docker compose run --rm tools hazem-e2e remove-test-credentials`, then `n8n-import`.
 3. `docker compose --profile tests rm -sf meta-stub`.
-4. `healthcheck`: real URLs, `turn_stale_seconds = 300`, dry run off, no test credential, stub stopped.
+4. `healthcheck`: real URLs, `turn_stale_seconds = 300`, dry run off, no test credential, stub
+   stopped, `responder = hazem`, `ai.stub_enabled = false`.
 Never point the two URLs at the stub by hand outside a test.
+
+## Hazem's AI is down, or HAZEM_OPENAI_API_KEY was revoked (TASK 04)
+
+Nothing stops: every text turn is classified `other` and gets the "unclear" answer (today the
+consultation offer, until the owner approves the "unclear" text). Look at the reason:
+
+```sql
+SELECT fallback_reason, count(*) FROM hazem.classifications
+ WHERE created_at > now() - interval '1 hour' GROUP BY 1;   -- no_key / timeout / error / invalid_output / low_confidence
+```
+
+- `no_key`: `HAZEM_OPENAI_API_KEY` is empty in `.env`.
+- `error`: OpenAI refuses (a revoked key gives 401): put a new key in `.env`, then
+  `docker compose up -d api`. Never paste the key in a chat or a log.
+- `timeout` / `error` for a while: OpenAI is down; the answers keep going out.
+
+## Changing the classification model (TASK 04, T-08)
+
+1. Run `classify-eval` with the candidate (`--model …`, [docs/ai/classification.md](../ai/classification.md)).
+2. Put the chosen name in `OPENAI_MODEL` in `.env`, then `docker compose up -d api`.
+3. Every new row of `hazem.classifications` shows the model it used.
+
+## Approving or changing an approved text (TASK 04)
+
+Hazem sends only active rows of `hazem.approved_texts`. A text is never edited in place: a
+change is a new version, so every reply keeps pointing at the exact words it sent
+(`hazem.turn_replies`). Only with the owner's written approval of the exact words:
+
+```sql
+-- approve a proposed text as it is (docs/approved-texts-proposal.md)
+UPDATE hazem.approved_texts SET active = true, updated_by = 'owner approval <date>'
+ WHERE key = 'unclear' AND version = 1;
+
+-- change a text: deactivate the old version, add the new one (same transaction)
+BEGIN;
+UPDATE hazem.approved_texts SET active = false WHERE key = 'unclear' AND active;
+INSERT INTO hazem.approved_texts (key, version, text, max_chars, active, source, updated_by)
+VALUES ('unclear', 2, '…النص الجديد…', 300, true, 'owner <date>', 'owner approval <date>');
+COMMIT;
+```
+
+`max_chars` is 300 for ordinary messages and 600 for payment, address and document messages
+(B-21). A text with a part-5 placeholder such as `{{OFFICE_ADDRESS}}` or a `[…]` slot is never
+sent (the healthcheck fails while one is active). Then run `healthcheck`.
 
 ## End-to-end test without Meta
 
 `hazem-e2e`: message → n8n → API → reply (dry run) → result back; same turn twice; API down and
 back; API → n8n send; wrong tokens; TASK 03: two texts and a photo grouped into one turn, PDF,
 voice note (stub transcript), too large, wrong sha256, forbidden type, a turn stuck while n8n
-restarts. Uses dummy numbers 20100000006x and `meta-stub`; restores every setting, removes its
+restarts; TASK 04 (responder `hazem`, classification by the stub): booking request → welcome →
+name → offer, legal question → B-20 + offer, a photo never reaches the AI, a phone number is
+masked, the AI down still gets an answer. Steps 1-7 run with `responder = echo`.
+Uses dummy numbers 20100000006x and `meta-stub`; restores every setting, removes its
 temporary credentials and checks n8n's credentials are exactly as before.
 `backend-test` runs the .NET unit and integration tests; `wa-tests` the SQL rules and the harness.
 

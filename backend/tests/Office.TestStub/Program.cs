@@ -1,12 +1,14 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json.Nodes;
 
 // Test-only stand-in for the two outside services TASK 03 calls (hazem-e2e points
 // whatsapp.graph_base_url and ai.openai_base_url here):
 //   GET  /{version}/{media_id}         Graph API media metadata (url, mime_type, sha256, file_size)
 //   GET  /files/{media_id}             the file behind that url
 //   POST /v1/audio/transcriptions      OpenAI transcription (multipart), fixed Arabic text
+//   POST /v1/chat/completions          OpenAI classification (TASK 04), keyword answers; /_ai/down, /_ai/up
 //   GET  /_log, POST /_log/reset       what was received, for the test's assertions
 // The log records whether an Authorization header was present, NEVER its value: if a real
 // credential exists in n8n, its value would reach this container.
@@ -85,6 +87,52 @@ app.MapPost("/v1/audio/transcriptions", async (HttpRequest request) =>
         : Results.Json(new { text = StubFiles.Transcript });
 });
 
+// TASK 04: OpenAI Chat Completions with Structured Outputs, for the .NET classifier. Answers a
+// fixed classification by keywords and records the user text it got (to prove what the AI saw).
+var aiDown = false;
+app.MapPost("/v1/chat/completions", async (HttpRequest request) =>
+{
+    var body = await JsonNode.ParseAsync(request.Body);
+    var text = (string?)body?["messages"]?[1]?["content"] ?? "";
+    log.Enqueue(Received.From(request, "classification", null) with
+    {
+        Model = (string?)body?["model"],
+        Text = text,
+        Strict = (bool?)body?["response_format"]?["json_schema"]?["strict"],
+    });
+
+    if (!request.Headers.ContainsKey("Authorization"))
+    {
+        return Results.Json(new { error = new { message = "no key" } }, statusCode: 401);
+    }
+
+    if (aiDown)
+    {
+        return Results.Json(new { error = new { message = "stub is down" } }, statusCode: 503);
+    }
+
+    var (intent, name) = StubAi.Classify(text);
+    var content = new JsonObject
+    {
+        ["intent"] = intent, ["service"] = null, ["consultation_mode"] = "unknown", ["full_name"] = name, ["confidence"] = 0.95,
+    }.ToJsonString();
+    return Results.Json(new
+    {
+        choices = new[] { new { message = new { role = "assistant", content } } },
+        usage = new { prompt_tokens = 500, completion_tokens = 25 },
+    });
+});
+app.MapPost("/_ai/down", () =>
+{
+    aiDown = true;
+    return Results.Ok();
+});
+app.MapPost("/_ai/up", () =>
+{
+    aiDown = false;
+    return Results.Ok();
+});
+
 app.MapGet("/_log", () => Results.Json(log.ToArray()));
 app.MapPost("/_log/reset", () =>
 {
@@ -107,10 +155,23 @@ internal sealed record Received(
     string? FileSha256 = null,
     bool? FileIsOgg = null,
     string? Model = null,
-    string? Language = null)
+    string? Language = null,
+    string? Text = null,
+    bool? Strict = null)
 {
     public static Received From(HttpRequest r, string kind, string? mediaId) =>
         new(kind, r.Method, r.Path, mediaId, r.Headers.ContainsKey("Authorization"));
+}
+
+/// <summary>Keyword classification for hazem-e2e (the real model is never called in tests).</summary>
+internal static class StubAi
+{
+    public static (string Intent, string? Name) Classify(string text) =>
+        text.Contains("أطلق", StringComparison.Ordinal) ? ("legal_question", null)
+        : text.Contains("أحجز", StringComparison.Ordinal) ? ("consultation_request", null)
+        : text.Contains("السلام", StringComparison.Ordinal) ? ("greeting", null)
+        : text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length >= 4 ? ("provide_name", text.Trim())
+        : ("other", null);
 }
 
 internal sealed record StubFile(string MimeType, byte[] Bytes, string AnnouncedSha256, long AnnouncedSize);

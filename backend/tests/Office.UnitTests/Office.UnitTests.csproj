@@ -7,7 +7,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Office.Core\Office.Core.csproj" />
+    <ProjectReference Include="..\..\src\Office.Api\Office.Api.csproj" />
+    <ProjectReference Include="..\..\src\Office.Application\Office.Application.csproj" />
+    <ProjectReference Include="..\..\src\Office.Domain\Office.Domain.csproj" />
     <ProjectReference Include="..\..\src\Office.Infrastructure\Office.Infrastructure.csproj" />
   </ItemGroup>
 

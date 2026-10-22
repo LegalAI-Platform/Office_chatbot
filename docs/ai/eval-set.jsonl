@@ -1,0 +1,156 @@
+{"id":1,"text":"السلام عليكم","intent":"greeting"}
+{"id":2,"text":"صباح الخير يا جماعة","intent":"greeting"}
+{"id":3,"text":"مساء الفل","intent":"greeting"}
+{"id":4,"text":"ازيكم عاملين ايه","intent":"greeting"}
+{"id":5,"text":"السلام عليكم ورحمة الله وبركاته","intent":"greeting"}
+{"id":6,"text":"hello","intent":"greeting"}
+{"id":7,"text":"ahlan","intent":"greeting"}
+{"id":8,"text":"اهلا","intent":"greeting"}
+{"id":9,"text":"مساء الخير يا استاذ","intent":"greeting"}
+{"id":10,"text":"سلام عليكو","intent":"greeting"}
+{"id":11,"text":"صباحو","intent":"greeting"}
+{"id":12,"text":"محمد أحمد علي حسن","intent":"provide_name"}
+{"id":13,"text":"اسمي منى سعيد عبد الله حسن","intent":"provide_name"}
+{"id":14,"text":"انا كريم محمود سيد ابراهيم","intent":"provide_name"}
+{"id":15,"text":"هالة عبد الرحمن مصطفى كامل","intent":"provide_name"}
+{"id":16,"text":"اسمى احمد سمير","intent":"provide_name"}
+{"id":17,"text":"mahmoud adel fathy ali","intent":"provide_name"}
+{"id":18,"text":"ياسمين","intent":"provide_name"}
+{"id":19,"text":"عمرو خالد عبد العزيز الشريف","intent":"provide_name"}
+{"id":20,"text":"الاسم: سارة محمد فؤاد عثمان","intent":"provide_name"}
+{"id":21,"text":"ابو بكر صلاح الدين حسين","intent":"provide_name"}
+{"id":22,"text":"مصطفي ابراهيم السيد عوض","intent":"provide_name"}
+{"id":23,"text":"عايز احجز استشارة","intent":"consultation_request"}
+{"id":24,"text":"محتاج اقعد مع الاستاذ في موضوع","intent":"consultation_request"}
+{"id":25,"text":"ممكن ميعاد مع الأستاذ سعد؟","intent":"consultation_request"}
+{"id":26,"text":"عاوزه استشارة تليفون","intent":"consultation_request","consultation_mode":"phone_video"}
+{"id":27,"text":"ينفع اجي المكتب اقابل الاستاذ","intent":"consultation_request","consultation_mode":"office"}
+{"id":28,"text":"3ayez a7gez esteshara","intent":"consultation_request"}
+{"id":29,"text":"عايز اتكلم مع المحامي في مشكلة عندي","intent":"consultation_request"}
+{"id":30,"text":"محتاج استشاره قانونيه ضروري بس مش مستعجل يعني","intent":"consultation_request"}
+{"id":31,"text":"ممكن اعمل مكالمة فيديو مع الأستاذ","intent":"consultation_request","consultation_mode":"phone_video"}
+{"id":32,"text":"عندي مشكلة في ميراث وعايز رأي الأستاذ","intent":"consultation_request"}
+{"id":33,"text":"احجزلي لو سمحت","intent":"consultation_request"}
+{"id":34,"text":"ايه المواعيد المتاحة للاستشارة","intent":"consultation_request"}
+{"id":35,"text":"عايز اعرف ازاي احجز","intent":"consultation_request"}
+{"id":36,"text":"عايز اراجع عقد ايجار قبل ما امضي","intent":"service_by_name","service":"document_review"}
+{"id":37,"text":"محتاج حد يكتبلي عقد بيع شقة","intent":"service_by_name","service":"contract_drafting"}
+{"id":38,"text":"عايز ابعت انذار رسمي للمستأجر","intent":"service_by_name","service":"formal_notice"}
+{"id":39,"text":"عايز اعمل جواز عرفي","intent":"service_by_name","service":"urf_marriage"}
+{"id":40,"text":"عايزة اطلق من العقد العرفي","intent":"service_by_name","service":"urf_divorce"}
+{"id":41,"text":"ازاي اثبت جوازي العرفي","intent":"service_by_name","service":"urf_proof"}
+{"id":42,"text":"عرفي","intent":"service_by_name","service":"urf_unclear"}
+{"id":43,"text":"محتاج رأي قانوني مكتوب","intent":"service_by_name","service":"written_opinion"}
+{"id":44,"text":"عايز الاستاذ يمسك قضيتي","intent":"service_by_name","service":"case_representation"}
+{"id":45,"text":"مراجعه عقد شراكة","intent":"service_by_name","service":"document_review"}
+{"id":46,"text":"صياغة عقد عمل لموظف عندي","intent":"service_by_name","service":"contract_drafting"}
+{"id":47,"text":"3ayez a3mel 3a2d 3orfy","intent":"service_by_name","service":"urf_marriage"}
+{"id":48,"text":"عندكو خدمة الانذار على يد محضر؟","intent":"service_by_name","service":"formal_notice"}
+{"id":49,"text":"عايز محامي يترافع عني في قضية نفقة","intent":"service_by_name","service":"case_representation"}
+{"id":50,"text":"ممكن تراجعولي ورق الشقة","intent":"service_by_name","service":"document_review"}
+{"id":51,"text":"عقد عرفي","intent":"service_by_name","service":"urf_unclear"}
+{"id":52,"text":"مستعجل جدا محتاج حد دلوقتي","intent":"urgent"}
+{"id":53,"text":"ضروري الاستاذ يكلمني حالا","intent":"urgent"}
+{"id":54,"text":"عاجل","intent":"urgent"}
+{"id":55,"text":"الحقوني البوليس قابض على اخويا","intent":"urgent"}
+{"id":56,"text":"محتاج استشارة عاجلة النهارده","intent":"urgent","service":"consultation_urgent"}
+{"id":57,"text":"msta3gel gedan","intent":"urgent"}
+{"id":58,"text":"في مشكله كبيره ومش هينفع تستنى لبكره","intent":"urgent"}
+{"id":59,"text":"ارجوكم بسرعة الموضوع مستعجل","intent":"urgent"}
+{"id":60,"text":"عندي جلسة بكرة الصبح ومحتاج حد يشوف الورق النهارده ضروري","intent":"urgent"}
+{"id":61,"text":"محتاج محامي حالا","intent":"urgent"}
+{"id":62,"text":"عاجل جدا يا استاذ","intent":"urgent"}
+{"id":63,"text":"الاستشارة بكام","intent":"price_question","service":"consultation_phone_video"}
+{"id":64,"text":"سعر المقابلة في المكتب كام","intent":"price_question","service":"consultation_office"}
+{"id":65,"text":"مراجعة العقد بكام","intent":"price_question","service":"document_review"}
+{"id":66,"text":"الانذار بكام","intent":"price_question","service":"formal_notice"}
+{"id":67,"text":"الجواز العرفي بكام","intent":"price_question","service":"urf_marriage"}
+{"id":68,"text":"اتعاب القضية كام","intent":"price_question","service":"case_representation"}
+{"id":69,"text":"bkam el esteshara","intent":"price_question","service":"consultation_phone_video"}
+{"id":70,"text":"الاسعار ايه","intent":"price_question"}
+{"id":71,"text":"صياغة عقد بيع تكلف كام","intent":"price_question","service":"contract_drafting"}
+{"id":72,"text":"هو الكشف عندكو بكام","intent":"price_question"}
+{"id":73,"text":"الرأي المكتوب سعره كام","intent":"price_question","service":"written_opinion"}
+{"id":74,"text":"الاستشارة العاجلة بكام","intent":"price_question","service":"consultation_urgent"}
+{"id":75,"text":"بكام الطلاق العرفي","intent":"price_question","service":"urf_divorce"}
+{"id":76,"text":"ينفع اطلق مراتي غيابي؟","intent":"legal_question"}
+{"id":77,"text":"حقي ايه لو جوزي طلقني","intent":"legal_question"}
+{"id":78,"text":"هو القانون بيقول ايه في الايجار القديم","intent":"legal_question"}
+{"id":79,"text":"المالك ينفع يطردني من الشقة؟","intent":"legal_question"}
+{"id":80,"text":"لو مضيت على وصل امانة يحصلي ايه","intent":"legal_question"}
+{"id":81,"text":"اخويا مش راضي يقسم الورث اعمل ايه","intent":"legal_question"}
+{"id":82,"text":"الحضانة بتبقى لمين لو الام اتجوزت","intent":"legal_question"}
+{"id":83,"text":"هو الشيك بدون رصيد عقوبته ايه","intent":"legal_question"}
+{"id":84,"text":"momken a5od nafa2a lw howa msafer?","intent":"legal_question"}
+{"id":85,"text":"مدة الطعن على الحكم قد ايه","intent":"legal_question"}
+{"id":86,"text":"ينفع ارفع قضية خلع من غير ما ارجع المهر","intent":"legal_question"}
+{"id":87,"text":"الشغل رفدني من غير سبب ليا حق؟","intent":"legal_question"}
+{"id":88,"text":"عايز اعرف القضية بتاعتي وصلت لفين","intent":"existing_matter"}
+{"id":89,"text":"الجلسة الجاية امتى","intent":"existing_matter"}
+{"id":90,"text":"بخصوص قضية النفقة اللي الاستاذ ماسكها","intent":"existing_matter"}
+{"id":91,"text":"انا موكل عندكو وعايز اسأل على الحكم","intent":"existing_matter"}
+{"id":92,"text":"الاستاذ قالي ابعتله الورق ده للقضية","intent":"existing_matter"}
+{"id":93,"text":"فيه جديد في موضوعي؟","intent":"existing_matter"}
+{"id":94,"text":"el qadeya beta3ty 3amla eh","intent":"existing_matter"}
+{"id":95,"text":"هو الحكم طلع ولا لسه","intent":"existing_matter"}
+{"id":96,"text":"انا اللي كلمتكو الاسبوع اللي فات في قضية الشقة","intent":"existing_matter"}
+{"id":97,"text":"ابعتلي صورة محضر الجلسة اللي فاتت","intent":"existing_matter"}
+{"id":98,"text":"المحامي بتاعي مش بيرد عليا","intent":"existing_matter"}
+{"id":99,"text":"عايز اكلم حد من المكتب","intent":"human_request"}
+{"id":100,"text":"موظف لو سمحت","intent":"human_request"}
+{"id":101,"text":"انت روبوت؟ عايز بني ادم","intent":"human_request"}
+{"id":102,"text":"ممكن حد يكلمني تليفون","intent":"human_request"}
+{"id":103,"text":"عايز اتكلم مع السكرتارية","intent":"human_request"}
+{"id":104,"text":"3ayez akalem 7d mn el maktab","intent":"human_request"}
+{"id":105,"text":"وصلني بحد مسؤول","intent":"human_request"}
+{"id":106,"text":"مش عايز اكلم بوت","intent":"human_request"}
+{"id":107,"text":"فين خدمة العملاء","intent":"human_request"}
+{"id":108,"text":"عايز رقم المكتب اكلمكو","intent":"human_request"}
+{"id":109,"text":"عايز اغير ميعادي","intent":"reschedule_or_cancel"}
+{"id":110,"text":"مش هقدر اجي بكرة ممكن نأجل","intent":"reschedule_or_cancel"}
+{"id":111,"text":"عايز الغي الحجز","intent":"reschedule_or_cancel"}
+{"id":112,"text":"ممكن ابدل ميعاد الخميس بالسبت","intent":"reschedule_or_cancel"}
+{"id":113,"text":"عايز اكنسل الميعاد","intent":"reschedule_or_cancel"}
+{"id":114,"text":"momken nghayar el ma3ad","intent":"reschedule_or_cancel"}
+{"id":115,"text":"حصل ظرف ومش هعرف احضر","intent":"reschedule_or_cancel"}
+{"id":116,"text":"ينفع اخلي الاستشارة بالليل بدل الصبح","intent":"reschedule_or_cancel"}
+{"id":117,"text":"الغي ميعادي وارجعلي فلوسي","intent":"reschedule_or_cancel"}
+{"id":118,"text":"اجل الميعاد اسبوع","intent":"reschedule_or_cancel"}
+{"id":119,"text":"شكرا","intent":"thanks_or_closing"}
+{"id":120,"text":"تمام متشكر جدا","intent":"thanks_or_closing"}
+{"id":121,"text":"ربنا يخليك","intent":"thanks_or_closing"}
+{"id":122,"text":"ok thanks","intent":"thanks_or_closing"}
+{"id":123,"text":"تسلم ايدك","intent":"thanks_or_closing"}
+{"id":124,"text":"خلاص كدة تمام مع السلامة","intent":"thanks_or_closing"}
+{"id":125,"text":"تمام","intent":"thanks_or_closing"}
+{"id":126,"text":"shokran","intent":"thanks_or_closing"}
+{"id":127,"text":"جزاكم الله خير","intent":"thanks_or_closing"}
+{"id":128,"text":"ماشي هبقى اكلمكو","intent":"thanks_or_closing"}
+{"id":129,"text":"👍","intent":"thanks_or_closing"}
+{"id":130,"text":"ههههه","intent":"other"}
+{"id":131,"text":"؟؟","intent":"other"}
+{"id":132,"text":"انتو فين بالظبط","intent":"other"}
+{"id":133,"text":"بتشتغلو يوم الجمعة؟","intent":"other"}
+{"id":134,"text":"ممكن اشتري منكو عربية","intent":"other"}
+{"id":135,"text":"asdfgh","intent":"other"}
+{"id":136,"text":"الو","intent":"other"}
+{"id":137,"text":"مين معايا","intent":"other"}
+{"id":138,"text":"بتعملو اعلانات؟","intent":"other"}
+{"id":139,"text":"انا غلطت في الرقم","intent":"other"}
+{"id":140,"text":"شوفت الماتش امبارح","intent":"other"}
+{"id":141,"text":".","intent":"other"}
+{"id":142,"text":"السلام عليكم عايز احجز استشارة","intent":"consultation_request"}
+{"id":143,"text":"اسمي احمد سعيد محمد علي وعايز احجز استشارة","intent":"consultation_request"}
+{"id":144,"text":"مستعجل وبكام الاستشارة","intent":"urgent"}
+{"id":145,"text":"عايز اغير ميعادي وكمان عايز اعرف السعر","intent":"reschedule_or_cancel"}
+{"id":146,"text":"شكرا بس عندي سؤال ينفع اطلق غيابي؟","intent":"legal_question"}
+{"id":147,"text":"سلام عليكم القضيه بتاعتي عامله ايه","intent":"existing_matter"}
+{"id":148,"text":"عايز موظف ضروري مستعجل","intent":"urgent"}
+{"id":149,"text":"مراجعة عقد وكمان صياغة عقد تاني بكام","intent":"price_question","service":"document_review"}
+{"id":150,"text":"عايز احجز بس قولي الاول الاستشارة بكام","intent":"price_question","service":"consultation_phone_video"}
+{"id":151,"text":"اهلا انا عايز اسأل لو اتطلقت هاخد الشقة؟","intent":"legal_question"}
+{"id":152,"text":"عاوز اعمل عقد عرفى ضرورى","intent":"urgent"}
+{"id":153,"text":"ممكن حد يكلمني بخصوص القضية","intent":"existing_matter"}
+{"id":154,"text":"3ayez a7gez ma3ad fel maktab","intent":"consultation_request","consultation_mode":"office"}
+{"id":155,"text":"ازيك يا حازم عايز استشارة","intent":"consultation_request"}
+{"id":156,"text":"الاستاذ موجود النهارده؟ محتاج اقابله ضروري","intent":"urgent"}

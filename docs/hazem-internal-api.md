@@ -3,6 +3,11 @@
 n8n is the WhatsApp layer (the only thing that talks to Meta); the .NET API is the brain.
 They talk only inside the Docker network `office_net`.
 
+> **TASK 04: the contract did not change.** Same requests, same responses, same errors; only
+> what the API decides to answer changed (approved texts instead of the test echo). An answer
+> may now hold more than one `send_text` action (e.g. the B-20 text then the consultation
+> offer), keys `hazem:<turn_id>:0`, `:1`, …; only the first quotes the client's last message.
+
 ```mermaid
 sequenceDiagram
     participant Meta

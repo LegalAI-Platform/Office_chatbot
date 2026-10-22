@@ -86,6 +86,20 @@ try {
     Start-Sleep -Seconds 22   # whatsapp.turn_stale_seconds is 20 during this step
     Forward
     Check 'check-stale'
+
+    Write-Host "==== 8. TASK 04: Hazem understands (AI stub) and answers from approved texts"
+    Step @('hazem-setup') | Out-Null
+    Forward
+    Check 'check-hazem-welcome'
+    Step @('hazem-name') | Out-Null
+    Forward
+    Check 'check-hazem-offer'
+    Step @('hazem-legal') | Out-Null
+    Forward
+    Check 'check-hazem-legal'
+    Step @('hazem-ai-down') | Out-Null
+    Forward
+    Check 'check-hazem-fallback'
 } catch {
     Write-Host "FAIL  $_"; $script:failed = $true
 } finally {

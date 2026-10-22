@@ -1,7 +1,8 @@
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Options;
-using Office.Core.Hazem;
+using Office.Api.Contracts;
+using Office.Application.UseCases;
 using Office.Infrastructure;
 using Office.Infrastructure.N8n;
 
@@ -10,13 +11,11 @@ namespace Office.Api.Hazem;
 /// <summary>Endpoints n8n calls (docs/hazem-internal-api.md). Every one needs X-Hazem-Token.</summary>
 public static class HazemEndpoints
 {
-    public const string ReportedByN8n = "n8n";
-
     public static void MapHazemApi(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/hazem").AddEndpointFilter<HazemTokenFilter>();
 
-        group.MapPost("/turns", async (TurnRequest? request, TurnService turns, ILoggerFactory loggers, CancellationToken ct) =>
+        group.MapPost("/turns", async (TurnRequest? request, HandleTurn turns, ILoggerFactory loggers, CancellationToken ct) =>
         {
             var errors = TurnRules.Validate(request);
             if (errors.Count > 0)
@@ -24,17 +23,25 @@ public static class HazemEndpoints
                 return Results.ValidationProblem(errors);
             }
 
-            var response = await turns.HandleAsync(request!, ct);
+            var result = await turns.HandleAsync(request!.ToTurn(), ct);
+            var response = result.ToResponse();
             // Never log message text, captions, transcripts, file names or the full phone number:
-            // only the turn id, the message types and counts.
-            loggers.CreateLogger("Office.Api.Hazem.Turns").LogInformation(
+            // only the turn id, the message types and counts, and why a text was not sent (keys and
+            // reasons only — Notes never hold a text).
+            var log = loggers.CreateLogger("Office.Api.Hazem.Turns");
+            log.LogInformation(
                 "Turn {TurnId} from {WaId}: {Status}, {MessageCount} message(s) [{MessageTypes}], {ActionCount} action(s)",
                 response.TurnId, TurnRules.Mask(request!.WaId), response.Status, request.Messages!.Count,
-                string.Join(",", request.Messages.Select(m => m.Type)), response.Actions.Count);
+                string.Join(",", request.Messages.Select(m => m!.Type)), response.Actions.Count);
+            if (result.Notes is { Count: > 0 } notes)
+            {
+                log.LogWarning("Turn {TurnId}: {Notes}", response.TurnId, string.Join("; ", notes));
+            }
+
             return Results.Ok(response);
         });
 
-        group.MapPost("/send-results", async (SendResultsRequest? request, ISendResultStore store, CancellationToken ct) =>
+        group.MapPost("/send-results", async (SendResultsRequest? request, RecordSendResults results, CancellationToken ct) =>
         {
             var errors = TurnRules.Validate(request);
             if (errors.Count > 0)
@@ -42,7 +49,7 @@ public static class HazemEndpoints
                 return Results.ValidationProblem(errors);
             }
 
-            var recorded = await store.UpsertAsync(request!.TurnId, request.Results!, ReportedByN8n, ct);
+            var recorded = await results.RecordAsync(request!.TurnId, request.Results!, ct);
             return Results.Ok(new { recorded });
         });
     }
