@@ -36,6 +36,9 @@ public sealed class PanelUser
     public long? TotpLastStep { get; set; }
     public DateTimeOffset CreatedAt { get; init; }
 
+    /// <summary>The Chatwoot user this account opens (TASK 07b); made on the first sync.</summary>
+    public long? ChatwootUserId { get; set; }
+
     public const string ApprovalPending = "pending";
     public const string ApprovalApproved = "approved";
 
@@ -59,6 +62,8 @@ public interface IPanelUserStore
 
     /// <summary>The e-mail of every active manager: they hear about new registrations.</summary>
     Task<IReadOnlyList<string>> ManagerEmailsAsync(CancellationToken ct);
+
+    Task SetChatwootUserIdAsync(Guid id, long chatwootUserId, CancellationToken ct);
 
     Task<bool> EmailTakenAsync(string email, Guid? except, CancellationToken ct);
 

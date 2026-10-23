@@ -14,6 +14,7 @@ import { VerifyEmailPage } from "../features/auth/VerifyEmailPage";
 import { TaskDetailPage } from "../features/tasks/TaskDetailPage";
 import { TasksPage } from "../features/tasks/TasksPage";
 import { UsersPage } from "../features/users/UsersPage";
+import { ChatsPage } from "../features/chats/ChatsPage";
 import { HomePage } from "../features/home/HomePage";
 import { Layout } from "./Layout";
 import { ComingSoon, SettingsPage } from "./Pages";
@@ -67,7 +68,7 @@ export const routes = [
           { path: "/settings", element: <SettingsPage /> },
           { path: "/clients", element: <ComingSoon title="العملاء / الشركات" icon="clients" what="ملف لكل عميل: بياناته، قضاياه، مواعيده ومستنداته في مكان واحد." when="بعد ربط المحادثات (TASK 07b)" /> },
           { path: "/appointments", element: <ComingSoon title="المواعيد" icon="calendar" what="الحجز من واتساب، تقويم الأستاذ، والتذكير قبل الميعاد." when="مع الحجز (TASK 08)" /> },
-          { path: "/chats", element: <ComingSoon title="المحادثات" icon="chat" what="المحادثة مع العميل والرد عليه من نفس اللوحة، عن طريق Chatwoot." when="TASK 07b" /> },
+          { path: "/chats", element: <ChatsPage /> },
           { path: "/documents", element: <ComingSoon title="المستندات" icon="document" what="العقود والصور والمستندات اللي العملاء بعتوها، مرتبة على كل عميل." when="بعد المحادثات" /> },
           { path: "/reports", element: <ComingSoon title="التقارير" icon="reports" what="أرقام الشهر: المواعيد، الإيصالات، والمهام اللي اتعملت في وقتها." when="بعد الحجز والدفع" /> },
           { path: "/receipts", element: <ComingSoon title="الإيصالات" icon="receipt" what="إيصالات التحويل اللي العملاء بعتوها، تتأكد منها بضغطة." when="مع الدفع" /> },

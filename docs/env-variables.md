@@ -40,6 +40,11 @@ contains `CHANGE_ME`, or has the wrong format.
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SSL` | api (`Mail__Host`, `Mail__Port`, `Mail__Ssl`): the no-reply sender | no | the owner's provider; port `587` with STARTTLS (`SMTP_SSL=true`); 465 is not supported. Empty host = sign-up "not available" | v1.9 |
 | `SMTP_USERNAME`, `SMTP_PASSWORD` | api (`Mail__Username`, `Mail__Password`) | **yes** (password) | from the provider. Never printed or logged | v1.9 |
 | `SMTP_FROM`, `SMTP_FROM_NAME` | api (`Mail__From`, `Mail__FromName`) | no | e.g. `no-reply@<domain>`; empty name = the office's name | v1.9 |
+| `CHATWOOT_SECRET_KEY_BASE`, `CHATWOOT_DB_PASSWORD`, `CHATWOOT_REDIS_PASSWORD` | chatwoot, chatwoot-sidekiq, chatwoot-db, chatwoot-redis | **yes** | from `gen-secrets` (TASK 07b) | 07b |
+| `CHATWOOT_BOT_TOKEN` | api (`Chatwoot__BotToken`); `chatwoot-setup` gives it to «حازم (النظام)» | **yes** | from `gen-secrets`. Empty = the Chatwoot link is off | 07b |
+| `CHATWOOT_PLATFORM_TOKEN` | api (`Chatwoot__PlatformToken`); `chatwoot-setup` gives it to the Platform App | **yes** | from `gen-secrets`: makes and disables the staff's Chatwoot users | 07b |
+| `CHATWOOT_WEBHOOK_TOKEN` | api (`Chatwoot__WebhookSecret`); the inbox's webhook secret | **yes** | from `gen-secrets`: Chatwoot signs every webhook with it | 07b |
+| `CHATWOOT_URL` | api (`Chatwoot__PublicUrl`), chatwoot (`FRONTEND_URL`) | no | empty = `http://127.0.0.1:3000`: where people open Chatwoot | 07b |
 | `OPENAI_BASE_URL` | api (`Hazem__OpenAiBaseUrl`) | no | empty = `https://api.openai.com/v1` (healthcheck checks it). Tests never change it: `hazem-e2e` uses `hazem.settings ai.stub_*` | 04 |
 
 ## Non-secret API settings: `hazem.settings`

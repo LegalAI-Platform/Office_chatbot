@@ -34,6 +34,11 @@ public sealed class ApiFactory(TestDatabase db, TimeProvider? clock = null) : We
     /// <summary>False: PANEL_SECRET_KEY and the mail server are not set (sign-up and 2FA unavailable).</summary>
     public bool SignupConfigured { get; init; } = true;
 
+    /// <summary>TASK 07b: Chatwoot faked at the HTTP boundary; the link is on only when a test asks.</summary>
+    public FakeChatwoot Chatwoot { get; } = new();
+    public bool ChatwootConfigured { get; init; }
+    public const string ChatwootWebhookSecret = "integration-test-chatwoot-webhook-secret-0123456789";
+
     /// <summary>The v1.9 rule that a manager must turn the authenticator on; off unless a test is about it.</summary>
     public bool ManagersNeedTwoFactor { get; init; }
 
@@ -51,6 +56,12 @@ public sealed class ApiFactory(TestDatabase db, TimeProvider? clock = null) : We
         builder.UseSetting("Panel:LoginsPerMinute", LoginsPerMinute.ToString(System.Globalization.CultureInfo.InvariantCulture));
         builder.UseSetting("Panel:SecretKey", SignupConfigured ? PanelSecretKey : "");
         builder.UseSetting("Panel:ManagersNeedTwoFactor", ManagersNeedTwoFactor ? "true" : "false");
+        builder.UseSetting("Chatwoot:RunWorker", "false");
+        builder.UseSetting("Chatwoot:BaseUrl", "http://chatwoot.test");
+        builder.UseSetting("Chatwoot:PublicUrl", "http://127.0.0.1:3000");
+        builder.UseSetting("Chatwoot:BotToken", ChatwootConfigured ? "integration-test-chatwoot-bot-token" : "");
+        builder.UseSetting("Chatwoot:PlatformToken", ChatwootConfigured ? "integration-test-chatwoot-platform-token" : "");
+        builder.UseSetting("Chatwoot:WebhookSecret", ChatwootWebhookSecret);
         Mail.Configured = SignupConfigured;
         builder.ConfigureLogging(l => l.AddProvider(Logs));
         builder.ConfigureTestServices(services =>
@@ -58,6 +69,7 @@ public sealed class ApiFactory(TestDatabase db, TimeProvider? clock = null) : We
             services.AddHttpClient(N8nWhatsAppGateway.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => N8n);
             services.AddHttpClient(OpenAiIntentClassifier.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => OpenAi);
             services.AddSingleton<IPanelMailer>(Mail);
+            services.AddHttpClient(Office.Infrastructure.Chatwoot.ChatwootApi.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => Chatwoot);
             if (clock is not null)
             {
                 services.AddSingleton(clock);
@@ -154,6 +166,97 @@ public sealed class FixedClock(DateTimeOffset now) : TimeProvider
 }
 
 /// <summary>Keeps every formatted log line written by the API, so a test can read them.</summary>
+/// <summary>
+/// Chatwoot at the HTTP boundary (TASK 07b), shaped like the real v4.18 answers: the account and
+/// inbox by name, contacts, conversations, messages, and the platform API's users. Records every
+/// call (path, token, body) so a test can prove what Chatwoot was told.
+/// </summary>
+public sealed class FakeChatwoot : HttpMessageHandler
+{
+    public const long Account = 2, Inbox = 1, SystemUser = 2;
+    public const string SystemEmail = "hazem@office.invalid";
+    private long _next = 100;
+    public ConcurrentQueue<(string Method, string Path, string? Token, JsonNode? Body)> Calls { get; } = new();
+    public bool Down { get; set; }
+
+    /// <summary>Fails the n-th message post from now on (a turn copied half-way), then works again.</summary>
+    public int FailMessagePostAt { get; private set; } = -1;
+    private int _messagePosts;
+
+    public void ArmMessageFailure(int nth)
+    {
+        _messagePosts = 0;
+        FailMessagePostAt = nth;
+    }
+
+    public IReadOnlyList<JsonNode> Messages(long conversation) => Calls
+        .Where(c => c.Method == "POST" && c.Path == $"/api/v1/accounts/{Account}/conversations/{conversation}/messages")
+        .Select(c => c.Body!).ToList();
+
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+    {
+        var body = request.Content is null ? null : JsonNode.Parse(await request.Content.ReadAsStringAsync(ct));
+        var path = request.RequestUri!.AbsolutePath;
+        var token = request.Headers.TryGetValues("api_access_token", out var v) ? v.Single() : null;
+        // A message post that fails is not stored by Chatwoot, so it is not recorded either.
+        if (request.Method == HttpMethod.Post && path.EndsWith("/messages", StringComparison.Ordinal)
+            && Interlocked.Increment(ref _messagePosts) - 1 == FailMessagePostAt)
+        {
+            FailMessagePostAt = -1;
+            return new HttpResponseMessage(HttpStatusCode.GatewayTimeout);
+        }
+
+        Calls.Enqueue((request.Method.Method, path, token, body));
+        if (Down)
+        {
+            return new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
+        }
+
+        var a = $"/api/v1/accounts/{Account}";
+        JsonNode answer = (request.Method.Method, path) switch
+        {
+            ("GET", "/api/v1/profile") => new JsonObject
+            {
+                ["id"] = SystemUser,
+                ["accounts"] = new JsonArray(new JsonObject { ["id"] = Account, ["name"] = "مكتب سعد فتحي سعد" }),
+            },
+            ("GET", var p) when p == $"{a}/inboxes" => new JsonObject
+            {
+                ["payload"] = new JsonArray(new JsonObject { ["id"] = Inbox, ["name"] = "واتساب (حازم)" }),
+            },
+            ("GET", var p) when p == $"{a}/contacts/search" => new JsonObject { ["payload"] = new JsonArray() },
+            ("POST", var p) when p == $"{a}/contacts" => new JsonObject
+            {
+                ["payload"] = new JsonObject
+                {
+                    ["contact"] = new JsonObject
+                    {
+                        ["id"] = Interlocked.Increment(ref _next),
+                        ["contact_inboxes"] = new JsonArray(new JsonObject { ["source_id"] = Guid.NewGuid().ToString() }),
+                    },
+                },
+            },
+            ("POST", var p) when p == $"{a}/conversations" => new JsonObject { ["id"] = Interlocked.Increment(ref _next) },
+            ("POST", var p) when p.StartsWith($"{a}/conversations/", StringComparison.Ordinal) =>
+                new JsonObject { ["id"] = Interlocked.Increment(ref _next) },
+            // Chatwoot hands back the user that already has this e-mail (here: its system user's).
+            ("POST", "/platform/api/v1/users") => new JsonObject
+            {
+                ["id"] = (string?)body?["email"] == SystemEmail ? SystemUser : Interlocked.Increment(ref _next),
+            },
+            (_, var p) when p == $"/platform/api/v1/accounts/{Account}/account_users" => new JsonObject(),
+            ("POST", var p) when p == $"{a}/inbox_members" => new JsonObject { ["payload"] = new JsonArray() },
+            ("GET", var p) when p.StartsWith("/platform/api/v1/users/", StringComparison.Ordinal) && p.EndsWith("/login", StringComparison.Ordinal) =>
+                new JsonObject { ["url"] = "http://chatwoot:3000/app/login?email=x%40example.test&sso_auth_token=one-time" },
+            _ => new JsonObject { ["error"] = "unknown fake path" },
+        };
+        return new HttpResponseMessage(answer["error"] is null ? HttpStatusCode.OK : HttpStatusCode.NotFound)
+        {
+            Content = new StringContent(answer.ToJsonString(), Encoding.UTF8, "application/json"),
+        };
+    }
+}
+
 /// <summary>The no-reply mail server: keeps every mail so a test can read the code a person would get.</summary>
 public sealed class FakeMailer : IPanelMailer
 {

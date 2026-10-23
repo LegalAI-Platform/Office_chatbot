@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Office.Api.Chatwoot;
 using Office.Api.Hazem;
 using Office.Api.Panel;
 using Office.Infrastructure.Json;
@@ -33,6 +34,7 @@ builder.Services.AddOfficeInfrastructure(builder.Configuration);
 builder.Services.AddProblemDetails();
 builder.Services.AddHealthChecks().AddCheck<HazemSchemaHealthCheck>("hazem-schema", tags: ["ready"]);
 builder.Services.AddPanelAuth(builder.Configuration, builder.Environment); // TASK 07a: the panel (/api/panel)
+builder.Services.AddHostedService<Office.Infrastructure.Chatwoot.ChatwootWorker>(); // TASK 07b: turns into Chatwoot
 
 var app = builder.Build();
 
@@ -52,6 +54,7 @@ app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => fa
 app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = c => c.Tags.Contains("ready") });
 app.MapHazemApi();
 app.MapPanelApi();
+app.MapChatwoot();
 
 app.Run();
 

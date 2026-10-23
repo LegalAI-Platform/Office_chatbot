@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.DataProtection;
+using Office.Application.Chatwoot;
 using Office.Application.Panel;
 
 namespace Office.Api.Panel;
@@ -227,17 +228,22 @@ public static class PanelEndpoints
         {
             var r = await accounts.CreateAsync(ctx.CurrentUser().Id,
                 new PanelAccounts.NewAccount(body?.Username, body?.DisplayName, body?.Email, body?.Role, body?.StaffName), null, ct);
+            if (r.Outcome == PanelOutcome.Ok)
+            {
+                await SyncChatwoot(ctx, r.Value.User);
+            }
+
             return r.Outcome == PanelOutcome.Ok
                 ? Results.Ok(new { user = UserDto.From(r.Value.User, clock.GetUtcNow()), temporary_password = r.Value.TemporaryPassword })
                 : Refused(r);
         });
 
         users.MapPost("/{id:guid}/disable", async (Guid id, HttpContext ctx, PanelAccounts a, TimeProvider clock, CancellationToken ct) =>
-            UserAnswer(await a.DisableAsync(ctx.CurrentUser().Id, id, ct), clock));
+            await Synced(ctx, await a.DisableAsync(ctx.CurrentUser().Id, id, ct), clock));
         users.MapPost("/{id:guid}/enable", async (Guid id, HttpContext ctx, PanelAccounts a, TimeProvider clock, CancellationToken ct) =>
-            UserAnswer(await a.EnableAsync(ctx.CurrentUser().Id, id, ct), clock));
+            await Synced(ctx, await a.EnableAsync(ctx.CurrentUser().Id, id, ct), clock));
         users.MapPost("/{id:guid}/role", async (Guid id, RoleRequest? body, HttpContext ctx, PanelAccounts a, TimeProvider clock, CancellationToken ct) =>
-            UserAnswer(await a.ChangeRoleAsync(ctx.CurrentUser().Id, id, body?.Role, ct), clock));
+            await Synced(ctx, await a.ChangeRoleAsync(ctx.CurrentUser().Id, id, body?.Role, ct), clock));
         users.MapPost("/{id:guid}/reset-password", async (Guid id, HttpContext ctx, PanelAccounts a, CancellationToken ct) =>
         {
             var r = await a.ResetPasswordAsync(ctx.CurrentUser().Id, id, null, ct);
@@ -245,7 +251,7 @@ public static class PanelEndpoints
         });
         // v1.9: a registered account waits for the manager, who picks its role (or refuses it).
         users.MapPost("/{id:guid}/approve", async (Guid id, ApproveRequest? body, HttpContext ctx, PanelSignup s, TimeProvider clock, CancellationToken ct) =>
-            UserAnswer(await s.ApproveAsync(ctx.CurrentUser().Id, id, body?.Role, body?.StaffName, ct), clock));
+            await Synced(ctx, await s.ApproveAsync(ctx.CurrentUser().Id, id, body?.Role, body?.StaffName, ct), clock));
         users.MapPost("/{id:guid}/reject", async (Guid id, HttpContext ctx, PanelSignup s, CancellationToken ct) =>
         {
             var r = await s.RejectAsync(ctx.CurrentUser().Id, id, ct);
@@ -281,6 +287,33 @@ public static class PanelEndpoints
 
     private static IResult Answer(PanelResult<TaskView> r) =>
         r.Outcome == PanelOutcome.Ok ? Results.Ok(TaskDetailDto.From(r.Value!)) : Refused(r);
+
+    /// <summary>
+    /// TASK 07b: the account's Chatwoot user follows the change (made, re-roled, taken out). The
+    /// panel never waits on Chatwoot: a failure is logged and the next sync fixes it.
+    /// </summary>
+    private static async Task SyncChatwoot(HttpContext ctx, PanelUser user)
+    {
+        try
+        {
+            await ctx.RequestServices.GetRequiredService<ChatwootAccounts>().SyncAsync(user, ctx.RequestAborted);
+        }
+        catch (Exception e) when (!ctx.RequestAborted.IsCancellationRequested)
+        {
+            ctx.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("Office.Api.Chatwoot")
+                .LogWarning("Chatwoot account sync failed for {UserId}: {Kind}: {Message}", user.Id, e.GetType().Name, e.Message);
+        }
+    }
+
+    private static async Task<IResult> Synced(HttpContext ctx, PanelResult<PanelUser> r, TimeProvider clock)
+    {
+        if (r.Outcome == PanelOutcome.Ok)
+        {
+            await SyncChatwoot(ctx, r.Value!);
+        }
+
+        return UserAnswer(r, clock);
+    }
 
     private static IResult UserAnswer(PanelResult<PanelUser> r, TimeProvider clock) =>
         r.Outcome == PanelOutcome.Ok ? Results.Ok(UserDto.From(r.Value!, clock.GetUtcNow())) : Refused(r);

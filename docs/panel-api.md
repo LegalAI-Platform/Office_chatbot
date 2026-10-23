@@ -58,6 +58,16 @@ server, these answer `503 { error: "not_configured" }`.
 | `POST /auth/2fa/disable` | `{ password, code }` (app or recovery code) → `204`. Every other session ends |
 | `POST /auth/2fa/recovery-codes` | `{ code }` → ten new codes; the old ones stop working |
 
+## Chatwoot (TASK 07b, T-24)
+
+| Endpoint | Permission | What |
+|---|---|---|
+| `POST /chatwoot/open` | account.self | `{ task_id? }` → `{ login_url, conversation_url }`: a one-time link that signs this person into Chatwoot (their Chatwoot user is made first if missing), and the client's conversation when the task is one they may see (`404` otherwise). `503 { error: "not_configured" \| "chatwoot_unavailable" }` |
+
+Chatwoot's webhook (`POST /chatwoot/webhook`) is not under `/api/panel` and is not reachable
+through nginx: only Chatwoot calls it, on the Docker network, signed with `CHATWOOT_WEBHOOK_TOKEN`
+(`X-Chatwoot-Signature`, 5 minutes).
+
 ## Permissions (RBAC, T-23)
 
 The code checks permissions, never role names. A role is a set of permissions, defined once in

@@ -63,6 +63,10 @@ public sealed class PanelUserStore(HazemDbContext db, TimeProvider clock) : IPan
     public async Task<IReadOnlyList<string>> ManagerEmailsAsync(CancellationToken ct) =>
         await db.PanelUsers.AsNoTracking().Where(u => u.Active && u.Role == Permissions.Manager).Select(u => u.Email).ToListAsync(ct);
 
+    public Task SetChatwootUserIdAsync(Guid id, long chatwootUserId, CancellationToken ct) =>
+        db.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE hazem.panel_users SET chatwoot_user_id = {chatwootUserId} WHERE id = {id}", ct);
+
     public Task<bool> EmailTakenAsync(string email, Guid? except, CancellationToken ct) =>
         // citext compared with a text parameter is compared as text (case-sensitive): lower both sides.
         db.PanelUsers.AnyAsync(u => u.Email.ToLower() == email.ToLowerInvariant() && (except == null || u.Id != except), ct);
@@ -137,6 +141,7 @@ public sealed class PanelUserStore(HazemDbContext db, TimeProvider clock) : IPan
         TotpEnabled = r.TotpEnabled,
         TotpLastStep = r.TotpLastStep,
         CreatedAt = r.CreatedAt,
+        ChatwootUserId = r.ChatwootUserId,
     };
 }
 

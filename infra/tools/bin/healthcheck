@@ -192,8 +192,15 @@ check "tables staff, list_entries, staff_tasks exist" \
   sql_equals office "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'hazem' AND table_name IN ('staff', 'list_entries', 'staff_tasks')" "3"
 check "office_app (n8n) cannot read the office lists or the staff tasks" \
   expect_fail psql_as office_app "$OFFICE_APP_PASSWORD" office -c 'SELECT 1 FROM hazem.list_entries UNION ALL SELECT 1 FROM hazem.staff_tasks LIMIT 1'
-check "handoff.enabled = false until staff answer from Chatwoot (TASK 07b): nobody would answer a client handed over" \
-  sql_equals office "SELECT value FROM hazem.settings WHERE key = 'handoff.enabled'" "false"
+check "handoff.enabled = true: a client handed over is answered from Chatwoot (TASK 07b)" \
+  sql_equals office "SELECT value FROM hazem.settings WHERE key = 'handoff.enabled'" "true"
+
+echo "== Chatwoot (TASK 07b, T-24)"
+check "Chatwoot answers on chatwoot_net" http_status_is "http://chatwoot:3000/api" "200"
+check "no turn waits more than 10 minutes to reach Chatwoot" \
+  sql_equals office "SELECT count(*) FROM hazem.chatwoot_turns WHERE state = 'failed' AND updated_at < now() - interval '10 minutes'" "0"
+check "no staff reply is stuck while sending" \
+  sql_equals office "SELECT count(*) FROM hazem.chatwoot_replies WHERE state = 'sending' AND created_at < now() - interval '5 minutes'" "0"
 check "no active approved text promises a contact time (B-06 promises wait for the alerts, TASK 07c)" \
   sql_equals office "SELECT count(*) FROM hazem.approved_texts WHERE active AND text ~ '(خلال ساعة|الساعة 10|هيتواصل|هيرد عليك)'" "0"
 

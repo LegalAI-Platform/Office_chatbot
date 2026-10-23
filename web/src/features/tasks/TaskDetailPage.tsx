@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router";
+import { openChatwoot } from "../../shared/api/chatwoot";
 import { errorMessage } from "../../shared/api/client";
 import type { ClientWord, TaskDetail } from "../../shared/api/types";
 import { CLIENT_TYPES, label, matterLabel, MEDIA_TYPES, SOURCES, TASK_STATES, TASK_TYPES } from "../../shared/lib/labels";
@@ -118,6 +119,7 @@ function Actions({ task }: { task: TaskDetail }) {
   const assign = useAssign(task.id);
   const staff = useStaff(task.can.assign);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [chat, setChat] = useState<{ busy: boolean; error?: unknown }>({ busy: false });
   const available = ACTIONS.filter((a) => task.can[a.key]);
 
   return (
@@ -171,11 +173,15 @@ function Actions({ task }: { task: TaskDetail }) {
       ) : null}
 
       <div className="grid gap-1 border-t border-line pt-3">
-        <Button disabled aria-describedby="chatwoot-note">
+        <Button aria-describedby="chatwoot-note" busy={chat.busy} onClick={async () => {
+          setChat({ busy: true });
+          setChat({ busy: false, error: await openChatwoot(task.id) });
+        }}>
           <Icon name="chat" className="size-4" />
           افتح المحادثة في Chatwoot
         </Button>
-        <p id="chatwoot-note" className="text-xs text-ink-soft">الرد على العميل هيبقى من Chatwoot، وده جاي قريب.</p>
+        <p id="chatwoot-note" className="text-xs text-ink-soft">بتفتح في تاب جديد وانت داخل على طول. ردك من هناك بيوصل للعميل على واتساب.</p>
+        {chat.error ? <p className="text-sm text-bad" role="alert">{errorMessage(chat.error)}</p> : null}
       </div>
     </Card>
   );
