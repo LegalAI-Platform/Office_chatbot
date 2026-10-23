@@ -95,6 +95,12 @@ public static class DependencyInjection
         services.AddScoped<Application.Panel.PanelSignup>();
         services.AddScoped<Application.Panel.PanelTwoFactor>();
 
+        // TASK 07c: the client's files, read-only (S3_API_*), and the office's alerts (the worker is added by the api).
+        services.AddSingleton<Application.Panel.IClientFiles, Panel.S3ClientFiles>();
+        services.AddScoped<Application.Panel.IPanelAlertStore, Panel.PanelAlertStore>();
+        services.AddScoped<Application.Panel.PanelAlerts>();
+        services.AddScoped<Panel.PanelTools>();
+
         // TASK 07b (T-24): Chatwoot, through its API inbox and platform API. Off without its tokens.
         services.AddOptions<Chatwoot.ChatwootOptions>().Bind(config.GetSection(Chatwoot.ChatwootOptions.Section));
         services.AddHttpClient<Application.Chatwoot.IChatwootApi, Chatwoot.ChatwootApi>(Chatwoot.ChatwootApi.HttpClientName,

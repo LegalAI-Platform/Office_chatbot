@@ -13,10 +13,11 @@ approved texts only; [docs/ai/classification.md](docs/ai/classification.md)), **
 writing, topics, staff tasks) and **TASK 07a** (the panel at http://127.0.0.1:8080: sign-in with
 roles, accounts, staff tasks; [docs/panel-api.md](docs/panel-api.md),
 [docs/runbooks/panel.md](docs/runbooks/panel.md)) and **TASK 07b** (Chatwoot at http://127.0.0.1:3000:
-the staff answer clients there; [docs/runbooks/chatwoot.md](docs/runbooks/chatwoot.md)). Hazem answers only the numbers in
+the staff answer clients there; [docs/runbooks/chatwoot.md](docs/runbooks/chatwoot.md)) and **TASK 07c**
+(alerts by e-mail and in the panel, the office's lists, Hazem's texts, client files, reports). Hazem answers only the numbers in
 `hazem.settings hazem.recipients` until the owner opens it to everyone.
 
-- All decisions: [docs/decisions/DECISIONS-v1.10.md](docs/decisions/DECISIONS-v1.10.md)
+- All decisions: [docs/decisions/DECISIONS-v1.11.md](docs/decisions/DECISIONS-v1.11.md)
 - n8n ↔ .NET API contract: [docs/hazem-internal-api.md](docs/hazem-internal-api.md)
 - Backend: [backend/README.md](backend/README.md)
 - Architecture and permissions: [docs/infrastructure.md](docs/infrastructure.md)

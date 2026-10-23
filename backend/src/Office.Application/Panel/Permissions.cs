@@ -12,9 +12,15 @@ public static class Permissions
     public const string TasksAssign = "tasks.assign";
     public const string UsersManage = "users.manage";
     public const string AccountSelf = "account.self";
+    // TASK 07c (DECISIONS v1.11): the manager and the lawyer keep the office's lists and Hazem's
+    // texts and read the reports; only the manager unmutes a conversation (S-01).
+    public const string ListsManage = "lists.manage";
+    public const string TextsManage = "texts.manage";
+    public const string ReportsView = "reports.view";
+    public const string ConversationsUnmute = "conversations.unmute";
 
     public static IReadOnlyList<string> All { get; } =
-        [TasksViewOwn, TasksViewAll, TasksUpdate, TasksAssign, UsersManage, AccountSelf];
+        [TasksViewOwn, TasksViewAll, TasksUpdate, TasksAssign, UsersManage, AccountSelf, ListsManage, TextsManage, ReportsView, ConversationsUnmute];
 
     public const string Manager = "manager";
     public const string Lawyer = "lawyer";
@@ -24,8 +30,9 @@ public static class Permissions
 
     private static readonly Dictionary<string, string[]> ByRole = new(StringComparer.Ordinal)
     {
-        [Manager] = [TasksViewOwn, TasksViewAll, TasksUpdate, TasksAssign, UsersManage, AccountSelf],
-        [Lawyer] = [TasksViewOwn, TasksViewAll, TasksUpdate, TasksAssign, AccountSelf],
+        [Manager] = [TasksViewOwn, TasksViewAll, TasksUpdate, TasksAssign, UsersManage, AccountSelf, ListsManage, TextsManage, ReportsView,
+            ConversationsUnmute],
+        [Lawyer] = [TasksViewOwn, TasksViewAll, TasksUpdate, TasksAssign, AccountSelf, ListsManage, TextsManage, ReportsView],
         [Staff] = [TasksViewOwn, TasksUpdate, AccountSelf],
     };
 

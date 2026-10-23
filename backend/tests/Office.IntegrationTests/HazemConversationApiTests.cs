@@ -25,7 +25,7 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
     public async ValueTask InitializeAsync()
     {
         await db.ExecAsync("""
-            TRUNCATE hazem.turns, hazem.send_results, hazem.turn_replies, hazem.classifications, hazem.staff_tasks, hazem.list_entries;
+            TRUNCATE hazem.turns, hazem.send_results, hazem.turn_replies, hazem.classifications, hazem.panel_alerts, hazem.panel_alert_reads, hazem.staff_tasks, hazem.list_entries;
             TRUNCATE hazem.panel_audit; DELETE FROM hazem.panel_users; -- they point at hazem.staff
             DELETE FROM hazem.staff;
             DELETE FROM hazem.intakes; DELETE FROM hazem.conversations; DELETE FROM hazem.persons;

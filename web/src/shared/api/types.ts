@@ -8,7 +8,11 @@ export type Permission =
   | "tasks.update"
   | "tasks.assign"
   | "users.manage"
-  | "account.self";
+  | "account.self"
+  | "lists.manage"
+  | "texts.manage"
+  | "reports.view"
+  | "conversations.unmute";
 
 export interface Me {
   id: string;
@@ -137,4 +141,81 @@ export interface Dashboard {
   overdue_by_day: number[];
   recent: DashboardTask[];
   priority: DashboardTask[];
+}
+
+// ---------- TASK 07c ----------
+
+export type AlertKind = "task_overdue" | "task_urgent" | "task_human";
+
+export interface PanelAlert {
+  id: number;
+  kind: AlertKind;
+  task_id: string;
+  task_type: string;
+  client_name?: string;
+  due_at: string;
+  created_at: string;
+  read: boolean;
+}
+
+export interface AlertList {
+  unread: number;
+  items: PanelAlert[];
+}
+
+export type ListKind = "existing_client" | "lawyer_direct" | "blocked";
+
+export interface ListEntry {
+  id: string;
+  kind: ListKind;
+  wa_id: string;
+  name?: string;
+  staff_name?: string;
+  note?: string;
+  imported_at: string;
+}
+
+export interface MutedConversation {
+  wa_id: string;
+  name?: string;
+  since: string;
+}
+
+export interface ApprovedText {
+  key: string;
+  version: number;
+  text: string;
+  max_chars: number;
+  source: string;
+  updated_at: string;
+  updated_by?: string;
+  versions: number;
+}
+
+export interface TextVersion {
+  version: number;
+  text: string;
+  active: boolean;
+  source: string;
+  updated_at: string;
+  updated_by?: string;
+}
+
+export interface ReportRow {
+  key: string;
+  count: number;
+}
+
+export interface MonthReport {
+  month: string;
+  tasks: number;
+  done: number;
+  done_on_time: number;
+  late: number;
+  by_type: ReportRow[];
+  by_staff: { staff: string; assigned: number; done: number; on_time: number }[];
+  new_clients: number;
+  by_source: ReportRow[];
+  by_matter: ReportRow[];
+  by_client_type: ReportRow[];
 }

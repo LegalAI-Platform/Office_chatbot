@@ -15,6 +15,9 @@ import { TaskDetailPage } from "../features/tasks/TaskDetailPage";
 import { TasksPage } from "../features/tasks/TasksPage";
 import { UsersPage } from "../features/users/UsersPage";
 import { ChatsPage } from "../features/chats/ChatsPage";
+import { ListsPage } from "../features/lists/ListsPage";
+import { ReportsPage } from "../features/reports/ReportsPage";
+import { TextsPage } from "../features/texts/TextsPage";
 import { HomePage } from "../features/home/HomePage";
 import { Layout } from "./Layout";
 import { ComingSoon, SettingsPage } from "./Pages";
@@ -70,7 +73,18 @@ export const routes = [
           { path: "/appointments", element: <ComingSoon title="المواعيد" icon="calendar" what="الحجز من واتساب، تقويم الأستاذ، والتذكير قبل الميعاد." when="مع الحجز (TASK 08)" /> },
           { path: "/chats", element: <ChatsPage /> },
           { path: "/documents", element: <ComingSoon title="المستندات" icon="document" what="العقود والصور والمستندات اللي العملاء بعتوها، مرتبة على كل عميل." when="بعد المحادثات" /> },
-          { path: "/reports", element: <ComingSoon title="التقارير" icon="reports" what="أرقام الشهر: المواعيد، الإيصالات، والمهام اللي اتعملت في وقتها." when="بعد الحجز والدفع" /> },
+          {
+            element: <RequirePermission permission="reports.view" />,
+            children: [{ path: "/reports", element: <ReportsPage /> }],
+          },
+          {
+            element: <RequirePermission permission="lists.manage" />,
+            children: [{ path: "/lists", element: <ListsPage /> }],
+          },
+          {
+            element: <RequirePermission permission="texts.manage" />,
+            children: [{ path: "/texts", element: <TextsPage /> }],
+          },
           { path: "/receipts", element: <ComingSoon title="الإيصالات" icon="receipt" what="إيصالات التحويل اللي العملاء بعتوها، تتأكد منها بضغطة." when="مع الدفع" /> },
           {
             element: <RequirePermission permission="users.manage" />,

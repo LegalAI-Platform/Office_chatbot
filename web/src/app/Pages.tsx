@@ -28,6 +28,8 @@ export function SettingsPage() {
     { to: "/account", icon: "account", title: "حسابي", text: "اسمك وإيميلك ودورك في المكتب.", show: true },
     { to: "/change-password", icon: "key", title: "تغيير كلمة السر", text: "كلمة سر جديدة، وكل الأجهزة التانية بتخرج.", show: true },
     { to: "/users", icon: "users", title: "الحسابات", text: "زوّد موظف، اقفل حساب، أو اعمل كلمة سر مؤقتة.", show: can(me, "users.manage") },
+    { to: "/lists", icon: "clients", title: "قوايم المكتب", text: "الموكلين الحاليين، وقايمة الأستاذ، والممنوعين" + (can(me, "conversations.unmute") ? "، والمحادثات الساكتة." : "."), show: can(me, "lists.manage") },
+    { to: "/texts", icon: "chat", title: "نصوص حازم", text: "الكلام اللي حازم بيرد بيه، وكل نسخة قديمة محفوظة.", show: can(me, "texts.manage") },
   ];
   return (
     <div className="grid gap-4">

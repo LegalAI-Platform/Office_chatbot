@@ -52,8 +52,25 @@ public sealed record TaskAbilities(bool Start, bool Done, bool Cancel, bool Assi
 public sealed record TaskView(TaskRecord Task, TaskAbilities Can);
 
 /// <summary>hazem.staff_tasks for the panel (Office.Infrastructure).</summary>
+/// <summary>Where a client's file is kept (n8n stored it). Never sent to the browser as such.</summary>
+public sealed record ClientFileRef(string Type, string Bucket, string Key, string? MimeType, string? Filename);
+
+/// <summary>A client's file, read from storage.</summary>
+public sealed record ClientFile(Stream Content, string ContentType, long? Length, string? Filename);
+
+/// <summary>Storage, read-only (TASK 07c: the api's own key, S3_API_*).</summary>
+public interface IClientFiles
+{
+    bool Configured { get; }
+
+    Task<ClientFile?> OpenAsync(ClientFileRef file, CancellationToken ct);
+}
+
 public interface IPanelTaskStore
 {
+    /// <summary>The file of the n-th message of the task's turn, if it was stored.</summary>
+    Task<ClientFileRef?> FileAsync(Guid taskId, int index, CancellationToken ct);
+
     Task<TaskList> ListAsync(TaskQuery query, Guid? onlyStaff, bool includeUnassigned, CancellationToken ct);
 
     /// <summary>
@@ -126,6 +143,28 @@ public sealed class PanelTasks(IPanelTaskStore store, TimeProvider clock)
     {
         var task = await store.GetAsync(id, ct);
         return task is null || !MaySee(viewer, task) ? new(PanelOutcome.NotFound) : PanelResult<TaskView>.Ok(View(viewer, task));
+    }
+
+    /// <summary>
+    /// TASK 07c (the owner's choice): whoever may see the task may open its files. Every opening is
+    /// written to the audit (who, which task, which message), never the file's name.
+    /// </summary>
+    public async Task<PanelResult<ClientFileRef>> FileAsync(Viewer viewer, Guid id, int index, CancellationToken ct)
+    {
+        var task = await store.GetAsync(id, ct);
+        if (task is null || !MaySee(viewer, task) || index < 0 || index >= task.ClientWords.Count)
+        {
+            return new(PanelOutcome.NotFound);
+        }
+
+        if (await store.FileAsync(id, index, ct) is not { } file)
+        {
+            return new(PanelOutcome.NotFound);
+        }
+
+        await store.AuditAsync(viewer.UserId, "task.file_open", id,
+            new Dictionary<string, string?> { ["message"] = index.ToString(System.Globalization.CultureInfo.InvariantCulture), ["type"] = file.Type }, ct);
+        return PanelResult<ClientFileRef>.Ok(file);
     }
 
     public async Task<PanelResult<TaskView>> ActAsync(Viewer viewer, Guid id, string action, CancellationToken ct)

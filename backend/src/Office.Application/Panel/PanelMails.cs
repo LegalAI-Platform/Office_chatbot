@@ -69,6 +69,59 @@ public static class PanelMails
         ["التحقق بخطوتين اتقفل على حسابك، والدخول بقى بكلمة السر بس. وكل الأجهزة اللي كانت داخلة اتقفلت."],
         null, ["لو مش إنت ولا المدير اللي قفله، كلّم مدير المكتب حالًا."]);
 
+    /// <summary>
+    /// TASK 07c: an alert. The kind of task, its due time in Cairo and a link: never the client's
+    /// name, number or words (an e-mail leaves the office's machines).
+    /// </summary>
+    public static PanelMail Alert(string to, AlertToMail a, string panelUrl)
+    {
+        var (subject, line) = a.Kind switch
+        {
+            AlertKinds.Overdue => ("مهمة اتأخرت", "فيه مهمة عدّى ميعادها ولسه ما خلصتش."),
+            AlertKinds.Urgent => ("طلب عاجل", "فيه طلب عاجل جديد محتاج حد يمسكه دلوقتي."),
+            _ => ("عميل عايز يكلم حد", "فيه عميل طلب يكلم حد من المكتب."),
+        };
+        var due = ArabicTime(TimeZoneInfo.ConvertTime(a.DueAt, Cairo));
+        return Build(to, subject, "أهلًا،",
+            [line, $"النوع: {TaskType(a.TaskType)}", $"المطلوب قبل: {due}"],
+            null,
+            [$"افتحها من لوحة المكتب: {panelUrl.TrimEnd('/')}/tasks/{a.TaskId}", "اسم العميل ورقمه وكلامه في اللوحة بس، مش في الإيميل."]);
+    }
+
+    private static TimeZoneInfo Cairo => global::Office.Domain.Tasks.OfficeHours.Cairo;
+
+    // The API runs with InvariantGlobalization (no culture data), so the Arabic names are written here.
+    private static readonly string[] Days = ["الأحد", "الاتنين", "التلات", "الأربع", "الخميس", "الجمعة", "السبت"];
+    private static readonly string[] Months =
+        ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
+
+    /// <summary>e.g. «الخميس 23 أكتوبر، 3:05 م» (Cairo time already).</summary>
+    public static string ArabicTime(DateTimeOffset t)
+    {
+        var hour = t.Hour % 12 == 0 ? 12 : t.Hour % 12;
+        return $"{Days[(int)t.DayOfWeek]} {t.Day} {Months[t.Month - 1]}، {hour}:{t.Minute:00} {(t.Hour < 12 ? "ص" : "م")}";
+    }
+
+    /// <summary>The task types as the panel names them.</summary>
+    public static string TaskType(string type) => type switch
+    {
+        "existing_client_message" => "موكل حالي بيسأل عن موضوعه",
+        "late_reschedule" => "تغيير ميعاد متأخر",
+        "refund" => "استرداد",
+        "price_quote" => "تسعير",
+        "discount_request" => "طلب خصم",
+        "complaint" => "شكوى",
+        "human_requested" => "طلب يكلم موظف",
+        "safety_alert" => "تنبيه أمان",
+        "lawyer_direct_message" => "رسالة لقايمة الأستاذ",
+        "external_contact" => "زميل أو صحافة أو مورّد",
+        "unclear_message" => "رسالة مش واضحة",
+        "urgent_request" => "طلب عاجل",
+        "service_request" => "طلب خدمة",
+        "reschedule_or_cancel" => "تغيير أو إلغاء ميعاد",
+        _ => type,
+    };
+
     /// <summary>The seal, attached inline by the mailer (Content-ID); the HTML points at it.</summary>
     public const string SealCid = "office-seal";
 

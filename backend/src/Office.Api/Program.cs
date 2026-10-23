@@ -35,6 +35,7 @@ builder.Services.AddProblemDetails();
 builder.Services.AddHealthChecks().AddCheck<HazemSchemaHealthCheck>("hazem-schema", tags: ["ready"]);
 builder.Services.AddPanelAuth(builder.Configuration, builder.Environment); // TASK 07a: the panel (/api/panel)
 builder.Services.AddHostedService<Office.Infrastructure.Chatwoot.ChatwootWorker>(); // TASK 07b: turns into Chatwoot
+builder.Services.AddHostedService<Office.Infrastructure.Panel.AlertWorker>(); // TASK 07c: overdue tasks and alerts
 
 var app = builder.Build();
 
@@ -55,6 +56,7 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = c => c
 app.MapHazemApi();
 app.MapPanelApi();
 app.MapChatwoot();
+app.MapPanelTools(); // TASK 07c
 
 app.Run();
 
