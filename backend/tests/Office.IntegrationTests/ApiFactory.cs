@@ -7,13 +7,18 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Office.Application.Panel;
 using Office.Infrastructure.Ai;
 using Office.Infrastructure.N8n;
 
 namespace Office.IntegrationTests;
 
-/// <summary>The real API on the throwaway database (as office_api), with n8n faked at the HTTP boundary.</summary>
-public sealed class ApiFactory(TestDatabase db) : WebApplicationFactory<Program>
+/// <summary>
+/// The real API on the throwaway database (as office_api), with n8n faked at the HTTP boundary.
+/// <paramref name="clock"/>: a fixed time for rules that depend on the hour (B-06), so a test does
+/// not pass or fail with the time it happens to run at.
+/// </summary>
+public sealed class ApiFactory(TestDatabase db, TimeProvider? clock = null) : WebApplicationFactory<Program>
 {
     public const string ApiToken = "integration-test-api-token-0123456789abcdef";
     public const string N8nToken = "integration-test-n8n-token-0123456789abcdef";
@@ -23,6 +28,17 @@ public sealed class ApiFactory(TestDatabase db) : WebApplicationFactory<Program>
     public FakeOpenAi OpenAi { get; } = new();
     public const string OpenAiKey = "sk-integration-test-not-a-real-key";
     public MemoryLogs Logs { get; } = new();
+    public FakeMailer Mail { get; } = new();
+    public const string PanelSecretKey = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff";
+
+    /// <summary>False: PANEL_SECRET_KEY and the mail server are not set (sign-up and 2FA unavailable).</summary>
+    public bool SignupConfigured { get; init; } = true;
+
+    /// <summary>The v1.9 rule that a manager must turn the authenticator on; off unless a test is about it.</summary>
+    public bool ManagersNeedTwoFactor { get; init; }
+
+    /// <summary>The panel's login rate limit; high by default because tests sign in many times a minute.</summary>
+    public int LoginsPerMinute { get; init; } = 1000;
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -32,11 +48,20 @@ public sealed class ApiFactory(TestDatabase db) : WebApplicationFactory<Program>
         builder.UseSetting("Hazem:N8nInternalSendUrl", N8nUrl);
         builder.UseSetting("Hazem:N8nInternalSendToken", N8nToken);
         builder.UseSetting("Hazem:OpenAiApiKey", OpenAiKey);
+        builder.UseSetting("Panel:LoginsPerMinute", LoginsPerMinute.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        builder.UseSetting("Panel:SecretKey", SignupConfigured ? PanelSecretKey : "");
+        builder.UseSetting("Panel:ManagersNeedTwoFactor", ManagersNeedTwoFactor ? "true" : "false");
+        Mail.Configured = SignupConfigured;
         builder.ConfigureLogging(l => l.AddProvider(Logs));
         builder.ConfigureTestServices(services =>
         {
             services.AddHttpClient(N8nWhatsAppGateway.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => N8n);
             services.AddHttpClient(OpenAiIntentClassifier.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => OpenAi);
+            services.AddSingleton<IPanelMailer>(Mail);
+            if (clock is not null)
+            {
+                services.AddSingleton(clock);
+            }
         });
     }
 
@@ -122,7 +147,33 @@ public sealed class FakeN8n : HttpMessageHandler
     }
 }
 
+/// <summary>A clock stopped at one instant.</summary>
+public sealed class FixedClock(DateTimeOffset now) : TimeProvider
+{
+    public override DateTimeOffset GetUtcNow() => now.ToUniversalTime();
+}
+
 /// <summary>Keeps every formatted log line written by the API, so a test can read them.</summary>
+/// <summary>The no-reply mail server: keeps every mail so a test can read the code a person would get.</summary>
+public sealed class FakeMailer : IPanelMailer
+{
+    public ConcurrentQueue<PanelMail> Sent { get; } = new();
+    public bool Configured { get; set; } = true;
+
+    public Task<bool> SendAsync(PanelMail mail, CancellationToken ct)
+    {
+        Sent.Enqueue(mail);
+        return Task.FromResult(true);
+    }
+
+    public IReadOnlyList<PanelMail> To(string address) =>
+        Sent.Where(m => string.Equals(m.To, address, StringComparison.OrdinalIgnoreCase)).ToList();
+
+    /// <summary>The six digits in the newest mail to this address.</summary>
+    public string LastCode(string address) =>
+        System.Text.RegularExpressions.Regex.Match(To(address)[^1].Text, @"(?m)^\d{6}$").Value;
+}
+
 public sealed class MemoryLogs : ILoggerProvider
 {
     public ConcurrentQueue<string> Lines { get; } = new();

@@ -37,7 +37,7 @@ lifecycle_30_days() {
 }
 
 echo "== Containers"
-for svc in postgres redis garage n8n api; do
+for svc in postgres redis garage n8n api web; do
   check "$svc reachable on the internal network" getent hosts "$svc"
 done
 
@@ -192,9 +192,9 @@ check "tables staff, list_entries, staff_tasks exist" \
   sql_equals office "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'hazem' AND table_name IN ('staff', 'list_entries', 'staff_tasks')" "3"
 check "office_app (n8n) cannot read the office lists or the staff tasks" \
   expect_fail psql_as office_app "$OFFICE_APP_PASSWORD" office -c 'SELECT 1 FROM hazem.list_entries UNION ALL SELECT 1 FROM hazem.staff_tasks LIMIT 1'
-check "handoff.enabled = false until the panel (TASK 07): nobody would answer a client handed over" \
+check "handoff.enabled = false until staff answer from Chatwoot (TASK 07b): nobody would answer a client handed over" \
   sql_equals office "SELECT value FROM hazem.settings WHERE key = 'handoff.enabled'" "false"
-check "no active approved text promises a contact time (B-06 promises wait for the panel)" \
+check "no active approved text promises a contact time (B-06 promises wait for the alerts, TASK 07c)" \
   sql_equals office "SELECT count(*) FROM hazem.approved_texts WHERE active AND text ~ '(خلال ساعة|الساعة 10|هيتواصل|هيرد عليك)'" "0"
 
 echo "== Who may receive messages (CLAUDE.md, migration 0006)"
@@ -206,7 +206,21 @@ if [[ "$(psql_super office -c "SELECT value FROM app.settings WHERE key = 'whats
   warn "whatsapp.send_restricted is false: messages may go to ANY number (the owner's decision only, CLAUDE.md)"
 fi
 
+echo "== The panel (TASK 07a, DECISIONS v1.8 T-11 / T-23)"
+check "web serves the panel (/healthz and the page)"   bash -c '[[ "$(curl -s http://web:8080/healthz)" == ok ]] && [[ "$(curl -s -o /dev/null -w "%{http_code}" http://web:8080/)" == 200 ]]'
+check "web forwards /api/panel to the API (not signed in: 401)" http_status_is http://web:8080/api/panel/auth/me 401
+check "web never forwards n8n's endpoints (/api/hazem/* through the panel: 404)"   test "$(api_status http://web:8080/api/hazem/turns -H "X-Hazem-Token: $HAZEM_API_TOKEN")" = 404
+check "web sends the security headers (strict CSP, no framing, no referrer)"   bash -c 'h="$(curl -sI http://web:8080/)"; grep -qi "^content-security-policy: default-src .self.;" <<<"$h" && grep -qi "^x-frame-options: DENY" <<<"$h" && grep -qi "^referrer-policy: no-referrer" <<<"$h"'
+check "tables panel_users and panel_audit exist"   sql_equals office "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'hazem' AND table_name IN ('panel_users', 'panel_audit')" "2"
+check "office_readonly cannot read password hashes or security stamps"   expect_fail psql_as office_readonly "$OFFICE_READONLY_PASSWORD" office -c 'SELECT password_hash, security_stamp FROM hazem.panel_users LIMIT 1'
+check "office_app (n8n) cannot read panel accounts"   expect_fail psql_as office_app "$OFFICE_APP_PASSWORD" office -c 'SELECT 1 FROM hazem.panel_users LIMIT 1'
+check "no test account left behind (e2e-*)"   sql_equals office "SELECT count(*) FROM hazem.panel_users WHERE username LIKE 'e2e-%'" "0"
+if [[ "$(psql_super office -c "SELECT count(*) FROM hazem.panel_users WHERE active AND role = 'manager'")" == "0" ]]; then
+  warn "no panel manager yet: the owner creates the first one from the terminal (docs/runbooks/panel.md)"
+fi
+
 echo "== Migrations"
+check "migration 0009 (panel accounts) is applied"   sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0009'" "1"
 check "migration 0008 (lists, staff tasks, sources, topics) is applied" \
   sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0008'" "1"
 check "migration 0007 (owner-approved texts) is applied" \

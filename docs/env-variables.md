@@ -36,6 +36,10 @@ contains `CHANGE_ME`, or has the wrong format.
 | `CLOUDFLARE_TUNNEL_TOKEN` | tunnel-named | **yes** | empty = Quick Tunnel | 01 / 02 |
 | `HAZEM_OPENAI_API_KEY` | api (`Hazem__OpenAiApiKey`): intent classification | **yes** | The .NET key from OpenAI, separate from n8n's voice key (T-08). **May be empty**: classification off, Hazem answers text as unclear, healthcheck WARN. Not made by `gen-secrets`. Never printed or logged | 04 |
 | `OPENAI_MODEL` | api (`Hazem__OpenAiModel`) | no | empty = `gpt-4.1-mini`, a starting point; the owner picks the final model with `classify-eval` ([ai/classification.md](ai/classification.md)) | 04 |
+| `PANEL_SECRET_KEY` | api (`Panel__SecretKey`): hashes the e-mail codes and recovery codes, encrypts the authenticator secrets | **yes** | 64 hex chars (`gen-secrets`). Empty = sign-up and 2FA "not available", sign-in still works. Changing it means everyone sets 2FA up again | v1.9 |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SSL` | api (`Mail__Host`, `Mail__Port`, `Mail__Ssl`): the no-reply sender | no | the owner's provider; port `587` with STARTTLS (`SMTP_SSL=true`); 465 is not supported. Empty host = sign-up "not available" | v1.9 |
+| `SMTP_USERNAME`, `SMTP_PASSWORD` | api (`Mail__Username`, `Mail__Password`) | **yes** (password) | from the provider. Never printed or logged | v1.9 |
+| `SMTP_FROM`, `SMTP_FROM_NAME` | api (`Mail__From`, `Mail__FromName`) | no | e.g. `no-reply@<domain>`; empty name = the office's name | v1.9 |
 | `OPENAI_BASE_URL` | api (`Hazem__OpenAiBaseUrl`) | no | empty = `https://api.openai.com/v1` (healthcheck checks it). Tests never change it: `hazem-e2e` uses `hazem.settings ai.stub_*` | 04 |
 
 ## Non-secret API settings: `hazem.settings`
@@ -48,7 +52,7 @@ contains `CHANGE_ME`, or has the wrong format.
 | `ai.min_confidence` | `0.6`: below it a turn is treated as unclear |
 | `ai.stub_enabled`, `ai.stub_base_url` | `false` / empty. Only inside `hazem-e2e`, and honoured only when `ENVIRONMENT=test` |
 | `echo.enabled`, `echo.recipients` | the TASK 02/03 test echo (`false` / empty) |
-| `handoff.enabled` | `false` (TASK 05a). `true` = «موظف» hands the conversation to the staff and Hazem goes silent (B-12). Stays `false` until the panel (TASK 07): nobody would answer the client. The healthcheck fails while it is `true` |
+| `handoff.enabled` | `false` (TASK 05a). `true` = «موظف» hands the conversation to the staff and Hazem goes silent (B-12). Stays `false` until staff can answer from Chatwoot (TASK 07b, DECISIONS v1.8): nobody would answer the client. The healthcheck fails while it is `true` |
 | `source.link_codes` | comma-separated codes put in wa.me links (e.g. `FB-OCT`); a first message containing one is recorded as source `link` (B-13) |
 
 ## Non-secret WhatsApp settings: `app.settings`, not `.env`

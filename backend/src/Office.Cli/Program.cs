@@ -13,6 +13,7 @@ using Office.Application.UseCases;
 using Office.Infrastructure;
 using Office.Infrastructure.Ai;
 using Office.Infrastructure.Json;
+using Office.Application.Panel;
 using Office.Infrastructure.Lists;
 
 // Office.Cli — operational commands, run inside the api container:
@@ -33,6 +34,15 @@ using Office.Infrastructure.Lists;
 //                                         reported by line number, never with the whole number
 //   tasks-overdue                         marks staff tasks past due_at as overdue (S-05)
 //   unmute --to <wa_id>                   the manager brings a muted conversation back (S-01)
+// Panel accounts (TASK 07a, T-23): the first manager and emergencies only; the manager manages
+// every other account from the panel. Passwords are typed in the terminal (twice, hidden) or, for
+// scripts, read from stdin; never an argument, never printed.
+//   docker compose exec -it api dotnet /app/cli/Office.Cli.dll create-user --name owner --display "…" --email … --role manager
+//   create-user --name N --display D --email E --role manager|lawyer|staff [--staff NAME]
+//   reset-password --name N               a new password, typed in the terminal; unlocks, ends every session
+//   unlock-user --name N                  clears a lockout (5 wrong passwords = 15 minutes)
+//   reset-2fa --name N                    turns the authenticator off (a lost phone and no other manager, v1.9)
+//   list-users                            every account, never a hash
 
 var command = args.FirstOrDefault() ?? "help";
 string? Option(string name)
@@ -60,10 +70,15 @@ try
         "import-lists" => await ImportLists(),
         "tasks-overdue" => await TasksOverdue(),
         "unmute" => await Unmute(),
+        "create-user" => await CreateUser(),
+        "reset-password" => await ResetPassword(),
+        "unlock-user" => await UnlockUser(),
+        "reset-2fa" => await ResetTwoFactor(),
+        "list-users" => await ListUsers(),
         _ => new JsonObject
         {
             ["ok"] = false,
-            ["usage"] = "send-test --to WA_ID [--text TEXT] | classify-eval [--file F] [--model M] [--limit N] [--input-price USD --output-price USD] | import-lists --kind K --file CSV [--replace] | tasks-overdue | unmute --to WA_ID",
+            ["usage"] = "send-test --to WA_ID [--text TEXT] | classify-eval [--file F] [--model M] [--limit N] [--input-price USD --output-price USD] | import-lists --kind K --file CSV [--replace] | tasks-overdue | unmute --to WA_ID | create-user --name N --display D --email E --role R [--staff S] | reset-password --name N | unlock-user --name N | reset-2fa --name N | list-users",
         },
     };
 
@@ -256,4 +271,103 @@ async Task<JsonNode> ClassifyEval()
     }
 
     return result;
+}
+
+async Task<JsonNode> CreateUser()
+{
+    var name = Option("--name") ?? throw new ArgumentException("--name <user name> is required");
+    var input = new PanelAccounts.NewAccount(name, Option("--display") ?? name, Option("--email"), Option("--role"), Option("--staff"));
+    var r = await sp.GetRequiredService<PanelAccounts>().CreateAsync(null, input, ReadPassword(), ct);
+    return r.Outcome == PanelOutcome.Ok
+        ? new JsonObject { ["ok"] = true, ["user"] = r.Value.User.Username, ["role"] = r.Value.User.Role }
+        : new JsonObject { ["ok"] = false, ["error"] = r.Error, ["fields"] = JsonSerializer.SerializeToNode(r.Fields, HazemJson.Options) };
+}
+
+async Task<JsonNode> ResetPassword()
+{
+    var accounts = sp.GetRequiredService<PanelAccounts>();
+    var user = await FindUser(accounts);
+    var r = await accounts.ResetPasswordAsync(null, user.Id, ReadPassword(), ct);
+    return new JsonObject { ["ok"] = r.Outcome == PanelOutcome.Ok, ["user"] = user.Username, ["error"] = r.Error };
+}
+
+async Task<JsonNode> UnlockUser()
+{
+    var accounts = sp.GetRequiredService<PanelAccounts>();
+    var user = await FindUser(accounts);
+    var r = await accounts.UnlockAsync(user.Id, ct);
+    return new JsonObject { ["ok"] = r.Outcome == PanelOutcome.Ok, ["user"] = user.Username };
+}
+
+async Task<JsonNode> ResetTwoFactor()
+{
+    var user = await FindUser(sp.GetRequiredService<PanelAccounts>());
+    var r = await sp.GetRequiredService<PanelTwoFactor>().ResetAsync(null, user.Id, ct);
+    return new JsonObject { ["ok"] = r.Outcome == PanelOutcome.Ok, ["user"] = user.Username, ["error"] = r.Error };
+}
+
+async Task<JsonNode> ListUsers()
+{
+    var now = DateTimeOffset.UtcNow;
+    var users = await sp.GetRequiredService<PanelAccounts>().ListAsync(ct);
+    return new JsonObject
+    {
+        ["ok"] = true,
+        ["users"] = new JsonArray(users.Select(u => (JsonNode)new JsonObject
+        {
+            ["user"] = u.Username, ["display_name"] = u.DisplayName, ["role"] = u.Role, ["active"] = u.Active,
+            ["locked"] = u.IsLocked(now), ["must_change_password"] = u.MustChangePassword,
+        }).ToArray()),
+    };
+}
+
+async Task<PanelUser> FindUser(PanelAccounts accounts)
+{
+    var name = Option("--name") ?? throw new ArgumentException("--name <user name> is required");
+    return await accounts.FindByUsernameAsync(name, ct) ?? throw new ArgumentException($"no account named {name}");
+}
+
+// A password typed twice without echo, or one line from stdin when it is redirected (scripts, tests).
+static string ReadPassword()
+{
+    if (Console.IsInputRedirected)
+    {
+        // Windows PowerShell 5.1 puts a BOM in front of what it pipes into docker.
+        return (Console.In.ReadLine() ?? throw new ArgumentException("no password on stdin")).TrimStart('﻿');
+    }
+
+    var first = Prompt("Password (12+ characters): ");
+    if (Prompt("Again: ") != first)
+    {
+        throw new ArgumentException("the two passwords differ");
+    }
+
+    return first;
+
+    static string Prompt(string label)
+    {
+        Console.Error.Write(label);
+        var sb = new System.Text.StringBuilder();
+        while (true)
+        {
+            var key = Console.ReadKey(intercept: true);
+            if (key.Key == ConsoleKey.Enter)
+            {
+                Console.Error.WriteLine();
+                return sb.ToString();
+            }
+
+            if (key.Key == ConsoleKey.Backspace)
+            {
+                if (sb.Length > 0)
+                {
+                    sb.Length--;
+                }
+            }
+            else if (!char.IsControl(key.KeyChar))
+            {
+                sb.Append(key.KeyChar);
+            }
+        }
+    }
 }

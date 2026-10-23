@@ -4,7 +4,7 @@ The project owner writes in Egyptian Arabic: answer in Egyptian Arabic, keep tec
 
 ## Read first, every session
 
-1. `docs/decisions/DECISIONS-v1.6.md` — the only source of truth. If anything (a prompt, a doc,
+1. `docs/decisions/DECISIONS-v1.9.md` — the only source of truth. If anything (a prompt, a doc,
    your own idea) conflicts with it, stop and ask the owner.
 2. The newest file in `docs/sessions/` — what was done last, what is pending, what is verified.
 3. For the task at hand: its prompt (`TASK-0x-prompt.md`), then `docs/hazem-internal-api.md`
@@ -47,13 +47,16 @@ unless the owner asks.
 
 ## Environment
 
-- Docker Compose stack: `postgres`, `redis`, `garage`, `n8n`, `api` (+ profiles `panel`, `tunnel`,
-  `tunnel-named`, `tools`, `tests`). All ports on `127.0.0.1`; only n8n is ever exposed, through
-  the Cloudflare Quick Tunnel.
+- Docker Compose stack: `postgres`, `redis`, `garage`, `n8n`, `api`, `web` (the panel, TASK 07a)
+  (+ profiles `tunnel`, `tunnel-named`, `tools`, `tests`). All ports on `127.0.0.1`; only n8n is
+  ever exposed, through the Cloudflare Quick Tunnel. The panel (`web/`, React) talks to
+  `/api/panel` only (nginx blocks every other `/api` path); its accounts and permissions follow
+  T-23 (RBAC, no super admin). Chatwoot (T-24) comes in TASK 07b.
 - Every script exists twice: `scripts/linux/<name>.sh` and `scripts/windows/<name>.ps1`.
   On Windows Git Bash use `MSYS_NO_PATHCONV=1` for container paths.
 - First run on a new machine: copy `.env.example` → `.env`, fill it with `gen-secrets`, `up`,
-  `migrate up`, `n8n-import`, create the n8n owner at http://127.0.0.1:5678, then `healthcheck`.
+  `migrate up`, `n8n-import`, create the n8n owner at http://127.0.0.1:5678, the owner creates the
+  first panel manager (`docs/runbooks/panel.md`), then `healthcheck`.
   Meta setup is manual: `docs/meta-setup.md`.
 
 ## Checks before saying a task is done
@@ -63,7 +66,8 @@ unless the owner asks.
 | `healthcheck` | containers, ports, roles, buckets, migrations, settings back to production values |
 | `wa-tests` | SQL rules with fixtures + the n8n harness (no Meta) |
 | `backend-test` | .NET unit + integration tests (throwaway database from the real migrations) |
-| `hazem-e2e` | full loop n8n → .NET → n8n with stubs and dry run (no Meta, no OpenAI) |
+| `hazem-e2e` | full loop n8n → .NET → n8n with stubs and dry run (no Meta, no OpenAI), and the panel |
+| `web-test` | the panel: type-check, Vitest, build with the bundle budget (Node container) |
 
 After tests, `whatsapp.dry_run` must be `false`, base URLs back to Meta/OpenAI defaults, and no
 test credential left in n8n — the healthcheck fails otherwise.

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Office.Api.Hazem;
+using Office.Api.Panel;
 using Office.Infrastructure.Json;
 using Office.Infrastructure;
 using Office.Infrastructure.Persistence;
@@ -31,9 +32,11 @@ builder.Services.ConfigureHttpJsonOptions(o => HazemJson.Configure(o.SerializerO
 builder.Services.AddOfficeInfrastructure(builder.Configuration);
 builder.Services.AddProblemDetails();
 builder.Services.AddHealthChecks().AddCheck<HazemSchemaHealthCheck>("hazem-schema", tags: ["ready"]);
+builder.Services.AddPanelAuth(builder.Configuration, builder.Environment); // TASK 07a: the panel (/api/panel)
 
 var app = builder.Build();
 
+app.UseForwardedHeaders();
 app.UseExceptionHandler();
 app.Use(async (ctx, next) =>
 {
@@ -41,10 +44,14 @@ app.Use(async (ctx, next) =>
     ctx.Response.Headers["Referrer-Policy"] = "no-referrer";
     await next();
 });
+app.UseAuthentication();
+app.UseAuthorization();
+app.UseRateLimiter();
 
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
 app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = c => c.Tags.Contains("ready") });
 app.MapHazemApi();
+app.MapPanelApi();
 
 app.Run();
 

@@ -69,7 +69,44 @@ public sealed class HazemDbContext(DbContextOptions<HazemDbContext> options) : D
             e.ToTable("list_entries");
             e.HasKey(x => x.Id);
         });
+
+        // Migration 0008 (TASK 05a), read by the panel.
+        b.Entity<StaffRow>(e =>
+        {
+            e.ToTable("staff");
+            e.HasKey(x => x.Id);
+        });
+
+        b.Entity<StaffTaskRow>(e =>
+        {
+            e.ToTable("staff_tasks");
+            e.HasKey(x => x.Id);
+        });
+
+        // Migration 0009 (TASK 07a): panel accounts. Written with SQL (see PanelUserStore).
+        b.Entity<PanelUserRow>(e =>
+        {
+            e.ToTable("panel_users");
+            e.HasKey(x => x.Id);
+        });
+        // Migration 0010: e-mail codes and recovery codes (read here, written with SQL).
+        b.Entity<PanelCodeRow>(e =>
+        {
+            e.ToTable("panel_codes");
+            e.HasKey(x => x.Id);
+        });
+        b.Entity<PanelRecoveryCodeRow>(e =>
+        {
+            e.ToTable("panel_recovery_codes");
+            e.HasKey(x => x.Id);
+        });
     }
+
+    public DbSet<StaffRow> Staff => Set<StaffRow>();
+    public DbSet<StaffTaskRow> StaffTasks => Set<StaffTaskRow>();
+    public DbSet<PanelUserRow> PanelUsers => Set<PanelUserRow>();
+    public DbSet<PanelCodeRow> PanelCodes => Set<PanelCodeRow>();
+    public DbSet<PanelRecoveryCodeRow> PanelRecoveryCodes => Set<PanelRecoveryCodeRow>();
 
     public DbSet<PersonRow> Persons => Set<PersonRow>();
     public DbSet<ConversationRow> Conversations => Set<ConversationRow>();
@@ -116,6 +153,74 @@ public sealed class IntakeRow
     public string? MatterType { get; set; }
     public string? MatterSubtype { get; set; }
     public bool MatterAsked { get; set; }
+}
+
+public sealed class StaffRow
+{
+    public Guid Id { get; set; }
+    public required string Name { get; set; }
+    public bool Active { get; set; }
+}
+
+public sealed class StaffTaskRow
+{
+    public Guid Id { get; set; }
+    public required string Type { get; set; }
+    public required string State { get; set; }
+    public Guid? StaffId { get; set; }
+    public Guid PersonId { get; set; }
+    public Guid? IntakeId { get; set; }
+    public required string TurnId { get; set; }
+    public DateTimeOffset DueAt { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
+public sealed class PanelUserRow
+{
+    public Guid Id { get; set; }
+    public required string Username { get; set; }
+    public required string DisplayName { get; set; }
+    public required string Email { get; set; }
+    public required string Role { get; set; }
+    public Guid? StaffId { get; set; }
+    public required string PasswordHash { get; set; }
+    public required string SecurityStamp { get; set; }
+    public bool MustChangePassword { get; set; }
+    public int FailedLogins { get; set; }
+    public DateTimeOffset? LockoutEnd { get; set; }
+    public bool Active { get; set; }
+    public DateTimeOffset? LastLoginAt { get; set; }
+    public long? ChatwootUserId { get; set; }
+    public required string Approval { get; set; }
+    public DateTimeOffset? EmailVerifiedAt { get; set; }
+    public Guid? ApprovedBy { get; set; }
+    public DateTimeOffset? ApprovedAt { get; set; }
+    public string? TotpSecret { get; set; }
+    public bool TotpEnabled { get; set; }
+    public long? TotpLastStep { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
+public sealed class PanelCodeRow
+{
+    public Guid Id { get; set; }
+    public Guid UserId { get; set; }
+    public required string Purpose { get; set; }
+    public required string CodeHash { get; set; }
+    public DateTimeOffset ExpiresAt { get; set; }
+    public int Attempts { get; set; }
+    public DateTimeOffset? UsedAt { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
+public sealed class PanelRecoveryCodeRow
+{
+    public Guid Id { get; set; }
+    public Guid UserId { get; set; }
+    public required string CodeHash { get; set; }
+    public DateTimeOffset? UsedAt { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
 }
 
 public sealed class ListEntryRow

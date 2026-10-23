@@ -10,6 +10,9 @@
 #      reaches the AI, a phone number is masked, and the AI stub down still gets an answer
 #   9. TASK 05a: a listed client gets the neutral reply and a task for their staff, a blocked number
 #      gets nothing (muted), a topic told first means no topic question after the name
+#  10. TASK 07a: a staff account (created with the CLI, removed at the end) signs in to the panel
+#      through the web container, finds that task under «مهامي», sees the client's words, starts
+#      and finishes it; the panel never reaches n8n's endpoints
 # Meta and OpenAI are the meta-stub container (profile tests). If meta-whatsapp-token or
 # openai-transcription do not exist, temporary ones (fixed test ids) are created and removed
 # again; existing (real) credentials are never touched. Everything is restored at the end.
@@ -112,6 +115,18 @@ try {
     Step @('hazem05-name') | Out-Null
     Forward
     Check 'check-hazem05-name'
+
+    Write-Host "==== 10. TASK 07a: the panel (a staff account signs in through the web container)"
+    # A throwaway password for the throwaway account: given to the CLI on stdin and to the check by
+    # name (-e NAME), so it never appears on a command line.
+    $env:E2E_PANEL_PASSWORD = -join (1..24 | ForEach-Object { '{0:x}' -f (Get-Random -Maximum 16) })
+    $env:E2E_PANEL_PASSWORD | & docker compose exec -T api dotnet /app/cli/Office.Cli.dll create-user `
+        --name e2e-panel --display E2E --email e2e-panel@example.test --role staff --staff e2e-staff 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) { Write-Host "FAIL  create-user e2e-panel (CLI)"; $script:failed = $true }
+    & docker compose run --rm --no-deps -e E2E_PANEL_PASSWORD tools hazem-e2e check-panel 2>&1 |
+        ForEach-Object { "$_" } | Where-Object { $_ -notmatch '^#\d+ |Image office-tools|^\s*$' } | Write-Host
+    if ($LASTEXITCODE -ne 0) { $script:failed = $true }
+    Remove-Item env:E2E_PANEL_PASSWORD -ErrorAction SilentlyContinue
 } catch {
     Write-Host "FAIL  $_"; $script:failed = $true
 } finally {

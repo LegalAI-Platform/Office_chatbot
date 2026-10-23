@@ -39,7 +39,7 @@ once `postgres` is healthy (its `/health/ready` also needs migration 0003).
 | `office_migrator` | `office` (owner) | DDL, owns schema `app` | connect to `n8n` | dbmate migrations only |
 | `office_app` | `office` | `SELECT, INSERT, UPDATE, DELETE` on tables in `app`; sequences; the `app.wa_*` functions | `CREATE` anything; any access to schema `hazem`; connect to `n8n` | n8n workflows |
 | `office_api` | `office` | `SELECT, INSERT, UPDATE, DELETE` on tables in `hazem` | `CREATE` anything; any access to schema `app`; connect to `n8n` | .NET API |
-| `office_readonly` | `office` | `SELECT` | any write; connect to `n8n` | reports, Appsmith read views |
+| `office_readonly` | `office` | `SELECT` | any write; connect to `n8n` | reports; never the panel's password hashes (column grants, TASK 07a) |
 
 - `CONNECT` is revoked from `PUBLIC` on `n8n`, `office` and `postgres`.
 - Default privileges: every table or sequence `office_migrator` creates later is granted to
@@ -100,9 +100,14 @@ original file name. The API has no S3 key: it only receives the bucket and key
 - Only n8n can be reached from the internet, and only through cloudflared (profiles `tunnel`
   or `tunnel-named`), which forwards to `http://n8n:5678` and nothing else.
 - `meta-stub` (profile `tests`, test only) has no published port and runs only during `hazem-e2e`.
-- The .NET API has **no** published port: only n8n (and the tools container) reach it, at
-  `http://api:8080` inside `office_net`. n8n's internal webhook `hazem-internal-send` is reachable
-  through the tunnel like any n8n webhook, so it is protected by the `X-Hazem-Token` header.
+- The .NET API has **no** published port: only n8n, the `web` container and the tools container
+  reach it, at `http://api:8080` inside `office_net`. n8n's internal webhook `hazem-internal-send` is
+  reachable through the tunnel like any n8n webhook, so it is protected by the `X-Hazem-Token` header.
+- The panel (`web`, TASK 07a) is published on `127.0.0.1:8080` only. Its nginx forwards
+  `/api/panel/*` to the API and answers 404 for every other `/api` path, so n8n's endpoints
+  (`/api/hazem/*`) are never reachable from the panel. It sends a strict Content-Security-Policy
+  (`'self'` only), `X-Frame-Options: DENY` and `Referrer-Policy: no-referrer`; the fonts are bundled,
+  so the panel makes no request outside this machine. Appsmith was removed.
 - Create the n8n owner account before starting any tunnel.
 
 ## Moving to production (documentation only, not implemented)
@@ -111,7 +116,7 @@ original file name. The API has no S3 key: it only receives the bucket and key
 |---|---|
 | Docker Desktop on Windows or a small isolated VPS | Dedicated VPS (decided after testing, T-01) |
 | Garage | Cloudflare R2, with separate buckets and scoped API tokens |
-| Quick/Named Tunnel | Real domain with HTTPS, e.g. `bot.<domain>` and `panel.<domain>` (T-13) |
+| Quick/Named Tunnel | Real domain with HTTPS, e.g. `bot.<domain>` and `panel.<domain>` (T-13); the panel only after 2FA (TASK 13, T-23) |
 | `ENVIRONMENT=test` | `ENVIRONMENT=production`, separate `.env` and credentials |
 | `N8N_SECURE_COOKIE=false` | `true` |
 | Backups on Garage | Backups on R2 + regular restore drills |

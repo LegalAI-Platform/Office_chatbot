@@ -9,10 +9,13 @@ tests with Meta pending the project owner's Meta setup), the **n8n ↔ .NET hand
 (DECISIONS v1.3) and **TASK 03** (messages grouped into turns after 8 quiet seconds, media
 downloaded to S3, voice notes transcribed) and **TASK 04** (backend in layers with the state
 machines S-01..S-06; Hazem classifies each turn with the AI — text only — and answers from
-approved texts only; [docs/ai/classification.md](docs/ai/classification.md)). Hazem answers only
-the numbers in `hazem.settings hazem.recipients` until the owner opens it to everyone.
+approved texts only; [docs/ai/classification.md](docs/ai/classification.md)), **TASK 05a** (who is
+writing, topics, staff tasks) and **TASK 07a** (the panel at http://127.0.0.1:8080: sign-in with
+roles, accounts, staff tasks; [docs/panel-api.md](docs/panel-api.md),
+[docs/runbooks/panel.md](docs/runbooks/panel.md)). Hazem answers only the numbers in
+`hazem.settings hazem.recipients` until the owner opens it to everyone.
 
-- All decisions: [docs/decisions/DECISIONS-v1.6.md](docs/decisions/DECISIONS-v1.6.md)
+- All decisions: [docs/decisions/DECISIONS-v1.9.md](docs/decisions/DECISIONS-v1.9.md)
 - n8n ↔ .NET API contract: [docs/hazem-internal-api.md](docs/hazem-internal-api.md)
 - Backend: [backend/README.md](backend/README.md)
 - Architecture and permissions: [docs/infrastructure.md](docs/infrastructure.md)
@@ -33,16 +36,16 @@ and OpenAI).
 | Service | Local URL / port | Purpose | Starts with |
 |---|---|---|---|
 | n8n 2.43.8 | http://127.0.0.1:5678 | WhatsApp layer: Meta in and out (Regular mode, PostgreSQL backend) | core |
-| .NET API (ASP.NET Core 10) | none (`http://api:8080` inside Docker only) | The brain: turns, decisions, later the panel API | core |
+| .NET API (ASP.NET Core 10) | none (`http://api:8080` inside Docker only) | The brain: turns, decisions, the panel API (`/api/panel`) | core |
+| Panel (React, nginx) | http://127.0.0.1:8080 | Staff tasks and accounts (TASK 07a); forwards `/api/panel` only | core |
 | PostgreSQL 16.15 | 127.0.0.1:5432 | Databases `n8n` and `office` | core |
 | Redis 7.4.11 | 127.0.0.1:6379 | Debounce, dedup, locks, rate limits (later tasks) | core |
 | Garage v2.4.1 (S3) | http://127.0.0.1:3900 | Object storage: `office-media`, `office-sensitive`, `office-backups` | core |
-| Appsmith CE v2.4.3 | http://127.0.0.1:8080 | Unused: the panel will be React on the API (TASK 07) | `panel` profile |
 | meta-stub (.NET, test only) | none | Stand-in for Meta media and OpenAI transcription during `hazem-e2e` | `tests` profile, started by `hazem-e2e` only |
 | cloudflared 2026.9.3 | public https URL | Exposes **n8n only** for the Meta webhook | `tunnel` / `tunnel-named` profile |
 
 Every port is bound to `127.0.0.1`. Nothing is reachable from the network except n8n,
-and only while a tunnel profile is running.
+and only while a tunnel profile is running. Appsmith was removed in TASK 07a (the panel is React).
 
 ## Requirements
 
@@ -90,13 +93,16 @@ Every script below exists in two versions: `scripts\windows\<name>.ps1` and
 6. **Create the n8n owner account by hand:** open http://127.0.0.1:5678 and fill the
    setup form. There is no default password. Do this **before** you start a tunnel,
    otherwise anyone with the tunnel URL could claim the owner account.
+7. **Create the first panel manager** (once): `docker compose exec -it api dotnet
+   /app/cli/Office.Cli.dll create-user --name <user> --display "<name>" --email <e-mail> --role manager`
+   and type the password in the terminal. Then sign in at http://127.0.0.1:8080
+   ([docs/runbooks/panel.md](docs/runbooks/panel.md)).
 
 ## Everyday commands
 
 | Script | What it does |
 |---|---|
 | `up` | Start core services and wait until healthy |
-| `up-panel` | Core + Appsmith |
 | `up-tunnel` | Core + Cloudflare tunnel, prints the public URL |
 | `down` | Stop everything, keep all data |
 | `status` | Containers, health, ports |
@@ -106,6 +112,7 @@ Every script below exists in two versions: `scripts\windows\<name>.ps1` and
 | `n8n-import` | Credentials from `.env` + workflows into n8n; restarts n8n when a schedule or webhook was published |
 | `wa-tests` | WhatsApp database rules + n8n harness (no Meta) |
 | `backend-test [-Docker]` | .NET tests; uses a throwaway database (needs `up`) |
+| `web-test` | The panel's tests (type-check, Vitest, build and bundle budget) in a Node container |
 | `hazem-e2e` | Whole loop n8n ↔ API without Meta or OpenAI (stub, dry run), including Hazem's TASK 04 answers, then restores every setting and removes its temporary credentials |
 | `backup` | Dump `office` and `n8n` to `office-backups` |
 | `restore ...` | Restore a dump into a new database and verify it |
@@ -127,7 +134,7 @@ powershell -ExecutionPolicy Bypass -File scripts\windows\up-tunnel.ps1
   token in `CLOUDFLARE_TUNNEL_TOKEN`, and set `WEBHOOK_URL=https://<your-hostname>/`.
   The URL then stays the same.
 
-The tunnel forwards to n8n only. PostgreSQL, Redis, Garage and Appsmith are never exposed.
+The tunnel forwards to n8n only. PostgreSQL, Redis, Garage, the API and the panel are never exposed.
 
 ## Backup and restore
 

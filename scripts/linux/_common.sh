@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
 
-ALL_PROFILES=(--profile panel --profile tunnel --profile tunnel-named --profile tools --profile tests)
+ALL_PROFILES=(--profile tunnel --profile tunnel-named --profile tools --profile tests)
 
 # Git Bash on Windows rewrites container paths such as /opt/...; harmless on Linux.
 export MSYS_NO_PATHCONV=1

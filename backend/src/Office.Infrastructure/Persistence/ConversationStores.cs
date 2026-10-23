@@ -39,6 +39,15 @@ public sealed class ConversationStore(HazemDbContext db) : IConversationStore
     public async Task SaveConversationAsync(Conversation conversation, CancellationToken ct) =>
         await SaveConversation(db, conversation, ct);
 
+    /// <summary>
+    /// Npgsql writes timestamptz only from UTC values. B-06 due times are Cairo times (+02/+03 at
+    /// night: "today/tomorrow 10:00") and staff events may carry the caller's offset, so every
+    /// time is converted here; the instant is unchanged.
+    /// </summary>
+    internal static DateTimeOffset Utc(DateTimeOffset value) => value.ToUniversalTime();
+
+    internal static DateTimeOffset? Utc(DateTimeOffset? value) => value?.ToUniversalTime();
+
     /// <summary>Called by <see cref="TurnStore"/> inside the turn's transaction.</summary>
     internal static async Task SaveAsync(HazemDbContext db, string turnId, TurnEffects e, CancellationToken ct)
     {
@@ -47,7 +56,7 @@ public sealed class ConversationStore(HazemDbContext db) : IConversationStore
             INSERT INTO hazem.persons (id, wa_id, name_raw, name_normalized, full_name_provided, preferred_call_phone,
                                        source, source_raw, first_seen_at)
             VALUES ({person.Id}, {person.WaId.Value}, {person.Name?.Raw}, {person.Name?.Normalized}, {person.FullNameProvided},
-                    {person.PreferredCallPhone}, {person.Source}, {person.SourceRaw}::jsonb, {person.FirstSeenAt})
+                    {person.PreferredCallPhone}, {person.Source}, {person.SourceRaw}::jsonb, {Utc(person.FirstSeenAt)})
             ON CONFLICT (id) DO UPDATE SET
               name_raw = EXCLUDED.name_raw, name_normalized = EXCLUDED.name_normalized,
               full_name_provided = EXCLUDED.full_name_provided, preferred_call_phone = EXCLUDED.preferred_call_phone,
@@ -68,7 +77,7 @@ public sealed class ConversationStore(HazemDbContext db) : IConversationStore
         {
             await db.Database.ExecuteSqlInterpolatedAsync($"""
                 INSERT INTO hazem.staff_tasks (person_id, intake_id, turn_id, type, staff_id, due_at)
-                VALUES ({person.Id}, {intake.Id}, {turnId}, {task.Kind}, {task.StaffId}, {task.DueAt})
+                VALUES ({person.Id}, {intake.Id}, {turnId}, {task.Kind}, {task.StaffId}, {Utc(task.DueAt)})
                 ON CONFLICT (turn_id, type) DO NOTHING
                 """, ct);
         }
@@ -99,7 +108,7 @@ public sealed class ConversationStore(HazemDbContext db) : IConversationStore
     private static Task SaveConversation(HazemDbContext db, Conversation conversation, CancellationToken ct) =>
         db.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO hazem.conversations (id, person_id, state, last_staff_message_at, abuse_warnings)
-            VALUES ({conversation.Id}, {conversation.PersonId}, {StateName.Of(conversation.State)}, {conversation.LastStaffMessageAt},
+            VALUES ({conversation.Id}, {conversation.PersonId}, {StateName.Of(conversation.State)}, {Utc(conversation.LastStaffMessageAt)},
                     {conversation.AbuseWarnings})
             ON CONFLICT (id) DO UPDATE SET state = EXCLUDED.state, last_staff_message_at = EXCLUDED.last_staff_message_at,
               abuse_warnings = EXCLUDED.abuse_warnings

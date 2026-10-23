@@ -15,6 +15,8 @@
   <ItemGroup>
     <!-- The classification prompt (its version is logged with every classification). -->
     <EmbeddedResource Include="Ai\prompts\*.md" />
+    <!-- The office seal (the owner's own cut), inside every panel e-mail as an inline image. -->
+    <EmbeddedResource Include="Panel\Mail\office-seal.png" LogicalName="Office.Infrastructure.Panel.Mail.office-seal.png" />
   </ItemGroup>
 
   <ItemGroup>
