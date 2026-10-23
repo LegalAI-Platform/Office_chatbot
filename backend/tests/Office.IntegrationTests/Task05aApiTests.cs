@@ -244,8 +244,9 @@ public sealed class Task05aApiTests(TestDatabase db) : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Handoff_stays_off_and_no_active_text_promises_a_contact_time()
+    public async Task Handoff_stays_off_until_chatwoot_setup_and_no_active_text_promises_a_contact_time()
     {
+        // TASK 07b: no migration turns it on; chatwoot-setup does, once someone can answer (B-12).
         Assert.Equal("false", await db.ScalarAsync<string>("SELECT value FROM hazem.settings WHERE key = 'handoff.enabled'"));
         Assert.Equal(0L, await db.ScalarAsync<long>(
             "SELECT count(*) FROM hazem.approved_texts WHERE active AND text ~ '(خلال ساعة|الساعة 10|هيتواصل|هيرد عليك)'"));

@@ -100,6 +100,17 @@ public sealed class HazemDbContext(DbContextOptions<HazemDbContext> options) : D
             e.ToTable("panel_recovery_codes");
             e.HasKey(x => x.Id);
         });
+        // Migration 0011 (TASK 07b): the link to Chatwoot.
+        b.Entity<ChatwootThreadRow>(e =>
+        {
+            e.ToTable("chatwoot_threads");
+            e.HasKey(x => x.WaId);
+        });
+        b.Entity<ChatwootTurnRow>(e =>
+        {
+            e.ToTable("chatwoot_turns");
+            e.HasKey(x => x.TurnId);
+        });
     }
 
     public DbSet<StaffRow> Staff => Set<StaffRow>();
@@ -107,6 +118,8 @@ public sealed class HazemDbContext(DbContextOptions<HazemDbContext> options) : D
     public DbSet<PanelUserRow> PanelUsers => Set<PanelUserRow>();
     public DbSet<PanelCodeRow> PanelCodes => Set<PanelCodeRow>();
     public DbSet<PanelRecoveryCodeRow> PanelRecoveryCodes => Set<PanelRecoveryCodeRow>();
+    public DbSet<ChatwootThreadRow> ChatwootThreads => Set<ChatwootThreadRow>();
+    public DbSet<ChatwootTurnRow> ChatwootTurns => Set<ChatwootTurnRow>();
 
     public DbSet<PersonRow> Persons => Set<PersonRow>();
     public DbSet<ConversationRow> Conversations => Set<ConversationRow>();
@@ -212,6 +225,24 @@ public sealed class PanelCodeRow
     public int Attempts { get; set; }
     public DateTimeOffset? UsedAt { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
+}
+
+public sealed class ChatwootThreadRow
+{
+    public required string WaId { get; set; }
+    public long ContactId { get; set; }
+    public required string SourceId { get; set; }
+    public long ConversationId { get; set; }
+}
+
+public sealed class ChatwootTurnRow
+{
+    public required string TurnId { get; set; }
+    public required string State { get; set; }
+    public int Attempts { get; set; }
+    public int Posted { get; set; }
+    public DateTimeOffset? NextAt { get; set; }
+    public string? LastError { get; set; }
 }
 
 public sealed class PanelRecoveryCodeRow

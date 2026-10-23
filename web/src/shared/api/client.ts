@@ -48,6 +48,7 @@ const MESSAGES: Record<string, string> = {
   no_setup: "ابدأ الإعداد من الأول.",
   invalid_role: "اختار الدور.",
   two_factor_required: "لازم تشغّل التحقق بخطوتين الأول.",
+  chatwoot_unavailable: "Chatwoot مش بيرد دلوقتي. جرّب تاني بعد شوية.",
 };
 
 export function errorMessage(error: unknown): string {

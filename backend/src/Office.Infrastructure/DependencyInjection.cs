@@ -95,6 +95,16 @@ public static class DependencyInjection
         services.AddScoped<Application.Panel.PanelSignup>();
         services.AddScoped<Application.Panel.PanelTwoFactor>();
 
+        // TASK 07b (T-24): Chatwoot, through its API inbox and platform API. Off without its tokens.
+        services.AddOptions<Chatwoot.ChatwootOptions>().Bind(config.GetSection(Chatwoot.ChatwootOptions.Section));
+        services.AddHttpClient<Application.Chatwoot.IChatwootApi, Chatwoot.ChatwootApi>(Chatwoot.ChatwootApi.HttpClientName,
+                c => c.Timeout = TimeSpan.FromSeconds(20))
+            .RemoveAllLoggers(); // request headers carry the tokens
+        services.AddScoped<Application.Chatwoot.IChatwootStore, Chatwoot.ChatwootStore>();
+        services.AddScoped<Application.Chatwoot.ChatwootMirror>();
+        services.AddScoped<Application.Chatwoot.ChatwootEvents>();
+        services.AddScoped<Application.Chatwoot.ChatwootAccounts>();
+
         return services;
     }
 }

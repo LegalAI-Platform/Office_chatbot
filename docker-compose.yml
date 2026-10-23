@@ -1,8 +1,9 @@
 # Office WhatsApp System (Hazem) - Test/Staging stack (TASK 01)
-# Decisions: docs/decisions/DECISIONS-v1.8.md
+# Decisions: docs/decisions/DECISIONS-v1.10.md
 #
 # Core services start with `docker compose up -d`: postgres, redis, garage, n8n, the
-# .NET backend (api) and the panel (web, TASK 07a; Appsmith was removed).
+# .NET backend (api), the panel (web, TASK 07a; Appsmith was removed) and Chatwoot for the
+# staff's conversations (TASK 07b, T-24: chatwoot, chatwoot-sidekiq, its own database and redis).
 # Optional profiles: tests (meta-stub for hazem-e2e), tunnel (Cloudflare Quick Tunnel),
 #                    tunnel-named (Cloudflare Named Tunnel), tools (one-off commands).
 # Every port is bound to 127.0.0.1 only. n8n is the only service ever exposed
@@ -10,6 +11,49 @@
 # the panel reaches it through the web container (/api/panel only).
 
 name: ${COMPOSE_PROJECT_NAME:-office}
+
+# Chatwoot Community Edition (T-24), pinned. It talks to the api only (an API inbox), never to
+# WhatsApp or Meta. Its database holds a second copy of client messages: backup and security
+# treat it like ours (TASK 13).
+x-chatwoot: &chatwoot
+  image: chatwoot/chatwoot:v4.18.0-ce
+  environment: &chatwoot-env
+    TZ: Africa/Cairo
+    RAILS_ENV: production
+    NODE_ENV: production
+    INSTALLATION_ENV: docker
+    RAILS_LOG_TO_STDOUT: "true"
+    LOG_LEVEL: info
+    SECRET_KEY_BASE: ${CHATWOOT_SECRET_KEY_BASE}
+    FRONTEND_URL: ${CHATWOOT_URL:-http://127.0.0.1:3000}
+    DEFAULT_LOCALE: ar
+    FORCE_SSL: "false"
+    ENABLE_ACCOUNT_SIGNUP: "false"
+    DISABLE_TELEMETRY: "true"
+    ENABLE_PUSH_RELAY_SERVER: "false"
+    POSTGRES_HOST: chatwoot-db
+    POSTGRES_USERNAME: chatwoot
+    POSTGRES_PASSWORD: ${CHATWOOT_DB_PASSWORD}
+    POSTGRES_DATABASE: chatwoot
+    REDIS_URL: redis://chatwoot-redis:6379
+    REDIS_PASSWORD: ${CHATWOOT_REDIS_PASSWORD}
+    ACTIVE_STORAGE_SERVICE: local
+    # Its webhook calls http://api:8080, which Chatwoot's SSRF guard refuses by default. Chatwoot
+    # sits on chatwoot_net, where the api is the only other service; only «حازم (النظام)» is an
+    # administrator (can set webhooks); never on the internet before TASK 14 (review this then).
+    SAFE_FETCH_ALLOW_PRIVATE_NETWORK: "true"
+    # Its own mails (invitations, password resets) from the same no-reply sender as the panel.
+    MAILER_SENDER_EMAIL: ${SMTP_FROM_NAME:-Office} <${SMTP_FROM:-no-reply@localhost}>
+    SMTP_ADDRESS: ${SMTP_HOST:-}
+    SMTP_PORT: ${SMTP_PORT:-587}
+    SMTP_USERNAME: ${SMTP_USERNAME:-}
+    SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+    SMTP_AUTHENTICATION: login
+    SMTP_ENABLE_STARTTLS_AUTO: "true"
+    SMTP_OPENSSL_VERIFY_MODE: peer
+  volumes:
+    - chatwoot_storage:/app/storage
+  networks: [chatwoot_net]
 
 x-tools: &tools
   build:
@@ -21,7 +65,7 @@ x-tools: &tools
       required: true
   environment:
     TZ: Africa/Cairo
-  networks: [office_net]
+  networks: [office_net, chatwoot_net]
   restart: "no"
 
 services:
@@ -213,6 +257,12 @@ services:
       Mail__Password: ${SMTP_PASSWORD:-}
       Mail__From: ${SMTP_FROM:-}
       Mail__FromName: ${SMTP_FROM_NAME:-}
+      # TASK 07b (T-24): Chatwoot on office_net. Empty tokens = the link is off.
+      Chatwoot__BaseUrl: http://chatwoot:3000
+      Chatwoot__PublicUrl: ${CHATWOOT_URL:-http://127.0.0.1:3000}
+      Chatwoot__BotToken: ${CHATWOOT_BOT_TOKEN:-}
+      Chatwoot__PlatformToken: ${CHATWOOT_PLATFORM_TOKEN:-}
+      Chatwoot__WebhookSecret: ${CHATWOOT_WEBHOOK_TOKEN:-}
     healthcheck:
       # Process only; /health/ready (database and migration 0003) is checked by the healthcheck job.
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health/live | grep -q Healthy"]
@@ -220,7 +270,7 @@ services:
       timeout: 5s
       retries: 12
       start_period: 20s
-    networks: [office_net]
+    networks: [office_net, chatwoot_net]
 
   # TEST ONLY (profile "tests", never started by `up`): stands in for Meta's Graph API media
   # endpoints and OpenAI transcription. hazem-e2e starts it, points whatsapp.graph_base_url and
@@ -260,6 +310,83 @@ services:
       retries: 6
       start_period: 5s
     networks: [office_net]
+
+  # ---------- Chatwoot (TASK 07b, T-24) ----------
+  chatwoot-db:
+    image: pgvector/pgvector:0.8.7-pg16
+    restart: unless-stopped
+    depends_on:
+      preflight:
+        condition: service_completed_successfully
+    environment:
+      TZ: Africa/Cairo
+      POSTGRES_USER: chatwoot
+      POSTGRES_PASSWORD: ${CHATWOOT_DB_PASSWORD}
+      POSTGRES_DB: chatwoot
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    volumes:
+      - chatwoot_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chatwoot -d chatwoot"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks: [chatwoot_net]
+
+  chatwoot-redis:
+    image: redis:7.4.11
+    restart: unless-stopped
+    depends_on:
+      preflight:
+        condition: service_completed_successfully
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${CHATWOOT_REDIS_PASSWORD}"]
+    environment:
+      REDISCLI_AUTH: ${CHATWOOT_REDIS_PASSWORD}
+    volumes:
+      - chatwoot_redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [chatwoot_net]
+
+  # Creates or migrates Chatwoot's database, then exits (idempotent; runs on every `up`).
+  chatwoot-init:
+    <<: *chatwoot
+    restart: "no"
+    entrypoint: ["docker/entrypoints/rails.sh"]
+    command: ["bundle", "exec", "rails", "db:chatwoot_prepare"]
+    depends_on:
+      chatwoot-db:
+        condition: service_healthy
+      chatwoot-redis:
+        condition: service_healthy
+
+  chatwoot:
+    <<: *chatwoot
+    restart: unless-stopped
+    entrypoint: ["docker/entrypoints/rails.sh"]
+    command: ["bundle", "exec", "rails", "s", "-p", "3000", "-b", "0.0.0.0"]
+    depends_on:
+      chatwoot-init:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:3000:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api | grep -q version"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+
+  chatwoot-sidekiq:
+    <<: *chatwoot
+    restart: unless-stopped
+    command: ["bundle", "exec", "sidekiq", "-C", "config/sidekiq.yml"]
+    depends_on:
+      chatwoot-init:
+        condition: service_completed_successfully
 
   # Cloudflare Quick Tunnel: no account needed, random https://*.trycloudflare.com
   # URL that changes on every start. Forwards to n8n only.
@@ -327,8 +454,14 @@ services:
 networks:
   office_net:
     name: office_net
+  # TASK 07b: Chatwoot, its database and redis, and the api (Chatwoot's only way to the rest).
+  chatwoot_net:
+    name: chatwoot_net
 
 volumes:
+  chatwoot_db_data:
+  chatwoot_redis_data:
+  chatwoot_storage:
   postgres_data:
   redis_data:
   garage_meta:

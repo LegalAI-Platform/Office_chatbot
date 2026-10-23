@@ -12,10 +12,11 @@ machines S-01..S-06; Hazem classifies each turn with the AI — text only — an
 approved texts only; [docs/ai/classification.md](docs/ai/classification.md)), **TASK 05a** (who is
 writing, topics, staff tasks) and **TASK 07a** (the panel at http://127.0.0.1:8080: sign-in with
 roles, accounts, staff tasks; [docs/panel-api.md](docs/panel-api.md),
-[docs/runbooks/panel.md](docs/runbooks/panel.md)). Hazem answers only the numbers in
+[docs/runbooks/panel.md](docs/runbooks/panel.md)) and **TASK 07b** (Chatwoot at http://127.0.0.1:3000:
+the staff answer clients there; [docs/runbooks/chatwoot.md](docs/runbooks/chatwoot.md)). Hazem answers only the numbers in
 `hazem.settings hazem.recipients` until the owner opens it to everyone.
 
-- All decisions: [docs/decisions/DECISIONS-v1.9.md](docs/decisions/DECISIONS-v1.9.md)
+- All decisions: [docs/decisions/DECISIONS-v1.10.md](docs/decisions/DECISIONS-v1.10.md)
 - n8n ↔ .NET API contract: [docs/hazem-internal-api.md](docs/hazem-internal-api.md)
 - Backend: [backend/README.md](backend/README.md)
 - Architecture and permissions: [docs/infrastructure.md](docs/infrastructure.md)
@@ -38,6 +39,7 @@ and OpenAI).
 | n8n 2.43.8 | http://127.0.0.1:5678 | WhatsApp layer: Meta in and out (Regular mode, PostgreSQL backend) | core |
 | .NET API (ASP.NET Core 10) | none (`http://api:8080` inside Docker only) | The brain: turns, decisions, the panel API (`/api/panel`) | core |
 | Panel (React, nginx) | http://127.0.0.1:8080 | Staff tasks and accounts (TASK 07a); forwards `/api/panel` only | core |
+| Chatwoot (Community Edition 4.18) | http://127.0.0.1:3000 | The staff's conversations (TASK 07b, T-24); its own database (`chatwoot-db`) and redis; opened from the panel without a second password | core |
 | PostgreSQL 16.15 | 127.0.0.1:5432 | Databases `n8n` and `office` | core |
 | Redis 7.4.11 | 127.0.0.1:6379 | Debounce, dedup, locks, rate limits (later tasks) | core |
 | Garage v2.4.1 (S3) | http://127.0.0.1:3900 | Object storage: `office-media`, `office-sensitive`, `office-backups` | core |
@@ -97,6 +99,8 @@ Every script below exists in two versions: `scripts\windows\<name>.ps1` and
    /app/cli/Office.Cli.dll create-user --name <user> --display "<name>" --email <e-mail> --role manager`
    and type the password in the terminal. Then sign in at http://127.0.0.1:8080
    ([docs/runbooks/panel.md](docs/runbooks/panel.md)).
+8. **Set up Chatwoot** (once, and again after new `CHATWOOT_*` tokens): `chatwoot-setup`
+   ([docs/runbooks/chatwoot.md](docs/runbooks/chatwoot.md)).
 
 ## Everyday commands
 
@@ -114,7 +118,8 @@ Every script below exists in two versions: `scripts\windows\<name>.ps1` and
 | `backend-test [-Docker]` | .NET tests; uses a throwaway database (needs `up`) |
 | `web-test` | The panel's tests (type-check, Vitest, build and bundle budget) in a Node container |
 | `hazem-e2e` | Whole loop n8n ↔ API without Meta or OpenAI (stub, dry run), including Hazem's TASK 04 answers, then restores every setting and removes its temporary credentials |
-| `backup` | Dump `office` and `n8n` to `office-backups` |
+| `backup` | Dump `office`, `n8n` and `chatwoot` to `office-backups` |
+| `chatwoot-setup` | Chatwoot's account, inbox, «حازم (النظام)» and Platform App from the `CHATWOOT_*` tokens; safe to run again (TASK 07b) |
 | `restore ...` | Restore a dump into a new database and verify it |
 | `reset` | **Deletes all data.** Only with `ENVIRONMENT=test` and after typing `RESET` |
 | `gen-secrets` | Print fresh random secrets (never edits `.env`) |
