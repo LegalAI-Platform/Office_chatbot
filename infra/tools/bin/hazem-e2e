@@ -1,5 +1,5 @@
 #!/bin/bash
-# Steps of the end-to-end test n8n <-> .NET API (DECISIONS v1.3 + TASK 03), driven by
+# Steps of the end-to-end test n8n <-> .NET API (DECISIONS v1.3 + TASK 03; TASK 07a: the panel), driven by
 # scripts/*/hazem-e2e. Each step is one call: hazem-e2e <step>. Dummy numbers 20100000006x only.
 # Meta and OpenAI are replaced by meta-stub (profile tests); whatsapp.dry_run records sends
 # without Meta. Every setting the test changes is backed up first and restored by "cleanup".
@@ -87,6 +87,10 @@ case "${1:-}" in
     done < <(q "SELECT w.bucket || '|' || w.object_key FROM app.wa_media w JOIN app.wa_inbound_messages m ON m.id = w.inbound_message_id
                  WHERE m.wa_id IN ($ALL) AND w.object_key IS NOT NULL")
     q "
+      DELETE FROM hazem.panel_audit WHERE user_id IN (SELECT id FROM hazem.panel_users WHERE username LIKE 'e2e-%')
+                                     OR target_id IN (SELECT id FROM hazem.panel_users WHERE username LIKE 'e2e-%')
+                                     OR target_id IN (SELECT id FROM hazem.staff_tasks WHERE person_id IN (SELECT id FROM hazem.persons WHERE wa_id IN ($ALL)));
+      DELETE FROM hazem.panel_users WHERE username LIKE 'e2e-%';
       DELETE FROM hazem.turn_replies WHERE turn_id IN (SELECT turn_id FROM hazem.turns WHERE wa_id IN ($ALL));
       DELETE FROM hazem.classifications WHERE turn_id IN (SELECT turn_id FROM hazem.turns WHERE wa_id IN ($ALL));
       DELETE FROM hazem.staff_tasks WHERE person_id IN (SELECT id FROM hazem.persons WHERE wa_id IN ($ALL));
@@ -434,6 +438,34 @@ SQL
     finish
     ;;
 
+  # ---------------------------------------------------------------- TASK 07a
+  # The account e2e-panel is created by the driver with the API's CLI (create-user, password on
+  # stdin, passed here by name as E2E_PANEL_PASSWORD) and removed by cleanup.
+  check-panel)
+    [[ -n "${E2E_PANEL_PASSWORD:-}" ]] || die "E2E_PANEL_PASSWORD is not set"
+    jar="$(mktemp)"; base=http://web:8080/api/panel
+    csrf() { curl -s -b "$jar" -c "$jar" "$base/auth/csrf" | jq -r .token; }
+    post() { curl -s -b "$jar" -c "$jar" -X POST -H "X-CSRF-TOKEN: $(csrf)" -H 'Content-Type: application/json' "$@"; }
+    code="$(post -o /dev/null -w '%{http_code}' -d "$(jq -nc --arg p "$E2E_PANEL_PASSWORD" '{username: "e2e-panel", password: $p}')" "$base/auth/login")"
+    assert_eq "a staff account signs in to the panel through the web container" "$code" "200"
+    task="$(curl -s -b "$jar" "$base/tasks?scope=mine" | jq -r --arg last "${H: -3}" '[.items[] | select(.phone_last3 == $last)][0].id // ""')"
+    assert_eq "the listed client's task (TASK 05a) is in «مهامي» of the staff member in charge" "$([[ -n "$task" ]] && echo found)" "found"
+    detail="$(curl -s -b "$jar" "$base/tasks/$task")"
+    assert_eq "the task shows the client's own words (B-25)" "$(jq -r '.client_words[0].text' <<<"$detail")" "الجلسة الجاية امتى؟"
+    assert_eq "start -> in progress, through S-05" "$(post "$base/tasks/$task/start" | jq -r .state)" "in_progress"
+    assert_eq "done -> done" "$(post "$base/tasks/$task/done" | jq -r .state)" "done"
+    assert_eq "the audit trail has the sign-in and both moves (no text)" \
+      "$(q "SELECT string_agg(a.action, ',' ORDER BY a.id) FROM hazem.panel_audit a JOIN hazem.panel_users u ON u.id = a.user_id WHERE u.username = 'e2e-panel'")" \
+      "login,task.start,task.done"
+    assert_eq "the panel never reaches n8n's endpoints (/api/hazem through web: 404)" \
+      "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "X-Hazem-Token: $HAZEM_API_TOKEN" -H 'Content-Type: application/json' -d '{}' http://web:8080/api/hazem/turns)" "404"
+    assert_eq "a wrong password is refused like an unknown account" \
+      "$(curl -s -b "$jar" -c "$jar" -X POST -H "X-CSRF-TOKEN: $(csrf)" -H 'Content-Type: application/json' -d '{"username":"e2e-panel","password":"wrong wrong wrong"}' "$base/auth/login")" \
+      '{"error":"invalid_credentials"}'
+    rm -f "$jar"
+    finish
+    ;;
+
   check-restored)
     assert_eq "settings back to normal: dry run off, stale 300, real Graph and OpenAI URLs, no backups left" \
       "$(q "SELECT string_agg(key || '=' || value, ',' ORDER BY key) FROM app.settings WHERE key IN ('whatsapp.dry_run','whatsapp.turn_stale_seconds','whatsapp.graph_base_url','ai.openai_base_url') OR key LIKE 'e2e.backup.%'")" \
@@ -441,6 +473,7 @@ SQL
     assert_eq "Hazem settings back: responder hazem, AI stub off, no backups left" \
       "$(q "SELECT string_agg(key || '=' || value, ',' ORDER BY key) FROM hazem.settings WHERE key IN ('responder','ai.stub_enabled','ai.stub_base_url','echo.enabled') OR key LIKE 'e2e.backup.%'")" \
       "ai.stub_base_url=,ai.stub_enabled=false,echo.enabled=false,responder=hazem"
+    assert_eq "no test panel account left (e2e-*)"       "$(q "SELECT count(*) FROM hazem.panel_users WHERE username LIKE 'e2e-%'")" "0"
     assert_eq "no test number left in the API's tables" \
       "$(q "SELECT count(*) FROM hazem.persons WHERE wa_id IN ($ALL)")" "0"
     assert_eq "no test credential left in n8n" \
@@ -449,6 +482,6 @@ SQL
     ;;
 
   *)
-    die "usage: hazem-e2e setup|check-loop|replay|check-replay|inject-b|check-api-down|check-recovered|check-api-send|check-auth|group-c|check-group|media-d|check-media|stale-e|check-stale|cleanup|remove-test-credentials|check-restored|hazem-setup|check-hazem-welcome|hazem-name|check-hazem-offer|hazem-legal|check-hazem-legal|hazem-ai-down|check-hazem-fallback|hazem05-setup|check-hazem05|hazem05-name|check-hazem05-name"
+    die "usage: hazem-e2e setup|check-loop|replay|check-replay|inject-b|check-api-down|check-recovered|check-api-send|check-auth|group-c|check-group|media-d|check-media|stale-e|check-stale|cleanup|remove-test-credentials|check-restored|hazem-setup|check-hazem-welcome|hazem-name|check-hazem-offer|hazem-legal|check-hazem-legal|hazem-ai-down|check-hazem-fallback|hazem05-setup|check-hazem05|hazem05-name|check-hazem05-name|check-panel"
     ;;
 esac

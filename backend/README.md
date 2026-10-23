@@ -1,4 +1,4 @@
-# Backend (.NET API) — DECISIONS v1.6
+# Backend (.NET API) — DECISIONS v1.8
 
 The brain of Hazem. n8n is the WhatsApp layer and hands every client *turn* to this API;
 the API decides what to answer and n8n sends it. The API never talks to Meta and has no
@@ -25,6 +25,21 @@ Office.Api ──► Office.Infrastructure ──► Office.Application ──�
 `hazem.staff_tasks`), the client's source (B-13, from Meta's referral), the topic of the request
 (B-25, `Intake.MatterType`), abuse (S-01: one warning, then muted), and `classify-v4` (two new
 intents, the topic and the sender role in the same call).
+
+**TASK 07a additions (the panel, T-11 / T-23):** `Application/Panel`: `Permissions` (RBAC: a role is
+a set of permissions, defined once; the code checks permissions, never role names; no super
+admin), `PanelAccounts` (sign-in with lockout, sessions ended by a new security stamp, accounts
+managed by the manager with a temporary password shown once, every change in `hazem.panel_audit`),
+`PanelTasks` (the staff tasks through the S-05 machine; a staff member sees own and unassigned
+tasks only, and gets 404 for the others). `Infrastructure/Panel`: the stores and `PanelSecrets`
+(ASP.NET Core Identity's `PasswordHasher`). `Api/Panel`: `/api/panel/*` with a cookie session,
+one authorization policy per permission, antiforgery on every change and a login rate limit
+([docs/panel-api.md](../docs/panel-api.md)). CLI: `create-user` (first manager), `reset-password`,
+`unlock-user`, `list-users` ([docs/runbooks/panel.md](../docs/runbooks/panel.md)). No new package:
+Identity's hasher, cookies, antiforgery and rate limiting are part of ASP.NET Core.
+
+| Project | Content |
+|---|---|
 | `tests/Office.UnitTests` | Domain (every transition of S-01..S-06), understanding (AI input, fallback, OpenAI call faked), approved texts, the conversation flow with fakes, the old contract rules |
 | `tests/Office.IntegrationTests` | Real API + throwaway PostgreSQL database built from `database/migrations`; n8n and OpenAI faked over HTTP |
 | `tests/Office.TestStub` | Meta media, OpenAI transcription and OpenAI classification stand-in for `hazem-e2e` |
@@ -40,6 +55,10 @@ intents, the topic and the sender role in the same call).
 - **Never log message text, names or full phone numbers** (`LogMask.Phone`). `hazem.classifications`
   has no text column. Turn logs carry text keys and fallback reasons only.
 - **Hazem answers only `hazem.recipients`** until the owner sets `hazem.open_to_all = true`.
+- **Times go to the database in UTC** (`ConversationStore.Utc`): Npgsql refuses another offset,
+  and B-06 due times are Cairo times. A test pins the clock at night (`OfficeHoursApiTests`).
+- **The panel checks permissions, never roles**: every `/api/panel` endpoint names a policy
+  (`PanelAuth.Policy(...)`), and a test walks every endpoint to prove it.
 - **Every send goes through n8n** (`IWhatsAppGateway`) with a stable idempotency key, so a
   retry can never reach the client twice.
 - Package versions are pinned in `Directory.Packages.props`; warnings are errors. TASK 04 added

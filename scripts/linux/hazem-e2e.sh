@@ -11,6 +11,9 @@
 #      reaches the AI, a phone number is masked, and the AI stub down still gets an answer
 #   9. TASK 05a: a listed client gets the neutral reply and a task for their staff, a blocked number
 #      gets nothing (muted), a topic told first means no topic question after the name
+#  10. TASK 07a: a staff account (created with the CLI, removed at the end) signs in to the panel
+#      through the web container, finds that task under «مهامي», sees the client's words, starts
+#      and finishes it; the panel never reaches n8n's endpoints
 # Meta and OpenAI are the meta-stub container (profile tests). If meta-whatsapp-token or
 # openai-transcription do not exist, temporary ones (fixed test ids) are created and removed
 # again; existing (real) credentials are never touched. Everything is restored at the end.
@@ -119,3 +122,12 @@ step check-hazem05 || failed=1
 step hazem05-name
 forward
 step check-hazem05-name || failed=1
+
+echo "==== 10. TASK 07a: the panel (a staff account signs in through the web container)"
+# A throwaway password for the throwaway account: on stdin for the CLI, by name for the check.
+export E2E_PANEL_PASSWORD="$(head -c 12 /dev/urandom | od -An -tx1 | tr -d ' 
+')"
+printf '%s
+' "$E2E_PANEL_PASSWORD" | docker compose exec -T api dotnet /app/cli/Office.Cli.dll create-user   --name e2e-panel --display E2E --email e2e-panel@example.test --role staff --staff e2e-staff >/dev/null 2>&1   || { echo "FAIL  create-user e2e-panel (CLI)"; failed=1; }
+docker compose run --rm --no-deps -e E2E_PANEL_PASSWORD tools hazem-e2e check-panel   2> >(grep -vE '^#[0-9]+ |Image office-tools|^\s*$' >&2) || failed=1
+unset E2E_PANEL_PASSWORD

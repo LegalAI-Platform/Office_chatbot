@@ -82,6 +82,19 @@ public static class DependencyInjection
         services.AddScoped<RecordSendResults>();
         services.AddScoped<SendOutbound>();
 
+        // TASK 07a: the panel's accounts (RBAC, T-23) and tasks.
+        services.AddSingleton<Application.Panel.IPanelSecrets, Panel.PanelSecrets>();
+        services.AddScoped<Application.Panel.IPanelUserStore, Panel.PanelUserStore>();
+        services.AddScoped<Application.Panel.IPanelTaskStore, Panel.PanelTaskStore>();
+        services.AddScoped<Application.Panel.PanelAccounts>();
+        services.AddScoped<Application.Panel.PanelTasks>();
+        // v1.9: sign-up, e-mail codes (the owner's SMTP) and the authenticator app.
+        services.AddSingleton<Application.Panel.IPanelCrypto, Panel.PanelCrypto>();
+        services.AddSingleton<Application.Panel.IPanelMailer, Panel.SmtpPanelMailer>();
+        services.AddScoped<Application.Panel.IPanelCodeStore, Panel.PanelCodeStore>();
+        services.AddScoped<Application.Panel.PanelSignup>();
+        services.AddScoped<Application.Panel.PanelTwoFactor>();
+
         return services;
     }
 }

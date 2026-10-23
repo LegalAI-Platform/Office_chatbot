@@ -1,0 +1,279 @@
+/* Hazem panel design tokens (TASK 07a; the owner's brand sheet, design-system/hazem-panel/MASTER.md).
+   Office black and seal gold on the warm light page and on near-black, the owner's photos (assets/owner), Cairo for
+   every word (SemiBold headings, Regular text), and the four status colors of the sheet. */
+@import "tailwindcss";
+@import "@fontsource/cairo/arabic-400.css";
+@import "@fontsource/cairo/arabic-600.css";
+@import "@fontsource/cairo/arabic-700.css";
+@import "@fontsource/cairo/latin-400.css";
+@import "@fontsource/cairo/latin-600.css";
+@import "@fontsource/cairo/latin-700.css";
+@import "@fontsource/aref-ruqaa/arabic-700.css";
+
+/* Light (the sheet's own palette). */
+:root {
+  --page: #f4f1ec;
+  --card: #ffffff;
+  --card-2: #f7f5f1;
+  --line: #ebe6de;
+  --top: #ffffff;
+  --hello: #1e1a14;
+  --light-only: inline-block;
+  --dark-only: none;
+  --line-strong: #e5e7eb;
+  --ink: #1e1a14;
+  --ink-soft: #776c5a;
+  --on-ink: #f7f3e9;
+  --gold: #c9a96a;
+  --gold-deep: #8b6f47;
+  --gold-ink: #8b6f47;
+  --gold-tint: #f5eddc;
+  --gold-line: #dcc8a5;
+  --side: #0f0e0b;
+  --side-2: #1e1a14;
+  --side-ink: #efe6db;
+  --side-soft: #a3977f;
+  --side-line: #2c2519;
+  --red: #ef4444;
+  --red-ink: #d42a2a;
+  --red-bg: #feeceb;
+  --orange: #f59e0b;
+  --orange-ink: #b86a00;
+  --orange-bg: #fef4e2;
+  --green: #10b981;
+  --green-ink: #078a5d;
+  --green-bg: #e3f6ee;
+  --blue: #3b82f6;
+  --blue-ink: #2563eb;
+  --blue-bg: #e8f1fe;
+  --grey-ink: #6b6253;
+  --grey-bg: #f0ece4;
+  --kpi-blue: #eef5fe;
+  --kpi-green: #edf8f2;
+  --kpi-orange: #fef7ea;
+  --kpi-red: #fff0ee;
+  --kpi-ink: #1e1a14;
+  --kpi-soft: #6b6253;
+  --shadow: 0 1px 2px rgb(30 26 20 / 0.04), 0 8px 24px rgb(139 111 71 / 0.07);
+  color-scheme: light;
+}
+
+/* Dark: the same family, on warm near-black. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page: #0e0e0d;
+    --card: #161615;
+    --card-2: #1d1c1a;
+    --line: #2b2925;
+    --top: #121211;
+    --hello: #e8c48a;
+    --light-only: none;
+    --dark-only: inline-block;
+    --line-strong: #3a2f20;
+    --ink: #f7f3e9;
+    --ink-soft: #b2a68e;
+    --on-ink: #1e1a14;
+    --gold-ink: #dcc8a5;
+    --gold-tint: rgb(201 169 106 / 0.14);
+    --gold-line: #5a4a31;
+    --side: #0b0a08;
+    --side-2: #17140f;
+    --side-line: #241e15;
+    --red-ink: #ff8f8f;
+    --red-bg: rgb(239 68 68 / 0.17);
+    --orange-ink: #fbc35a;
+    --orange-bg: rgb(245 158 11 / 0.16);
+    --green-ink: #5fd8ac;
+    --green-bg: rgb(16 185 129 / 0.16);
+    --blue-ink: #8fb8ff;
+    --blue-bg: rgb(59 130 246 / 0.18);
+    --grey-ink: #b2a68e;
+    --grey-bg: rgb(255 255 255 / 0.06);
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 10px 28px rgb(0 0 0 / 0.35);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --page: #0e0e0d;
+  --card: #161615;
+  --card-2: #1d1c1a;
+  --line: #2b2925;
+  --top: #121211;
+  --hello: #e8c48a;
+  --light-only: none;
+  --dark-only: inline-block;
+  --line-strong: #3a2f20;
+  --ink: #f7f3e9;
+  --ink-soft: #b2a68e;
+  --on-ink: #1e1a14;
+  --gold-ink: #dcc8a5;
+  --gold-tint: rgb(201 169 106 / 0.14);
+  --gold-line: #5a4a31;
+  --side: #0b0a08;
+  --side-2: #17140f;
+  --side-line: #241e15;
+  --red-ink: #ff8f8f;
+  --red-bg: rgb(239 68 68 / 0.17);
+  --orange-ink: #fbc35a;
+  --orange-bg: rgb(245 158 11 / 0.16);
+  --green-ink: #5fd8ac;
+  --green-bg: rgb(16 185 129 / 0.16);
+  --blue-ink: #8fb8ff;
+  --blue-bg: rgb(59 130 246 / 0.18);
+  --grey-ink: #b2a68e;
+  --grey-bg: rgb(255 255 255 / 0.06);
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 10px 28px rgb(0 0 0 / 0.35);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-page: var(--page);
+  --color-card: var(--card);
+  --color-card-2: var(--card-2);
+  --color-top: var(--top);
+  --color-hello: var(--hello);
+  --color-surface: var(--card);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-on-ink: var(--on-ink);
+  --color-gold: var(--gold);
+  --color-gold-deep: var(--gold-deep);
+  --color-gold-ink: var(--gold-ink);
+  --color-gold-tint: var(--gold-tint);
+  --color-gold-line: var(--gold-line);
+  --color-brass: var(--gold);
+  --color-brass-ink: var(--gold-ink);
+  --color-side: var(--side);
+  --color-side-2: var(--side-2);
+  --color-side-ink: var(--side-ink);
+  --color-side-soft: var(--side-soft);
+  --color-side-line: var(--side-line);
+  --color-red: var(--red);
+  --color-red-ink: var(--red-ink);
+  --color-red-bg: var(--red-bg);
+  --color-orange: var(--orange);
+  --color-orange-ink: var(--orange-ink);
+  --color-orange-bg: var(--orange-bg);
+  --color-green: var(--green);
+  --color-green-ink: var(--green-ink);
+  --color-green-bg: var(--green-bg);
+  --color-blue: var(--blue);
+  --color-blue-ink: var(--blue-ink);
+  --color-blue-bg: var(--blue-bg);
+  --color-grey-ink: var(--grey-ink);
+  --color-grey-bg: var(--grey-bg);
+  /* the older names the pages use */
+  --color-ok: var(--green-ink);
+  --color-ok-bg: var(--green-bg);
+  --color-warn: var(--orange-ink);
+  --color-warn-bg: var(--orange-bg);
+  --color-bad: var(--red-ink);
+  --color-bad-bg: var(--red-bg);
+  --color-info: var(--blue-ink);
+  --color-info-bg: var(--blue-bg);
+  --color-muted: var(--grey-bg);
+  --color-kpi-blue: var(--kpi-blue);
+  --color-kpi-green: var(--kpi-green);
+  --color-kpi-orange: var(--kpi-orange);
+  --color-kpi-red: var(--kpi-red);
+  --color-kpi-ink: var(--kpi-ink);
+  --color-kpi-soft: var(--kpi-soft);
+  --font-ui: "Cairo", "Segoe UI", Tahoma, sans-serif;
+  --font-display: "Cairo", "Segoe UI", Tahoma, sans-serif;
+  --font-seal: "Aref Ruqaa", "Cairo", serif;
+  --radius-sheet: 18px;
+  --radius-card: 14px;
+  --radius-control: 10px;
+}
+
+@layer base {
+  html,
+  body {
+    background-color: var(--page);
+    color: var(--ink);
+    font-family: var(--font-ui);
+    font-size: 14px;
+    line-height: 1.65;
+  }
+  body {
+    margin: 0;
+    min-height: 100dvh;
+  }
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    line-height: 1.35;
+    text-wrap: balance;
+  }
+  :focus-visible {
+    outline: 2px solid var(--gold);
+    outline-offset: 2px;
+  }
+  button,
+  [role="button"] {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: not-allowed;
+  }
+}
+
+@layer components {
+  /* A content card: white on the light page, dark card on near-black. */
+  .surface,
+  .glass {
+    background: var(--card);
+    border: 1px solid var(--line);
+    box-shadow: var(--shadow);
+  }
+  .btn-gold {
+    background: linear-gradient(180deg, #d4b67a 0%, var(--gold) 45%, var(--gold-deep) 100%);
+    color: #fff;
+    border-color: var(--gold-deep);
+    text-shadow: 0 1px 0 rgb(0 0 0 / 0.15);
+  }
+  /* the mockup's active item: a gold bar with a lit edge */
+  .nav-active {
+    background: linear-gradient(270deg, #c9a46a 0%, #a8834f 55%, #6f5534 100%);
+    color: #fff7e6;
+    box-shadow: inset 0 1px 0 rgb(255 240 200 / 0.45), 0 4px 14px rgb(0 0 0 / 0.35);
+  }
+  /* an image drawn for one theme only (the owner's assets come in a light and a dark cut) */
+  .only-light {
+    display: var(--light-only) !important;
+  }
+  .only-dark {
+    display: var(--dark-only) !important;
+  }
+  /* the owner's photos melt into the page instead of ending on a hard edge */
+  .fade-right {
+    -webkit-mask-image: linear-gradient(to right, #000 62%, transparent 100%);
+    mask-image: linear-gradient(to right, #000 62%, transparent 100%);
+  }
+  .fade-top {
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 38%), linear-gradient(to right, transparent 0%, #000 12%);
+    -webkit-mask-composite: source-in;
+    mask-image: linear-gradient(to bottom, transparent 0%, #000 38%), linear-gradient(to right, transparent 0%, #000 12%);
+    mask-composite: intersect;
+  }
+  .fade-all {
+    -webkit-mask-image: radial-gradient(50% 50% at 50% 55%, #000 50%, transparent 100%);
+    mask-image: radial-gradient(50% 50% at 50% 55%, #000 50%, transparent 100%);
+  }
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}

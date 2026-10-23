@@ -1,12 +1,13 @@
 # Office WhatsApp System (Hazem) - Test/Staging stack (TASK 01)
-# Decisions: docs/decisions/DECISIONS-v1.3.md
+# Decisions: docs/decisions/DECISIONS-v1.8.md
 #
-# Core services start with `docker compose up -d`: postgres, redis, garage, n8n and the
-# .NET backend (api).
-# Optional profiles: panel (Appsmith), tests (meta-stub for hazem-e2e), tunnel (Cloudflare Quick Tunnel),
+# Core services start with `docker compose up -d`: postgres, redis, garage, n8n, the
+# .NET backend (api) and the panel (web, TASK 07a; Appsmith was removed).
+# Optional profiles: tests (meta-stub for hazem-e2e), tunnel (Cloudflare Quick Tunnel),
 #                    tunnel-named (Cloudflare Named Tunnel), tools (one-off commands).
 # Every port is bound to 127.0.0.1 only. n8n is the only service ever exposed
-# to the internet, and only through the tunnel profile. The api has no host port at all.
+# to the internet, and only through the tunnel profile. The api has no host port at all;
+# the panel reaches it through the web container (/api/panel only).
 
 name: ${COMPOSE_PROJECT_NAME:-office}
 
@@ -202,6 +203,16 @@ services:
       Hazem__OpenAiApiKey: ${HAZEM_OPENAI_API_KEY:-}
       Hazem__OpenAiModel: ${OPENAI_MODEL:-gpt-4.1-mini}
       Hazem__OpenAiBaseUrl: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      # v1.9 (T-23): sign-up, e-mail codes and the authenticator. Without PANEL_SECRET_KEY and
+      # SMTP_HOST/SMTP_FROM the sign-up page says it is not available; sign-in still works.
+      Panel__SecretKey: ${PANEL_SECRET_KEY:-}
+      Mail__Host: ${SMTP_HOST:-}
+      Mail__Port: ${SMTP_PORT:-587}
+      Mail__Ssl: ${SMTP_SSL:-true}
+      Mail__Username: ${SMTP_USERNAME:-}
+      Mail__Password: ${SMTP_PASSWORD:-}
+      Mail__From: ${SMTP_FROM:-}
+      Mail__FromName: ${SMTP_FROM_NAME:-}
     healthcheck:
       # Process only; /health/ready (database and migration 0003) is checked by the healthcheck job.
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health/live | grep -q Healthy"]
@@ -229,21 +240,25 @@ services:
       retries: 12
     networks: [office_net]
 
-  # Panel: unused until the React panel (TASK 07, DECISIONS v1.3 T-11).
-  appsmith:
-    image: appsmith/appsmith-ce:v2.4.3
-    profiles: ["panel"]
+  # The panel (TASK 07a, DECISIONS v1.8 T-11): React served by unprivileged nginx, which also
+  # forwards /api/panel (and nothing else under /api) to the api. Port 8080 on this machine only.
+  web:
+    build:
+      context: ./web
+    image: office-web:local
+    pull_policy: build
     restart: unless-stopped
     depends_on:
-      preflight:
-        condition: service_completed_successfully
-    environment:
-      TZ: Africa/Cairo
-      APPSMITH_DISABLE_TELEMETRY: "true"
-    volumes:
-      - appsmith_data:/appsmith-stacks
+      api:
+        condition: service_healthy
     ports:
-      - "127.0.0.1:8080:80"
+      - "127.0.0.1:8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz | grep -q ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
     networks: [office_net]
 
   # Cloudflare Quick Tunnel: no account needed, random https://*.trycloudflare.com
@@ -319,4 +334,3 @@ volumes:
   garage_meta:
   garage_data:
   n8n_data:
-  appsmith_data:
