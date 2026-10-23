@@ -224,6 +224,21 @@ public static class PanelEndpoints
             var type = ClientFileTypes.Safe(file.ContentType);
             ctx.Response.Headers.ContentSecurityPolicy = "sandbox; default-src 'none'; img-src 'self'; media-src 'self'";
             var name = ClientFileTypes.Name(index, file.Filename, type);
+            // Safari plays audio and video only from byte ranges: those (WhatsApp keeps them under 16 MB)
+            // are read whole so a range can be answered. Everything else streams.
+            if ((type.StartsWith("audio/", StringComparison.Ordinal) || type.StartsWith("video/", StringComparison.Ordinal))
+                && file.Length is > 0 and <= ClientFileTypes.MaxRanged)
+            {
+                var whole = new MemoryStream((int)file.Length.Value);
+                await using (file.Content)
+                {
+                    await file.Content.CopyToAsync(whole, ct);
+                }
+
+                whole.Position = 0;
+                return Results.Stream(whole, type, null, enableRangeProcessing: true);
+            }
+
             return Results.Stream(file.Content, type, ClientFileTypes.Inline(type) ? null : name, enableRangeProcessing: false);
         }).RequireAuthorization(PanelAuth.Policy(Permissions.TasksViewOwn));
 
@@ -476,6 +491,9 @@ public sealed record UserDto(Guid Id, string Username, string DisplayName, strin
 /// origin (HTML, SVG, scripts) is only ever downloaded.</summary>
 public static class ClientFileTypes
 {
+    /// <summary>Audio and video up to this size are answered in byte ranges (Safari needs them).</summary>
+    public const long MaxRanged = 32L * 1024 * 1024;
+
     // A PDF downloads: the browser's PDF viewer does not run in a sandboxed page.
     private static readonly string[] InlinePrefixes = ["image/jpeg", "image/png", "image/webp", "image/gif", "audio/", "video/"];
 

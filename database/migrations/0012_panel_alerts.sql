@@ -39,7 +39,9 @@ ALTER TABLE hazem.panel_audit ADD CONSTRAINT panel_audit_target_type_check
   CHECK (target_type IN ('user', 'task', 'text', 'list', 'conversation'));
 
 ALTER TABLE hazem.approved_texts ADD COLUMN created_at timestamptz;
+ALTER TABLE hazem.approved_texts DISABLE TRIGGER trg_approved_texts_updated_at;
 UPDATE hazem.approved_texts SET created_at = updated_at;
+ALTER TABLE hazem.approved_texts ENABLE TRIGGER trg_approved_texts_updated_at;
 ALTER TABLE hazem.approved_texts ALTER COLUMN created_at SET NOT NULL, ALTER COLUMN created_at SET DEFAULT now();
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON hazem.panel_alerts, hazem.panel_alert_reads TO office_api;

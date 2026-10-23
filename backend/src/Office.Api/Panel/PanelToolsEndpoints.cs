@@ -50,8 +50,9 @@ public static partial class PanelToolsEndpoints
         // whole list only when every line is valid.
         lists.MapPost("/import", async (ListImportRequest? body, HttpContext ctx, PanelTools tools, CancellationToken ct) =>
         {
-            // nginx lets 1 MB through for this address only; about 10,000 lines of Arabic names.
-            if (body?.Kind is null || !ListImporter.Kinds.Contains(body.Kind) || body.Csv is not { Length: > 0 and <= 450_000 })
+            // nginx and Kestrel let 1 MB through; 300,000 characters of Arabic (2 bytes each) fit, about
+            // 6,000 lines. The panel says so before sending a bigger file.
+            if (body?.Kind is null || !ListImporter.Kinds.Contains(body.Kind) || body.Csv is not { Length: > 0 and <= 300_000 })
             {
                 return Results.BadRequest(new { error = "invalid" });
             }

@@ -39,6 +39,7 @@ public sealed partial class PanelTools(HazemDbContext db, ListImporter importer,
     public const string ErrTooLong = "too_long";
     public const string ErrPlaceholder = "placeholder";
     public const string ErrUnknownText = "unknown_text";
+    public const string ErrUnknownStaff = "unknown_staff";
 
     // ---------- lists (B-14) ----------
 
@@ -83,12 +84,17 @@ public sealed partial class PanelTools(HazemDbContext db, ListImporter importer,
             return ErrTooLong;
         }
 
+        // One of the office's staff, picked from the list (a typo never makes a new staff member;
+        // the CSV import is where new names come from).
         Guid? staffId = null;
         if (kind == "existing_client" && !string.IsNullOrWhiteSpace(staffName))
         {
             var staff = staffName.Trim();
-            await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO hazem.staff (name) VALUES ({staff}) ON CONFLICT (name) DO NOTHING", ct);
-            staffId = await db.Staff.Where(s => s.Name == staff).Select(s => s.Id).SingleAsync(ct);
+            staffId = await db.Staff.Where(s => s.Name == staff && s.Active).Select(s => (Guid?)s.Id).FirstOrDefaultAsync(ct);
+            if (staffId is null)
+            {
+                return ErrUnknownStaff;
+            }
         }
 
         var id = await db.Database.SqlQuery<Guid>($"""

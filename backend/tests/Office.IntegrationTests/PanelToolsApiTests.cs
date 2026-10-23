@@ -174,6 +174,19 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal("client-file-2.jpg", r.Content.Headers.ContentDisposition.FileName?.Trim('"'));
     }
 
+    [Fact]
+    public async Task A_video_answers_a_byte_range_so_it_plays_on_an_iphone()
+    {
+        var task = await NewTask(staff: _staffA, mime: "video/mp4");
+        var boss = await SignIn("boss");
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/panel/tasks/{task}/files/1");
+        request.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(1, 2);
+        var r = await boss.SendAsync(request, Ct);
+        Assert.Equal(HttpStatusCode.PartialContent, r.StatusCode);
+        Assert.Equal([2, 3], await r.Content.ReadAsByteArrayAsync(Ct));
+        Assert.Null(r.Content.Headers.ContentDisposition); // plays in the page
+    }
+
     // ---------- lists and unmuting ----------
 
     [Fact]
@@ -184,6 +197,11 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
             new { kind = "existing_client", phone = "0100 123 4567", name = "محمد علي", staff_name = "ياسمين" }, Ct)).StatusCode);
         Assert.Equal("invalid_phone", (string)(await (await lawyer.PostAsJsonAsync("/api/panel/lists",
             new { kind = "blocked", phone = "12" }, Ct)).Content.ReadFromJsonAsync<JsonNode>(Ct))!["error"]!);
+        // A name that is not one of the staff makes no new staff member.
+        var staffBefore = await db.ScalarAsync<long>("SELECT count(*) FROM hazem.staff");
+        Assert.Equal("unknown_staff", (string)(await (await lawyer.PostAsJsonAsync("/api/panel/lists",
+            new { kind = "existing_client", phone = "0100 123 4568", staff_name = "ياسمبن" }, Ct)).Content.ReadFromJsonAsync<JsonNode>(Ct))!["error"]!);
+        Assert.Equal(staffBefore, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.staff"));
         var import = await lawyer.PostAsJsonAsync("/api/panel/lists/import",
             new { kind = "blocked", csv = "name,phone\nسبام,01011112222\n,bad", replace = false }, Ct);
         var imported = (await import.Content.ReadFromJsonAsync<JsonNode>(Ct))!;
