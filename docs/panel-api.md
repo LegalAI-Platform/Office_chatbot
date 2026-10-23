@@ -58,6 +58,28 @@ server, these answer `503 { error: "not_configured" }`.
 | `POST /auth/2fa/disable` | `{ password, code }` (app or recovery code) → `204`. Every other session ends |
 | `POST /auth/2fa/recovery-codes` | `{ code }` → ten new codes; the old ones stop working |
 
+## Alerts, files and the office's tools (TASK 07c, DECISIONS v1.11)
+
+| Endpoint | Permission | What |
+|---|---|---|
+| `GET /alerts` | view_own | `{ unread, items[30] }`: the alerts of tasks this person may see (overdue, urgent, a client asking for someone), newest first, with `read` |
+| `POST /alerts/read` | view_own | `{ ids }` or `{ ids: null }` (all) |
+| `GET /tasks/{id}/files/{n}` | view_own (and may see the task) | the file of the task turn's n-th message, from storage (read-only key). Pictures, sound, video and PDF open in the browser; anything else downloads as `client-file-<n>.<ext>`. `Content-Security-Policy: sandbox`, never cached. Every opening → `panel_audit task.file_open` (no file name) |
+| `GET /lists?kind&q&page` | lists.manage | `{ total, items }`, 50 a page; `q` = part of the name or 3+ last digits |
+| `POST /lists` | lists.manage | `{ kind, phone, name, staff_name, note }` (adds or updates by kind + number) |
+| `DELETE /lists/{id}` | lists.manage | |
+| `POST /lists/import` | lists.manage | `{ kind, csv, replace }` → `{ imported, rejected[] }` (as `import-lists`) |
+| `GET /conversations/muted` | conversations.unmute | the muted conversations (S-01) |
+| `POST /conversations/{wa_id}/unmute` | conversations.unmute | back to Hazem |
+| `GET /texts` · `GET /texts/{key}` | texts.manage | the active version of each text · every version of one |
+| `POST /texts/{key}` | texts.manage | `{ text }` → a new active version; `too_long` (over its 300/600, B-21), `placeholder` ({{…}}) |
+| `POST /texts/{key}/versions/{v}/activate` | texts.manage | an earlier version back |
+| `GET /reports?month=YYYY-MM` | reports.view | the month (Cairo): tasks by type and staff member, done on time, new clients by source, topic and kind |
+
+Alerts are made every minute by the api (tasks past their due time become `overdue` first) and
+e-mailed once to everyone who may see the task; the e-mail holds the task's kind, due time and a
+link, never the client's name, number or words.
+
 ## Chatwoot (TASK 07b, T-24)
 
 | Endpoint | Permission | What |

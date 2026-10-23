@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link, NavLink, Outlet, useNavigate } from "react-router";
+import { useAlerts, useMarkAlertsRead } from "../shared/api/alerts";
 import { useDashboard } from "../shared/api/dashboard";
 import { can, useLogout, useMe } from "../shared/api/session";
-import { label, ROLES } from "../shared/lib/labels";
+import { ALERT_KINDS, label, ROLES, TASK_TYPES } from "../shared/lib/labels";
 import { setTheme, useTheme } from "../shared/lib/theme";
-import { cairoLongDate, cairoTime } from "../shared/lib/time";
+import { cairoLongDate, cairoTime, timeAgo } from "../shared/lib/time";
 import { Icon } from "../shared/ui/Icon";
 import { OwnerImg, type OwnerImage } from "../shared/ui/Owner";
 
@@ -29,6 +30,9 @@ export function Layout() {
     { to: "/reports", text: "التقارير", short: "التقارير", icon: "nav_reports" },
     { to: "/settings", text: "الإعدادات", short: "الإعدادات", icon: "nav_settings" },
   ];
+  // TASK 07c: the reports are for the manager and the lawyer; the others never see the entry.
+  const { data: me } = useMe();
+  const shownItems = items.filter((i) => i.to !== "/reports" || can(me, "reports.view"));
   const phoneTabs = items.filter((i) => ["/", "/tasks", "/appointments", "/chats", "/settings"].includes(i.to));
 
   return (
@@ -45,7 +49,7 @@ export function Layout() {
           <p className="text-[12px] text-side-ink/80">للمحاماة والاستشارات القانونية</p>
         </div>
         <nav aria-label="التنقل" className="relative z-10 grid gap-1.5 px-2.5">
-          {items.map((i) => (
+          {shownItems.map((i) => (
             <NavLink key={i.to} to={i.to} end={i.end}
               className={({ isActive }) => `flex min-h-[3.1rem] items-center gap-3.5 whitespace-nowrap rounded-[10px] px-4 text-[15px] transition ${isActive ? "nav-active font-bold" : "text-side-ink hover:bg-white/5"}`}>
               <NavIcon icon={i.icon} />
@@ -110,17 +114,79 @@ function TopBar({ late }: { late: number }) {
         </Link>
         <Clock />
         <span className="hidden h-9 w-px bg-line md:block" aria-hidden />
-        <Link to="/tasks?state=overdue" className="relative grid size-11 shrink-0 place-items-center rounded-full text-ink hover:bg-muted"
-          aria-label={late > 0 ? `${late} مهام متأخرة` : "التنبيهات"}>
-          <Icon name="bell" className="size-7" />
-          {late > 0 ? (
-            <span className="absolute top-0 right-0 grid size-[1.35rem] place-items-center rounded-full bg-red text-[12px] font-bold text-white ring-2 ring-top">{late > 9 ? "9+" : late}</span>
-          ) : null}
-        </Link>
+        <Bell late={late} />
         <Search />
         <UserMenu />
       </div>
     </header>
+  );
+}
+
+/** TASK 07c: the office's alerts (overdue, urgent, a client asking for someone) that this person may see. */
+function Bell({ late }: { late: number }) {
+  const alerts = useAlerts();
+  const read = useMarkAlertsRead();
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent | KeyboardEvent) => {
+      if (e instanceof KeyboardEvent ? e.key === "Escape" : !box.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", close);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", close);
+    };
+  }, [open]);
+  const unread = alerts.data?.unread ?? 0;
+  const items = alerts.data?.items ?? [];
+  const now = new Date();
+
+  return (
+    <div ref={box} className="relative shrink-0">
+      <button type="button" aria-expanded={open} aria-haspopup="dialog" onClick={() => setOpen((v) => !v)}
+        className="relative grid size-11 place-items-center rounded-full text-ink hover:bg-muted"
+        aria-label={unread > 0 ? `${unread} تنبيهات جديدة` : late > 0 ? `${late} مهام متأخرة` : "التنبيهات"}>
+        <Icon name="bell" className="size-7" />
+        {unread > 0 ? (
+          <span className="absolute top-0 right-0 grid size-[1.35rem] place-items-center rounded-full bg-red text-[12px] font-bold text-white ring-2 ring-top">{unread > 9 ? "9+" : unread}</span>
+        ) : null}
+      </button>
+      {open ? (
+        <div role="dialog" aria-label="التنبيهات" className="surface absolute top-[calc(100%+0.5rem)] left-0 z-30 grid w-[min(22rem,calc(100vw-2rem))] gap-1 rounded-xl p-2">
+          <div className="flex items-center justify-between px-2 py-1">
+            <span className="font-bold">التنبيهات</span>
+            {unread > 0 ? (
+              <button type="button" className="text-xs font-semibold text-gold-ink hover:underline" onClick={() => read.mutate(undefined)}>
+                علّم الكل مقروء
+              </button>
+            ) : null}
+          </div>
+          {items.length === 0 ? (
+            <p className="px-2 py-6 text-center text-sm text-ink-soft">مفيش تنبيهات.</p>
+          ) : (
+            <ul className="grid max-h-[60vh] gap-0.5 overflow-y-auto">
+              {items.map((a) => (
+                <li key={a.id}>
+                  <button type="button" onClick={() => { if (!a.read) read.mutate([a.id]); setOpen(false); navigate(`/tasks/${a.task_id}`); }}
+                    className={`grid w-full gap-0.5 rounded-lg px-2.5 py-2 text-start hover:bg-muted ${a.read ? "opacity-70" : ""}`}>
+                    <span className="flex items-center gap-2 text-sm font-bold">
+                      {!a.read ? <span className="size-2 shrink-0 rounded-full bg-red" aria-label="جديد" role="img" /> : null}
+                      {label(ALERT_KINDS, a.kind)}
+                      <span className="ms-auto text-[11px] font-normal text-ink-soft">{timeAgo(a.created_at, now)}</span>
+                    </span>
+                    <span className="truncate text-xs text-ink-soft">{label(TASK_TYPES, a.task_type)} · {a.client_name ?? "رقم من غير اسم"}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
+    </div>
   );
 }
 

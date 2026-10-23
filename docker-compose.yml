@@ -1,5 +1,5 @@
 # Office WhatsApp System (Hazem) - Test/Staging stack (TASK 01)
-# Decisions: docs/decisions/DECISIONS-v1.10.md
+# Decisions: docs/decisions/DECISIONS-v1.11.md
 #
 # Core services start with `docker compose up -d`: postgres, redis, garage, n8n, the
 # .NET backend (api), the panel (web, TASK 07a; Appsmith was removed) and Chatwoot for the
@@ -257,6 +257,12 @@ services:
       Mail__Password: ${SMTP_PASSWORD:-}
       Mail__From: ${SMTP_FROM:-}
       Mail__FromName: ${SMTP_FROM_NAME:-}
+      # TASK 07c: client files for the panel, read-only (its own key; nothing on backups).
+      S3__Endpoint: http://garage:3900
+      S3__Region: ${S3_REGION}
+      S3__AccessKeyId: ${S3_API_ACCESS_KEY_ID}
+      S3__SecretAccessKey: ${S3_API_SECRET_ACCESS_KEY}
+      Panel__PublicUrl: ${PANEL_URL:-http://127.0.0.1:8080}
       # TASK 07b (T-24): Chatwoot on office_net. Empty tokens = the link is off.
       Chatwoot__BaseUrl: http://chatwoot:3000
       Chatwoot__PublicUrl: ${CHATWOOT_URL:-http://127.0.0.1:3000}

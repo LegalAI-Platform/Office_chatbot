@@ -78,7 +78,30 @@ account out. `list-users` shows every account (never a password or a hash).
 the record of what they did) and can be enabled again. The last active manager cannot be
 disabled or demoted.
 
+## Alerts (TASK 07c)
+
+The bell in the top bar shows the alerts a person may see: a task past its due time, an urgent
+task, a client asking for someone. Each one also goes by e-mail (the no-reply sender) once, to the
+manager, the lawyer and the staff member of the task (everyone, if it is unassigned). The e-mail
+says only the kind of task and its due time, with a link to the panel. Tasks become overdue by
+themselves every minute.
+
+## The office's tools (TASK 07c; the manager and the lawyer)
+
+- **الإعدادات → قوايم المكتب:** add or remove a number, or import a CSV (`name,phone[,staff]`) into
+  the current clients, the lawyer's own list or the blocked. "Replace" swaps a whole list only
+  when every line is valid. The manager also sees the muted conversations here and can give one
+  back to Hazem.
+- **الإعدادات → نصوص حازم:** change what Hazem says, word for word. Each change is a new version,
+  used from the next message; «النسخ القديمة» brings an earlier one back. The limit of each text
+  (300 or 600 characters) holds.
+- **التقارير:** the month's tasks (by type, by staff member, done on time) and new clients (by
+  source, topic and kind).
+- **A client's file** (a picture, an ID, a contract): «افتح» on the task. Whoever may see the task
+  may open it; every opening is recorded.
+
 ## What is recorded
 
-`hazem.panel_audit`: sign-ins, failed attempts, account changes, task changes and assignments —
+`hazem.panel_audit`: sign-ins, failed attempts, account changes, task changes and assignments,
+opened files, list changes, text versions and unmuting —
 who, what and when. Never a password, never a client's words.

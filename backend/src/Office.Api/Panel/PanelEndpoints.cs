@@ -205,6 +205,28 @@ public static class PanelEndpoints
                 .RequireAuthorization(PanelAuth.Policy(Permissions.TasksUpdate));
         }
 
+        // TASK 07c: a file the client sent, for whoever may see the task. Shown in the browser only
+        // when it is a picture, a sound, a video or a PDF; anything else downloads. Never cached.
+        tasks.MapGet("/{id:guid}/files/{index:int}", async (Guid id, int index, HttpContext ctx, PanelTasks use, IClientFiles files,
+            CancellationToken ct) =>
+        {
+            if (!files.Configured)
+            {
+                return Results.Json(new { error = "not_configured" }, statusCode: StatusCodes.Status503ServiceUnavailable);
+            }
+
+            var r = await use.FileAsync(ctx.CurrentUser().AsViewer(), id, index, ct);
+            if (r.Outcome != PanelOutcome.Ok || await files.OpenAsync(r.Value!, ct) is not { } file)
+            {
+                return Results.NotFound(new { error = "not_found" });
+            }
+
+            var type = ClientFileTypes.Safe(file.ContentType);
+            ctx.Response.Headers.ContentSecurityPolicy = "sandbox; default-src 'none'; img-src 'self'; media-src 'self'";
+            var name = ClientFileTypes.Name(index, file.Filename, type);
+            return Results.Stream(file.Content, type, ClientFileTypes.Inline(type) ? null : name, enableRangeProcessing: false);
+        }).RequireAuthorization(PanelAuth.Policy(Permissions.TasksViewOwn));
+
         tasks.MapPost("/{id:guid}/assign", async (Guid id, AssignRequest? body, HttpContext ctx, PanelTasks use, CancellationToken ct) =>
             Answer(await use.AssignAsync(ctx.CurrentUser().AsViewer(), id, body?.StaffId, ct)))
             .RequireAuthorization(PanelAuth.Policy(Permissions.TasksAssign));
@@ -213,6 +235,28 @@ public static class PanelEndpoints
         work.MapGet("/dashboard", async (HttpContext ctx, PanelTasks use, CancellationToken ct) =>
             Results.Ok(DashboardDto.From(await use.DashboardAsync(ctx.CurrentUser().AsViewer(), ct))))
             .RequireAuthorization(PanelAuth.Policy(Permissions.TasksViewOwn));
+
+        // TASK 07c: the bell. Only what the person may see (their tasks and the unassigned, or all).
+        work.MapGet("/alerts", async (HttpContext ctx, PanelAlerts alerts, CancellationToken ct) =>
+        {
+            var (items, unread) = await alerts.ListAsync(ctx.CurrentUser().AsViewer(), ct);
+            return Results.Ok(new
+            {
+                unread,
+                items = items.Select(a => new AlertDto(a.Id, a.Kind, a.TaskId, a.TaskType, a.ClientName, a.DueAt, a.CreatedAt, a.Read)),
+            });
+        }).RequireAuthorization(PanelAuth.Policy(Permissions.TasksViewOwn));
+
+        work.MapPost("/alerts/read", async (AlertsReadRequest? body, HttpContext ctx, PanelAlerts alerts, CancellationToken ct) =>
+        {
+            if (body?.Ids is { Count: > 100 })
+            {
+                return Results.BadRequest(new { error = "invalid" });
+            }
+
+            await alerts.MarkReadAsync(ctx.CurrentUser().AsViewer(), body?.Ids, ct);
+            return Results.NoContent();
+        }).RequireAuthorization(PanelAuth.Policy(Permissions.TasksViewOwn));
 
         work.MapGet("/staff", async (PanelTasks use, CancellationToken ct) =>
             Results.Ok((await use.StaffAsync(ct)).Select(s => new StaffDto(s.Id, s.Name))))
@@ -362,12 +406,18 @@ public sealed record DisableTwoFactorRequest(string? Password, string? Code);
 
 public sealed record ApproveRequest(string? Role, string? StaffName);
 
+/// <summary>Null ids: every alert the person may see.</summary>
+public sealed record AlertsReadRequest(IReadOnlyList<long>? Ids);
+
 // ---------- responses ----------
 
 public sealed record MeDto(Guid Id, string Username, string DisplayName, string Email, string Role,
     IReadOnlyList<string> Permissions, bool MustChangePassword, bool TwoFactor, bool TwoFactorRequired);
 
 public sealed record StaffDto(Guid Id, string Name);
+
+public sealed record AlertDto(long Id, string Kind, Guid TaskId, string TaskType, string? ClientName, DateTimeOffset DueAt,
+    DateTimeOffset CreatedAt, bool Read);
 
 public sealed record DashboardTaskDto(Guid Id, string Type, string State, DateTimeOffset DueAt, DateTimeOffset CreatedAt,
     string? ClientName, string? StaffName, bool Late);
@@ -420,4 +470,27 @@ public sealed record UserDto(Guid Id, string Username, string DisplayName, strin
     public static UserDto From(PanelUser u, DateTimeOffset now) => new(u.Id, u.Username, u.DisplayName, u.Email,
         u.Pending ? null : u.Role, u.StaffId is { } s ? new StaffDto(s, u.StaffName ?? "") : null, u.Active, u.IsLocked(now),
         u.MustChangePassword, u.LastLoginAt, u.Pending, u.EmailVerifiedAt is not null, u.TotpEnabled, u.CreatedAt);
+}
+
+/// <summary>What a client's file may be shown as (TASK 07c): anything that could run in the panel's
+/// origin (HTML, SVG, scripts) is only ever downloaded.</summary>
+public static class ClientFileTypes
+{
+    // A PDF downloads: the browser's PDF viewer does not run in a sandboxed page.
+    private static readonly string[] InlinePrefixes = ["image/jpeg", "image/png", "image/webp", "image/gif", "audio/", "video/"];
+
+    public static string Safe(string type)
+    {
+        var t = type.Split(';')[0].Trim().ToLowerInvariant();
+        return t.Length is > 0 and <= 100 && !t.Contains('\n') ? t : "application/octet-stream";
+    }
+
+    public static bool Inline(string type) => InlinePrefixes.Any(p => type.StartsWith(p, StringComparison.Ordinal));
+
+    /// <summary>A download name without the client's own file name (it may hold a name or a case number).</summary>
+    public static string Name(int index, string? filename, string type)
+    {
+        var ext = Path.GetExtension(filename ?? "") is { Length: > 1 and <= 6 } e && e.Skip(1).All(char.IsAsciiLetterOrDigit) ? e : "";
+        return $"client-file-{index + 1}{ext}";
+    }
 }

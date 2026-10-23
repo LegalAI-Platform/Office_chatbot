@@ -29,7 +29,7 @@ public sealed class ChatwootApiTests(TestDatabase db) : IAsyncLifetime
     {
         await db.ExecAsync("""
             TRUNCATE hazem.panel_audit; DELETE FROM hazem.panel_users;
-            TRUNCATE hazem.turns, hazem.send_results, hazem.turn_replies, hazem.classifications, hazem.staff_tasks, hazem.list_entries;
+            TRUNCATE hazem.turns, hazem.send_results, hazem.turn_replies, hazem.classifications, hazem.panel_alerts, hazem.panel_alert_reads, hazem.staff_tasks, hazem.list_entries;
             TRUNCATE hazem.chatwoot_threads, hazem.chatwoot_turns, hazem.chatwoot_replies;
             DELETE FROM hazem.staff; DELETE FROM hazem.intakes; DELETE FROM hazem.conversations; DELETE FROM hazem.persons;
             UPDATE hazem.settings SET value = to_char((now() - interval '1 minute') AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')

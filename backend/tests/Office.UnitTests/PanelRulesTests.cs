@@ -7,8 +7,8 @@ public sealed class PanelRulesTests
 {
     // The whole table, cell by cell: a change to a role must change this test on purpose.
     [Theory]
-    [InlineData("manager", "tasks.view_own tasks.view_all tasks.update tasks.assign users.manage account.self")]
-    [InlineData("lawyer", "tasks.view_own tasks.view_all tasks.update tasks.assign account.self")]
+    [InlineData("manager", "tasks.view_own tasks.view_all tasks.update tasks.assign users.manage account.self lists.manage texts.manage reports.view conversations.unmute")]
+    [InlineData("lawyer", "tasks.view_own tasks.view_all tasks.update tasks.assign account.self lists.manage texts.manage reports.view")]
     [InlineData("staff", "tasks.view_own tasks.update account.self")]
     public void Each_role_has_exactly_its_permissions(string role, string expected)
     {
@@ -72,4 +72,17 @@ public sealed class PanelRulesTests
     [InlineData(null, "")]
     public void User_names_are_trimmed_and_lower_case(string? raw, string expected) =>
         Assert.Equal(expected, PanelAccounts.NormalizeUsername(raw));
+
+    // The API has no culture data (InvariantGlobalization): the alert e-mail's time is written by hand.
+    [Theory]
+    [InlineData(15, 5, "الجمعة 23 أكتوبر، 3:05 م")]
+    [InlineData(0, 30, "الجمعة 23 أكتوبر، 12:30 ص")]
+    [InlineData(12, 0, "الجمعة 23 أكتوبر، 12:00 م")]
+    public void The_alert_time_is_in_arabic_without_culture_data(int hour, int minute, string expected) =>
+        Assert.Equal(expected, PanelMails.ArabicTime(new DateTimeOffset(2026, 10, 23, hour, minute, 0, TimeSpan.FromHours(3))));
+
+    [Fact]
+    public void An_alert_email_builds_with_no_culture_data() =>
+        Assert.Contains("المطلوب قبل:", PanelMails.Alert("a@example.test",
+            new AlertToMail(1, AlertKinds.Urgent, Guid.NewGuid(), "urgent_request", DateTimeOffset.UtcNow, null), "http://x").Text);
 }

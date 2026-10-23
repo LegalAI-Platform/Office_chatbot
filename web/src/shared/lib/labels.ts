@@ -94,3 +94,17 @@ export function matterLabel(type?: string, subtype?: string): string {
   const main = label(MATTER_TYPES, type);
   return subtype ? `${main} / ${label(MATTER_SUBTYPES, subtype)}` : main;
 }
+
+/** TASK 07c: the bell's alerts. */
+export const ALERT_KINDS: Record<string, string> = {
+  task_overdue: "مهمة اتأخرت",
+  task_urgent: "طلب عاجل",
+  task_human: "عميل عايز يكلم حد",
+};
+
+/** B-14: the office's lists. */
+export const LIST_KINDS: Record<string, string> = {
+  existing_client: "الموكلين الحاليين",
+  lawyer_direct: "قايمة الأستاذ المباشرة",
+  blocked: "الممنوعين",
+};

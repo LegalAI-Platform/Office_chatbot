@@ -29,6 +29,7 @@ public sealed class ApiFactory(TestDatabase db, TimeProvider? clock = null) : We
     public const string OpenAiKey = "sk-integration-test-not-a-real-key";
     public MemoryLogs Logs { get; } = new();
     public FakeMailer Mail { get; } = new();
+    public FakeClientFiles Files { get; } = new();
     public const string PanelSecretKey = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff";
 
     /// <summary>False: PANEL_SECRET_KEY and the mail server are not set (sign-up and 2FA unavailable).</summary>
@@ -57,6 +58,7 @@ public sealed class ApiFactory(TestDatabase db, TimeProvider? clock = null) : We
         builder.UseSetting("Panel:SecretKey", SignupConfigured ? PanelSecretKey : "");
         builder.UseSetting("Panel:ManagersNeedTwoFactor", ManagersNeedTwoFactor ? "true" : "false");
         builder.UseSetting("Chatwoot:RunWorker", "false");
+        builder.UseSetting("Alerts:RunWorker", "false");
         builder.UseSetting("Chatwoot:BaseUrl", "http://chatwoot.test");
         builder.UseSetting("Chatwoot:PublicUrl", "http://127.0.0.1:3000");
         builder.UseSetting("Chatwoot:BotToken", ChatwootConfigured ? "integration-test-chatwoot-bot-token" : "");
@@ -69,6 +71,7 @@ public sealed class ApiFactory(TestDatabase db, TimeProvider? clock = null) : We
             services.AddHttpClient(N8nWhatsAppGateway.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => N8n);
             services.AddHttpClient(OpenAiIntentClassifier.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => OpenAi);
             services.AddSingleton<IPanelMailer>(Mail);
+            services.AddSingleton<IClientFiles>(Files);
             services.AddHttpClient(Office.Infrastructure.Chatwoot.ChatwootApi.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => Chatwoot);
             if (clock is not null)
             {
@@ -255,6 +258,18 @@ public sealed class FakeChatwoot : HttpMessageHandler
             Content = new StringContent(answer.ToJsonString(), Encoding.UTF8, "application/json"),
         };
     }
+}
+
+/// <summary>Storage at the boundary (TASK 07c): the files a test put there, by bucket and key.</summary>
+public sealed class FakeClientFiles : IClientFiles
+{
+    public ConcurrentDictionary<string, (byte[] Bytes, string Type)> Objects { get; } = new();
+    public bool Configured => true;
+
+    public Task<ClientFile?> OpenAsync(ClientFileRef file, CancellationToken ct) =>
+        Task.FromResult(Objects.TryGetValue($"{file.Bucket}/{file.Key}", out var o)
+            ? new ClientFile(new MemoryStream(o.Bytes), file.MimeType ?? o.Type, o.Bytes.Length, file.Filename)
+            : null);
 }
 
 /// <summary>The no-reply mail server: keeps every mail so a test can read the code a person would get.</summary>

@@ -56,7 +56,7 @@ function Detail({ task }: { task: TaskDetail }) {
             نوع الموضوع: <strong className="text-ink">{matterLabel(task.matter_type, task.matter_subtype)}</strong>. ده
             تصنيف حازم، فاقرا كلام العميل نفسه قبل ما تعتمد عليه.
           </p>
-          <ClientWords words={task.client_words} />
+          <ClientWords taskId={task.id} words={task.client_words} />
         </Card>
 
         <div className="grid content-start gap-4">
@@ -83,7 +83,7 @@ function Detail({ task }: { task: TaskDetail }) {
 const hazemState = (s?: string) =>
   s === "human_handoff" ? "ساكت، موظف ماسك المحادثة" : s === "muted" ? "متكتم" : s === "ignored" ? "جروب، متجاهل" : "شغال";
 
-function ClientWords({ words }: { words: ClientWord[] }) {
+function ClientWords({ taskId, words }: { taskId: string; words: ClientWord[] }) {
   if (words.length === 0) return <p className="text-sm text-ink-soft">مفيش كلام متسجل للمهمة دي.</p>;
   return (
     <ol className="grid gap-2">
@@ -96,8 +96,15 @@ function ClientWords({ words }: { words: ClientWord[] }) {
               <span className="text-xs font-semibold text-ink-soft">
                 {media}
                 {w.transcript ? " · التفريغ" : ""}
-                {w.type !== "audio" && w.type !== "text" ? " · فتح الملفات من اللوحة جاي قريب" : ""}
               </span>
+            ) : null}
+            {w.media_status === "stored" ? (
+              // TASK 07c: opened by the api for whoever may see this task; every opening is recorded.
+              <a href={`/api/panel/tasks/${taskId}/files/${i}`} target="_blank" rel="noopener noreferrer"
+                className="inline-flex w-fit items-center gap-1.5 text-sm font-semibold text-gold-ink hover:underline">
+                <Icon name="document" className="size-4" />
+                افتح {media ?? "الملف"}
+              </a>
             ) : null}
             {text ? <p className="font-display text-lg leading-relaxed whitespace-pre-wrap">{text}</p> : null}
             {w.sent_at ? <span className="tabular text-xs text-ink-soft">{cairoWhen(w.sent_at)}</span> : null}

@@ -252,6 +252,34 @@ public sealed class PanelTaskStore(HazemDbContext db, TimeProvider clock) : IPan
             intake?.MatterType, intake?.MatterSubtype, turn is null ? [] : ClientWords(turn.Messages));
     }
 
+    public async Task<ClientFileRef?> FileAsync(Guid taskId, int index, CancellationToken ct)
+    {
+        var turnId = await db.StaffTasks.AsNoTracking().Where(t => t.Id == taskId).Select(t => t.TurnId).FirstOrDefaultAsync(ct);
+        var messages = turnId is null ? null
+            : await db.Turns.AsNoTracking().Where(t => t.TurnId == turnId).Select(t => t.Messages).FirstOrDefaultAsync(ct);
+        if (messages is null)
+        {
+            return null;
+        }
+
+        using var doc = JsonDocument.Parse(messages);
+        if (doc.RootElement.ValueKind != JsonValueKind.Array || index >= doc.RootElement.GetArrayLength())
+        {
+            return null;
+        }
+
+        static string? Str(JsonElement e, string name) =>
+            e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+        var m = doc.RootElement[index];
+        if (!m.TryGetProperty("media", out var media) || media.ValueKind != JsonValueKind.Object
+            || Str(media, "status") != "stored" || Str(media, "bucket") is not { } bucket || Str(media, "key") is not { } key)
+        {
+            return null;
+        }
+
+        return new ClientFileRef(Str(m, "type") ?? "unsupported", bucket, key, Str(media, "mime_type"), Str(media, "filename"));
+    }
+
     /// <summary>
     /// The client's words from the stored turn (n8n's shape, docs/hazem-internal-api.md): text,
     /// caption and a finished transcript, and only the type and status of a file. Never its
