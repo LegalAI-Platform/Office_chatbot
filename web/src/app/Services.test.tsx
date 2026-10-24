@@ -15,7 +15,7 @@ const me = (role: "staff" | "lawyer"): Me => ({
 const order = (over: object = {}) => ({
   id: "o1", kind: "document_review", state: "awaiting_price", name: "محمد أحمد علي حسن", wa_id: "201000000093",
   created_at: "2026-11-19T10:00:00Z", files: 2, price: null, price_exception: false, due_on: null, delivery: null, price_until: null,
-  payment: null, file_name: null, delivered_at: null, closed_reason: null, appointment_id: null, ...over,
+  payment: null, file_name: null, delivered_at: null, closed_reason: null, appointment_id: null, notice: null, ...over,
 });
 
 function serve(table: Record<string, unknown>) {
@@ -67,6 +67,21 @@ describe("TASK 10 service orders", () => {
     expect(calls.find((c) => c.method === "POST")).toMatchObject({
       path: "/services/o1/price", body: { price: 5000, exception: true, due_on: "2026-11-25", delivery: "file" },
     });
+  });
+
+  it("a delivered file that did not reach the client is said, and can be sent again", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const calls = serve({
+      "GET /auth/me": me("staff"),
+      "GET /services?show=open": [],
+      "GET /services?show=done": [order({ state: "delivered", delivery: "file", file_name: "مراجعة.pdf", delivered_at: "2026-11-20T10:00:00Z", notice: "failed" })],
+    });
+    renderAt("/services");
+    fireEvent.click(await screen.findByRole("tab", { name: "اتسلّمت أو اتقفلت" }));
+    const card = (await screen.findByText(/محمد أحمد علي حسن/)).closest("li")!;
+    expect(within(card).getByText(/آخر رسالة ما وصلتش للعميل/)).toBeTruthy();
+    fireEvent.click(within(card).getByRole("button", { name: /ابعت الملف تاني/ }));
+    await vi.waitFor(() => expect(calls.some((c) => c.path === "/services/o1/resend")).toBe(true));
   });
 
   it("the file goes to storage with the signed link, then the API is told where it is", async () => {

@@ -78,6 +78,9 @@ public interface IServiceStore
     Task<OpenOrderOutcome> OpenAsync(Guid personId, Guid? intakeId, ServiceKind kind, string key, CancellationToken ct);
 
     Task<AddFileOutcome> AddFileAsync(Guid personId, StoredFile file, CancellationToken ct);
+
+    /// <summary>The client wrote: the 24-hour window is open again, so what could not reach him is sent again.</summary>
+    Task RetryNoticesAsync(Guid personId, CancellationToken ct);
 }
 
 /// <summary>Where the flow opens orders and hands them the client's documents (B-16.1, B-16.2).</summary>
@@ -87,6 +90,8 @@ public sealed class ServiceDesk(IServiceStore store)
 
     public Task<OpenOrderOutcome> OpenAsync(Guid personId, Guid? intakeId, ServiceKind kind, string key, CancellationToken ct) =>
         store.OpenAsync(personId, intakeId, kind, key, ct);
+
+    public Task RetryNoticesAsync(Guid personId, CancellationToken ct) => store.RetryNoticesAsync(personId, ct);
 
     /// <summary>Every stored file of the turn, in order. First when any of them was the order's first.</summary>
     public async Task<AddFileOutcome> AddFilesAsync(Guid personId, IEnumerable<StoredFile> files, CancellationToken ct)

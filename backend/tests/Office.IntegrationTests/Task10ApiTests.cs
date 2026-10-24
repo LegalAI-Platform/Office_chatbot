@@ -169,6 +169,8 @@ public sealed class Task10ApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal("no_file", (string?)(await (await staff.PostAsJsonAsync($"/api/panel/services/{id}/deliver", new { key, filename = "مراجعة العقد.pdf" }, Ct))
             .Content.ReadFromJsonAsync<JsonNode>(Ct))!["error"]); // not uploaded yet
         _factory.Deliverables.Objects[key] = 1234;
+        Assert.Equal("invalid", (string?)(await (await staff.PostAsJsonAsync($"/api/panel/services/{id}/deliver", new { key, filename = "مراجعة العقد.docx" }, Ct))
+            .Content.ReadFromJsonAsync<JsonNode>(Ct))!["error"]); // a PDF uploaded is never sent as Word
         Assert.Equal(HttpStatusCode.NoContent, (await staff.PostAsJsonAsync($"/api/panel/services/{id}/deliver", new { key, filename = "مراجعة العقد.pdf" }, Ct)).StatusCode);
 
         sends = _factory.N8n.Requests.Count;
@@ -177,7 +179,19 @@ public sealed class Task10ApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal(("send_document", "مراجعة العقد.pdf"), ((string?)file["type"], (string?)file["document"]!["filename"]));
         Assert.StartsWith("https://storage.test/office-sensitive/deliverables/", (string?)file["document"]!["link"]);
         Assert.Equal("delivered|sent", await db.ScalarAsync<string>("SELECT state || '|' || client_notice FROM hazem.service_orders"));
-        Assert.Equal("service.priced|service.delivered", await db.ScalarAsync<string>(
+
+        // The 24-hour window: «ابعت الملف تاني» from the panel, and the send that failed goes again when the client writes.
+        Assert.Equal(HttpStatusCode.NoContent, (await staff.PostAsync($"/api/panel/services/{id}/resend", null, Ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await staff.PostAsync($"/api/panel/services/{id}/resend", null, Ct)).StatusCode); // already waiting
+        sends = _factory.N8n.Requests.Count;
+        await Notices();
+        Assert.EndsWith(":1:0", (string?)SentSince(sends).Single()["idempotency_key"]);
+        await db.ExecAsync("UPDATE hazem.service_orders SET client_notice = 'failed'"); // as if outside the window
+        await Say("شكرا");
+        sends = _factory.N8n.Requests.Count;
+        await Notices();
+        Assert.Equal("send_document", (string?)SentSince(sends).Single()["type"]);
+        Assert.Equal("service.priced|service.delivered|service.resent", await db.ScalarAsync<string>(
             "SELECT string_agg(action, '|' ORDER BY id) FROM hazem.panel_audit WHERE target_type = 'service'"));
     }
 
@@ -204,7 +218,7 @@ public sealed class Task10ApiTests(TestDatabase db) : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_paid_order_the_office_closes_is_refunded_and_a_call_is_delivered_without_a_file()
+    public async Task Closing_before_the_review_promises_no_refund_until_the_money_is_found()
     {
         await ServicesOn();
         var id = await OrderWithDocuments();
@@ -212,11 +226,59 @@ public sealed class Task10ApiTests(TestDatabase db) : IAsyncLifetime
         await lawyer.PostAsJsonAsync($"/api/panel/services/{id}/price", new { price = 1500, exception = false, due_on = "2026-11-25", delivery = "call" }, Ct);
         await Turn(File("image", "image/jpeg", "r1"));
         Assert.Equal(HttpStatusCode.NoContent, (await lawyer.PostAsync($"/api/panel/services/{id}/close", null, Ct)).StatusCode);
-        Assert.Equal("closed|refund_requested|1500|refund", await db.ScalarAsync<string>("""
-            SELECT o.state || '|' || p.state || '|' || p.refund_due || '|' || (SELECT type FROM hazem.staff_tasks WHERE type = 'refund')
+        Assert.Equal("closed|proof_received|0", await db.ScalarAsync<string>("""
+            SELECT o.state || '|' || p.state || '|' || (SELECT count(*) FROM hazem.staff_tasks WHERE type = 'refund')
               FROM hazem.service_orders o JOIN hazem.payments p ON p.service_order_id = o.id
-            """));
+            """)); // nobody checked the receipt yet: no refund promised
         Assert.Equal(HttpStatusCode.Conflict, (await lawyer.PostAsync($"/api/panel/services/{id}/close", null, Ct)).StatusCode);
+
+        Assert.Equal(HttpStatusCode.NoContent, (await lawyer.PostAsJsonAsync($"/api/panel/payments/{id}/review", new { state = "verified", received = 1500 }, Ct)).StatusCode);
+        Assert.Equal("closed|refund_requested|1500|office_cancelled|1", await db.ScalarAsync<string>("""
+            SELECT o.state || '|' || p.state || '|' || p.refund_due || '|' || p.refund_reason || '|' || (SELECT count(*) FROM hazem.staff_tasks WHERE type = 'refund')
+              FROM hazem.service_orders o JOIN hazem.payments p ON p.service_order_id = o.id
+            """)); // the money came for an order the office closed: it goes back
+    }
+
+    [Fact]
+    public async Task A_paid_order_the_office_closes_is_refunded_and_a_call_delivery_tells_the_client()
+    {
+        await ServicesOn();
+        var id = await OrderWithDocuments();
+        var lawyer = await SignIn("saad", Permissions.Lawyer);
+        await lawyer.PostAsJsonAsync($"/api/panel/services/{id}/price", new { price = 1500, exception = false, due_on = "2026-11-25", delivery = "call" }, Ct);
+        await Turn(File("image", "image/jpeg", "r1"));
+        await lawyer.PostAsJsonAsync($"/api/panel/payments/{id}/review", new { state = "verified", received = 1500 }, Ct);
+        await Notices(); // «الأستاذ بدأ»
+        Assert.Equal(HttpStatusCode.NoContent, (await lawyer.PostAsJsonAsync($"/api/panel/services/{id}/deliver", new { }, Ct)).StatusCode);
+        var sends = _factory.N8n.Requests.Count;
+        Assert.Equal(1, await Notices());
+        var told = SentSince(sends).Single();
+        Assert.Equal(("send_text", "📄 مراجعة العقد بتاع حضرتك جاهز ✅"), ((string?)told["type"], (string?)told["text"])); // after the call: words, no file
+
+        var month = DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(2)).ToString("yyyy-MM", System.Globalization.CultureInfo.InvariantCulture);
+        Assert.Equal(1500, (int)(await lawyer.GetFromJsonAsync<JsonNode>($"/api/panel/reports?month={month}", Ct))!["received"]!); // the report counts it
+    }
+
+    [Fact]
+    public async Task Part_of_the_money_keeps_the_order_for_the_office_and_not_received_closes_it()
+    {
+        await ServicesOn();
+        var id = await OrderWithDocuments();
+        var lawyer = await SignIn("saad", Permissions.Lawyer);
+        await lawyer.PostAsJsonAsync($"/api/panel/services/{id}/price", new { price = 2000, exception = false, due_on = "2026-11-25", delivery = "file" }, Ct);
+        await Turn(File("image", "image/jpeg", "r1"));
+        await lawyer.PostAsJsonAsync($"/api/panel/payments/{id}/review", new { state = "partial", received = 500 }, Ct);
+        await db.ExecAsync("UPDATE hazem.service_orders SET price_until = now() - interval '1 minute'");
+        await Notices();
+        await Notices();
+        Assert.Equal("awaiting_payment|true|1", await db.ScalarAsync<string>("""
+            SELECT state || '|' || (price_expired_at IS NOT NULL) || '|' || (SELECT count(*) FROM hazem.staff_tasks WHERE type = 'service_unpaid')
+              FROM hazem.service_orders
+            """)); // the office decides (a task, once); the client is not told it closed
+
+        await lawyer.PostAsJsonAsync($"/api/panel/payments/{id}/review", new { state = "not_received" }, Ct);
+        await Notices();
+        Assert.Equal("closed|price_expired", await db.ScalarAsync<string>("SELECT state || '|' || closed_reason FROM hazem.service_orders"));
     }
 
     // ---------- B-17 ----------

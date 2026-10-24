@@ -273,6 +273,12 @@ public sealed partial class PanelTools(HazemDbContext db, ListImporter importer,
                                   Came = p == null ? null : p.AmountReceived, GaveBack = p != null && p.State == "refunded" ? p.RefundDue : null,
                               })
             .ToListAsync(ct);
+        // TASK 10: the service orders' payments count too, in the month they were priced.
+        var orders = await (from o in db.ServiceOrders.AsNoTracking()
+                            join p in db.Payments.AsNoTracking() on (Guid?)o.Id equals p.ServiceOrderId
+                            where o.PricedAt >= start && o.PricedAt < end
+                            select new { Payment = p.State, Due = p.AmountDue, Came = p.AmountReceived, GaveBack = p.State == "refunded" ? p.RefundDue : null })
+            .ToListAsync(ct);
         var refunded = await db.Payments.AsNoTracking().Where(p => p.State == "refunded" && p.RefundedAt >= start && p.RefundedAt < end)
             .SumAsync(p => p.RefundDue ?? 0, ct);
 
@@ -291,8 +297,10 @@ public sealed partial class PanelTools(HazemDbContext db, ListImporter importer,
             Count(people.Select(p => p.Intake?.MatterType)),
             Count(people.Select(p => p.Intake?.ClientType)),
             Count(bookings.Select(b => b.State)),
-            bookings.Sum(b => (b.Came ?? 0) - (b.GaveBack ?? 0)), // what came and stayed: a refund given back is not income
-            bookings.Where(b => b.Payment == "partial").Sum(b => b.Due - (b.Came ?? 0)),
+            // what came and stayed: a refund given back is not income
+            bookings.Sum(b => (b.Came ?? 0) - (b.GaveBack ?? 0)) + orders.Sum(o => (o.Came ?? 0) - (o.GaveBack ?? 0)),
+            bookings.Where(b => b.Payment == "partial").Sum(b => b.Due - (b.Came ?? 0))
+                + orders.Where(o => o.Payment == "partial").Sum(o => o.Due - (o.Came ?? 0)),
             refunded);
     }
 

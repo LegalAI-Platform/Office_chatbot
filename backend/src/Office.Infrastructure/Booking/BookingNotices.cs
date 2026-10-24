@@ -23,9 +23,10 @@ namespace Office.Infrastructure.Booking;
 /// A send that fails, outside the 24-hour window too (P5), becomes a task (booking_message_failed). Each is told once.
 /// </summary>
 public sealed class BookingNotices(HazemDbContext db, BookingStore store, BookingDesk desk, ISettingsReader settingsReader, IApprovedTexts texts,
-    SendOutbound send, TimeProvider clock)
+    NoticeSender notices, TimeProvider clock)
 {
     public const int Batch = 20;
+    private const string Requester = "panel-booking";
 
     public async Task<int> RunAsync(CancellationToken ct)
     {
@@ -66,7 +67,7 @@ public sealed class BookingNotices(HazemDbContext db, BookingStore store, Bookin
                 "hold_expired" => new ReplyStep(TextKeys.BookingHoldExpired, null, When(a, now)),
                 _ => await OfficeCancelledAsync(a, x.Paid, booking, settings, bookingOn, now, ct),
             };
-            var told = await SendAsync(x.WaId, $"booking:{a.Id:N}:{Short(kind)}", step, active, ct);
+            var told = await notices.SendAsync(x.WaId, $"booking:{a.Id:N}:{Short(kind)}", Requester, step, active, ct);
             if (!told)
             {
                 await store.AddTaskAsync(a.PersonId, $"booking:{a.Id:N}:{Short(kind)}", PendingTask.BookingMessageFailed, OfficeHours.DueAt(now), ct);
@@ -101,7 +102,7 @@ public sealed class BookingNotices(HazemDbContext db, BookingStore store, Bookin
                 }, pay.RefundedAt),
             };
             var id = $"payment:{a.Id:N}:{pay.NoticeKind}:{(at ?? now).ToUnixTimeSeconds()}";
-            var told = await SendAsync(x.WaId, id, new ReplyStep(key, null, fill), active, ct);
+            var told = await notices.SendAsync(x.WaId, id, Requester, new ReplyStep(key, null, fill), active, ct);
             if (!told)
             {
                 await store.AddTaskAsync(a.PersonId, id, PendingTask.BookingMessageFailed, OfficeHours.DueAt(now), ct);
@@ -136,20 +137,6 @@ public sealed class BookingNotices(HazemDbContext db, BookingStore store, Bookin
         return paid
             ? new ReplyStep(TextKeys.BookingCancelledByOffice, null, null, choices)
             : new ReplyStep(TextKeys.BookingOfficeUnpaid, null, When(a, now), choices);
-    }
-
-    private async Task<bool> SendAsync(string waId, string id, ReplyStep step, IReadOnlyDictionary<string, ApprovedText> active, CancellationToken ct)
-    {
-        var composed = ReplyComposer.Compose(id, null, [step], active);
-        var told = composed.Actions.Count > 0;
-        foreach (var action in composed.Actions)
-        {
-            var r = await send.SendAsync(new OutboundMessage(action.Type, waId, action.IdempotencyKey, "panel-booking", action.Text,
-                Interactive: action.Interactive), ct);
-            told &= r.Ok;
-        }
-
-        return told;
     }
 
     private static Dictionary<string, string> When(AppointmentRow a, DateTimeOffset now) => new()

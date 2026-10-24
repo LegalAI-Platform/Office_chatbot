@@ -21,6 +21,7 @@ export interface ServiceOrder {
   delivered_at: string | null;
   closed_reason: string | null;
   appointment_id: string | null;
+  notice: "pending" | "sent" | "failed" | null;
 }
 
 export interface Upload { url: string; key: string; content_type: string }
@@ -31,6 +32,7 @@ export const services = {
     api<void>("POST", `/services/${id}/price`, body),
   upload: (id: string, filename: string) => api<Upload>("POST", `/services/${id}/upload`, { filename }),
   deliver: (id: string, key?: string, filename?: string) => api<void>("POST", `/services/${id}/deliver`, { key, filename }),
+  resend: (id: string) => api<void>("POST", `/services/${id}/resend`),
   close: (id: string) => api<void>("POST", `/services/${id}/close`),
   opinion: (appointmentId: string, body: { due_on: string; delivery: string }) =>
     api<void>("POST", `/booking/appointments/${appointmentId}/opinion`, body),

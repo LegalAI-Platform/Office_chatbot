@@ -54,6 +54,9 @@ public sealed class ServiceStore(HazemDbContext db) : IServiceStore
         }, r.TryGetProperty("id", out var id) ? id.GetGuid() : null, r.TryGetProperty("kind", out var k) ? k.GetString() : null);
     }
 
+    public Task RetryNoticesAsync(Guid personId, CancellationToken ct) =>
+        db.Database.SqlQuery<int>($"""SELECT hazem.retry_service_notices({personId}) AS "Value" """).SingleAsync(ct);
+
     private async Task<JsonDocument> JsonAsync(FormattableString sql, CancellationToken ct) =>
         JsonDocument.Parse(await db.Database.SqlQuery<string>(sql).SingleAsync(ct));
 

@@ -100,6 +100,11 @@ public sealed class HazemResponder(
         var bookingSettings = BookingSettings.From(settings);
         var bookingOn = booking is not null && bookingSettings.Enabled && BookingTextKeys.All(k => texts.TryGetValue(k, out var t) && t.Active);
         var servicesOn = services is not null && ServiceTextKeys.All(k => texts.TryGetValue(k, out var t) && t.Active);
+        if (servicesOn && !list.Blocked)
+        {
+            // The client wrote: the 24-hour window is open again for the price, the work started or the file that could not reach him.
+            await services!.RetryNoticesAsync(state.Person.Id, ct);
+        }
 
         if (list.Blocked)
         {
@@ -121,7 +126,7 @@ public sealed class HazemResponder(
             var askImage = false;
             if (choice is null && (bookingOn || servicesOn) && flow.MayOrder && services is not null && FileIn(turn) is { } m)
             {
-                var image = m.Type == MessageType.Image && m.Media!.Sha256 is not null;
+                var image = m.Type == MessageType.Image;
                 var target = await services.FileTargetAsync(state.Person.Id, image, ct);
                 switch (target.Target)
                 {
@@ -172,6 +177,10 @@ public sealed class HazemResponder(
             if (flow.ServiceToOpen is { } kind)
             {
                 await services!.OpenAsync(state.Person.Id, flow.State.Intake.Id, kind, turn.TurnId, ct);
+                if (flow.FilesToOrder)
+                {
+                    await services.AddFilesAsync(state.Person.Id, StoredFiles(turn), ct);
+                }
             }
 
             state = flow.State;
@@ -228,7 +237,8 @@ public sealed class HazemResponder(
     /// B-05 (P7), B-16: the last stored image or document with its place in storage. An image may be a
     /// receipt; a PDF or Word goes to a service order waiting for documents, or Hazem asks for an image.
     /// </summary>
-    private static IncomingMessage? FileIn(Turn turn) => turn.Messages.LastOrDefault(IsStoredFile);
+    private static IncomingMessage? FileIn(Turn turn) => turn.Messages.LastOrDefault(m =>
+        IsStoredFile(m) && (m.Type != MessageType.Image || m.Media!.Sha256 is not null)); // a receipt needs its sha256 (duplicates)
 
     /// <summary>B-16.2: every stored image and document of the turn (a contract comes in several pages).</summary>
     private static IEnumerable<StoredFile> StoredFiles(Turn turn) => turn.Messages.Where(IsStoredFile)
@@ -253,6 +263,9 @@ public sealed class HazemResponder(
     {
         /// <summary>TASK 10: the written service to open an order for (B-16.1), once the flow is done.</summary>
         public ServiceKind? ServiceToOpen { get; private set; }
+
+        /// <summary>The turn's documents go to that order once it is open (they came with the request).</summary>
+        public bool FilesToOrder { get; private set; }
 
         public ClientState State { get; private set; } = state;
 
@@ -675,6 +688,11 @@ public sealed class HazemResponder(
 
         private void AnswerService(Service? service)
         {
+            if (OrderWithFiles(service))
+            {
+                return;
+            }
+
             switch (service)
             {
                 case Service.ConsultationUrgent:
@@ -1141,6 +1159,25 @@ public sealed class HazemResponder(
             {
                 ServiceToOpen = kind;
             }
+        }
+
+        /// <summary>
+        /// B-16.1 + B-16.2 in one turn: «راجعلي العقد ده» with the contract. The order opens and takes the turn's
+        /// documents (after the flow); the client hears they arrived, not «ابعتلي صورة العقد».
+        /// </summary>
+        private bool OrderWithFiles(Service? service)
+        {
+            if (!servicesOn || !MayOrder || ServiceKind.Requested(service) is not { } kind || !turn.Messages.Any(IsStoredFile))
+            {
+                return false;
+            }
+
+            ServiceToOpen = kind;
+            FilesToOrder = true;
+            plan.Say(TextKeys.ServiceFilesReceived);
+            plan.Task(PendingTask.ServicePricing);
+            Check(Intake.MoveTo(IntakeState.InServiceFlow));
+            return true;
         }
 
         /// <summary>A task and a reply without any contact time (B-06: the promises wait for the panel).</summary>

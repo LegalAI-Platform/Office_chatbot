@@ -694,6 +694,33 @@ public sealed class BookingFlowTests
     }
 
     [Fact]
+    public async Task The_request_with_the_contract_in_one_turn_opens_the_order_with_it()
+    {
+        ServicesOn();
+        await ToTheOffer();
+        var both = await Send(new Turn($"wt:{++_turn}", Number, null,
+        [
+            new IncomingMessage($"wamid.{++_turn}", MessageType.Text, "عايز حد يراجعلي عقد", null, null),
+            new IncomingMessage($"wamid.{++_turn}", MessageType.Document, null, null, null, null,
+                new MediaRef(MediaStatus.Stored, "office-sensitive", $"k{_turn}", "application/pdf", 1000, $"sha{_turn}", "contract.pdf")),
+        ]));
+        Assert.Equal([TextKeys.ServiceFilesReceived], Keys(both)); // not «ابعتلي صورة العقد»
+        Assert.Contains(PendingTask.ServicePricing, TaskKinds(both));
+        var order = Assert.Single(_booking.Orders);
+        Assert.Equal(("awaiting_price", 1), (order.State, order.Files.Count));
+    }
+
+    [Fact]
+    public async Task A_message_from_the_client_sends_again_what_could_not_reach_him()
+    {
+        ServicesOn();
+        await ToTheOffer();
+        var before = _booking.Retries;
+        await Say("شكرا");
+        Assert.Equal(before + 1, _booking.Retries);
+    }
+
+    [Fact]
     public async Task Without_the_service_texts_a_named_service_is_answered_as_before()
     {
         await ToTheOffer();
@@ -965,6 +992,14 @@ public sealed class BookingFlowTests
             var o = new Order(personId, kind.Code);
             Orders.Add(o);
             return Task.FromResult(new Office.Application.Services.OpenOrderOutcome(Office.Application.Services.OpenOrderStatus.Opened, o.Id, o.State));
+        }
+
+        public int Retries { get; private set; }
+
+        public Task RetryNoticesAsync(Guid personId, CancellationToken ct)
+        {
+            Retries++;
+            return Task.CompletedTask;
         }
 
         public async Task<Office.Application.Services.AddFileOutcome> AddFileAsync(Guid personId, Office.Application.Services.StoredFile file, CancellationToken ct)

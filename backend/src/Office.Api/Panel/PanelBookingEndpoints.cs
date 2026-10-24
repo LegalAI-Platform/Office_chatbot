@@ -191,6 +191,9 @@ public static class PanelBookingEndpoints
             CancellationToken ct) =>
             ServiceAnswer(await s.DeliverAsync(ctx.CurrentUser().Id, id, body?.Key, body?.Filename, ct)));
 
+        services.MapPost("/{id:guid}/resend", async (Guid id, HttpContext ctx, Office.Infrastructure.Services.PanelServices s, CancellationToken ct) =>
+            ServiceAnswer(await s.ResendAsync(ctx.CurrentUser().Id, id, ct)));
+
         services.MapPost("/{id:guid}/close", async (Guid id, HttpContext ctx, Office.Infrastructure.Services.PanelServices s, CancellationToken ct) =>
             ServiceAnswer(await s.CloseAsync(ctx.CurrentUser().Id, id, ct)));
 

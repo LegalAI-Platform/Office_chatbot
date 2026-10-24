@@ -17,12 +17,14 @@ namespace Office.Infrastructure.Services;
 /// panel request): the price and where to pay, the one reminder, the price that ran out (the office gets a task),
 /// the work started, the file itself (a document Meta reads from a short storage link), the order the office
 /// closed, and partial / not received / refunded for an order's payment. A send that fails, outside the 24-hour
-/// window too, becomes a task (booking_message_failed). Each is told once.
+/// window too, becomes a task (booking_message_failed); the price, the work started and the file are sent again when
+/// the client writes again (the window reopens: hazem.retry_service_notices) or from the panel («ابعت الملف تاني»).
 /// </summary>
 public sealed class ServiceNotices(HazemDbContext db, BookingStore store, ISettingsReader settingsReader, IApprovedTexts texts,
-    IDeliverables deliverables, SendOutbound send, TimeProvider clock)
+    IDeliverables deliverables, NoticeSender notices, TimeProvider clock)
 {
     public const int Batch = 20;
+    private const string Requester = "panel-service";
 
     public async Task<int> RunAsync(CancellationToken ct)
     {
@@ -101,12 +103,15 @@ public sealed class ServiceNotices(HazemDbContext db, BookingStore store, ISetti
                     break;
             }
 
+            // A notice sent again (the client wrote again, or «ابعت الملف تاني») needs a new key: n8n never sends one key twice.
             var id = $"service:{o.Id:N}:{o.NoticeKind}";
-            var document = o.NoticeKind == "delivered" && o.FileKey is { } fileKey && deliverables.Configured
+            var withFile = o.NoticeKind == "delivered" && o.Delivery == "file";
+            var document = withFile && o.FileKey is { } fileKey && deliverables.Configured
                 ? new DocumentPayload(deliverables.ReadLink(fileKey), o.FileName ?? "file")
                 : null;
-            var told = (o.NoticeKind != "delivered" || document is not null)
-                       && await SendAsync(x.WaId, id, new ReplyStep(key, null, fill), active, document, ct);
+            var told = (!withFile || document is not null)
+                       && await notices.SendAsync(x.WaId, o.NoticeAttempt == 0 ? id : $"{id}:{o.NoticeAttempt}", Requester,
+                           new ReplyStep(key, null, fill), active, ct, document);
             if (!told)
             {
                 await store.AddTaskAsync(o.PersonId, id, PendingTask.BookingMessageFailed, OfficeHours.DueAt(now), ct);
@@ -134,7 +139,7 @@ public sealed class ServiceNotices(HazemDbContext db, BookingStore store, ISetti
                 ["method"] = pay.RefundMethod ?? "",
             };
             var id = $"service-payment:{x.pay.ServiceOrderId:N}:{pay.NoticeKind}:{(at ?? now).ToUnixTimeSeconds()}";
-            var told = await SendAsync(x.WaId, id, new ReplyStep(key, null, fill), active, null, ct);
+            var told = await notices.SendAsync(x.WaId, id, Requester, new ReplyStep(key, null, fill), active, ct);
             if (!told)
             {
                 await store.AddTaskAsync(x.PersonId, id, PendingTask.BookingMessageFailed, OfficeHours.DueAt(now), ct);
@@ -147,21 +152,6 @@ public sealed class ServiceNotices(HazemDbContext db, BookingStore store, ISetti
         return orders.Count + payments.Count;
     }
 
-    private async Task<bool> SendAsync(string waId, string id, ReplyStep step, IReadOnlyDictionary<string, ApprovedText> active,
-        DocumentPayload? document, CancellationToken ct)
-    {
-        var composed = ReplyComposer.Compose(id, null, [step], active);
-        var told = composed.Actions.Count > 0;
-        foreach (var action in composed.Actions)
-        {
-            var r = await send.SendAsync(document is null
-                ? new OutboundMessage(action.Type, waId, action.IdempotencyKey, "panel-service", action.Text, Interactive: action.Interactive)
-                : new OutboundMessage(ActionType.SendDocument, waId, action.IdempotencyKey, "panel-service", action.Text, Document: document), ct);
-            told &= r.Ok;
-        }
-
-        return told;
-    }
 
     private static string Name(string kind) => ServiceKind.ByCode(kind)?.Name ?? "الخدمة";
 

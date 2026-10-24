@@ -47,6 +47,7 @@ function OrderCard({ o }: { o: ServiceOrder }) {
   const { data: me } = useMe();
   const done = () => { void qc.invalidateQueries({ queryKey: ["services"] }); void qc.invalidateQueries({ queryKey: ["payments"] }); };
   const close = useMutation({ mutationFn: () => services.close(o.id), onSuccess: done });
+  const resend = useMutation({ mutationFn: () => services.resend(o.id), onSuccess: done });
   const open = o.state !== "delivered" && o.state !== "closed";
 
   return (
@@ -85,6 +86,20 @@ function OrderCard({ o }: { o: ServiceOrder }) {
         {(o.state === "collecting" || o.state === "awaiting_price") && can(me, "services.price") ? <PriceForm o={o} onDone={done} /> : null}
         {o.state === "awaiting_payment" ? <p className="text-sm text-ink-soft">حازم بعت السعر وبيانات الدفع. لما الإيصال يوصل، راجعه من «الإيصالات والمدفوعات».</p> : null}
         {o.state === "in_progress" ? <Deliver o={o} onDone={done} /> : null}
+        {o.notice === "failed" ? (
+          <p className="text-sm text-bad" role="status">
+            آخر رسالة ما وصلتش للعميل (غالبًا عدّى 24 ساعة من آخر رسالة منه). هتتبعت تاني لوحدها أول ما يكتب، أو كلّموه.
+          </p>
+        ) : null}
+        {o.state === "delivered" && o.file_name ? (
+          <div>
+            <Button variant="secondary" busy={resend.isPending} disabled={o.notice === "pending"}
+              onClick={() => { if (window.confirm(`حازم هيبعت «${o.file_name}» للعميل تاني. أكيد؟`)) resend.mutate(); }}>
+              <Icon name="document" className="size-4" />ابعت الملف تاني
+            </Button>
+            {resend.isError ? <span className="text-sm text-bad" role="alert"> {errorMessage(resend.error)}</span> : null}
+          </div>
+        ) : null}
 
         {open ? (
           <div>

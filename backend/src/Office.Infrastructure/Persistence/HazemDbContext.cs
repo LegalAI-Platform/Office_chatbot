@@ -484,6 +484,8 @@ public sealed class ServiceOrderRow
     public string? ClosedReason { get; set; }
     public string? ClientNotice { get; set; }
     public string? NoticeKind { get; set; }
+    public int NoticeAttempt { get; set; }
+    public DateTimeOffset? PriceExpiredAt { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }

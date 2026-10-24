@@ -38,6 +38,8 @@ CREATE TABLE hazem.service_orders (
   closed_reason     text CHECK (closed_reason IN ('price_expired', 'office')),
   client_notice     text CHECK (client_notice IN ('pending', 'sent', 'failed')),
   notice_kind       text CHECK (notice_kind IN ('priced', 'price_reminder', 'price_expired', 'started', 'delivered', 'closed')),
+  notice_attempt    int NOT NULL DEFAULT 0,                    -- a notice sent again (the window reopened, «ابعت تاني»)
+  price_expired_at  timestamptz,                               -- the price ran out with part of the money in: the office decides
   created_at        timestamptz NOT NULL DEFAULT now(),
   updated_at        timestamptz NOT NULL DEFAULT now(),
   CHECK (file_key IS NULL OR file_bucket = 'office-sensitive' AND file_key LIKE 'deliverables/%')
@@ -212,6 +214,7 @@ RETURNS jsonb LANGUAGE plpgsql SET search_path = hazem, pg_temp AS $$
 DECLARE
   v hazem.payments;
   v_over boolean;
+  v_closed boolean;
   v_tell boolean;
 BEGIN
   -- p_appointment is the payment's owner: a booking, or a service order.
@@ -231,15 +234,18 @@ BEGIN
     RETURN jsonb_build_object('status', 'invalid_amount');
   END IF;
 
+  -- An order the office closed before anyone checked its receipt: whatever came is due back (B-22).
+  v_closed := p_state IN ('verified', 'partial')
+              AND EXISTS (SELECT 1 FROM hazem.service_orders WHERE id = v.service_order_id AND state = 'closed');
   v_over := p_state = 'verified' AND p_received > v.amount_due;
   v_tell := p_state IN ('partial', 'not_received')
             AND (EXISTS (SELECT 1 FROM hazem.appointments WHERE id = v.appointment_id AND state = 'confirmed' AND ends_at > now())
                  OR EXISTS (SELECT 1 FROM hazem.service_orders WHERE id = v.service_order_id AND state = 'awaiting_payment'));
   UPDATE hazem.payments
-     SET state = CASE WHEN v_over THEN 'refund_requested' ELSE p_state END,
+     SET state = CASE WHEN v_over OR v_closed THEN 'refund_requested' ELSE p_state END,
          amount_received = CASE WHEN p_state = 'not_received' THEN NULL ELSE p_received END,
-         refund_due = CASE WHEN v_over THEN p_received - v.amount_due END,
-         refund_reason = CASE WHEN v_over THEN 'overpaid' END,
+         refund_due = CASE WHEN v_closed THEN p_received WHEN v_over THEN p_received - v.amount_due END,
+         refund_reason = CASE WHEN v_closed THEN 'office_cancelled' WHEN v_over THEN 'overpaid' END,
          reviewed_by = p_by, reviewed_at = now(),
          client_notice = CASE WHEN v_tell THEN 'pending' ELSE client_notice END,
          notice_kind = CASE WHEN v_tell THEN 'payment_' || p_state ELSE notice_kind END
@@ -249,7 +255,7 @@ BEGIN
   -- B-16: the work starts once a person found the money.
   UPDATE hazem.service_orders SET state = 'in_progress', client_notice = 'pending', notice_kind = 'started'
    WHERE id = v.service_order_id AND state = 'awaiting_payment' AND p_state = 'verified';
-  RETURN jsonb_build_object('status', 'marked', 'refund', v_over);
+  RETURN jsonb_build_object('status', 'marked', 'refund', v_over OR v_closed);
 END $$;
 
 -- B-22 (P2), as in 0014, for a booking's payment or an order's.
@@ -278,6 +284,8 @@ RETURNS jsonb LANGUAGE plpgsql SET search_path = hazem, pg_temp AS $$
 DECLARE
   v hazem.service_orders;
 BEGIN
+  -- Two turns of the same client at once must not both insert (service_orders_one_open).
+  PERFORM pg_advisory_xact_lock(hashtext('hazem.service_orders:' || p_person));
   SELECT * INTO v FROM hazem.service_orders WHERE opened_key = p_key;
   IF FOUND THEN
     RETURN jsonb_build_object('status', 'exists', 'id', v.id, 'state', v.state);
@@ -377,11 +385,14 @@ BEGIN
 END $$;
 
 -- v1.14, run by the worker: one reminder a day before the price runs out (no receipt yet), then the order
--- closes (the office gets a task, the client a word). Returns the orders closed, for their tasks.
+-- closes (the office gets a task, the client a word): nothing came, or what came was marked «ما وصلش».
+-- Part of the money in: the order stays for the office to decide (a task, once). A receipt still waiting for
+-- its review keeps the order as it is. Returns the orders that ran out, for their tasks.
 CREATE FUNCTION hazem.service_due()
 RETURNS jsonb LANGUAGE plpgsql SET search_path = hazem, pg_temp AS $$
 DECLARE
   v_closed jsonb;
+  v_partial jsonb;
 BEGIN
   UPDATE hazem.service_orders o
      SET price_reminded_at = now(), client_notice = 'pending', notice_kind = 'price_reminder'
@@ -393,11 +404,18 @@ BEGIN
     UPDATE hazem.service_orders o
        SET state = 'closed', closed_reason = 'price_expired', client_notice = 'pending', notice_kind = 'price_expired'
       FROM hazem.payments p
-     WHERE p.service_order_id = o.id AND p.state = 'requested'
+     WHERE p.service_order_id = o.id AND p.state IN ('requested', 'not_received')
        AND o.state = 'awaiting_payment' AND o.price_until <= now()
     RETURNING o.id, o.person_id)
   SELECT COALESCE(jsonb_agg(jsonb_build_object('id', id, 'person', person_id)), '[]'::jsonb) INTO v_closed FROM closed;
-  RETURN v_closed;
+  WITH partial AS (
+    UPDATE hazem.service_orders o SET price_expired_at = now()
+      FROM hazem.payments p
+     WHERE p.service_order_id = o.id AND p.state = 'partial'
+       AND o.state = 'awaiting_payment' AND o.price_until <= now() AND o.price_expired_at IS NULL
+    RETURNING o.id, o.person_id)
+  SELECT COALESCE(jsonb_agg(jsonb_build_object('id', id, 'person', person_id)), '[]'::jsonb) INTO v_partial FROM partial;
+  RETURN v_closed || v_partial;
 END $$;
 
 -- B-16.6: delivered: the file the panel put in office-sensitive (the API checked it is there), or the call made.
@@ -422,10 +440,44 @@ BEGIN
          file_key = CASE WHEN v.delivery = 'file' THEN p_key END,
          file_name = CASE WHEN v.delivery = 'file' THEN left(p_name, 120) END,
          file_mime = CASE WHEN v.delivery = 'file' THEN p_mime END,
-         client_notice = CASE WHEN v.delivery = 'file' THEN 'pending' END,
-         notice_kind = CASE WHEN v.delivery = 'file' THEN 'delivered' END
+         client_notice = 'pending', notice_kind = 'delivered'  -- the file with its caption, or the words after the call
    WHERE id = v.id;
   RETURN jsonb_build_object('status', 'delivered');
+END $$;
+
+-- B-16.6 (24-hour window): a delivered file sent again from the panel («ابعت الملف تاني»), with a new key.
+CREATE FUNCTION hazem.resend_service_file(p_order uuid)
+RETURNS jsonb LANGUAGE plpgsql SET search_path = hazem, pg_temp AS $$
+DECLARE
+  v hazem.service_orders;
+BEGIN
+  SELECT * INTO v FROM hazem.service_orders WHERE id = p_order FOR UPDATE;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('status', 'not_found');
+  END IF;
+  IF v.state <> 'delivered' OR v.file_key IS NULL OR v.client_notice = 'pending' THEN
+    RETURN jsonb_build_object('status', 'not_allowed');
+  END IF;
+  UPDATE hazem.service_orders SET client_notice = 'pending', notice_kind = 'delivered', notice_attempt = notice_attempt + 1
+   WHERE id = v.id;
+  RETURN jsonb_build_object('status', 'resent');
+END $$;
+
+-- 24-hour window: a message from the client opens it again, so what could not reach him is sent now
+-- (the price while it waits for payment, the work started, the file), each with a new key.
+CREATE FUNCTION hazem.retry_service_notices(p_person uuid)
+RETURNS int LANGUAGE plpgsql SET search_path = hazem, pg_temp AS $$
+DECLARE
+  v_count int;
+BEGIN
+  UPDATE hazem.service_orders
+     SET client_notice = 'pending', notice_attempt = notice_attempt + 1
+   WHERE person_id = p_person AND client_notice = 'failed'
+     AND (notice_kind = 'priced' AND state = 'awaiting_payment' AND price_until > now()
+          OR notice_kind = 'started' AND state = 'in_progress'
+          OR notice_kind = 'delivered' AND state = 'delivered');
+  GET DIAGNOSTICS v_count = ROW_COUNT;
+  RETURN v_count;
 END $$;
 
 -- B-16.7: the office closes an order; money that came is due back (B-22).
@@ -444,9 +496,11 @@ BEGIN
   END IF;
   UPDATE hazem.service_orders SET state = 'closed', closed_reason = 'office', client_notice = 'pending', notice_kind = 'closed'
    WHERE id = v.id;
+  -- Only money a person found (verified, partial) is due back now; a receipt nobody checked yet stays for the
+  -- review, and mark_payment opens the refund if the money did come.
   UPDATE hazem.payments
-     SET state = 'refund_requested', refund_due = COALESCE(amount_received, amount_due), refund_reason = 'office_cancelled'
-   WHERE service_order_id = v.id AND state IN ('proof_received', 'duplicate_suspected', 'verified', 'partial')
+     SET state = 'refund_requested', refund_due = amount_received, refund_reason = 'office_cancelled'
+   WHERE service_order_id = v.id AND state IN ('verified', 'partial') AND amount_received > 0
   RETURNING refund_due INTO v_refund;
   RETURN jsonb_build_object('status', 'closed', 'refund', v_refund, 'person', v.person_id);
 END $$;
@@ -476,15 +530,17 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON hazem.service_orders, hazem.service_file
 GRANT EXECUTE ON FUNCTION hazem.file_target(uuid, boolean), hazem.open_service_order(uuid, uuid, text, text),
   hazem.add_service_file(uuid, text, text, text, text, text), hazem.price_service_order(uuid, int, boolean, date, text, uuid),
   hazem.open_written_opinion(uuid, date, text, uuid), hazem.service_due(), hazem.deliver_service_order(uuid, uuid, text, text, text),
-  hazem.close_service_order(uuid, uuid) TO office_api;
+  hazem.close_service_order(uuid, uuid), hazem.resend_service_file(uuid), hazem.retry_service_notices(uuid) TO office_api;
 GRANT SELECT ON hazem.service_orders, hazem.service_files TO office_readonly;
 REVOKE ALL ON hazem.service_orders, hazem.service_files FROM office_app;
 REVOKE ALL ON FUNCTION hazem.file_target(uuid, boolean), hazem.open_service_order(uuid, uuid, text, text),
   hazem.add_service_file(uuid, text, text, text, text, text), hazem.price_service_order(uuid, int, boolean, date, text, uuid),
   hazem.open_written_opinion(uuid, date, text, uuid), hazem.service_due(), hazem.deliver_service_order(uuid, uuid, text, text, text),
-  hazem.close_service_order(uuid, uuid) FROM PUBLIC;
+  hazem.close_service_order(uuid, uuid), hazem.resend_service_file(uuid), hazem.retry_service_notices(uuid) FROM PUBLIC;
 
 -- migrate:down
+DROP FUNCTION IF EXISTS hazem.retry_service_notices(uuid);
+DROP FUNCTION IF EXISTS hazem.resend_service_file(uuid);
 DROP FUNCTION IF EXISTS hazem.close_service_order(uuid, uuid);
 DROP FUNCTION IF EXISTS hazem.deliver_service_order(uuid, uuid, text, text, text);
 DROP FUNCTION IF EXISTS hazem.service_due();

@@ -15,7 +15,7 @@ namespace Office.Infrastructure.Services;
 
 public sealed record ServiceOrderView(Guid Id, string Kind, string State, string? Name, string WaId, DateTimeOffset CreatedAt, int Files,
     int? Price, bool PriceException, DateOnly? DueOn, string? Delivery, DateTimeOffset? PriceUntil, string? Payment, string? FileName,
-    DateTimeOffset? DeliveredAt, string? ClosedReason, Guid? AppointmentId);
+    DateTimeOffset? DeliveredAt, string? ClosedReason, Guid? AppointmentId, string? Notice);
 
 public sealed class PanelServices(HazemDbContext db, BookingStore store, IDeliverables deliverables, TimeProvider clock)
 {
@@ -55,7 +55,7 @@ public sealed class PanelServices(HazemDbContext db, BookingStore store, IDelive
                       orderby o.CreatedAt
                       select new ServiceOrderView(o.Id, o.Kind, o.State, p.NameRaw, p.WaId, o.CreatedAt, db.ServiceFiles.Count(f => f.OrderId == o.Id),
                           o.Price, o.PriceException, o.DueOn, o.Delivery, o.PriceUntil, pay == null ? null : pay.State, o.FileName, o.DeliveredAt,
-                          o.ClosedReason, o.AppointmentId)).Take(300).ToListAsync(ct);
+                          o.ClosedReason, o.AppointmentId, o.ClientNotice)).Take(300).ToListAsync(ct);
     }
 
     /// <summary>The n-th document the client sent for the order (0 = the first), for the panel to show.</summary>
@@ -163,7 +163,8 @@ public sealed class PanelServices(HazemDbContext db, BookingStore store, IDelive
             }
 
             if (key is null || !key.StartsWith($"{S3Deliverables.Prefix}{id}/", StringComparison.Ordinal) || string.IsNullOrWhiteSpace(filename)
-                || filename.Length > 120 || !Types.TryGetValue(Path.GetExtension(filename), out mime))
+                || filename.Length > 120 || !Types.TryGetValue(Path.GetExtension(filename), out mime)
+                || !string.Equals(Path.GetExtension(filename), Path.GetExtension(key), StringComparison.OrdinalIgnoreCase)) // the type of the file uploaded
             {
                 return ErrInvalid;
             }
@@ -189,6 +190,22 @@ public sealed class PanelServices(HazemDbContext db, BookingStore store, IDelive
         }
 
         await Audit(by, "service.delivered", id, new Dictionary<string, string?>(), ct);
+        return null;
+    }
+
+    /// <summary>
+    /// B-16.6: «ابعت الملف تاني»: the delivered file sent again (the first send fell outside the 24-hour window, or the
+    /// client lost it). The worker sends it with a new key.
+    /// </summary>
+    public async Task<string?> ResendAsync(Guid by, Guid id, CancellationToken ct)
+    {
+        var status = await StatusAsync($"""SELECT hazem.resend_service_file({id})::text AS "Value" """, ct);
+        if (status != "resent")
+        {
+            return status == "not_found" ? ErrNotFound : ErrNotAllowed;
+        }
+
+        await Audit(by, "service.resent", id, new Dictionary<string, string?>(), ct);
         return null;
     }
 
