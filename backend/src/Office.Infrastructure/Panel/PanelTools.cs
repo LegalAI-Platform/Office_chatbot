@@ -264,7 +264,7 @@ public sealed partial class PanelTools(HazemDbContext db, ListImporter importer,
             keys.GroupBy(k => k ?? "unknown").Select(g => new ReportRow(g.Key, g.Count())).OrderByDescending(r => r.Count).ToList();
 
         var bookings = await (from a in db.Appointments.AsNoTracking()
-                              join p in db.Payments.AsNoTracking() on a.Id equals p.AppointmentId into pays
+                              join p in db.Payments.AsNoTracking() on (Guid?)a.Id equals p.AppointmentId into pays
                               from p in pays.DefaultIfEmpty()
                               where a.StartsAt >= start && a.StartsAt < end
                               select new

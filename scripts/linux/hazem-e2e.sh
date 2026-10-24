@@ -159,4 +159,26 @@ forward
 step check-hazem09-refund-requested || failed=1
 panel_step hazem09-refunded || failed=1
 step check-hazem09-refunded || failed=1
+echo "==== 13. TASK 10: a document review from the request to the file delivered on WhatsApp"
+# (b) only the lawyer or the manager prices: a throwaway lawyer account, same throwaway password.
+printf '%s\n' "$E2E_PANEL_PASSWORD" | docker compose exec -T api dotnet /app/cli/Office.Cli.dll create-user \
+  --name e2e-lawyer --display E2E-L --email e2e-lawyer@example.test --role lawyer >/dev/null 2>&1 \
+  || { echo "FAIL  create-user e2e-lawyer (CLI)"; failed=1; }
+step hazem10-setup
+forward
+step hazem10-name
+forward
+step hazem10-ask
+forward
+step check-hazem10-order || failed=1
+step hazem10-document
+forward
+step check-hazem10-files || failed=1
+panel_step hazem10-price || failed=1
+step check-hazem10-priced || failed=1
+step hazem10-receipt
+forward
+step check-hazem10-receipt || failed=1
+panel_step hazem10-deliver || failed=1
+step check-hazem10-delivered || failed=1
 unset E2E_PANEL_PASSWORD

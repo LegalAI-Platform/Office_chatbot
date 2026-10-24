@@ -124,6 +124,13 @@ public static class DependencyInjection
         services.AddScoped<Booking.PanelBooking>();
         services.AddScoped<Booking.PanelPayments>();
 
+        // TASK 10 (DECISIONS v1.14): the written services, from the request to the delivered file.
+        services.AddScoped<Application.Services.IServiceStore, Services.ServiceStore>();
+        services.AddScoped<Application.Services.ServiceDesk>();
+        services.AddSingleton<Services.IDeliverables, Services.S3Deliverables>();
+        services.AddScoped<Services.ServiceNotices>();
+        services.AddScoped<Services.PanelServices>();
+
         return services;
     }
 }

@@ -172,10 +172,12 @@ public enum ReceiptStatus
     ConfirmedLate, // the hold had run out, the time was still free: confirmed
     LateTaken,     // the hold had run out and the time was taken: kept for the next time he picks
     Received,      // a confirmed booking's (new) receipt
+    OrderReceived, // TASK 10: a service order's receipt (the work starts after a person's review)
     Exists,        // the same message again
 }
 
-public sealed record ReceiptOutcome(ReceiptStatus Status, Guid? AppointmentId);
+/// <summary><see cref="OrderId"/> and <see cref="OrderKind"/> (TASK 10): the receipt was for a service order, not a booking.</summary>
+public sealed record ReceiptOutcome(ReceiptStatus Status, Guid? AppointmentId, Guid? OrderId = null, string? OrderKind = null);
 
 public enum MoveStatus
 {
@@ -210,8 +212,9 @@ public interface IBookingStore
     Task<bool> CancelAsync(Guid id, string state, CancellationToken ct);
 
     /// <summary>
-    /// B-05 (1.13): what a receipt image from this client would be for. A hold whose time ran out comes
-    /// back as such (<see cref="AppointmentInfo.Expired"/>): the desk checks its time before attaching.
+    /// B-05 (1.13): the booking a receipt image from this client would be for (none when it is for a service
+    /// order, TASK 10). A hold whose time ran out comes back as such (<see cref="AppointmentInfo.Expired"/>):
+    /// the desk checks its time before attaching.
     /// </summary>
     Task<AppointmentInfo?> ReceiptTargetAsync(Guid personId, DateTimeOffset now, CancellationToken ct);
 
@@ -319,21 +322,14 @@ public sealed class BookingDesk(IBookingStore store, IBusyCalendar calendar)
     public async Task<ReceiptOutcome?> ReceiptAsync(BookingSettings booking, HazemSettings settings, ReceiptRequest receipt, DateTimeOffset now,
         CancellationToken ct)
     {
-        if (await store.ReceiptTargetAsync(receipt.PersonId, now, ct) is not { } target)
-        {
-            return null;
-        }
-
-        var lateFree = target.State == AppointmentInfo.Expired
+        // The booking the receipt is for, if it is for one (TASK 10: it may be for a service order).
+        var target = await store.ReceiptTargetAsync(receipt.PersonId, now, ct);
+        var lateFree = target is { State: AppointmentInfo.Expired }
                        && await StillFreeAsync(booking, settings, BookingService.ByCode(target.Service) ?? BookingService.PhoneVideo, target.Start, now,
                            target.Id, ct, holdCheck: false);
         var outcome = await store.AttachReceiptAsync(receipt, lateFree, booking.Rules.BufferMinutes, ct);
         return outcome.Status == ReceiptStatus.None ? null : outcome;
     }
-
-    /// <summary>P7: does anything of this client wait for a receipt (a PDF is then answered «ابعت صورة»).</summary>
-    public async Task<bool> WaitsForReceiptAsync(Guid personId, DateTimeOffset now, CancellationToken ct) =>
-        await store.ReceiptTargetAsync(personId, now, ct) is not null;
 
     public Task<PaymentInfo?> PaymentAsync(Guid appointmentId, CancellationToken ct) => store.PaymentAsync(appointmentId, ct);
 

@@ -51,9 +51,11 @@ public sealed class BookingStore(HazemDbContext db) : IBookingStore
         return row is null ? null : ToInfo(row);
     }
 
-    /// <summary>hazem.receipt_target: the one rule attach_receipt uses too (the database's clock).</summary>
+    /// <summary>hazem.file_target (an image): the one rule attach_receipt uses too (the database's clock).</summary>
     public async Task<AppointmentInfo?> ReceiptTargetAsync(Guid personId, DateTimeOffset now, CancellationToken ct) =>
-        await db.Database.SqlQuery<Guid?>($"""SELECT hazem.receipt_target({personId}) AS "Value" """).SingleAsync(ct) is { } id
+        await db.Database.SqlQuery<Guid?>($"""
+            SELECT t.id AS "Value" FROM hazem.file_target({personId}, true) t WHERE t.kind IN ('hold', 'booking_payment', 'late_hold')
+            """).SingleOrDefaultAsync(ct) is { } id
             ? await FindAsync(id, ct)
             : null;
 
@@ -63,16 +65,18 @@ public sealed class BookingStore(HazemDbContext db) : IBookingStore
             SELECT hazem.attach_receipt({r.PersonId}, {r.Wamid}, {r.Bucket}, {r.Key}, {r.Sha256}, {r.MimeType}, {lateFree}, {bufferMinutes})::text AS "Value"
             """).SingleAsync(ct);
         using var doc = JsonDocument.Parse(json);
-        Guid? id = doc.RootElement.TryGetProperty("id", out var i) ? i.GetGuid() : null;
+        Guid? id = doc.RootElement.TryGetProperty("id", out var i) && i.ValueKind == JsonValueKind.String ? i.GetGuid() : null;
+        Guid? order = doc.RootElement.TryGetProperty("order", out var o) && o.ValueKind == JsonValueKind.String ? o.GetGuid() : null;
         return new ReceiptOutcome(doc.RootElement.GetProperty("status").GetString() switch
         {
             "confirmed" => ReceiptStatus.Confirmed,
             "confirmed_late" => ReceiptStatus.ConfirmedLate,
             "late_taken" => ReceiptStatus.LateTaken,
             "received" => ReceiptStatus.Received,
+            "order_received" => ReceiptStatus.OrderReceived,
             "exists" => ReceiptStatus.Exists,
             _ => ReceiptStatus.None,
-        }, id);
+        }, id, order, doc.RootElement.TryGetProperty("kind", out var k) && k.ValueKind == JsonValueKind.String ? k.GetString() : null);
     }
 
     public async Task<PaymentInfo?> PaymentAsync(Guid appointmentId, CancellationToken ct) =>

@@ -42,7 +42,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const b = $input.first().json.body || {};\nconst by = typeof b.requested_by === 'string' && b.requested_by ? ':' + b.requested_by.slice(0, 80) : '';\nreturn [{ json: {\n  type: b.type, wa_id: String(b.wa_id ?? ''), text: b.text, template_name: b.template_name,\n  language: b.language, components: b.components, interactive: b.interactive, idempotency_key: b.idempotency_key,\n  context_wamid: b.context_wamid, requested_by: 'hazem-api' + by } }];"
+        "jsCode": "const b = $input.first().json.body || {};\nconst by = typeof b.requested_by === 'string' && b.requested_by ? ':' + b.requested_by.slice(0, 80) : '';\nreturn [{ json: {\n  type: b.type, wa_id: String(b.wa_id ?? ''), text: b.text, template_name: b.template_name,\n  language: b.language, components: b.components, interactive: b.interactive, document: b.document, idempotency_key: b.idempotency_key,\n  context_wamid: b.context_wamid, requested_by: 'hazem-api' + by } }];"
       },
       "id": "a5658eb2-23d4-589b-95db-c0cf0bfad04b",
       "name": "Read request",

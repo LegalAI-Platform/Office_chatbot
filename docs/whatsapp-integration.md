@@ -35,7 +35,7 @@ flowchart LR
 |---|---|---|
 | `META-WA-INBOUND` | WhatsApp Trigger | Verifies `X-Hub-Signature-256` with the App Secret, answers Meta's GET verification, registers the webhook when published. PROCESS-EVENT → WA-MEDIA-FETCH (media downloaded at once) → waits `group_quiet_seconds` + 1 s → WA-FORWARD-TURN. **One per Meta App.** |
 | `META-WA-PROCESS-EVENT` | sub-workflow | Calls `app.wa_process_event(event)`: stores the event (dedupe by hash), messages (dedupe by `wamid`, `pending`; groups `ignored_group`), 24-hour window, delivery statuses (forward only), template status. No media download (TASK 03). |
-| `META-WA-SEND-MESSAGE` | sub-workflow | Input `wa_id, text, idempotency_key, requested_by[, context_wamid][, interactive]` (TASK 08: buttons or a list under the text, words from the API) → `{ ok, outbound_id, wamid, status, error_code, error_message }`. |
+| `META-WA-SEND-MESSAGE` | sub-workflow | Input `wa_id, text, idempotency_key, requested_by[, context_wamid][, interactive][, document]` (TASK 08: buttons or a list under the text, words from the API; TASK 10: `document {link, filename}` sends a document with `text` as its caption) → `{ ok, outbound_id, wamid, status, error_code, error_message }`. |
 | `META-WA-SEND-TEMPLATE` | sub-workflow | Input `wa_id, template_name[, language=ar][, components], idempotency_key, requested_by` → same output. |
 | `CFG-GET` | sub-workflow | Returns `app.settings` as `cfg`; stops if a required key is empty. |
 | `META-WA-TEMPLATES-SUBMIT` | manual | Syncs, then submits the M-03 templates Meta does not have. Never resubmits or deletes. |
@@ -47,7 +47,7 @@ flowchart LR
 | `WA-MEDIA-FETCH` | sub-workflow / manual | Claims up to 10 media rows (`app.wa_media_claim`) and runs WA-MEDIA-ONE for each. |
 | `WA-MEDIA-ONE` | sub-workflow | One file: Graph API metadata → `app.wa_media_precheck` (size, allowed type, bucket, key) → download at once → sha256 (hex or base64) → S3 (`office-s3`) → `app.wa_media_stored`. Audio only, behind an explicit check (T-09): read back from S3 → OpenAI `/audio/transcriptions` (`openai-transcription`, `language=ar`) → `app.wa_media_transcribed`. The media URL is never stored. |
 | `WA-HANDLE-TURN` | sub-workflow | One turn: `POST /api/hazem/turns`, sends every action through WA-SEND-ACTION, reports to `POST /api/hazem/send-results`, then `app.wa_turns_finish`. API down / 5xx / 401 / 403 → back to `pending`; 400 / 422 → `failed`. |
-| `WA-SEND-ACTION` | sub-workflow | One action: `send_text` or `send_interactive` (TASK 08) → SEND-MESSAGE, `send_template` → SEND-TEMPLATE, anything else → `INVALID_INPUT`. |
+| `WA-SEND-ACTION` | sub-workflow | One action: `send_text`, `send_interactive` (TASK 08) or `send_document` (TASK 10) → SEND-MESSAGE, `send_template` → SEND-TEMPLATE, anything else → `INVALID_INPUT`. |
 | `WA-INTERNAL-SEND` | Webhook `POST /webhook/hazem-internal-send` | Sends for the API (reminders, panel). Header `X-Hazem-Token` checked against credential `hazem-internal-send`; 403 otherwise. |
 | `WA-TEST-HARNESS` | manual (`n8n execute`) | Runs fixtures through the real wiring without Meta (used by `wa-tests`). |
 
@@ -162,6 +162,9 @@ was present, never its value. Only `hazem-e2e` starts it and points the two base
   Events Meta sends while the tunnel is down are retried by Meta for a limited time, then lost.
 - **One Meta App = one callback URL** (one WhatsApp Trigger). Production needs its own app.
 - **Invalid signatures** are rejected inside the trigger and produce no execution (no counter).
+- **Documents we send (TASK 10)** go to Meta as a link (`document.link`), so Meta must reach it: Garage in
+  test is not public, so a real delivery waits for R2 (`S3__PublicEndpoint`, TASK 14). Dry run stores the
+  payload without sending.
 
 ## Reference used for TASK 03: n8n template 17216
 

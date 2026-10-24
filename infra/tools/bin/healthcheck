@@ -95,6 +95,11 @@ check "n8n key can write to $BUCKET_SENSITIVE" s3_as n8n s3 cp /tmp/probe.txt "s
 check "n8n key cannot write to $BUCKET_BACKUPS" expect_fail s3_as n8n s3 cp /tmp/probe.txt "s3://$BUCKET_BACKUPS/$probe"
 check "backup key can write to $BUCKET_BACKUPS" s3_as backup s3 cp /tmp/probe.txt "s3://$BUCKET_BACKUPS/$probe"
 check "backup key cannot read $BUCKET_SENSITIVE" expect_fail s3_as backup s3 ls "s3://$BUCKET_SENSITIVE"
+# TASK 10 (v1.14): the api signs the upload of a delivered file into office-sensitive/deliverables/; nowhere else.
+check "api key can write a delivered file to $BUCKET_SENSITIVE" s3_as api s3 cp /tmp/probe.txt "s3://$BUCKET_SENSITIVE/deliverables/$probe"
+check "api key cannot write to $BUCKET_MEDIA" expect_fail s3_as api s3 cp /tmp/probe.txt "s3://$BUCKET_MEDIA/$probe"
+check "api key cannot read $BUCKET_BACKUPS" expect_fail s3_as api s3 ls "s3://$BUCKET_BACKUPS"
+s3_as api s3 rm "s3://$BUCKET_SENSITIVE/deliverables/$probe" >/dev/null 2>&1 || true
 check "lifecycle: $BUCKET_BACKUPS expires objects after 30 days" lifecycle_30_days
 s3_as n8n s3 rm "s3://$BUCKET_MEDIA/$probe" >/dev/null 2>&1 || true
 s3_as n8n s3 rm "s3://$BUCKET_SENSITIVE/$probe" >/dev/null 2>&1 || true
@@ -261,7 +266,22 @@ if [[ "$(psql_super office -c "SELECT count(*) FROM hazem.approved_texts WHERE s
   warn "TASK 09's texts are not approved yet: booking from WhatsApp stays off until the owner approves them (docs/approved-texts-proposal.md)"
 fi
 
+echo "== The written services (TASK 10, DECISIONS v1.14 B-16 / B-17 / S-07)"
+check "tables service_orders and service_files exist" \
+  sql_equals office "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'hazem' AND table_name IN ('service_orders', 'service_files')" "2"
+check "a payment belongs to one booking or one order (payments_one_owner)" \
+  sql_equals office "SELECT count(*) FROM pg_constraint WHERE conname = 'payments_one_owner'" "1"
+check "office_app (n8n) cannot read the orders or their files" \
+  expect_fail psql_as office_app "$OFFICE_APP_PASSWORD" office -c 'SELECT 1 FROM hazem.service_orders UNION ALL SELECT 1 FROM hazem.service_files LIMIT 1'
+check "no price forgotten by the worker (an order more than 10 minutes past its price's time)" \
+  sql_equals office "SELECT count(*) FROM hazem.service_orders WHERE state = 'awaiting_payment' AND price_until < now() - interval '10 minutes'" "0"
+if [[ "$(psql_super office -c "SELECT count(*) FROM hazem.approved_texts WHERE source = 'proposal TASK 10' AND active")" == "0" ]]; then
+  warn "TASK 10's texts are not approved yet: Hazem answers a written service as before and opens no order (docs/approved-texts-proposal.md)"
+fi
+
 echo "== Migrations"
+check "migration 0015 (the written services) is applied" \
+  sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0015'" "1"
 check "migration 0014 (the payments, the hold until the receipt) is applied" \
   sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0014'" "1"
 check "migration 0013 (the booking) is applied" \

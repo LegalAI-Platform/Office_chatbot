@@ -9,7 +9,7 @@ import { cairoLongDate, cairoTime, timeAgo } from "../shared/lib/time";
 import { Icon } from "../shared/ui/Icon";
 import { OwnerImg, type OwnerImage } from "../shared/ui/Owner";
 
-type Item = { to: string; text: string; short: string; icon: OwnerImage | "home" | "chat" | "receipt"; dot?: boolean; badge?: number; end?: boolean };
+type Item = { to: string; text: string; short: string; icon: OwnerImage | "home" | "chat" | "receipt" | "document"; dot?: boolean; badge?: number; end?: boolean };
 
 /**
  * The shell of the owner's mockups («الرئيسية», light and dark): the black side bar with the seal,
@@ -26,6 +26,7 @@ export function Layout() {
     { to: "/tasks", text: "الطلبات / المهام", short: "المهام", icon: "nav_tasks", dot: late > 0 },
     { to: "/appointments", text: "المواعيد", short: "المواعيد", icon: "nav_appointments" },
     { to: "/receipts", text: "الإيصالات والمدفوعات", short: "الإيصالات", icon: "receipt" },
+    { to: "/services", text: "طلبات الخدمات", short: "الخدمات", icon: "document" },
     { to: "/chats", text: "المحادثات", short: "المحادثات", icon: "chat" },
     { to: "/documents", text: "المستندات", short: "المستندات", icon: "nav_documents" },
     { to: "/reports", text: "التقارير", short: "التقارير", icon: "nav_reports" },
@@ -101,7 +102,7 @@ function NavIcon({ icon, small = false }: { icon: Item["icon"]; small?: boolean 
     );
   }
   // the cut has no chat or receipt icon: the same lines drawn here, in the same white
-  if (icon === "chat" || icon === "receipt") return <Icon name={icon} className={`${size} shrink-0 text-white`} />;
+  if (icon === "chat" || icon === "receipt" || icon === "document") return <Icon name={icon} className={`${size} shrink-0 text-white`} />;
   // these PNGs are white strokes made for the black bar, the same in both cuts
   return <OwnerImg name={icon} className={`${size} shrink-0 object-contain`} />;
 }

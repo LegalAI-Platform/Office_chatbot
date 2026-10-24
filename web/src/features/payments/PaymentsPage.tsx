@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { errorMessage } from "../../shared/api/client";
 import { can, useMe } from "../../shared/api/session";
-import { APPOINTMENT_STATES, BOOKING_SERVICES, label, PAYMENT_STATES, REFUND_REASONS } from "../../shared/lib/labels";
+import { APPOINTMENT_STATES, BOOKING_SERVICES, label, PAYMENT_STATES, REFUND_REASONS, SERVICE_KINDS, SERVICE_STATES } from "../../shared/lib/labels";
 import { cairoWhen } from "../../shared/lib/time";
 import { Icon } from "../../shared/ui/Icon";
 import { Button, Card, Chip, Empty, ErrorState, Field, Loading } from "../../shared/ui/ui";
@@ -70,7 +70,7 @@ function PaymentCard({ p }: { p: Payment }) {
           <span className="grid min-w-0 flex-1 gap-0.5">
             <span className="font-semibold">{p.name ?? "من غير اسم"} · {cairoWhen(p.start)}</span>
             <span className="text-xs text-ink-soft">
-              {label(BOOKING_SERVICES, p.service)} · {label(APPOINTMENT_STATES, p.appointment)} · <span dir="ltr">+{p.wa_id}</span>
+              {p.order ? label(SERVICE_KINDS, p.service) : label(BOOKING_SERVICES, p.service)} · {p.order ? label(SERVICE_STATES, p.appointment) : label(APPOINTMENT_STATES, p.appointment)} · <span dir="ltr">+{p.wa_id}</span>
             </span>
             <span className="text-sm">
               المطلوب <b className="tabular">{pounds(p.amount_due)}</b> جنيه

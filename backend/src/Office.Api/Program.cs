@@ -59,6 +59,7 @@ app.MapPanelApi();
 app.MapChatwoot();
 app.MapPanelTools(); // TASK 07c
 app.MapPanelBooking(); // TASK 08
+app.MapPanelServices(); // TASK 10
 
 app.Run();
 

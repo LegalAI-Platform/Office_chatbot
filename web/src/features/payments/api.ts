@@ -23,6 +23,8 @@ export interface Payment {
   refunded_by: string | null;
   refunded_at: string | null;
   refund_method: string | null;
+  /** TASK 10: a service order's payment (service = its kind, appointment = its state, start = when it was asked). */
+  order?: boolean;
 }
 
 export type Review = "verified" | "partial" | "not_received";

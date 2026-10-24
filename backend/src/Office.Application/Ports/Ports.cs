@@ -40,7 +40,14 @@ public sealed record OutboundMessage(
     string? Text = null,
     string? TemplateName = null,
     string? Language = null,
-    InteractivePayload? Interactive = null);
+    InteractivePayload? Interactive = null,
+    DocumentPayload? Document = null);
+
+/// <summary>
+/// TASK 10 (B-16.6): a document for WhatsApp, as a short signed link to storage that Meta reads (never the
+/// file itself) and the name the client sees. <see cref="OutboundMessage.Text"/> is its caption (≤ 1024).
+/// </summary>
+public sealed record DocumentPayload(string Link, string Filename);
 
 /// <summary>Outcome of one send, reported by n8n (POST /api/hazem/send-results) or by the API itself.</summary>
 public sealed record SendResult(

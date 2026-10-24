@@ -29,9 +29,14 @@ public static class Permissions
     public const string PaymentsVerify = "payments.verify";
     public const string PaymentsRefund = "payments.refund";
 
+    // TASK 10 (DECISIONS v1.14): every role follows the service orders (documents, upload, delivery, close);
+    // only the lawyer and the manager price one or ask for a written opinion (owner: b).
+    public const string ServicesManage = "services.manage";
+    public const string ServicesPrice = "services.price";
+
     public static IReadOnlyList<string> All { get; } =
         [TasksViewOwn, TasksViewAll, TasksUpdate, TasksAssign, UsersManage, AccountSelf, ListsManage, TextsManage, ReportsView, ConversationsUnmute,
-            ScheduleManage, OfficeManage, PaymentsVerify, PaymentsRefund];
+            ScheduleManage, OfficeManage, PaymentsVerify, PaymentsRefund, ServicesManage, ServicesPrice];
 
     public const string Manager = "manager";
     public const string Lawyer = "lawyer";
@@ -42,10 +47,10 @@ public static class Permissions
     private static readonly Dictionary<string, string[]> ByRole = new(StringComparer.Ordinal)
     {
         [Manager] = [TasksViewOwn, TasksViewAll, TasksUpdate, TasksAssign, UsersManage, AccountSelf, ListsManage, TextsManage, ReportsView,
-            ConversationsUnmute, ScheduleManage, OfficeManage, PaymentsVerify, PaymentsRefund],
+            ConversationsUnmute, ScheduleManage, OfficeManage, PaymentsVerify, PaymentsRefund, ServicesManage, ServicesPrice],
         [Lawyer] = [TasksViewOwn, TasksViewAll, TasksUpdate, TasksAssign, AccountSelf, ListsManage, TextsManage, ReportsView, ScheduleManage,
-            OfficeManage, PaymentsVerify, PaymentsRefund],
-        [Staff] = [TasksViewOwn, TasksUpdate, AccountSelf, ScheduleManage, PaymentsVerify, PaymentsRefund],
+            OfficeManage, PaymentsVerify, PaymentsRefund, ServicesManage, ServicesPrice],
+        [Staff] = [TasksViewOwn, TasksUpdate, AccountSelf, ScheduleManage, PaymentsVerify, PaymentsRefund, ServicesManage],
     };
 
     public static IReadOnlyList<string> Of(string role) =>

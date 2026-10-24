@@ -16,7 +16,9 @@ export type Permission =
   | "schedule.manage"
   | "office.manage"
   | "payments.verify"
-  | "payments.refund";
+  | "payments.refund"
+  | "services.manage"
+  | "services.price";
 
 export interface Me {
   id: string;

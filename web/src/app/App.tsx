@@ -21,6 +21,7 @@ import { TextsPage } from "../features/texts/TextsPage";
 import { HomePage } from "../features/home/HomePage";
 import { BookingPage } from "../features/booking/BookingPage";
 import { PaymentsPage } from "../features/payments/PaymentsPage";
+import { ServicesPage } from "../features/services/ServicesPage";
 import { Layout } from "./Layout";
 import { ComingSoon, SettingsPage } from "./Pages";
 
@@ -93,6 +94,10 @@ export const routes = [
           {
             element: <RequirePermission permission="schedule.manage" />,
             children: [{ path: "/receipts", element: <PaymentsPage /> }],
+          },
+          {
+            element: <RequirePermission permission="services.manage" />,
+            children: [{ path: "/services", element: <ServicesPage /> }],
           },
           {
             element: <RequirePermission permission="users.manage" />,

@@ -35,13 +35,13 @@ public sealed class BookingNotices(HazemDbContext db, BookingStore store, Bookin
 
         var due = await (from a in db.Appointments.AsNoTracking()
                          join p in db.Persons.AsNoTracking() on a.PersonId equals p.Id
-                         join pay in db.Payments.AsNoTracking() on a.Id equals pay.AppointmentId into pays
+                         join pay in db.Payments.AsNoTracking() on (Guid?)a.Id equals pay.AppointmentId into pays
                          from pay in pays.DefaultIfEmpty()
                          where a.ClientNotice == "pending"
                          orderby a.UpdatedAt
                          select new { a, p.WaId, Paid = pay != null && pay.ProofAt != null }).Take(Batch).ToListAsync(ct);
         var payments = await (from pay in db.Payments.AsNoTracking()
-                              join a in db.Appointments.AsNoTracking() on pay.AppointmentId equals a.Id
+                              join a in db.Appointments.AsNoTracking() on pay.AppointmentId equals (Guid?)a.Id
                               join p in db.Persons.AsNoTracking() on a.PersonId equals p.Id
                               where pay.ClientNotice == "pending"
                               orderby pay.UpdatedAt

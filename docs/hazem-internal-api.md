@@ -224,6 +224,19 @@ Response `200` (always, the outcome is in the body):
 TASK 08: `send_interactive` with `interactive` (as above) works here too (the panel's booking tells
 a client when the office cancels).
 
+TASK 10 (v1.14): `send_document` delivers a written service's file. `text` is the caption; `document.link`
+is a signed read link to storage (one hour) that Meta downloads; the file itself never passes through
+.NET or n8n:
+
+```json
+{ "type": "send_document", "wa_id": "201001234567", "text": "📄 مراجعة العقد بتاع حضرتك جاهز ✅",
+  "document": { "link": "https://…/office-sensitive/deliverables/…pdf?X-Amz-…", "filename": "مراجعة العقد.pdf" },
+  "idempotency_key": "hazem:service:…:delivered", "requested_by": "panel-service" }
+```
+
+n8n sends `{ type: "document", document: { link, filename, caption } }` to Meta (the same 24-hour window
+rule as text). Real delivery needs the link to be reachable from the internet (R2 in production, TASK 14).
+
 - Same rules as any other send: 24-hour window for text, `APPROVED` templates only, and the
   same `idempotency_key` never sends twice (the first result is returned with `DUPLICATE`
   when it had not succeeded).
