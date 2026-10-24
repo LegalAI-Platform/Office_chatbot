@@ -181,4 +181,33 @@ forward
 step check-hazem10-receipt || failed=1
 panel_step hazem10-deliver || failed=1
 step check-hazem10-delivered || failed=1
+echo "==== 14. TASK 11: an Urfi marriage contract from the questions to the lawyer's approval"
+step hazem11-setup
+forward
+step hazem11-say 2 "محمد أحمد علي حسن"
+forward
+step hazem11-say 3 "عايز أعمل جواز عرفي"
+forward
+step check-hazem11-ages || failed=1
+step hazem11-say 4 "30 و 25"
+forward
+step check-hazem11-wife-past || failed=1
+step hazem11-press 5 urf:wife_past:first
+forward
+step hazem11-press 6 urf:guardian:father
+forward
+step hazem11-press 7 urf:witnesses:office
+forward
+step check-hazem11-times || failed=1
+step hazem11-pick
+forward
+step check-hazem11-held || failed=1
+step hazem11-receipt
+forward
+step check-hazem11-documents-asked || failed=1
+step hazem11-document
+forward
+step check-hazem11-documents || failed=1
+panel_step hazem11-approve || failed=1
+step check-hazem11-confirmed || failed=1
 unset E2E_PANEL_PASSWORD

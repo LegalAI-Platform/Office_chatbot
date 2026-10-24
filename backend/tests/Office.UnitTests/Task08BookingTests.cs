@@ -275,7 +275,8 @@ public sealed class BookingFlowTests
     }
 
     private HazemResponder Hazem => new(new Store(_rows), new Scripted(_script), new Texts(_texts), new NoLists(), new Clock(_now),
-        new BookingDesk(_booking, _calendar), new Office.Application.Services.ServiceDesk(_booking));
+        new BookingDesk(_booking, _calendar), new Office.Application.Services.ServiceDesk(_booking),
+        new Office.Application.Urf.UrfDesk(new MemoryUrf(_booking)));
 
     private Task<TurnDecision> Send(IncomingMessage m) => Send(new Turn($"wt:{++_turn}", Number, null, [m]));
 
@@ -740,7 +741,201 @@ public sealed class BookingFlowTests
         Assert.Equal("اختار ميعاد", Office.Application.Chatwoot.ChatwootText.Hazem(a with { Interactive = null }));
     }
 
+    // ---------- TASK 11: the Urfi paths (B-11, every row of its table) ----------
+
+    private void UrfOn()
+    {
+        foreach (var k in HazemResponder.UrfTextKeys)
+        {
+            var max = k.StartsWith("btn_", StringComparison.Ordinal) ? 20 : 600;
+            _texts[k] = new ApprovedText(k, 1, k == TextKeys.UrfChooseSlot ? "{{service}} {{amount}} {{documents}}"
+                : k == TextKeys.UrfSendDocuments ? "ابعت {{documents}}" : "T:" + k[..Math.Min(k.Length, 14)], max, true);
+        }
+
+        _texts[TextKeys.MediaReceived] = new ApprovedText(TextKeys.MediaReceived, 1, "وصلت {{media}}", 300, true);
+        _script["عايز أعمل جواز عرفي"] = new("service_by_name", "urf_marriage", "unknown", null, 0.9);
+        _script["عايز طلاق عرفي"] = new("service_by_name", "urf_divorce", "unknown", null, 0.9);
+        _script["عرفي"] = new("service_by_name", "urf_unclear", "unknown", null, 0.9);
+    }
+
+    private Task<TurnDecision> Answer(string step, string value) => Press(Office.Application.Urf.UrfAnswer.Id(step, value));
+
+    private Office.Application.Urf.UrfCase TheCase => Assert.Single(_booking.UrfCases);
+
+    /// <summary>A new client asks for an Urfi marriage contract and answers up to the guardian.</summary>
+    private async Task ToTheGuardian(string ages = "30 و 25", string past = "first")
+    {
+        UrfOn();
+        await ToTheOffer();
+        Assert.Equal([TextKeys.UrfAskAges], Keys(await Say("عايز أعمل جواز عرفي")));
+        _script[ages] = new("other", null, "unknown", null, 0.9);
+        Assert.Equal([TextKeys.UrfAskWifePast], Keys(await Say(ages)));
+        Assert.Equal([TextKeys.UrfAskGuardian], Keys(await Answer(Office.Application.Urf.UrfStep.WifePast, past)));
+    }
+
+    [Fact]
+    public async Task Urf_17_is_refused_without_a_price_or_a_time()
+    {
+        UrfOn();
+        await ToTheOffer();
+        await Say("عايز أعمل جواز عرفي");
+        var d = await Say("الزوج 30 والزوجة ١٧");
+        Assert.Equal([TextKeys.UrfUnderAge], Keys(d));
+        Assert.Null(d.Effects!.Classification); // read by code, never the AI
+        Assert.Equal((Office.Application.Urf.UrfCase.RejectedAge, Office.Application.Urf.UrfRules.PolicyVersion), (TheCase.State, TheCase.PolicyVersion));
+        Assert.Empty(_booking.Appointments);
+    }
+
+    [Theory]
+    [InlineData("brother", "الأخ")] // the father passed away, the brother is there
+    [InlineData("uncle", "العم")]   // no father, no brother, the uncle is there
+    public async Task Urf_the_first_guardian_there_is_the_guardian(string guardian, string name)
+    {
+        await ToTheGuardian();
+        Assert.Equal([TextKeys.UrfAskWitnesses], Keys(await Answer(Office.Application.Urf.UrfStep.Guardian, guardian)));
+        var times = await Answer(Office.Application.Urf.UrfStep.Witnesses, "own");
+        Assert.Equal([TextKeys.UrfChooseSlot], Keys(times));
+        Assert.Contains($"بطاقة الولي ({name})", times.Actions.Single().Text);
+        Assert.Contains("4,000", times.Actions.Single().Text); // the client's witnesses
+        Assert.Contains("بطاقتين الشاهدين", times.Actions.Single().Text);
+        Assert.Equal(Office.Application.Urf.UrfCase.DocumentsPending, TheCase.State);
+    }
+
+    [Fact]
+    public async Task Urf_no_guardian_is_the_office_s_policy()
+    {
+        await ToTheGuardian();
+        Assert.Equal([TextKeys.UrfNoGuardian], Keys(await Answer(Office.Application.Urf.UrfStep.Guardian, "none")));
+        Assert.Equal(Office.Application.Urf.UrfCase.RejectedGuardian, TheCase.State);
+    }
+
+    [Fact]
+    public async Task Urf_a_khul_asks_for_its_ruling_and_the_office_s_witnesses_cost_5000_for_60_minutes()
+    {
+        await ToTheGuardian(past: "khul");
+        await Answer(Office.Application.Urf.UrfStep.Guardian, "father");
+        var times = await Answer(Office.Application.Urf.UrfStep.Witnesses, "office");
+        Assert.Contains("حكم الخلع", times.Actions.Single().Text);
+        Assert.Contains("5,000", times.Actions.Single().Text);
+        Assert.DoesNotContain("الشاهدين", times.Actions.Single().Text);
+
+        var row = times.Actions.Single().Interactive!.Choices[0].Id;
+        await Press(row);
+        var held = Assert.Single(_booking.Appointments);
+        Assert.Equal((BookingService.UrfMarriageOffice.Code, 5000, 60), (held.Service, held.Amount, (int)(held.End - held.Start).TotalMinutes));
+        Assert.Equal((Office.Application.Urf.UrfCase.Booked, held.Id), (TheCase.State, TheCase.AppointmentId!.Value));
+
+        // The receipt confirms it, then Hazem asks for the documents; the IDs go to the case, never the AI.
+        Assert.Equal([TextKeys.BookingPaid, TextKeys.UrfSendDocuments], Keys(await Receipt()));
+        var ids = await Files((MessageType.Image, "image/jpeg"), (MessageType.Image, "image/jpeg"));
+        Assert.Null(ids.Effects!.Classification);
+        Assert.Equal([TextKeys.UrfDocumentsReceived], Keys(ids));
+        Assert.Contains(PendingTask.UrfReview, TaskKinds(ids));
+        Assert.Equal(2, _booking.UrfFiles[TheCase.Id]);
+    }
+
+    [Fact]
+    public async Task Urf_unclear_asks_what_is_wanted_without_choices()
+    {
+        UrfOn();
+        await ToTheOffer();
+        var d = await Say("عرفي");
+        Assert.Equal([TextKeys.UrfUnclear], Keys(d));
+        Assert.Null(d.Actions.Single().Interactive);
+        Assert.Empty(_booking.UrfCases);
+    }
+
+    [Theory]
+    [InlineData("has_copy", "no")]
+    [InlineData("agreed", "no")]
+    [InlineData("children", "yes")]
+    public async Task Urf_divorce_goes_straight_to_its_path_and_a_hard_case_gets_the_consultation_only(string stop, string value)
+    {
+        UrfOn();
+        await ToTheOffer();
+        Assert.Equal([TextKeys.UrfAskCopy], Keys(await Say("عايز طلاق عرفي")));
+        string[] steps = [Office.Application.Urf.UrfStep.HasCopy, Office.Application.Urf.UrfStep.Agreed, Office.Application.Urf.UrfStep.Children];
+        TurnDecision last = null!;
+        foreach (var step in steps)
+        {
+            last = await Answer(step, step == stop ? value : step == Office.Application.Urf.UrfStep.Children ? "no" : "yes");
+            if (step == stop)
+            {
+                break;
+            }
+        }
+
+        Assert.Equal([TextKeys.ConsultationOffer], Keys(last)); // the divorce service is not sold
+        Assert.Equal(Office.Application.Urf.UrfCase.Redirected, TheCase.State);
+    }
+
+    [Fact]
+    public async Task Urf_ages_that_cannot_be_read_are_asked_again_then_go_to_the_office()
+    {
+        UrfOn();
+        await ToTheOffer();
+        await Say("عايز أعمل جواز عرفي");
+        _script["مش عارف"] = new("other", null, "unknown", null, 0.9);
+        Assert.Equal([TextKeys.UrfAgesAgain], Keys(await Say("مش عارف")));
+        var d = await Say("مش عارف");
+        Assert.Contains(PendingTask.UrfHelp, TaskKinds(d));
+        Assert.Equal(Office.Application.Urf.UrfCase.Collecting, TheCase.State);
+    }
+
+    [Theory]
+    [InlineData("30 و 25", 30, 25)]
+    [InlineData("الزوج ٣٥ والزوجة ٢٢", 35, 22)]
+    [InlineData("25", null, null)]
+    [InlineData("30 و 25 و 40", null, null)]
+    [InlineData("3000 و 25", null, null)]
+    public void Urf_ages_are_two_numbers_husband_first(string text, int? husband, int? wife)
+    {
+        var r = Office.Application.Urf.UrfAges.Parse(text);
+        Assert.Equal(husband, r?.Husband);
+        Assert.Equal(wife, r?.Wife);
+    }
+
+    [Fact]
+    public async Task Without_the_urf_texts_a_urf_request_is_answered_as_before()
+    {
+        await ToTheOffer();
+        _script["عايز أعمل جواز عرفي"] = new("service_by_name", "urf_marriage", "unknown", null, 0.9);
+        var d = await Say("عايز أعمل جواز عرفي");
+        Assert.DoesNotContain(TextKeys.UrfAskAges, Keys(d));
+        Assert.Contains(PendingTask.ServiceRequest, TaskKinds(d)); // the office takes it, as before TASK 11
+        Assert.Empty(_booking.UrfCases);
+    }
+
     // ---------- fakes ----------
+
+    /// <summary>hazem.urf_cases and add_urf_file, in memory (the cases live in <see cref="MemoryBooking"/> for file_target).</summary>
+    private sealed class MemoryUrf(MemoryBooking booking) : Office.Application.Urf.IUrfStore
+    {
+        public Task<Office.Application.Urf.UrfCase?> OpenAsync(Guid personId, CancellationToken ct) =>
+            Task.FromResult(booking.UrfCases.LastOrDefault(c => c.PersonId == personId
+                && c.State is Office.Application.Urf.UrfCase.Collecting or Office.Application.Urf.UrfCase.DocumentsPending or Office.Application.Urf.UrfCase.Booked));
+
+        public Task SaveAsync(Office.Application.Urf.UrfCase c, Guid? intakeId, CancellationToken ct)
+        {
+            booking.UrfCases.RemoveAll(x => x.Id == c.Id);
+            booking.UrfCases.Add(c);
+            return Task.CompletedTask;
+        }
+
+        public async Task<Office.Application.Services.AddFileOutcome> AddFileAsync(Guid personId, Office.Application.Services.StoredFile file,
+            CancellationToken ct)
+        {
+            if (await booking.FileTargetAsync(personId, file.MimeType?.StartsWith("image/", StringComparison.Ordinal) == true, ct)
+                is not { Target: Office.Application.Services.FileTarget.UrfDocuments, Id: { } id })
+            {
+                return new(Office.Application.Services.AddFileStatus.None, null, null);
+            }
+
+            var count = booking.UrfFiles.GetValueOrDefault(id);
+            booking.UrfFiles[id] = count + 1;
+            return new(count == 0 ? Office.Application.Services.AddFileStatus.First : Office.Application.Services.AddFileStatus.More, id, null);
+        }
+    }
 
     private sealed class Clock(DateTimeOffset now) : TimeProvider
     {
@@ -946,6 +1141,10 @@ public sealed class BookingFlowTests
 
         public List<Order> Orders { get; } = [];
 
+        public List<Office.Application.Urf.UrfCase> UrfCases { get; } = [];
+
+        public Dictionary<Guid, int> UrfFiles { get; } = [];
+
         public sealed class Order(Guid person, string kind)
         {
             public Guid Id { get; } = Guid.NewGuid();
@@ -955,10 +1154,15 @@ public sealed class BookingFlowTests
             public List<string> Files { get; } = [];
         }
 
-        /// <summary>hazem.file_target: a hold or a booking waiting for a receipt first, then an order's documents, then a late hold.</summary>
+        /// <summary>
+        /// hazem.file_target: a hold or a booking waiting for a receipt first, then an Urfi case's documents, then an order's
+        /// documents, then a late hold.
+        /// </summary>
         public async Task<Office.Application.Services.FileFor> FileTargetAsync(Guid personId, bool image, CancellationToken ct)
         {
             var docs = Orders.LastOrDefault(o => o.Person == personId && o.State is "collecting" or "awaiting_price");
+            var urf = UrfCases.LastOrDefault(c => c.PersonId == personId
+                && c.State is Office.Application.Urf.UrfCase.DocumentsPending or Office.Application.Urf.UrfCase.Booked or Office.Application.Urf.UrfCase.Approved);
             var receipt = await ReceiptTargetAsync(personId, now(), ct);
             var kind = receipt?.State switch
             {
@@ -971,12 +1175,14 @@ public sealed class BookingFlowTests
             {
                 return kind is Office.Application.Services.FileTarget.Hold or Office.Application.Services.FileTarget.BookingPayment
                     ? new(kind, receipt!.Id)
+                    : urf is not null ? new(Office.Application.Services.FileTarget.UrfDocuments, urf.Id)
                     : docs is not null ? new(Office.Application.Services.FileTarget.OrderDocuments, docs.Id)
                     : receipt is not null ? new(kind, receipt.Id)
                     : Office.Application.Services.FileFor.Nothing;
             }
 
-            return docs is not null ? new(Office.Application.Services.FileTarget.OrderDocuments, docs.Id)
+            return urf is not null ? new(Office.Application.Services.FileTarget.UrfDocuments, urf.Id)
+                : docs is not null ? new(Office.Application.Services.FileTarget.OrderDocuments, docs.Id)
                 : receipt is not null ? new(Office.Application.Services.FileTarget.AskImage, receipt.Id)
                 : Office.Application.Services.FileFor.Nothing;
         }

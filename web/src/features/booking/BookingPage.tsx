@@ -430,6 +430,12 @@ function SettingsForm() {
           <Field label="الحجز المؤقت يخلص قبل الميعاد بـ (دقيقة)" type="number" min={0} max={240} value={v.hold_gap_minutes} onChange={num("hold_gap_minutes")} />
         </div>
       </fieldset>
+      <fieldset className="grid gap-3 border-t border-line pt-3">
+        <legend className="text-sm font-semibold">العرفي</legend>
+        <div className="grid gap-3 md:grid-cols-2">
+          <Field label="مدة ميعاد العرفي في المكتب (دقيقة)" type="number" min={15} max={480} value={v.urf_minutes} onChange={num("urf_minutes")} />
+        </div>
+      </fieldset>
       {save.isError ? <p className="text-sm text-bad" role="alert">{errorMessage(save.error)}</p> : null}
       <div><Button variant="primary" busy={save.isPending} disabled={!draft} onClick={() => save.mutate(v)}>احفظ</Button></div>
     </Card>

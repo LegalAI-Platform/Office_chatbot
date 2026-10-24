@@ -15,20 +15,41 @@ public sealed record BookingService(string Code, string Short, int Minutes, int 
     public static BookingService Office { get; } = new("consultation_office", "of", 30, 1000, "مقابلة في المكتب");
     public static BookingService Urgent { get; } = new("consultation_urgent", "ur", 15, 1000, "استشارة عاجلة بالتليفون");
 
-    public static IReadOnlyList<BookingService> All { get; } = [PhoneVideo, Office, Urgent];
+    // B-11 (1.15): the Urfi contract or divorce, in the office; the price comes from the witnesses (B-23), the length from
+    // booking.urf_minutes (BookingSettings.Fit).
+    public static BookingService UrfMarriageOffice { get; } = new("urf_marriage_office", "mo", 60, 5000, "عقد جواز عرفي (الشهود من المكتب)");
+    public static BookingService UrfMarriageOwn { get; } = new("urf_marriage_own", "mw", 60, 4000, "عقد جواز عرفي (الشهود من طرفكم)");
+    public static BookingService UrfDivorceOffice { get; } = new("urf_divorce_office", "do", 60, 5000, "طلاق عرفي (الشهود من المكتب)");
+    public static BookingService UrfDivorceOwn { get; } = new("urf_divorce_own", "dw", 60, 4000, "طلاق عرفي (الشهود من طرفكم)");
+
+    public static IReadOnlyList<BookingService> All { get; } = [PhoneVideo, Office, Urgent, UrfMarriageOffice, UrfMarriageOwn, UrfDivorceOffice, UrfDivorceOwn];
 
     public bool IsUrgent => Code == Urgent.Code;
+
+    public bool IsUrf => Code.StartsWith("urf_", StringComparison.Ordinal);
+
+    public static BookingService Urf(bool marriage, bool officeWitnesses) => (marriage, officeWitnesses) switch
+    {
+        (true, true) => UrfMarriageOffice,
+        (true, false) => UrfMarriageOwn,
+        (false, true) => UrfDivorceOffice,
+        _ => UrfDivorceOwn,
+    };
 
     public static BookingService? ByCode(string? code) => All.FirstOrDefault(s => s.Code == code || s.Short == code);
 }
 
 /// <summary>The booking.* and office.* settings, read in every turn (the panel's changes count at once).</summary>
-public sealed record BookingSettings(bool Enabled, BookingRules Rules, string CalendarId, OfficeInfo Office, HoldRules Hold)
+public sealed record BookingSettings(bool Enabled, BookingRules Rules, string CalendarId, OfficeInfo Office, HoldRules Hold, int UrfMinutes = 60)
 {
     public const string HoldMinutesKey = "booking.hold_minutes";
     public const string HoldShortMinutesKey = "booking.hold_short_minutes";
     public const string HoldShortWithinKey = "booking.hold_short_within_hours";
     public const string HoldGapKey = "booking.hold_gap_minutes";
+    public const string UrfMinutesKey = "booking.urf_minutes";
+
+    /// <summary>B-11 (1.15): the Urfi appointment in the office, 15 minutes to 8 hours.</summary>
+    public static bool UrfMinutesValid(int minutes) => minutes is >= 15 and <= 480;
 
     public const string EnabledKey = "booking.enabled";
     public const string BufferKey = "booking.buffer_minutes";
@@ -58,8 +79,11 @@ public sealed record BookingSettings(bool Enabled, BookingRules Rules, string Ca
         var hold = new HoldRules(Int(HoldMinutesKey, h.Minutes), Int(HoldShortMinutesKey, h.ShortMinutes), Int(HoldShortWithinKey, h.ShortWithinHours),
             Int(HoldGapKey, h.GapMinutes));
         return new(s.Flag(EnabledKey), rules.Problem() is null ? rules : d, s.Get(CalendarIdKey), OfficeInfo.From(s),
-            hold.Problem() is null ? hold : h);
+            hold.Problem() is null ? hold : h, UrfMinutesValid(Int(UrfMinutesKey, 60)) ? Int(UrfMinutesKey, 60) : 60);
     }
+
+    /// <summary>The service with its length here: an Urfi appointment takes <see cref="UrfMinutes"/>.</summary>
+    public BookingService Fit(BookingService service) => service.IsUrf ? service with { Minutes = UrfMinutes } : service;
 }
 
 /// <summary>
@@ -248,6 +272,7 @@ public sealed class BookingDesk(IBookingStore store, IBusyCalendar calendar)
         DateTimeOffset after, DateOnly? onlyDay, int limit, Guid? except, CancellationToken ct, bool holdCheck = true)
     {
         var rules = booking.Rules;
+        service = booking.Fit(service);
         var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, Zone).DateTime);
         // One day asked (re-checking a time, the urgent path): only that day, and the buffer around it.
         var (first, last) = onlyDay is { } day ? (day, day) : (today, today.AddDays(rules.HorizonDays));
@@ -286,6 +311,7 @@ public sealed class BookingDesk(IBookingStore store, IBusyCalendar calendar)
     public async Task<BookOutcome?> BookAsync(BookingSettings booking, HazemSettings settings, BookRequest request, DateTimeOffset now,
         CancellationToken ct)
     {
+        request = request with { Service = booking.Fit(request.Service) }; // the Urfi length (booking.urf_minutes)
         if (!await StillFreeAsync(booking, settings, request.Service, request.Start, now, null, ct))
         {
             return null;
@@ -297,7 +323,7 @@ public sealed class BookingDesk(IBookingStore store, IBusyCalendar calendar)
     public async Task<MoveStatus> MoveAsync(BookingSettings booking, HazemSettings settings, AppointmentInfo appointment, DateTimeOffset start,
         string turnId, DateTimeOffset now, CancellationToken ct)
     {
-        var service = BookingService.ByCode(appointment.Service) ?? BookingService.PhoneVideo;
+        var service = booking.Fit(BookingService.ByCode(appointment.Service) ?? BookingService.PhoneVideo);
         if (!await StillFreeAsync(booking, settings, service, start, now, appointment.Id, ct, holdCheck: false))
         {
             return MoveStatus.Taken;

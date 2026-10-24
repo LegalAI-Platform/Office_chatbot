@@ -22,6 +22,7 @@ import { HomePage } from "../features/home/HomePage";
 import { BookingPage } from "../features/booking/BookingPage";
 import { PaymentsPage } from "../features/payments/PaymentsPage";
 import { ServicesPage } from "../features/services/ServicesPage";
+import { UrfPage } from "../features/urf/UrfPage";
 import { Layout } from "./Layout";
 import { ComingSoon, SettingsPage } from "./Pages";
 
@@ -98,6 +99,10 @@ export const routes = [
           {
             element: <RequirePermission permission="services.manage" />,
             children: [{ path: "/services", element: <ServicesPage /> }],
+          },
+          {
+            element: <RequirePermission permission="urf.manage" />,
+            children: [{ path: "/urf", element: <UrfPage /> }],
           },
           {
             element: <RequirePermission permission="users.manage" />,

@@ -204,6 +204,46 @@ public static class PanelBookingEndpoints
             .RequireAuthorization(PanelAuth.Policy(Permissions.ServicesPrice));
     }
 
+    /// <summary>TASK 11 (DECISIONS v1.15, B-11 / S-06): «حالات العرفي». docs/panel-api.md.</summary>
+    public static void MapPanelUrf(this IEndpointRouteBuilder app)
+    {
+        var urf = app.MapGroup("/api/panel/urf")
+            .AddEndpointFilter<NoStoreFilter>()
+            .AddEndpointFilter<AntiforgeryFilter>()
+            .AddEndpointFilter<MustChangePasswordFilter>()
+            .AddEndpointFilter<TwoFactorRequiredFilter>()
+            .RequireAuthorization(PanelAuth.Policy(Permissions.UrfManage));
+
+        urf.MapGet("", async (string? show, Office.Infrastructure.Urf.PanelUrf u, CancellationToken ct) =>
+            await u.ListAsync(show, ct) is { } list ? Results.Ok(list) : Results.BadRequest(new { error = PanelPayments.ErrInvalid }));
+
+        // A document the client sent for the case (ID cards): never cached, recorded once read.
+        urf.MapGet("/{id:guid}/files/{index:int}", async (Guid id, int index, HttpContext ctx, Office.Infrastructure.Urf.PanelUrf u,
+            Office.Application.Panel.IClientFiles files, CancellationToken ct) =>
+        {
+            if (!files.Configured)
+            {
+                return Results.Json(new { error = "not_configured" }, statusCode: StatusCodes.Status503ServiceUnavailable);
+            }
+
+            if (await u.FileAsync(id, index, ct) is not { } f || await files.OpenAsync(f, ct) is not { } file)
+            {
+                return Results.NotFound(new { error = PanelPayments.ErrNotFound });
+            }
+
+            await u.RecordFileOpenedAsync(ctx.CurrentUser().Id, id, index, ct);
+            var type = ClientFileTypes.Safe(file.ContentType);
+            ctx.Response.Headers.ContentSecurityPolicy = "sandbox; default-src 'none'; img-src 'self'";
+            return Results.Stream(file.Content, type, ClientFileTypes.Inline(type) ? null : ClientFileTypes.Name(index, file.Filename, type));
+        });
+
+        urf.MapPost("/{id:guid}/review", async (Guid id, UrfReviewRequest? body, HttpContext ctx, Office.Infrastructure.Urf.PanelUrf u,
+            CancellationToken ct) => ServiceAnswer(await u.ReviewAsync(ctx.CurrentUser().Id, id, body?.Decision, ct)))
+            .RequireAuthorization(PanelAuth.Policy(Permissions.UrfReview));
+    }
+
+    public sealed record UrfReviewRequest(string? Decision);
+
     private static IResult ServiceAnswer(string? error) => error switch
     {
         null => Results.NoContent(),

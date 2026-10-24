@@ -4,6 +4,7 @@ using Office.Application.Services;
 using Office.Application.Texts;
 using Office.Application.Turns;
 using Office.Application.Understanding;
+using Office.Application.Urf;
 using Office.Domain.Clients;
 using Office.Domain.Common;
 using Office.Domain.Tasks;
@@ -24,7 +25,8 @@ public sealed class HazemResponder(
     IClientLists lists,
     TimeProvider clock,
     BookingDesk? booking = null,
-    ServiceDesk? services = null) : ITurnResponder
+    ServiceDesk? services = null,
+    UrfDesk? urf = null) : ITurnResponder
 {
     /// <summary>
     /// TASK 10 (v1.14): the written services run (an order from the request to the delivery) only when every
@@ -35,6 +37,20 @@ public sealed class HazemResponder(
         TextKeys.ServiceFilesReceived, TextKeys.ServicePriced, TextKeys.ServicePriceReminder, TextKeys.ServicePriceExpired,
         TextKeys.ServiceReceiptReceived, TextKeys.ServiceStarted, TextKeys.ServiceDelivered, TextKeys.ServicePaymentPartial,
         TextKeys.ServicePaymentNotReceived, TextKeys.ServiceClosed, TextKeys.ReceiptSendImage,
+    ];
+
+    /// <summary>
+    /// TASK 11 (v1.15): the Urfi questions run (B-11, from the request to the lawyer's review) only with the booking on
+    /// and every one of their texts approved; otherwise a Urfi request is answered as before.
+    /// </summary>
+    public static IReadOnlyList<string> UrfTextKeys { get; } =
+    [
+        TextKeys.UrfAskAges, TextKeys.UrfUnderAge, TextKeys.UrfAskWifePast, TextKeys.UrfAskGuardian, TextKeys.UrfNoGuardian,
+        TextKeys.UrfAskWitnesses, TextKeys.UrfAskCopy, TextKeys.UrfAskAgreed, TextKeys.UrfAskChildren, TextKeys.UrfConfirmed,
+        TextKeys.UrfAgesAgain, TextKeys.UrfChooseSlot, TextKeys.UrfSendDocuments, TextKeys.UrfDocumentsReceived, TextKeys.UrfRejected,
+        TextKeys.BtnUrfFirst, TextKeys.BtnUrfDivorced, TextKeys.BtnUrfKhul, TextKeys.BtnUrfGuardianList, TextKeys.BtnUrfFather,
+        TextKeys.BtnUrfBrother, TextKeys.BtnUrfUncle, TextKeys.BtnUrfNoGuardian, TextKeys.BtnUrfWitnessOffice, TextKeys.BtnUrfWitnessOwn,
+        TextKeys.BtnYes, TextKeys.BtnNo,
     ];
 
     /// <summary>The booking runs only when every one of its texts is approved: never half a conversation.</summary>
@@ -116,15 +132,24 @@ public sealed class HazemResponder(
         }
         else if (state.Conversation.HazemMayAnswer)
         {
-            var flow = new Flow(turn, state, list, null, plan, settings.Flag(HandoffEnabledKey), bookingOn ? bookingSettings : null, servicesOn);
+            var urfOn = urf is not null && bookingOn && UrfTextKeys.All(k => texts.TryGetValue(k, out var t) && t.Active);
+            var urfCase = urfOn ? await urf!.OpenAsync(state.Person.Id, ct) : null;
+            var flow = new Flow(turn, state, list, null, plan, settings.Flag(HandoffEnabledKey), bookingOn ? bookingSettings : null, servicesOn,
+                urfOn, urfCase);
             // TASK 08: a button or a list row Hazem sent is read without the AI.
             var choice = bookingOn && flow.MayBook ? ChoiceIn(turn) : null;
+            // TASK 11 (B-11): the answer to the Urfi question waiting: its button, or the typed ages (never the AI).
+            var urfAnswer = choice is null && urfCase is { State: UrfCase.Collecting } && flow.MayBook ? UrfAnswerIn(turn) : null;
+            var urfAges = choice is null && urfAnswer is null && urfCase is { State: UrfCase.Collecting, Step: UrfStep.Ages } && flow.MayBook
+                          && FileIn(turn) is null && AiInput.Build(turn) is not null;
             // TASK 09 / 10 (B-05, B-16, T-09): a file from the client never reaches the AI, nor any word sent with it:
             // a receipt (an image) for what waits for one, the documents of a service order, or «send an image».
             ReceiptOutcome? receipt = null;
             AddFileOutcome? documents = null;
+            AddFileOutcome? urfDocuments = null;
             var askImage = false;
-            if (choice is null && (bookingOn || servicesOn) && flow.MayOrder && services is not null && FileIn(turn) is { } m)
+            if (choice is null && urfAnswer is null && !urfAges && (bookingOn || servicesOn) && flow.MayOrder && services is not null
+                && FileIn(turn) is { } m)
             {
                 var image = m.Type == MessageType.Image;
                 var target = await services.FileTargetAsync(state.Person.Id, image, ct);
@@ -138,6 +163,9 @@ public sealed class HazemResponder(
                     case FileTarget.OrderDocuments when servicesOn:
                         documents = await services.AddFilesAsync(state.Person.Id, StoredFiles(turn), ct);
                         break;
+                    case FileTarget.UrfDocuments when urfOn:
+                        urfDocuments = await urf!.AddFilesAsync(state.Person.Id, StoredFiles(turn), ct);
+                        break;
                     case FileTarget.AskImage:
                         askImage = true; // P7: a PDF or Word is no receipt
                         break;
@@ -147,6 +175,14 @@ public sealed class HazemResponder(
             if (choice is not null)
             {
                 flow.RespondToChoice(choice);
+            }
+            else if (urfAnswer is not null || urfAges)
+            {
+                flow.RespondToUrf(urfAnswer);
+            }
+            else if (urfDocuments is { Status: not AddFileStatus.None })
+            {
+                flow.RespondToUrfDocuments(urfDocuments);
             }
             else if (receipt is not null || askImage)
             {
@@ -165,7 +201,7 @@ public sealed class HazemResponder(
                 }
 
                 flow = new Flow(turn, state, list, classification, plan, settings.Flag(HandoffEnabledKey), bookingOn ? bookingSettings : null,
-                    servicesOn);
+                    servicesOn, urfOn, urfCase);
                 flow.Respond(firstContact);
             }
 
@@ -181,6 +217,11 @@ public sealed class HazemResponder(
                 {
                     await services.AddFilesAsync(state.Person.Id, StoredFiles(turn), ct);
                 }
+            }
+
+            if (flow.UrfChanged && flow.Urf is { } changed)
+            {
+                await urf!.SaveAsync(changed, flow.State.Intake.Id, ct);
             }
 
             state = flow.State;
@@ -233,6 +274,13 @@ public sealed class HazemResponder(
         return BookingChoice.Parse(last?.Interactive?.Id ?? last?.Button?.Payload);
     }
 
+    /// <summary>TASK 11: the Urfi button the client pressed last, if any.</summary>
+    private static UrfAnswer? UrfAnswerIn(Turn turn)
+    {
+        var last = turn.Messages.LastOrDefault(m => m.Interactive?.Id is not null || m.Button?.Payload is not null);
+        return UrfAnswer.Parse(last?.Interactive?.Id ?? last?.Button?.Payload);
+    }
+
     /// <summary>
     /// B-05 (P7), B-16: the last stored image or document with its place in storage. An image may be a
     /// receipt; a PDF or Word goes to a service order waiting for documents, or Hazem asks for an image.
@@ -259,8 +307,14 @@ public sealed class HazemResponder(
 
     /// <summary>The decisions for one turn. Changes the state in memory; the store saves it with the turn.</summary>
     private sealed class Flow(Turn turn, ClientState state, ListMatch list, Classification? c, Plan plan, bool handoffEnabled,
-        BookingSettings? booking, bool servicesOn)
+        BookingSettings? booking, bool servicesOn, bool urfOn = false, UrfCase? urfCase = null)
     {
+        /// <summary>TASK 11: the client's Urfi case (B-11), as this turn leaves it.</summary>
+        public UrfCase? Urf { get; private set; } = urfCase;
+
+        /// <summary>The case changed in this turn and must be saved.</summary>
+        public bool UrfChanged { get; private set; }
+
         /// <summary>TASK 10: the written service to open an order for (B-16.1), once the flow is done.</summary>
         public ServiceKind? ServiceToOpen { get; private set; }
 
@@ -348,6 +402,130 @@ public sealed class HazemResponder(
                     break;
                 case AddFileStatus.More:
                     plan.Say(TextKeys.MediaReceived, Fill: new Dictionary<string, string> { ["media"] = "المستند" });
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// TASK 11 (B-11): the answer to the Urfi question waiting (a button, or the typed ages), read without the AI.
+        /// </summary>
+        public void RespondToUrf(UrfAnswer? answer)
+        {
+            if (answer is not null)
+            {
+                WordsToOffice();
+            }
+
+            var (next, how) = answer is not null ? UrfRules.Answer(Urf!, answer) : UrfRules.Ages(Urf!, AiInput.Build(turn));
+            Urf = next;
+            UrfChanged = true;
+            AfterUrf(how);
+        }
+
+        /// <summary>B-11: «عايز جواز / طلاق عرفي»: a new case, or the one already running picks up where it was.</summary>
+        private void StartUrf(string kind)
+        {
+            Check(Intake.MoveTo(IntakeState.InServiceFlow));
+            if (Urf is { } open && open.Kind == kind)
+            {
+                AfterUrf(open.State == UrfCase.Collecting ? UrfNext.Ask : UrfNext.Book);
+                return;
+            }
+
+            Urf = UrfCase.Start(State.Person.Id, kind);
+            UrfChanged = true;
+            AfterUrf(UrfNext.Ask);
+        }
+
+        /// <summary>
+        /// TASK 11 (B-11): the case's first documents → «استلمت» and the lawyer's review task; more later → «استلمت المستند».
+        /// Words with them go to the office.
+        /// </summary>
+        public void RespondToUrfDocuments(AddFileOutcome documents)
+        {
+            WordsToOffice();
+            switch (documents.Status)
+            {
+                case AddFileStatus.First:
+                    plan.Say(TextKeys.UrfDocumentsReceived);
+                    plan.Task(PendingTask.UrfReview);
+                    break;
+                case AddFileStatus.More:
+                    plan.Say(TextKeys.MediaReceived, Fill: new Dictionary<string, string> { ["media"] = "المستند" });
+                    break;
+            }
+        }
+
+        private void AfterUrf(UrfNext next)
+        {
+            var c = Urf!;
+            switch (next)
+            {
+                case UrfNext.Ask:
+                    AskUrf(c.Step);
+                    break;
+                case UrfNext.AskAgesAgain:
+                    plan.Say(TextKeys.UrfAgesAgain);
+                    break;
+                case UrfNext.Help:
+                    HandToOffice(TextKeys.UnclearAgain, PendingTask.UrfHelp);
+                    break;
+                case UrfNext.RejectAge:
+                    plan.Say(TextKeys.UrfUnderAge); // closed: no price, no time
+                    break;
+                case UrfNext.RejectGuardian:
+                    plan.Say(TextKeys.UrfNoGuardian); // the office's policy, never «the law»
+                    break;
+                case UrfNext.Redirect:
+                    Offer(askTopic: false); // B-11 divorce: the consultation only
+                    break;
+                case UrfNext.Book:
+                    // B-11.6 (1.15): the price, the documents and the free times in the office; the pick holds it (B-08).
+                    var service = booking!.Fit(c.Service);
+                    work = new OfferTimes(service, null, TextKeys.UrfChooseSlot, null, new Dictionary<string, string>
+                    {
+                        ["service"] = service.Name,
+                        ["amount"] = BookingWords.Money(service.Amount),
+                        ["documents"] = c.Documents(),
+                    });
+                    Check(Intake.MoveTo(IntakeState.OfferSent));
+                    break;
+            }
+        }
+
+        /// <summary>B-11: one question per message; the closed ones as buttons (or a list for the guardian).</summary>
+        private void AskUrf(string? step)
+        {
+            ReplyChoice Btn(string value, string key) => new(UrfAnswer.Id(step!, value), key);
+            ReplyChoices YesNo() => new(InteractivePayload.Buttons, [Btn("yes", TextKeys.BtnYes), Btn("no", TextKeys.BtnNo)]);
+            switch (step)
+            {
+                case UrfStep.Ages:
+                    plan.Say(TextKeys.UrfAskAges);
+                    break;
+                case UrfStep.WifePast:
+                    plan.Ask(TextKeys.UrfAskWifePast, new ReplyChoices(InteractivePayload.Buttons,
+                        [Btn("first", TextKeys.BtnUrfFirst), Btn("divorced", TextKeys.BtnUrfDivorced), Btn("khul", TextKeys.BtnUrfKhul)]));
+                    break;
+                case UrfStep.Guardian:
+                    plan.Ask(TextKeys.UrfAskGuardian, new ReplyChoices(InteractivePayload.List,
+                    [
+                        Btn("father", TextKeys.BtnUrfFather), Btn("brother", TextKeys.BtnUrfBrother), Btn("uncle", TextKeys.BtnUrfUncle),
+                        Btn("none", TextKeys.BtnUrfNoGuardian),
+                    ], TextKeys.BtnUrfGuardianList));
+                    break;
+                case UrfStep.Witnesses:
+                    plan.Ask(TextKeys.UrfAskWitnesses, new ReplyChoices(InteractivePayload.Buttons,
+                        [Btn("own", TextKeys.BtnUrfWitnessOwn), Btn("office", TextKeys.BtnUrfWitnessOffice)]));
+                    break;
+                case UrfStep.HasCopy:
+                    plan.Ask(TextKeys.UrfAskCopy, YesNo());
+                    break;
+                case UrfStep.Agreed:
+                    plan.Ask(TextKeys.UrfAskAgreed, YesNo());
+                    break;
+                case UrfStep.Children:
+                    plan.Ask(TextKeys.UrfAskChildren, YesNo());
                     break;
             }
         }
@@ -712,9 +890,12 @@ public sealed class HazemResponder(
                     InService(TextKeys.FormalNoticeRequest);
                     OpenOrder(service);
                     break;
+                case Service.UrfMarriage or Service.UrfDivorce when urfOn && MayBook:
+                    StartUrf(service == Service.UrfMarriage ? UrfCase.Marriage : UrfCase.Divorce); // TASK 11: B-11's questions
+                    break;
                 case Service.UrfMarriage:
                 case Service.UrfDivorce:
-                    InService(TextKeys.UrfRequest); // the Urfi questions are TASK 11
+                    InService(TextKeys.UrfRequest); // without the Urfi texts or the booking: the office takes it
                     break;
                 case Service.UrfUnclear:
                     plan.Say(TextKeys.UrfUnclear);
@@ -825,7 +1006,7 @@ public sealed class HazemResponder(
             switch (work)
             {
                 case OfferTimes o:
-                    await OfferTimesAsync(desk, b, settings, o.Service, o.After ?? plan.Now, o.IntroKey, o.Moving, ct);
+                    await OfferTimesAsync(desk, b, settings, o.Service, o.After ?? plan.Now, o.IntroKey, o.Moving, ct, o.Fill);
                     break;
                 case PickTime p:
                     await PickAsync(desk, b, settings, p.Service, p.At, ct);
@@ -887,6 +1068,12 @@ public sealed class HazemResponder(
                 case ReceiptStatus.Confirmed or ReceiptStatus.ConfirmedLate:
                 case ReceiptStatus.Exists when a.State == AppointmentInfo.Confirmed:
                     plan.Say(TextKeys.BookingPaid, Fill: Describe(a));
+                    if (Urf is { State: UrfCase.Booked } u && u.AppointmentId == a.Id)
+                    {
+                        // B-11 (1.15): now the documents (an image before the receipt would have been taken as the receipt).
+                        plan.Say(TextKeys.UrfSendDocuments, Fill: new Dictionary<string, string> { ["documents"] = u.Documents() });
+                    }
+
                     break;
                 case ReceiptStatus.LateTaken:
                     await OfferTimesAsync(desk, b, settings, ServiceOf(a), plan.Now, TextKeys.BookingHoldLate, null, ct, Describe(a));
@@ -952,6 +1139,13 @@ public sealed class HazemResponder(
                 Intake.MatterType, b.Hold.Until(plan.Now, at));
             var outcome = await desk.BookAsync(b, settings, request, plan.Now, ct);
             var a = outcome?.AppointmentId is { } id ? await OwnAsync(desk, id, ct) : null;
+            if (service.IsUrf && a is { State: AppointmentInfo.PendingPayment or AppointmentInfo.Confirmed } && a.Service == service.Code
+                && Urf is { State: UrfCase.DocumentsPending or UrfCase.Booked } u)
+            {
+                Urf = u with { State = UrfCase.Booked, AppointmentId = a.Id }; // B-11.6: the case has its time in the office
+                UrfChanged = true;
+            }
+
             switch (outcome?.Status)
             {
                 case BookStatus.Held or BookStatus.Exists when a is { State: AppointmentInfo.PendingPayment }:
@@ -1262,7 +1456,8 @@ public sealed class HazemResponder(
     // TASK 08: what the booking still has to do after the flow (it needs the calendar and the database).
     private abstract record BookingWork;
 
-    private sealed record OfferTimes(BookingService Service, DateTimeOffset? After, string IntroKey, Guid? Moving) : BookingWork;
+    private sealed record OfferTimes(BookingService Service, DateTimeOffset? After, string IntroKey, Guid? Moving,
+        IReadOnlyDictionary<string, string>? Fill = null) : BookingWork;
 
     private sealed record PickTime(BookingService Service, DateTimeOffset At) : BookingWork;
 

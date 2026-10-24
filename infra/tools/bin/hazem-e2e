@@ -18,7 +18,8 @@ I=201000000069   # TASK 05a: a blocked number
 K=201000000070   # TASK 05a: a client who tells the topic first (B-25)
 L=201000000071   # TASK 08: books from the buttons; the panel closes days
 M=201000000072   # TASK 10: a document review from the request to the delivered file
-ALL="'$A','$B','$C','$D','$E','$F','$G','$H','$I','$K','$L','$M'"
+N=201000000073   # TASK 11: an Urfi marriage contract from the questions to the lawyer's approval
+ALL="'$A','$B','$C','$D','$E','$F','$G','$H','$I','$K','$L','$M','$N'"
 STUB=http://meta-stub:8080
 
 passed=0; failed=0
@@ -96,7 +97,8 @@ panel_post() {  # panel_post PATH JSON: prints «status body»
 }
 interactive() { jq -nc --arg id "$2" --arg kind "$1" '{type: $kind} + {($kind): {id: $id, title: "e2e"}}'; }
 # TASK 08: the last list Hazem sent to L, and the Cairo date of a day from now.
-last_list() { q "SELECT request_payload->'interactive'->'action'->'sections'->0->'rows' FROM app.wa_outbound_messages WHERE wa_id = '$L' AND request_payload->>'type' = 'interactive' AND request_payload->'interactive'->>'type' = 'list' ORDER BY created_at DESC, idempotency_key DESC LIMIT 1"; }
+last_list() {  # last_list [WA_ID]: L unless named
+  q "SELECT request_payload->'interactive'->'action'->'sections'->0->'rows' FROM app.wa_outbound_messages WHERE wa_id = '${1:-$L}' AND request_payload->>'type' = 'interactive' AND request_payload->'interactive'->>'type' = 'list' ORDER BY created_at DESC, idempotency_key DESC LIMIT 1"; }
 cairo_day() { TZ=Africa/Cairo date -d "${1:-today}" +%F; }
 
 case "${1:-}" in
@@ -113,6 +115,15 @@ case "${1:-}" in
     done < <(q "SELECT file_bucket || '|' || file_key FROM hazem.service_orders
                  WHERE file_key IS NOT NULL AND person_id IN (SELECT id FROM hazem.persons WHERE wa_id IN ($ALL))")
     q "
+      DELETE FROM hazem.panel_audit WHERE target_type = 'urf'
+         AND target_id IN (SELECT id FROM hazem.urf_cases WHERE person_id IN (SELECT id FROM hazem.persons WHERE wa_id IN ($ALL)));
+      DELETE FROM hazem.urf_files WHERE case_id IN (
+        SELECT id FROM hazem.urf_cases WHERE person_id IN (SELECT id FROM hazem.persons WHERE wa_id IN ($ALL)));
+      DELETE FROM hazem.urf_cases WHERE person_id IN (SELECT id FROM hazem.persons WHERE wa_id IN ($ALL));
+      UPDATE hazem.approved_texts SET active = false
+       WHERE source = 'proposal TASK 11'
+         AND key = ANY (string_to_array(COALESCE((SELECT value FROM hazem.settings WHERE key = 'e2e.texts11'), ''), ','));
+      DELETE FROM hazem.settings WHERE key = 'e2e.texts11';
       DELETE FROM hazem.panel_audit WHERE target_type IN ('service', 'payment')
          AND target_id IN (SELECT id FROM hazem.service_orders WHERE person_id IN (SELECT id FROM hazem.persons WHERE wa_id IN ($ALL)));
       DELETE FROM hazem.payment_receipts WHERE payment_id IN (
@@ -182,7 +193,7 @@ case "${1:-}" in
   setup)
     "$0" cleanup >/dev/null
     backup_set whatsapp.dry_run true
-    backup_set whatsapp.test_recipients "$A,$B,$C,$D,$E,$F,$G,$H,$I,$K,$L,$M"   # 0006: only test numbers get sends
+    backup_set whatsapp.test_recipients "$A,$B,$C,$D,$E,$F,$G,$H,$I,$K,$L,$M,$N"   # 0006: only test numbers get sends
     backup_set whatsapp.graph_base_url "$STUB"
     backup_set ai.openai_base_url "$STUB/v1"
     if [[ -z "$(q "SELECT value FROM app.settings WHERE key = 'whatsapp.graph_api_version'")" ]]; then
@@ -820,6 +831,117 @@ SQL
          FROM app.wa_outbound_messages WHERE wa_id = '$M' AND request_payload->>'type' = 'document'" "document|مراجعة العقد.pdf|true"
     assert_eq "the order is delivered" \
       "$(q "SELECT o.state FROM hazem.service_orders o JOIN hazem.persons p ON p.id = o.person_id WHERE p.wa_id = '$M'")" "delivered"
+    finish
+    ;;
+
+  # ---------------------------------------------------------------- TASK 11
+  # An Urfi marriage contract (B-11) from N, with the booking of step 11 still on: the questions (buttons, the ages read
+  # by the API, never the AI), the hold in the office (5,000, booking.urf_minutes), the receipt, the documents, and the
+  # lawyer's approval with the confirmation. TASK 11's proposed texts are on for the test only (e2e.texts11).
+  hazem11-setup)
+    hazem_backup_set hazem.recipients "$N"
+    q "INSERT INTO hazem.settings (key, value, description)
+         SELECT 'e2e.texts11', COALESCE(string_agg(t.key, ','), ''), 'hazem-e2e: TASK 11 texts switched on for the test, off again by cleanup'
+           FROM hazem.approved_texts t
+          WHERE t.source = 'proposal TASK 11' AND NOT t.active
+            AND NOT EXISTS (SELECT 1 FROM hazem.approved_texts a WHERE a.key = t.key AND a.active)
+       ON CONFLICT (key) DO NOTHING;
+       UPDATE hazem.approved_texts SET active = true
+        WHERE source = 'proposal TASK 11'
+          AND key = ANY (string_to_array((SELECT value FROM hazem.settings WHERE key = 'e2e.texts11'), ','));" >/dev/null
+    inject "$N" wamid.E2E-N1 text "$(text "السلام عليكم")" 10
+    echo "TASK 11 texts on, a new client writes"
+    ;;
+
+  hazem11-say)  # hazem11-say WAMID_SUFFIX TEXT
+    inject "$N" "wamid.E2E-N$2" text "$(text "$3")" 10
+    echo "$N writes «$3»"
+    ;;
+
+  hazem11-press)  # hazem11-press WAMID_SUFFIX ID
+    inject "$N" "wamid.E2E-N$2" interactive "$(interactive button_reply "$3")" 10
+    echo "$N presses $3"
+    ;;
+
+  check-hazem11-ages)
+    wait_eq "B-11.1: the ages question, word for word from DECISIONS" \
+      "SELECT count(*) FROM app.wa_outbound_messages WHERE wa_id = '$N' AND request_payload->'text'->>'body' = 'سن الزوج كام، وسن الزوجة كام؟'" "1"
+    finish
+    ;;
+
+  check-hazem11-wife-past)
+    wait_eq "B-11.2: the ages were read by the API (no AI) and the next question comes with three buttons" \
+      "SELECT (SELECT count(*) FROM hazem.classifications WHERE turn_id = $(turn_of wamid.E2E-N4)) || '/' ||
+              (SELECT jsonb_array_length(request_payload->'interactive'->'action'->'buttons') FROM app.wa_outbound_messages
+                WHERE wa_id = '$N' AND request_payload->'interactive'->'body'->>'text' LIKE 'دي أول جوازة للزوجة%')" "0/3"
+    finish
+    ;;
+
+  check-hazem11-times)
+    wait_eq "B-11.6: after the witnesses, the price (5,000), the documents and the free times in one list" \
+      "SELECT count(*) FROM app.wa_outbound_messages WHERE wa_id = '$N' AND request_payload->'interactive'->>'type' = 'list'
+          AND request_payload->'interactive'->'body'->>'text' LIKE '%5,000%بطاقة الولي (الأب)%'" "1"
+    finish
+    ;;
+
+  hazem11-pick)
+    id="$(last_list "$N" | jq -r '.[0].id')"
+    [[ "$id" == bk:s:mo:* ]] || die "no Urfi time to pick (got '$id')"
+    inject "$N" wamid.E2E-N9 interactive "$(interactive list_reply "$id")" 10
+    echo "$N picks the first time"
+    ;;
+
+  check-hazem11-held)
+    wait_eq "B-08: held in the office for booking.urf_minutes, the case booked with it" \
+      "SELECT a.service || '/' || a.state || '/' || a.amount || '/' || (extract(epoch FROM a.ends_at - a.starts_at)::int / 60 =
+              (SELECT value::int FROM hazem.settings WHERE key = 'booking.urf_minutes')) || '/' || c.state
+         FROM hazem.urf_cases c JOIN hazem.appointments a ON a.id = c.appointment_id JOIN hazem.persons p ON p.id = c.person_id
+        WHERE p.wa_id = '$N'" "urf_marriage_office/pending_payment/5000/true/booked"
+    finish
+    ;;
+
+  hazem11-receipt)
+    inject "$N" wamid.E2E-N10 image '{"id":"STUB-IMG","mime_type":"image/jpeg"}' 10
+    echo "$N sends the transfer's image"
+    ;;
+
+  check-hazem11-documents-asked)
+    wait_eq "B-11 (1.15): the receipt confirms it, then Hazem asks for the documents" \
+      "SELECT count(*) FROM app.wa_outbound_messages WHERE wa_id = '$N' AND request_payload->'text'->>'body' LIKE '📎 دلوقتي ابعت هنا صور المستندات%'" "1"
+    finish
+    ;;
+
+  hazem11-document)
+    inject "$N" wamid.E2E-N11 document '{"id":"STUB-PDF","mime_type":"application/pdf","filename":"ids.pdf"}' 10
+    echo "$N sends the IDs (PDF)"
+    ;;
+
+  check-hazem11-documents)
+    wait_eq "the document is the case's, the lawyer gets a review task, the client hears it arrived" \
+      "SELECT (SELECT count(*) FROM hazem.urf_files f JOIN hazem.urf_cases c ON c.id = f.case_id JOIN hazem.persons p ON p.id = c.person_id WHERE p.wa_id = '$N')
+              || '/' || (SELECT count(*) FROM hazem.staff_tasks t JOIN hazem.persons p ON p.id = t.person_id WHERE p.wa_id = '$N' AND t.type = 'urf_review')
+              || '/' || (SELECT count(*) FROM app.wa_outbound_messages WHERE wa_id = '$N' AND request_payload->'text'->>'body' LIKE 'استلمت ✅. الأستاذ هيراجع الورق%')" \
+      "1/1/1"
+    assert_eq "T-09: the IDs never reached the AI (no classification)" \
+      "$(q "SELECT count(*) FROM hazem.classifications WHERE turn_id = $(turn_of wamid.E2E-N11)")" "0"
+    finish
+    ;;
+
+  hazem11-approve)
+    id="$(q "SELECT c.id FROM hazem.urf_cases c JOIN hazem.persons p ON p.id = c.person_id WHERE p.wa_id = '$N'")"
+    panel_login
+    r="$(panel_post "/urf/$id/review" '{"decision":"approved"}')"
+    assert_eq "a staff account cannot approve" "${r##* }" "403"
+    panel_login e2e-lawyer
+    r="$(panel_post "/urf/$id/review" '{"decision":"approved"}')"
+    assert_eq "the lawyer approves the documents" "${r##* }" "204"
+    finish
+    ;;
+
+  check-hazem11-confirmed)
+    wait_eq "B-11.7: the confirmation with who must come (the worker)" \
+      "SELECT count(*) FROM app.wa_outbound_messages WHERE wa_id = '$N'
+          AND request_payload->'text'->>'body' LIKE 'تم تأكيد الميعاد يوم % في المكتب ✅. الحضور: الزوج والزوجة والولي، ومعاكم أصول البطاقات.'" "1"
     finish
     ;;
 

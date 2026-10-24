@@ -150,6 +150,21 @@ The order's receipt is reviewed on **الإيصالات والمدفوعات** l
 never inside the request. The API never receives a file: the browser PUTs it to storage with the signed link
 (decision a), and n8n sends Meta a signed read link (one hour).
 
+## Urfi cases (TASK 11, DECISIONS v1.15 B-11 / S-06)
+
+Hazem asks B-11's questions on WhatsApp (buttons; the ages read by the API, never the AI), then the price, the documents
+and the free times in the office; the pick holds the time until the receipt (B-08); after the receipt the client sends
+the documents. States: `collecting` → `documents_pending` → `booked` → `approved` / `lawyer_rejected`, or closed early
+(`rejected_age`, `rejected_guardian`, `redirected_consultation`).
+
+| Endpoint | Permission | What |
+|---|---|---|
+| `GET /urf?show=open\|done` | urf.manage (all roles) | the cases: `kind` (marriage / divorce), `state`, the client, the answers (`husband_age`, `wife_age`, `wife_past`, `guardian`, `witnesses`, `has_copy`, `agreed`, `children`), `documents` (what is needed, in words), `files`, the appointment (`start`, `appointment`, `payment`), `decided_by`, `decided_at`, `notice` |
+| `GET /urf/{id}/files/{n}` | urf.manage | the n-th document (an ID card), like a client's file in 07c: `no-store`, CSP sandbox, every opening in the audit (`urf.file_open`) |
+| `POST /urf/{id}/review` | **urf.review** (manager, lawyer) | `{ decision: approved\|rejected }`. `approved` (only `booked` with its appointment still on): the worker sends B-11.7's confirmation with who must come. `rejected` (`documents_pending` or `booked`): the appointment `cancelled_by_office` without B-22's list, its event removed, what was paid due back in full (`refund` task, P2), and the worker tells the client. Every decision is kept with `policy_version`. `409` otherwise |
+
+`/booking/settings` also carries `urf_minutes` (15–480, default 60): the length of an Urfi appointment.
+
 ## Chatwoot (TASK 07b, T-24)
 
 | Endpoint | Permission | What |
@@ -181,6 +196,8 @@ The code checks permissions, never role names. A role is a set of permissions, d
 | `payments.refund` (TASK 09, P2: «اتحوّل», a refund made) | ✅ | ✅ | ✅ |
 | `services.manage` (TASK 10: the orders, their documents, the delivery, closing) | ✅ | ✅ | ✅ |
 | `services.price` (TASK 10, decision b: the price of a service, the written opinion) | ✅ | ✅ | |
+| `urf.manage` (TASK 11: the Urfi cases and their documents) | ✅ | ✅ | ✅ |
+| `urf.review` (TASK 11: approve or refuse a case before the appointment) | ✅ | ✅ | |
 
 No permission → `403`. Not signed in → `401`. A task the user may not see → `404`.
 

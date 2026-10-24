@@ -30,7 +30,7 @@ public sealed record WeekDayView(int Weekday, IReadOnlyList<RangeView> Ranges);
 
 public sealed record BookingSettingsView(bool Enabled, int BufferMinutes, int MinNoticeHours, int HorizonDays, int? MaxPerDay, int SlotStepMinutes,
     int OfferCount, string CalendarId, bool CalendarKey, bool TextsApproved, int HoldMinutes = 120, int HoldShortMinutes = 60,
-    int HoldShortWithinHours = 6, int HoldGapMinutes = 15);
+    int HoldShortWithinHours = 6, int HoldGapMinutes = 15, int UrfMinutes = 60);
 
 public sealed record ExceptionView(Guid Id, DateOnly Day, string Kind, int? Start, int? End, string? Reason, string? By, DateTimeOffset At);
 
@@ -189,7 +189,7 @@ public sealed class PanelBooking(
         return new BookingSettingsView(b.Enabled, b.Rules.BufferMinutes, b.Rules.MinNoticeHours, b.Rules.HorizonDays, b.Rules.MaxPerDay,
             b.Rules.SlotStepMinutes, b.Rules.OfferCount, b.CalendarId, google.HasKey,
             HazemResponder.BookingTextKeys.All(k => active.ContainsKey(k)), b.Hold.Minutes, b.Hold.ShortMinutes, b.Hold.ShortWithinHours,
-            b.Hold.GapMinutes);
+            b.Hold.GapMinutes, b.UrfMinutes);
     }
 
     public async Task<string?> SaveSettingsAsync(Guid by, string username, BookingSettingsView body, CancellationToken ct)
@@ -197,7 +197,7 @@ public sealed class PanelBooking(
         var rules = new BookingRules(body.BufferMinutes, body.MinNoticeHours, body.HorizonDays, body.MaxPerDay, body.SlotStepMinutes, body.OfferCount);
         var calendarId = (body.CalendarId ?? "").Trim();
         var hold = new HoldRules(body.HoldMinutes, body.HoldShortMinutes, body.HoldShortWithinHours, body.HoldGapMinutes);
-        if ((rules.Problem() ?? hold.Problem()) is { } p)
+        if ((rules.Problem() ?? hold.Problem() ?? (BookingSettings.UrfMinutesValid(body.UrfMinutes) ? null : "urf_minutes")) is { } p)
         {
             return p;
         }
@@ -221,6 +221,7 @@ public sealed class PanelBooking(
             [BookingSettings.HoldShortMinutesKey] = hold.ShortMinutes.ToString(CultureInfo.InvariantCulture),
             [BookingSettings.HoldShortWithinKey] = hold.ShortWithinHours.ToString(CultureInfo.InvariantCulture),
             [BookingSettings.HoldGapKey] = hold.GapMinutes.ToString(CultureInfo.InvariantCulture),
+            [BookingSettings.UrfMinutesKey] = body.UrfMinutes.ToString(CultureInfo.InvariantCulture),
         };
         await SetAsync(by, username, "settings", "booking.settings", values, ct);
         return null;
@@ -418,9 +419,9 @@ public sealed class PanelBooking(
 
     public async Task<PreviewView> PreviewAsync(DateOnly day, string? serviceCode, CancellationToken ct)
     {
-        var service = BookingService.ByCode(serviceCode) ?? BookingService.PhoneVideo;
         var settings = await settingsReader.GetAsync(ct);
         var b = BookingSettings.From(settings);
+        var service = b.Fit(BookingService.ByCode(serviceCode) ?? BookingService.PhoneVideo);
         var now = clock.GetUtcNow();
         var from = BookingDesk.Instant(day);
         var to = BookingDesk.Instant(day.AddDays(1));

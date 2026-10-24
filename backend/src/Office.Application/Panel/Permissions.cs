@@ -33,10 +33,12 @@ public static class Permissions
     // only the lawyer and the manager price one or ask for a written opinion (owner: b).
     public const string ServicesManage = "services.manage";
     public const string ServicesPrice = "services.price";
+    public const string UrfManage = "urf.manage";   // TASK 11: the Urfi cases and their documents (every role)
+    public const string UrfReview = "urf.review";   // TASK 11: approve or refuse a case (the lawyer and the manager)
 
     public static IReadOnlyList<string> All { get; } =
         [TasksViewOwn, TasksViewAll, TasksUpdate, TasksAssign, UsersManage, AccountSelf, ListsManage, TextsManage, ReportsView, ConversationsUnmute,
-            ScheduleManage, OfficeManage, PaymentsVerify, PaymentsRefund, ServicesManage, ServicesPrice];
+            ScheduleManage, OfficeManage, PaymentsVerify, PaymentsRefund, ServicesManage, ServicesPrice, UrfManage, UrfReview];
 
     public const string Manager = "manager";
     public const string Lawyer = "lawyer";
@@ -47,10 +49,10 @@ public static class Permissions
     private static readonly Dictionary<string, string[]> ByRole = new(StringComparer.Ordinal)
     {
         [Manager] = [TasksViewOwn, TasksViewAll, TasksUpdate, TasksAssign, UsersManage, AccountSelf, ListsManage, TextsManage, ReportsView,
-            ConversationsUnmute, ScheduleManage, OfficeManage, PaymentsVerify, PaymentsRefund, ServicesManage, ServicesPrice],
+            ConversationsUnmute, ScheduleManage, OfficeManage, PaymentsVerify, PaymentsRefund, ServicesManage, ServicesPrice, UrfManage, UrfReview],
         [Lawyer] = [TasksViewOwn, TasksViewAll, TasksUpdate, TasksAssign, AccountSelf, ListsManage, TextsManage, ReportsView, ScheduleManage,
-            OfficeManage, PaymentsVerify, PaymentsRefund, ServicesManage, ServicesPrice],
-        [Staff] = [TasksViewOwn, TasksUpdate, AccountSelf, ScheduleManage, PaymentsVerify, PaymentsRefund, ServicesManage],
+            OfficeManage, PaymentsVerify, PaymentsRefund, ServicesManage, ServicesPrice, UrfManage, UrfReview],
+        [Staff] = [TasksViewOwn, TasksUpdate, AccountSelf, ScheduleManage, PaymentsVerify, PaymentsRefund, ServicesManage, UrfManage],
     };
 
     public static IReadOnlyList<string> Of(string role) =>

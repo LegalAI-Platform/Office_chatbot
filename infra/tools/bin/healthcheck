@@ -279,7 +279,22 @@ if [[ "$(psql_super office -c "SELECT count(*) FROM hazem.approved_texts WHERE s
   warn "TASK 10's texts are not approved yet: Hazem answers a written service as before and opens no order (docs/approved-texts-proposal.md)"
 fi
 
+echo "== The Urfi paths (TASK 11, DECISIONS v1.15 B-11 / S-06)"
+check "tables urf_cases and urf_files exist" \
+  sql_equals office "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'hazem' AND table_name IN ('urf_cases', 'urf_files')" "2"
+check "office_app (n8n) cannot read the Urfi cases or their documents" \
+  expect_fail psql_as office_app "$OFFICE_APP_PASSWORD" office -c 'SELECT 1 FROM hazem.urf_cases UNION ALL SELECT 1 FROM hazem.urf_files LIMIT 1'
+check "the Urfi appointment length is set (booking.urf_minutes, 15 to 480)" \
+  sql_equals office "SELECT count(*) FROM hazem.settings WHERE key = 'booking.urf_minutes' AND value ~ '^[0-9]+$' AND value::int BETWEEN 15 AND 480" "1"
+check "B-11's questions are active word for word (10 texts)" \
+  sql_equals office "SELECT count(*) FROM hazem.approved_texts WHERE source = 'DECISIONS v1.15 B-11' AND active" "10"
+if [[ "$(psql_super office -c "SELECT count(*) FROM hazem.approved_texts WHERE source = 'proposal TASK 11' AND active")" == "0" ]]; then
+  warn "TASK 11's texts are not approved yet: Hazem answers an Urfi request as before (the text and a task) (docs/approved-texts-proposal.md)"
+fi
+
 echo "== Migrations"
+check "migration 0016 (the Urfi cases) is applied" \
+  sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0016'" "1"
 check "migration 0015 (the written services) is applied" \
   sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0015'" "1"
 check "migration 0014 (the payments, the hold until the receipt) is applied" \

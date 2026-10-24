@@ -113,7 +113,9 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request) =>
     }
 
     var (intent, name) = StubAi.Classify(text);
-    var service = intent == "service_by_name" ? "document_review" : null; // TASK 10
+    var service = intent != "service_by_name" ? null
+        : text.Contains("جواز عرفي", StringComparison.Ordinal) ? "urf_marriage" // TASK 11
+        : "document_review"; // TASK 10
     var content = new JsonObject
     {
         ["intent"] = intent, ["service"] = service, ["consultation_mode"] = "unknown", ["full_name"] = name, ["confidence"] = 0.95,
@@ -283,6 +285,7 @@ internal static class StubAi
         : text.Contains("أطلق", StringComparison.Ordinal) ? ("legal_question", null)
         : text.Contains("أحجز", StringComparison.Ordinal) ? ("consultation_request", null)
         : text.Contains("يراجع", StringComparison.Ordinal) ? ("service_by_name", null)
+        : text.Contains("جواز عرفي", StringComparison.Ordinal) ? ("service_by_name", null)
         : text.Contains("السلام", StringComparison.Ordinal) ? ("greeting", null)
         : text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length >= 4 ? ("provide_name", text.Trim())
         : ("other", null);

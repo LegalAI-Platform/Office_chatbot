@@ -74,6 +74,7 @@ const MESSAGES: Record<string, string> = {
   upload_failed: "رفع الملف ما نجحش. جرّب تاني.",
   no_file: "الملف ما اترفعش. ارفعه تاني.",
   too_large: "الملف أكبر من 20 ميجا.",
+  urf_minutes: "مدة ميعاد العرفي من 15 لـ 480 دقيقة.",
 };
 
 export function errorMessage(error: unknown): string {

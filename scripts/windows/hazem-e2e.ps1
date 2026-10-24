@@ -181,6 +181,35 @@ try {
     Check 'check-hazem10-receipt'
     PanelStep 'hazem10-deliver'
     Check 'check-hazem10-delivered'
+    Write-Host "==== 14. TASK 11: an Urfi marriage contract from the questions to the lawyer's approval"
+    Step @('hazem11-setup') | Out-Null
+    Forward
+    Step @('hazem11-say', '2', 'محمد أحمد علي حسن') | Out-Null
+    Forward
+    Step @('hazem11-say', '3', 'عايز أعمل جواز عرفي') | Out-Null
+    Forward
+    Check 'check-hazem11-ages'
+    Step @('hazem11-say', '4', '30 و 25') | Out-Null
+    Forward
+    Check 'check-hazem11-wife-past'
+    Step @('hazem11-press', '5', 'urf:wife_past:first') | Out-Null
+    Forward
+    Step @('hazem11-press', '6', 'urf:guardian:father') | Out-Null
+    Forward
+    Step @('hazem11-press', '7', 'urf:witnesses:office') | Out-Null
+    Forward
+    Check 'check-hazem11-times'
+    Step @('hazem11-pick') | Out-Null
+    Forward
+    Check 'check-hazem11-held'
+    Step @('hazem11-receipt') | Out-Null
+    Forward
+    Check 'check-hazem11-documents-asked'
+    Step @('hazem11-document') | Out-Null
+    Forward
+    Check 'check-hazem11-documents'
+    PanelStep 'hazem11-approve'
+    Check 'check-hazem11-confirmed'
     Remove-Item env:E2E_PANEL_PASSWORD -ErrorAction SilentlyContinue
 } catch {
     Write-Host "FAIL  $_"; $script:failed = $true

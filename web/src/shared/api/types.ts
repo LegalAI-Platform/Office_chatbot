@@ -18,7 +18,9 @@ export type Permission =
   | "payments.verify"
   | "payments.refund"
   | "services.manage"
-  | "services.price";
+  | "services.price"
+  | "urf.manage"
+  | "urf.review";
 
 export interface Me {
   id: string;

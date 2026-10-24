@@ -9,7 +9,7 @@ export interface Appointment { id: string; service: string; start: string; end: 
 export interface Settings {
   enabled: boolean; buffer_minutes: number; min_notice_hours: number; horizon_days: number; max_per_day: number | null; slot_step_minutes: number; offer_count: number;
   calendar_id: string; calendar_key: boolean; texts_approved: boolean;
-  hold_minutes: number; hold_short_minutes: number; hold_short_within_hours: number; hold_gap_minutes: number;
+  hold_minutes: number; hold_short_minutes: number; hold_short_within_hours: number; hold_gap_minutes: number; urf_minutes: number;
 }
 export interface Office { instapay: string; wallet_number: string; wallet_provider: string; address: string; map_url: string }
 export interface Change { id: number; at: string; what: string; by: string | null; undone: boolean }
