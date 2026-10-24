@@ -98,6 +98,18 @@ public static class TextKeys
     public const string RefundFull = "refund_full";                         // B-22
     public const string RefundNone = "refund_none";                         // B-22
     public const string RefundCompleted = "refund_completed";               // B-22, the worker
+
+    // Proposed in TASK 10 (DECISIONS v1.14: written services, B-16 / B-17; inactive until approved).
+    public const string ServiceFilesReceived = "service_files_received";    // B-16.2
+    public const string ServicePriced = "service_priced";                   // B-16.4, the worker
+    public const string ServicePriceReminder = "service_price_reminder";    // v1.14, the worker
+    public const string ServicePriceExpired = "service_price_expired";      // v1.14, the worker
+    public const string ServiceReceiptReceived = "service_receipt_received"; // B-16.5
+    public const string ServiceStarted = "service_started";                 // B-16.5, the worker
+    public const string ServiceDelivered = "service_delivered";             // B-16.6, the caption of the file
+    public const string ServicePaymentPartial = "service_payment_partial";  // B-05, the worker
+    public const string ServicePaymentNotReceived = "service_payment_not_received"; // B-05, the worker
+    public const string ServiceClosed = "service_closed";                   // B-16.7, the worker
 }
 
 /// <summary>

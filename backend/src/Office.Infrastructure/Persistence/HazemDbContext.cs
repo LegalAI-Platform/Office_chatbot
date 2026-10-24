@@ -160,6 +160,16 @@ public sealed class HazemDbContext(DbContextOptions<HazemDbContext> options) : D
             e.ToTable("payment_receipts");
             e.HasKey(x => x.Id);
         });
+        b.Entity<ServiceOrderRow>(e =>
+        {
+            e.ToTable("service_orders");
+            e.HasKey(x => x.Id);
+        });
+        b.Entity<ServiceFileRow>(e =>
+        {
+            e.ToTable("service_files");
+            e.HasKey(x => x.Id);
+        });
     }
 
     public DbSet<BookingWeeklyHourRow> BookingWeeklyHours => Set<BookingWeeklyHourRow>();
@@ -168,6 +178,8 @@ public sealed class HazemDbContext(DbContextOptions<HazemDbContext> options) : D
     public DbSet<AppointmentRow> Appointments => Set<AppointmentRow>();
     public DbSet<PaymentRow> Payments => Set<PaymentRow>();
     public DbSet<PaymentReceiptRow> PaymentReceipts => Set<PaymentReceiptRow>();
+    public DbSet<ServiceOrderRow> ServiceOrders => Set<ServiceOrderRow>();
+    public DbSet<ServiceFileRow> ServiceFiles => Set<ServiceFileRow>();
 
     public DbSet<StaffRow> Staff => Set<StaffRow>();
     public DbSet<StaffTaskRow> StaffTasks => Set<StaffTaskRow>();
@@ -425,7 +437,8 @@ public sealed class AppointmentRow
 public sealed class PaymentRow
 {
     public Guid Id { get; set; }
-    public Guid AppointmentId { get; set; }
+    public Guid? AppointmentId { get; set; }
+    public Guid? ServiceOrderId { get; set; }
     public required string State { get; set; }
     public int AmountDue { get; set; }
     public int? AmountReceived { get; set; }
@@ -442,6 +455,52 @@ public sealed class PaymentRow
     public string? NoticeKind { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
+}
+
+/// <summary>hazem.service_orders (0015, S-07).</summary>
+public sealed class ServiceOrderRow
+{
+    public Guid Id { get; set; }
+    public Guid PersonId { get; set; }
+    public Guid? IntakeId { get; set; }
+    public required string Kind { get; set; }
+    public required string State { get; set; }
+    public Guid? AppointmentId { get; set; }
+    public required string OpenedKey { get; set; }
+    public int? Price { get; set; }
+    public bool PriceException { get; set; }
+    public DateOnly? DueOn { get; set; }
+    public string? Delivery { get; set; }
+    public Guid? PricedBy { get; set; }
+    public DateTimeOffset? PricedAt { get; set; }
+    public DateTimeOffset? PriceUntil { get; set; }
+    public DateTimeOffset? PriceRemindedAt { get; set; }
+    public string? FileBucket { get; set; }
+    public string? FileKey { get; set; }
+    public string? FileName { get; set; }
+    public string? FileMime { get; set; }
+    public Guid? DeliveredBy { get; set; }
+    public DateTimeOffset? DeliveredAt { get; set; }
+    public string? ClosedReason { get; set; }
+    public string? ClientNotice { get; set; }
+    public string? NoticeKind { get; set; }
+    public int NoticeAttempt { get; set; }
+    public DateTimeOffset? PriceExpiredAt { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
+/// <summary>hazem.service_files (0015): where a client's document for an order is; never its content.</summary>
+public sealed class ServiceFileRow
+{
+    public Guid Id { get; set; }
+    public Guid OrderId { get; set; }
+    public required string Wamid { get; set; }
+    public required string Bucket { get; set; }
+    public required string Key { get; set; }
+    public string? Mime { get; set; }
+    public string? Filename { get; set; }
+    public DateTimeOffset ReceivedAt { get; set; }
 }
 
 /// <summary>hazem.payment_receipts (0014): where a receipt image is; never its content.</summary>

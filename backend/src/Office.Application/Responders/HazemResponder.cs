@@ -1,5 +1,6 @@
 using Office.Application.Booking;
 using Office.Application.Conversations;
+using Office.Application.Services;
 using Office.Application.Texts;
 using Office.Application.Turns;
 using Office.Application.Understanding;
@@ -22,8 +23,20 @@ public sealed class HazemResponder(
     IApprovedTexts approvedTexts,
     IClientLists lists,
     TimeProvider clock,
-    BookingDesk? booking = null) : ITurnResponder
+    BookingDesk? booking = null,
+    ServiceDesk? services = null) : ITurnResponder
 {
+    /// <summary>
+    /// TASK 10 (v1.14): the written services run (an order from the request to the delivery) only when every
+    /// one of their texts is approved; otherwise a service named by the client is answered as before.
+    /// </summary>
+    public static IReadOnlyList<string> ServiceTextKeys { get; } =
+    [
+        TextKeys.ServiceFilesReceived, TextKeys.ServicePriced, TextKeys.ServicePriceReminder, TextKeys.ServicePriceExpired,
+        TextKeys.ServiceReceiptReceived, TextKeys.ServiceStarted, TextKeys.ServiceDelivered, TextKeys.ServicePaymentPartial,
+        TextKeys.ServicePaymentNotReceived, TextKeys.ServiceClosed, TextKeys.ReceiptSendImage,
+    ];
+
     /// <summary>The booking runs only when every one of its texts is approved: never half a conversation.</summary>
     /// TASK 09 (1.13): the hold, the receipt and the refund texts too; booking_confirmed (1.4) is no longer used.
     public static IReadOnlyList<string> BookingTextKeys { get; } =
@@ -86,6 +99,12 @@ public sealed class HazemResponder(
         var texts = await approvedTexts.GetActiveAsync(ct);
         var bookingSettings = BookingSettings.From(settings);
         var bookingOn = booking is not null && bookingSettings.Enabled && BookingTextKeys.All(k => texts.TryGetValue(k, out var t) && t.Active);
+        var servicesOn = services is not null && ServiceTextKeys.All(k => texts.TryGetValue(k, out var t) && t.Active);
+        if (servicesOn && !list.Blocked)
+        {
+            // The client wrote: the 24-hour window is open again for the price, the work started or the file that could not reach him.
+            await services!.RetryNoticesAsync(state.Person.Id, ct);
+        }
 
         if (list.Blocked)
         {
@@ -97,22 +116,31 @@ public sealed class HazemResponder(
         }
         else if (state.Conversation.HazemMayAnswer)
         {
-            var flow = new Flow(turn, state, list, null, plan, settings.Flag(HandoffEnabledKey), bookingOn ? bookingSettings : null);
+            var flow = new Flow(turn, state, list, null, plan, settings.Flag(HandoffEnabledKey), bookingOn ? bookingSettings : null, servicesOn);
             // TASK 08: a button or a list row Hazem sent is read without the AI.
             var choice = bookingOn && flow.MayBook ? ChoiceIn(turn) : null;
-            // TASK 09 (B-05, T-09): a receipt image never reaches the AI, nor any word sent with it.
+            // TASK 09 / 10 (B-05, B-16, T-09): a file from the client never reaches the AI, nor any word sent with it:
+            // a receipt (an image) for what waits for one, the documents of a service order, or «send an image».
             ReceiptOutcome? receipt = null;
+            AddFileOutcome? documents = null;
             var askImage = false;
-            if (choice is null && bookingOn && flow.MayBook && ReceiptIn(turn) is { } m)
+            if (choice is null && (bookingOn || servicesOn) && flow.MayOrder && services is not null && FileIn(turn) is { } m)
             {
-                if (m.Type == MessageType.Image)
+                var image = m.Type == MessageType.Image;
+                var target = await services.FileTargetAsync(state.Person.Id, image, ct);
+                switch (target.Target)
                 {
-                    receipt = await booking!.ReceiptAsync(bookingSettings, settings,
-                        new ReceiptRequest(state.Person.Id, m.Wamid, m.Media!.Bucket!, m.Media.Key!, m.Media.Sha256!, m.Media.MimeType), now, ct);
-                }
-                else
-                {
-                    askImage = await booking!.WaitsForReceiptAsync(state.Person.Id, now, ct); // P7: a PDF is no receipt
+                    case FileTarget.OrderPayment when servicesOn && booking is not null:
+                    case FileTarget.Hold or FileTarget.BookingPayment or FileTarget.LateHold when bookingOn:
+                        receipt = await booking!.ReceiptAsync(bookingSettings, settings,
+                            new ReceiptRequest(state.Person.Id, m.Wamid, m.Media!.Bucket!, m.Media.Key!, m.Media.Sha256!, m.Media.MimeType), now, ct);
+                        break;
+                    case FileTarget.OrderDocuments when servicesOn:
+                        documents = await services.AddFilesAsync(state.Person.Id, StoredFiles(turn), ct);
+                        break;
+                    case FileTarget.AskImage:
+                        askImage = true; // P7: a PDF or Word is no receipt
+                        break;
                 }
             }
 
@@ -124,6 +152,10 @@ public sealed class HazemResponder(
             {
                 flow.RespondToReceipt(receipt);
             }
+            else if (documents is { Status: not AddFileStatus.None })
+            {
+                flow.RespondToDocuments(documents);
+            }
             else
             {
                 var aiText = AiInput.Build(turn);
@@ -132,13 +164,23 @@ public sealed class HazemResponder(
                     classification = Classification.From(await classifier.ClassifyAsync(aiText, settings, ct), settings);
                 }
 
-                flow = new Flow(turn, state, list, classification, plan, settings.Flag(HandoffEnabledKey), bookingOn ? bookingSettings : null);
+                flow = new Flow(turn, state, list, classification, plan, settings.Flag(HandoffEnabledKey), bookingOn ? bookingSettings : null,
+                    servicesOn);
                 flow.Respond(firstContact);
             }
 
             if (flow.HasBookingWork)
             {
                 await flow.RunBookingAsync(booking!, settings, ct);
+            }
+
+            if (flow.ServiceToOpen is { } kind)
+            {
+                await services!.OpenAsync(state.Person.Id, flow.State.Intake.Id, kind, turn.TurnId, ct);
+                if (flow.FilesToOrder)
+                {
+                    await services.AddFilesAsync(state.Person.Id, StoredFiles(turn), ct);
+                }
             }
 
             state = flow.State;
@@ -192,13 +234,19 @@ public sealed class HazemResponder(
     }
 
     /// <summary>
-    /// B-05 (P7): the last stored image with its place in storage, or a stored PDF (which is not taken
-    /// as a receipt: Hazem asks for an image).
+    /// B-05 (P7), B-16: the last stored image or document with its place in storage. An image may be a
+    /// receipt; a PDF or Word goes to a service order waiting for documents, or Hazem asks for an image.
     /// </summary>
-    private static IncomingMessage? ReceiptIn(Turn turn) => turn.Messages.LastOrDefault(m =>
-        m.Media is { Status: MediaStatus.Stored } media
-        && (m.Type == MessageType.Image && media.Bucket is not null && media.Key is not null && media.Sha256 is not null
-            || m.Type == MessageType.Document && media.MimeType == "application/pdf"));
+    private static IncomingMessage? FileIn(Turn turn) => turn.Messages.LastOrDefault(m =>
+        IsStoredFile(m) && (m.Type != MessageType.Image || m.Media!.Sha256 is not null)); // a receipt needs its sha256 (duplicates)
+
+    /// <summary>B-16.2: every stored image and document of the turn (a contract comes in several pages).</summary>
+    private static IEnumerable<StoredFile> StoredFiles(Turn turn) => turn.Messages.Where(IsStoredFile)
+        .Select(m => new StoredFile(m.Wamid, m.Media!.Bucket!, m.Media.Key!, m.Media.MimeType, m.Media.Filename));
+
+    private static bool IsStoredFile(IncomingMessage m) =>
+        m.Type is MessageType.Image or MessageType.Document
+        && m.Media is { Status: MediaStatus.Stored, Bucket: not null, Key: not null };
 
     /// <summary>A refused transition here is a bug in the flow, not a client's mistake.</summary>
     private static void Check(Result r)
@@ -211,8 +259,14 @@ public sealed class HazemResponder(
 
     /// <summary>The decisions for one turn. Changes the state in memory; the store saves it with the turn.</summary>
     private sealed class Flow(Turn turn, ClientState state, ListMatch list, Classification? c, Plan plan, bool handoffEnabled,
-        BookingSettings? booking)
+        BookingSettings? booking, bool servicesOn)
     {
+        /// <summary>TASK 10: the written service to open an order for (B-16.1), once the flow is done.</summary>
+        public ServiceKind? ServiceToOpen { get; private set; }
+
+        /// <summary>The turn's documents go to that order once it is open (they came with the request).</summary>
+        public bool FilesToOrder { get; private set; }
+
         public ClientState State { get; private set; } = state;
 
         private Intake Intake => State.Intake;
@@ -226,10 +280,12 @@ public sealed class HazemResponder(
         public bool HasBookingWork => work is not null;
 
         /// <summary>A new or current client past the name question; never the lists' lawyer or the roles (B-14).</summary>
-        public bool MayBook =>
-            booking is not null && State.Person.NameSettled && !list.LawyerDirect
+        public bool MayOrder =>
+            State.Person.NameSettled && !list.LawyerDirect
             && Intake.State is not (IntakeState.New or IntakeState.AwaitingName)
             && Intake.ClientType is not (ClientType.Colleague or ClientType.Press or ClientType.Vendor or ClientType.LawyerDirect);
+
+        public bool MayBook => booking is not null && MayOrder;
 
         /// <summary>
         /// The client pressed one of Hazem's buttons or list rows (no AI). Words typed or said in the same
@@ -264,7 +320,36 @@ public sealed class HazemResponder(
                 return;
             }
 
+            if (outcome is { OrderId: not null, Status: ReceiptStatus.OrderReceived or ReceiptStatus.Exists })
+            {
+                // B-16.5: the work starts after a person found the money (never «اتأكد الدفع»).
+                plan.Say(TextKeys.ServiceReceiptReceived, Fill: new Dictionary<string, string>
+                {
+                    ["service"] = ServiceKind.ByCode(outcome.OrderKind)?.Name ?? "الخدمة",
+                });
+                return;
+            }
+
             work = new Receipted(outcome);
+        }
+
+        /// <summary>
+        /// TASK 10 (B-16.2): documents for a service order. The first ones: «استلمت…» and a task for the lawyer or
+        /// the manager to price it; more later: «استلمت المستند ✅». Words with them go to the office.
+        /// </summary>
+        public void RespondToDocuments(AddFileOutcome documents)
+        {
+            WordsToOffice();
+            switch (documents.Status)
+            {
+                case AddFileStatus.First:
+                    plan.Say(TextKeys.ServiceFilesReceived);
+                    plan.Task(PendingTask.ServicePricing);
+                    break;
+                case AddFileStatus.More:
+                    plan.Say(TextKeys.MediaReceived, Fill: new Dictionary<string, string> { ["media"] = "المستند" });
+                    break;
+            }
         }
 
         /// <summary>Words typed or said with a press or a receipt are not lost: a task, and the panel shows the turn's words.</summary>
@@ -603,21 +688,29 @@ public sealed class HazemResponder(
 
         private void AnswerService(Service? service)
         {
+            if (OrderWithFiles(service))
+            {
+                return;
+            }
+
             switch (service)
             {
                 case Service.ConsultationUrgent:
                     Urgent();
                     break;
                 case Service.DocumentReview:
-                    plan.Say(TextKeys.DocumentReviewRequest); // B-16 step 1 (step 2 promises a contact: later)
+                    plan.Say(TextKeys.DocumentReviewRequest); // B-16 step 1
                     plan.Task(PendingTask.ServiceRequest);
                     Check(Intake.MoveTo(IntakeState.InServiceFlow));
+                    OpenOrder(service);
                     break;
                 case Service.ContractDrafting:
                     InService(TextKeys.ContractDraftingRequest);
+                    OpenOrder(service);
                     break;
                 case Service.FormalNotice:
                     InService(TextKeys.FormalNoticeRequest);
+                    OpenOrder(service);
                     break;
                 case Service.UrfMarriage:
                 case Service.UrfDivorce:
@@ -1057,6 +1150,34 @@ public sealed class HazemResponder(
             plan.Say(key, TextKeys.ConsultationOffer);
             plan.Task(PendingTask.ServiceRequest);
             Check(Intake.MoveTo(IntakeState.InServiceFlow));
+        }
+
+        /// <summary>TASK 10 (B-16.1): the written service gets an order waiting for its documents (when its texts are approved).</summary>
+        private void OpenOrder(Service? service)
+        {
+            if (servicesOn && MayOrder && ServiceKind.Requested(service) is { } kind)
+            {
+                ServiceToOpen = kind;
+            }
+        }
+
+        /// <summary>
+        /// B-16.1 + B-16.2 in one turn: «راجعلي العقد ده» with the contract. The order opens and takes the turn's
+        /// documents (after the flow); the client hears they arrived, not «ابعتلي صورة العقد».
+        /// </summary>
+        private bool OrderWithFiles(Service? service)
+        {
+            if (!servicesOn || !MayOrder || ServiceKind.Requested(service) is not { } kind || !turn.Messages.Any(IsStoredFile))
+            {
+                return false;
+            }
+
+            ServiceToOpen = kind;
+            FilesToOrder = true;
+            plan.Say(TextKeys.ServiceFilesReceived);
+            plan.Task(PendingTask.ServicePricing);
+            Check(Intake.MoveTo(IntakeState.InServiceFlow));
+            return true;
         }
 
         /// <summary>A task and a reply without any contact time (B-06: the promises wait for the panel).</summary>

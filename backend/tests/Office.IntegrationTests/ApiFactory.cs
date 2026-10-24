@@ -30,6 +30,9 @@ public sealed class ApiFactory(TestDatabase db, TimeProvider? clock = null) : We
     public MemoryLogs Logs { get; } = new();
     public FakeMailer Mail { get; } = new();
     public FakeClientFiles Files { get; } = new();
+
+    /// <summary>TASK 10: the storage of delivered files at the boundary (the API signs links and checks a file is there).</summary>
+    public FakeDeliverables Deliverables { get; } = new();
     public const string PanelSecretKey = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff";
 
     /// <summary>False: PANEL_SECRET_KEY and the mail server are not set (sign-up and 2FA unavailable).</summary>
@@ -77,6 +80,7 @@ public sealed class ApiFactory(TestDatabase db, TimeProvider? clock = null) : We
             services.AddHttpClient(OpenAiIntentClassifier.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => OpenAi);
             services.AddSingleton<IPanelMailer>(Mail);
             services.AddSingleton<IClientFiles>(Files);
+            services.AddSingleton<Office.Infrastructure.Services.IDeliverables>(Deliverables);
             services.AddHttpClient(Office.Infrastructure.Chatwoot.ChatwootApi.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => Chatwoot);
             services.AddHttpClient(Office.Infrastructure.Booking.GoogleCalendar.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => Google);
             if (clock is not null)
@@ -120,6 +124,8 @@ public sealed class FakeOpenAi : HttpMessageHandler
             : text.Contains("السلام", StringComparison.Ordinal) ? ("greeting", null, null)
             : text.Contains("شكرا", StringComparison.Ordinal) ? ("thanks_or_closing", null, null)
             : text.Contains("الجلسة", StringComparison.Ordinal) ? ("existing_matter", null, null)
+            : text.Contains("يراجع", StringComparison.Ordinal) ? ("service_by_name", "document_review", null) // TASK 10
+            : text.Contains("إنذار", StringComparison.Ordinal) ? ("service_by_name", "formal_notice", null)
             : text.Split(' ').Length >= 4 ? ("provide_name", (string?)null, (string?)text)
             : ("other", null, null);
         var content = new JsonObject
@@ -337,6 +343,27 @@ public sealed class FakeClientFiles : IClientFiles
         Task.FromResult(Objects.TryGetValue($"{file.Bucket}/{file.Key}", out var o)
             ? new ClientFile(new MemoryStream(o.Bytes), file.MimeType ?? o.Type, o.Bytes.Length, file.Filename)
             : null);
+}
+
+/// <summary>
+/// TASK 10: delivered files at the storage boundary. An upload link points at the panel's /storage/ path (as the
+/// real one does); a test "uploads" by putting the key in <see cref="Objects"/>; Meta's read link is a fake https URL.
+/// </summary>
+public sealed class FakeDeliverables : Office.Infrastructure.Services.IDeliverables
+{
+    public ConcurrentDictionary<string, long> Objects { get; } = new();
+    public bool Configured => true;
+
+    public (string Url, string Key) UploadLink(Guid orderId, string filename, string contentType)
+    {
+        var key = $"deliverables/{orderId}/{Guid.NewGuid():N}{Path.GetExtension(filename).ToLowerInvariant()}";
+        return ($"/storage/office-sensitive/{key}?X-Amz-Signature=test", key);
+    }
+
+    public Task<Office.Infrastructure.Services.StoredObject?> HeadAsync(string key, CancellationToken ct) =>
+        Task.FromResult(Objects.TryGetValue(key, out var size) ? new Office.Infrastructure.Services.StoredObject(size, "application/pdf") : null);
+
+    public string ReadLink(string key) => $"https://storage.test/office-sensitive/{key}?X-Amz-Signature=read";
 }
 
 /// <summary>The no-reply mail server: keeps every mail so a test can read the code a person would get.</summary>

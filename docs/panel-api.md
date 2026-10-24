@@ -128,6 +128,28 @@ Partial, not received and refunded are told to the client by the booking worker 
 inside the request; a send that fails (outside the 24-hour window too, P5) becomes a `booking_message_failed` task.
 `GET /reports` (07c) also has `by_booking` (the month's appointments by state), `received`, `missing` and `refunded` (pounds).
 
+## Service orders (TASK 10, DECISIONS v1.14 B-16 / B-17 / S-07)
+
+A written service (contract review, contract drafting, formal notice, written opinion) from the client's
+documents to the delivered file. States: `collecting` → `awaiting_price` → `awaiting_payment` →
+`in_progress` → `delivered`, and `closed` from any open state.
+
+| Endpoint | Permission | What |
+|---|---|---|
+| `GET /services?show=open\|done` | services.manage (all roles) | the orders: `kind`, `state`, the client, `files` (how many documents), `price`, `price_exception`, `due_on`, `delivery` (`file`\|`call`), `price_until`, `payment` (the payment's state), `file_name`, `delivered_at`, `closed_reason`, `appointment_id`, `notice` (`pending`|`sent`|`failed`: the last message to the client) |
+| `GET /services/{id}/files/{n}` | services.manage | the n-th document the client sent, like a client's file in 07c: `no-store`, CSP sandbox, every opening in the audit (`service.file_open`) |
+| `POST /services/{id}/price` | **services.price** (manager, lawyer: decision b) | `{ price, exception, due_on, delivery }`: from `collecting` / `awaiting_price`. B-10's range (review 1,500–3,000, drafting from 3,000, notice and opinion 2,000); outside it only with `exception: true` (`400 out_of_range`). The price holds 3 days (decision c) |
+| `POST /booking/appointments/{id}/opinion` | services.price | `{ due_on, delivery }`: B-17, a written opinion (2,000) from a **completed** consultation; once per booking (`409`) |
+| `POST /services/{id}/upload` | services.manage | `{ filename }` (pdf, doc, docx) → `{ url, key, content_type }`: a link signed for 10 minutes to PUT the file to `office-sensitive/deliverables/…` through the panel's nginx (`/storage/…`). Only `in_progress` with delivery `file` |
+| `POST /services/{id}/deliver` | services.manage | `{ key, filename }` for a file (the API checks it is there with HEAD, ≤ 20 MB, under that order's key, the same extension as the file uploaded: `400 no_file | too_large | invalid`), `{}` for a call. → `delivered`; the worker sends the file with its caption, or the caption alone after a call |\| too_large`), `{}` for a call. → `delivered`; the worker sends the file |
+| `POST /services/{id}/close` | services.manage | closes an open order; money a person found (verified, partial) opens a refund (`refund` task, P2 as in TASK 09). A receipt nobody reviewed yet promises nothing: if its review later finds the money, that opens the refund. `409` if already closed or delivered |
+| `POST /services/{id}/resend` | services.manage | «ابعت الملف تاني»: a delivered file sent again with a new key (the first send fell outside the 24-hour window, or the client lost it). `409` while a send is waiting |
+
+The order's receipt is reviewed on **الإيصالات والمدفوعات** like a booking's (`/payments/{order id}/review`,
+`/refunded`): «تمام» starts the work (`in_progress`). The client hears every step from the worker (every 10 s),
+never inside the request. The API never receives a file: the browser PUTs it to storage with the signed link
+(decision a), and n8n sends Meta a signed read link (one hour).
+
 ## Chatwoot (TASK 07b, T-24)
 
 | Endpoint | Permission | What |
@@ -157,6 +179,8 @@ The code checks permissions, never role names. A role is a set of permissions, d
 | `office.manage` (TASK 08: InstaPay, the wallet, the address) | ✅ | ✅ | |
 | `payments.verify` (TASK 09, P1: a transfer is fine / partial / not received) | ✅ | ✅ | ✅ |
 | `payments.refund` (TASK 09, P2: «اتحوّل», a refund made) | ✅ | ✅ | ✅ |
+| `services.manage` (TASK 10: the orders, their documents, the delivery, closing) | ✅ | ✅ | ✅ |
+| `services.price` (TASK 10, decision b: the price of a service, the written opinion) | ✅ | ✅ | |
 
 No permission → `403`. Not signed in → `401`. A task the user may not see → `404`.
 

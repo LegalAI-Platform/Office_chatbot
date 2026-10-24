@@ -7,9 +7,9 @@ public sealed class PanelRulesTests
 {
     // The whole table, cell by cell: a change to a role must change this test on purpose.
     [Theory]
-    [InlineData("manager", "tasks.view_own tasks.view_all tasks.update tasks.assign users.manage account.self lists.manage texts.manage reports.view conversations.unmute schedule.manage office.manage payments.verify payments.refund")]
-    [InlineData("lawyer", "tasks.view_own tasks.view_all tasks.update tasks.assign account.self lists.manage texts.manage reports.view schedule.manage office.manage payments.verify payments.refund")]
-    [InlineData("staff", "tasks.view_own tasks.update account.self schedule.manage payments.verify payments.refund")]
+    [InlineData("manager", "tasks.view_own tasks.view_all tasks.update tasks.assign users.manage account.self lists.manage texts.manage reports.view conversations.unmute schedule.manage office.manage payments.verify payments.refund services.manage services.price")]
+    [InlineData("lawyer", "tasks.view_own tasks.view_all tasks.update tasks.assign account.self lists.manage texts.manage reports.view schedule.manage office.manage payments.verify payments.refund services.manage services.price")]
+    [InlineData("staff", "tasks.view_own tasks.update account.self schedule.manage payments.verify payments.refund services.manage")]
     public void Each_role_has_exactly_its_permissions(string role, string expected)
     {
         var granted = Permissions.All.Where(p => Permissions.Has(role, p));

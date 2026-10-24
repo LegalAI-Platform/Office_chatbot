@@ -64,7 +64,8 @@ ensure_key() {
 }
 ensure_key "$S3_N8N_ACCESS_KEY_ID"    "$S3_N8N_SECRET_ACCESS_KEY"    "n8n"
 ensure_key "$S3_BACKUP_ACCESS_KEY_ID" "$S3_BACKUP_SECRET_ACCESS_KEY" "backup"
-# TASK 07c: the api opens client files for the panel: read-only, never backups.
+# TASK 07c: the api opens client files for the panel; TASK 10 (v1.14): it signs the upload of a delivered file
+# (office-sensitive/deliverables/), so it writes office-sensitive too. Never backups.
 ensure_key "$S3_API_ACCESS_KEY_ID"    "$S3_API_SECRET_ACCESS_KEY"    "api"
 
 # 5. Permissions: allow exactly what each key needs, deny everything else.
@@ -87,7 +88,7 @@ set_perm "$media_id"     "$S3_BACKUP_ACCESS_KEY_ID"  false false false
 set_perm "$sensitive_id" "$S3_BACKUP_ACCESS_KEY_ID"  false false false
 set_perm "$backups_id"   "$S3_BACKUP_ACCESS_KEY_ID"  true  true  true
 set_perm "$media_id"     "$S3_API_ACCESS_KEY_ID"     true  false false
-set_perm "$sensitive_id" "$S3_API_ACCESS_KEY_ID"     true  false false
+set_perm "$sensitive_id" "$S3_API_ACCESS_KEY_ID"     true  true  false
 set_perm "$backups_id"   "$S3_API_ACCESS_KEY_ID"     false false false
 log "Key permissions applied."
 

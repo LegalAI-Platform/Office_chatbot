@@ -159,6 +159,28 @@ try {
     Check 'check-hazem09-refund-requested'
     PanelStep 'hazem09-refunded'
     Check 'check-hazem09-refunded'
+    Write-Host "==== 13. TASK 10: a document review from the request to the file delivered on WhatsApp"
+    # (b) only the lawyer or the manager prices: a throwaway lawyer account, same throwaway password.
+    $env:E2E_PANEL_PASSWORD | & docker compose exec -T api dotnet /app/cli/Office.Cli.dll create-user `
+        --name e2e-lawyer --display E2E-L --email e2e-lawyer@example.test --role lawyer 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) { Write-Host "FAIL  create-user e2e-lawyer (CLI)"; $script:failed = $true }
+    Step @('hazem10-setup') | Out-Null
+    Forward
+    Step @('hazem10-name') | Out-Null
+    Forward
+    Step @('hazem10-ask') | Out-Null
+    Forward
+    Check 'check-hazem10-order'
+    Step @('hazem10-document') | Out-Null
+    Forward
+    Check 'check-hazem10-files'
+    PanelStep 'hazem10-price'
+    Check 'check-hazem10-priced'
+    Step @('hazem10-receipt') | Out-Null
+    Forward
+    Check 'check-hazem10-receipt'
+    PanelStep 'hazem10-deliver'
+    Check 'check-hazem10-delivered'
     Remove-Item env:E2E_PANEL_PASSWORD -ErrorAction SilentlyContinue
 } catch {
     Write-Host "FAIL  $_"; $script:failed = $true

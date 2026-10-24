@@ -33,7 +33,7 @@ public sealed class CalendarSync(HazemDbContext db, GoogleCalendar google, ISett
         var now = clock.GetUtcNow();
         var due = await (from a in db.Appointments.AsNoTracking()
                          join p in db.Persons.AsNoTracking() on a.PersonId equals p.Id
-                         join pay in db.Payments.AsNoTracking() on a.Id equals pay.AppointmentId into pays
+                         join pay in db.Payments.AsNoTracking() on (Guid?)a.Id equals pay.AppointmentId into pays
                          from pay in pays.DefaultIfEmpty()
                          where (a.CalendarState == "create" || a.CalendarState == "update" || a.CalendarState == "remove") && a.CalendarNextAt <= now
                          orderby a.CalendarNextAt
@@ -211,7 +211,8 @@ public sealed class CalendarWorker(IServiceScopeFactory scopes, IConfiguration c
             try
             {
                 using var scope = scopes.CreateScope();
-                var told = await scope.ServiceProvider.GetRequiredService<BookingNotices>().RunAsync(stop);
+                var told = await scope.ServiceProvider.GetRequiredService<BookingNotices>().RunAsync(stop)
+                           + await scope.ServiceProvider.GetRequiredService<Services.ServiceNotices>().RunAsync(stop); // TASK 10
                 var sync = scope.ServiceProvider.GetRequiredService<CalendarSync>();
                 var synced = await sync.SyncAsync(stop);
                 var conflicts = round++ % 30 == 0 ? await sync.CheckConflictsAsync(stop) : 0;

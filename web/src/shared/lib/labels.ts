@@ -20,6 +20,25 @@ export const TASK_TYPES: Record<string, string> = {
   booking_message_failed: "رسالة حجز ما وصلتش للعميل",
   calendar_conflict: "حدث في الكالندر فوق حجز",
   office_cancelled: "المكتب لغى حجز: ميعاد تاني أو استرداد",
+  service_pricing: "ورق خدمة وصل: حدّد السعر",
+  service_unpaid: "سعر خدمة عدّى من غير دفع",
+};
+
+/** TASK 10 (v1.14): the written services and their order's states (S-07). */
+export const SERVICE_KINDS: Record<string, string> = {
+  document_review: "مراجعة عقد",
+  contract_drafting: "صياغة عقد",
+  formal_notice: "إنذار رسمي",
+  written_opinion: "رأي قانوني مكتوب",
+};
+
+export const SERVICE_STATES: Record<string, string> = {
+  collecting: "مستني الورق",
+  awaiting_price: "مستني السعر",
+  awaiting_payment: "مستني الدفع",
+  in_progress: "شغال",
+  delivered: "اتسلّم",
+  closed: "اتقفل",
 };
 
 /** TASK 08: the services booked from the calendar (B-23) and the appointment's states (S-03). */

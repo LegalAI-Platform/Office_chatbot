@@ -141,6 +141,86 @@ public static class PanelBookingEndpoints
             .RequireAuthorization(PanelAuth.Policy(Permissions.PaymentsRefund));
     }
 
+    /// <summary>
+    /// TASK 10 (B-16, B-17, S-07): the service orders. Everyone sees them, opens the client's documents, uploads and
+    /// delivers the file and closes an order; the lawyer and the manager price one and ask for a written opinion.
+    /// </summary>
+    public static void MapPanelServices(this IEndpointRouteBuilder app)
+    {
+        var panel = app.MapGroup("/api/panel")
+            .AddEndpointFilter<NoStoreFilter>()
+            .AddEndpointFilter<AntiforgeryFilter>()
+            .AddEndpointFilter<MustChangePasswordFilter>()
+            .AddEndpointFilter<TwoFactorRequiredFilter>();
+        var services = panel.MapGroup("/services").RequireAuthorization(PanelAuth.Policy(Permissions.ServicesManage));
+
+        services.MapGet("", async (string? show, Office.Infrastructure.Services.PanelServices s, CancellationToken ct) =>
+            await s.ListAsync(show, ct) is { } list ? Results.Ok(list) : Results.BadRequest(new { error = PanelPayments.ErrInvalid }));
+
+        // A document the client sent for the order, like a client's file in 07c: never cached, recorded once read.
+        services.MapGet("/{id:guid}/files/{index:int}", async (Guid id, int index, HttpContext ctx, Office.Infrastructure.Services.PanelServices s,
+            Office.Application.Panel.IClientFiles files, CancellationToken ct) =>
+        {
+            if (!files.Configured)
+            {
+                return Results.Json(new { error = "not_configured" }, statusCode: StatusCodes.Status503ServiceUnavailable);
+            }
+
+            if (await s.FileAsync(id, index, ct) is not { } f || await files.OpenAsync(f, ct) is not { } file)
+            {
+                return Results.NotFound(new { error = PanelPayments.ErrNotFound });
+            }
+
+            await s.RecordFileOpenedAsync(ctx.CurrentUser().Id, id, index, ct);
+            var type = ClientFileTypes.Safe(file.ContentType);
+            ctx.Response.Headers.ContentSecurityPolicy = "sandbox; default-src 'none'; img-src 'self'";
+            return Results.Stream(file.Content, type, ClientFileTypes.Inline(type) ? null : ClientFileTypes.Name(index, file.Filename, type));
+        });
+
+        services.MapPost("/{id:guid}/price", async (Guid id, PriceRequest? body, HttpContext ctx, Office.Infrastructure.Services.PanelServices s,
+            CancellationToken ct) =>
+            ServiceAnswer(await s.PriceAsync(ctx.CurrentUser().Id, id, body?.Price, body?.Exception == true, Day(body?.DueOn), body?.Delivery, ct)))
+            .RequireAuthorization(PanelAuth.Policy(Permissions.ServicesPrice));
+
+        services.MapPost("/{id:guid}/upload", async (Guid id, UploadRequest? body, Office.Infrastructure.Services.PanelServices s, CancellationToken ct) =>
+            await s.UploadAsync(id, body?.Filename, ct) is var r && r.Error is null
+                ? Results.Ok(new { url = r.Url, key = r.Key, content_type = r.ContentType })
+                : ServiceAnswer(r.Error));
+
+        services.MapPost("/{id:guid}/deliver", async (Guid id, DeliverRequest? body, HttpContext ctx, Office.Infrastructure.Services.PanelServices s,
+            CancellationToken ct) =>
+            ServiceAnswer(await s.DeliverAsync(ctx.CurrentUser().Id, id, body?.Key, body?.Filename, ct)));
+
+        services.MapPost("/{id:guid}/resend", async (Guid id, HttpContext ctx, Office.Infrastructure.Services.PanelServices s, CancellationToken ct) =>
+            ServiceAnswer(await s.ResendAsync(ctx.CurrentUser().Id, id, ct)));
+
+        services.MapPost("/{id:guid}/close", async (Guid id, HttpContext ctx, Office.Infrastructure.Services.PanelServices s, CancellationToken ct) =>
+            ServiceAnswer(await s.CloseAsync(ctx.CurrentUser().Id, id, ct)));
+
+        // B-17: on a consultation that took place.
+        panel.MapPost("/booking/appointments/{id:guid}/opinion", async (Guid id, OpinionRequest? body, HttpContext ctx,
+            Office.Infrastructure.Services.PanelServices s, CancellationToken ct) =>
+            ServiceAnswer(await s.OpinionAsync(ctx.CurrentUser().Id, id, Day(body?.DueOn), body?.Delivery, ct)))
+            .RequireAuthorization(PanelAuth.Policy(Permissions.ServicesPrice));
+    }
+
+    private static IResult ServiceAnswer(string? error) => error switch
+    {
+        null => Results.NoContent(),
+        Office.Infrastructure.Services.PanelServices.ErrNotFound => Results.NotFound(new { error }),
+        Office.Infrastructure.Services.PanelServices.ErrNotAllowed => Results.Conflict(new { error }),
+        Office.Infrastructure.Services.PanelServices.ErrNotConfigured => Results.Json(new { error }, statusCode: StatusCodes.Status503ServiceUnavailable),
+        _ => Results.BadRequest(new { error }),
+    };
+
+    public sealed record PriceRequest(int? Price, bool Exception, string? DueOn, string? Delivery);
+
+    public sealed record UploadRequest(string? Filename);
+
+    public sealed record DeliverRequest(string? Key, string? Filename);
+
+    public sealed record OpinionRequest(string? DueOn, string? Delivery);
+
     private static IResult PaymentAnswer(string? error) => error switch
     {
         null => Results.NoContent(),

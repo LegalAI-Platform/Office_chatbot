@@ -30,6 +30,9 @@ export const booking = {
   appointments: (from: string, to: string) => api<Appointment[]>("GET", `/booking/appointments?from=${from}&to=${to}`),
   mark: (id: string, state: string) => api<void>("POST", `/booking/appointments/${id}/state`, { state }),
   cancel: (id: string) => api<Done>("POST", `/booking/appointments/${id}/cancel`),
+  /** TASK 10 (B-17): a written opinion after a consultation that took place: an order waiting for its 2,000. */
+  opinion: (id: string, dueOn: string, delivery: "file" | "call") =>
+    api<void>("POST", `/booking/appointments/${id}/opinion`, { due_on: dueOn, delivery }),
   preview: (day: string, service: string) => api<Preview>("GET", `/booking/preview?day=${day}&service=${service}`),
   office: () => api<Office>("GET", "/office"),
   saveOffice: (o: Office) => api<void>("PUT", "/office", o),

@@ -372,7 +372,7 @@ public sealed class PanelBooking(
         var (f, t) = (BookingDesk.Instant(from).ToUniversalTime(), BookingDesk.Instant(to.AddDays(1)).ToUniversalTime());
         return await (from a in db.Appointments.AsNoTracking()
                       join p in db.Persons.AsNoTracking() on a.PersonId equals p.Id
-                      join pay in db.Payments.AsNoTracking() on a.Id equals pay.AppointmentId into pays
+                      join pay in db.Payments.AsNoTracking() on (Guid?)a.Id equals pay.AppointmentId into pays
                       from pay in pays.DefaultIfEmpty()
                       where a.StartsAt >= f && a.StartsAt < t
                       orderby a.StartsAt
@@ -484,7 +484,7 @@ public sealed class PanelBooking(
             ? []
             : await (from a in db.Appointments.AsNoTracking()
                      join p in db.Persons.AsNoTracking() on a.PersonId equals p.Id
-                     join pay in db.Payments.AsNoTracking() on a.Id equals pay.AppointmentId into pays
+                     join pay in db.Payments.AsNoTracking() on (Guid?)a.Id equals pay.AppointmentId into pays
                      from pay in pays.DefaultIfEmpty()
                      where ids.Contains(a.Id)
                      orderby a.StartsAt

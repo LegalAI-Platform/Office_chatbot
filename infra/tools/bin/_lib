@@ -28,13 +28,14 @@ garage_api() {
   [[ "$GARAGE_HTTP_STATUS" =~ ^2 ]]
 }
 
-# s3_as n8n|backup <aws cli args...>
+# s3_as n8n|backup|api <aws cli args...>
 s3_as() {
   local who="$1"; shift
   local id secret
   case "$who" in
     n8n)    id="$S3_N8N_ACCESS_KEY_ID";    secret="$S3_N8N_SECRET_ACCESS_KEY" ;;
     backup) id="$S3_BACKUP_ACCESS_KEY_ID"; secret="$S3_BACKUP_SECRET_ACCESS_KEY" ;;
+    api)    id="$S3_API_ACCESS_KEY_ID";    secret="$S3_API_SECRET_ACCESS_KEY" ;;
     anon)   aws --endpoint-url "$S3_ENDPOINT" --region "$S3_REGION" --no-sign-request "$@"; return ;;
     *) die "unknown S3 identity: $who" ;;
   esac

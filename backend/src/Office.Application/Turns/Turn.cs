@@ -84,6 +84,7 @@ public enum ActionType
     SendText,
     SendTemplate,
     SendInteractive,
+    SendDocument, // TASK 10: a file the lawyer delivered (B-16.6)
 }
 
 /// <summary>

@@ -264,7 +264,9 @@ function TimeSelect({ value, onChange, label: aria, min = 0 }: { value: number; 
 
 function Bookings() {
   const qc = useQueryClient();
-  const today = cairoDate(new Date());
+  const { data: me } = useMe();
+  // TASK 10: the last two weeks too, so a consultation that took place can get «مطلوب رأي مكتوب» (B-17).
+  const today = cairoDate(new Date(Date.now() - 14 * 86_400_000));
   const to = cairoDate(new Date(Date.now() + 30 * 86_400_000));
   const list = useQuery({ queryKey: ["booking", "appointments", today], queryFn: () => booking.appointments(today, to) });
   const refresh = () => void qc.invalidateQueries({ queryKey: ["booking"] });
@@ -289,6 +291,7 @@ function Bookings() {
             <Chip tone={STATE_TONE[a.state] ?? "grey"}>
               {label(APPOINTMENT_STATES, a.state)}{a.state === "pending_payment" && a.hold_until ? ` لحد ${cairoTime(new Date(a.hold_until))}` : ""}
             </Chip>
+            {a.state === "completed" && can(me, "services.price") ? <Opinion id={a.id} /> : null}
             {a.state === "confirmed" || a.state === "pending_payment" ? (
               <span className="flex flex-wrap gap-1">
                 {a.state === "confirmed" ? (
@@ -308,6 +311,27 @@ function Bookings() {
       </ul>
       {mark.isError || cancel.isError ? <p className="text-sm text-bad" role="alert">{errorMessage(mark.error ?? cancel.error)}</p> : null}
     </Card>
+  );
+}
+
+/** B-17 (TASK 10): «مطلوب رأي مكتوب» with its delivery day: Hazem asks the client for the 2,000. */
+function Opinion({ id }: { id: string }) {
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [due, setDue] = useState(cairoDate(new Date(Date.now() + 7 * 86_400_000)));
+  const ask = useMutation({
+    mutationFn: () => booking.opinion(id, due, "file"),
+    onSuccess: () => { setOpen(false); void qc.invalidateQueries({ queryKey: ["services"] }); },
+  });
+  if (!open) return <Button variant="ghost" onClick={() => setOpen(true)}>مطلوب رأي مكتوب</Button>;
+  return (
+    <span className="flex flex-wrap items-end gap-2">
+      <Field label="يوم التسليم" type="date" min={cairoDate(new Date())} value={due} onChange={(e) => setDue(e.target.value)} />
+      <Button variant="primary" busy={ask.isPending} onClick={() => ask.mutate()}>ابعت طلب الـ 2,000</Button>
+      <Button onClick={() => setOpen(false)}>لأ</Button>
+      {ask.isError ? <span className="text-sm text-bad" role="alert">{errorMessage(ask.error)}</span> : null}
+      {ask.isSuccess ? <span className="text-sm" role="status">اتبعت. الطلب في «طلبات الخدمات».</span> : null}
+    </span>
   );
 }
 

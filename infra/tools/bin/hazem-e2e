@@ -17,7 +17,8 @@ H=201000000068   # TASK 05a: a listed existing client asks about their case
 I=201000000069   # TASK 05a: a blocked number
 K=201000000070   # TASK 05a: a client who tells the topic first (B-25)
 L=201000000071   # TASK 08: books from the buttons; the panel closes days
-ALL="'$A','$B','$C','$D','$E','$F','$G','$H','$I','$K','$L'"
+M=201000000072   # TASK 10: a document review from the request to the delivered file
+ALL="'$A','$B','$C','$D','$E','$F','$G','$H','$I','$K','$L','$M'"
 STUB=http://meta-stub:8080
 
 passed=0; failed=0
@@ -82,11 +83,11 @@ finish() { echo "Result: $passed passed, $failed failed."; [[ $failed -eq 0 ]]; 
 # The panel as the e2e-panel account (made by the driver, TASK 07a), through the web container.
 PANEL=http://web:8080/api/panel
 JAR=/tmp/e2e-panel.jar
-panel_login() {
+panel_login() {  # panel_login [USERNAME]: e2e-panel (staff) unless named
   [[ -n "${E2E_PANEL_PASSWORD:-}" ]] || die "E2E_PANEL_PASSWORD is not set"
   rm -f "$JAR"
   curl -s -b "$JAR" -c "$JAR" -X POST -H "X-CSRF-TOKEN: $(panel_csrf)" -H 'Content-Type: application/json' \
-    -d "$(jq -nc --arg p "$E2E_PANEL_PASSWORD" '{username: "e2e-panel", password: $p}')" "$PANEL/auth/login" >/dev/null
+    -d "$(jq -nc --arg u "${1:-e2e-panel}" --arg p "$E2E_PANEL_PASSWORD" '{username: $u, password: $p}')" "$PANEL/auth/login" >/dev/null
 }
 panel_csrf() { curl -s -b "$JAR" -c "$JAR" "$PANEL/auth/csrf" | jq -r .token; }
 panel_get() { curl -s -b "$JAR" -c "$JAR" "$PANEL$1"; }  # panel_get PATH: prints the body
@@ -106,7 +107,26 @@ case "${1:-}" in
     done < <(q "SELECT w.bucket || '|' || w.object_key FROM app.wa_media w JOIN app.wa_inbound_messages m ON m.id = w.inbound_message_id
                  WHERE m.wa_id IN ($ALL) AND w.object_key IS NOT NULL")
     curl -s -X POST "$STUB/_google/reset" >/dev/null 2>&1
+    # TASK 10: the files the panel delivered (the api's key is the one that may write deliverables/).
+    while IFS='|' read -r bucket key; do
+      [[ -n "$bucket" ]] && s3_as api s3 rm "s3://$bucket/$key" >/dev/null 2>&1
+    done < <(q "SELECT file_bucket || '|' || file_key FROM hazem.service_orders
+                 WHERE file_key IS NOT NULL AND person_id IN (SELECT id FROM hazem.persons WHERE wa_id IN ($ALL))")
     q "
+      DELETE FROM hazem.panel_audit WHERE target_type IN ('service', 'payment')
+         AND target_id IN (SELECT id FROM hazem.service_orders WHERE person_id IN (SELECT id FROM hazem.persons WHERE wa_id IN ($ALL)));
+      DELETE FROM hazem.payment_receipts WHERE payment_id IN (
+        SELECT p.id FROM hazem.payments p JOIN hazem.service_orders o ON o.id = p.service_order_id
+         WHERE o.person_id IN (SELECT id FROM hazem.persons WHERE wa_id IN ($ALL)));
+      DELETE FROM hazem.payments WHERE service_order_id IN (
+        SELECT id FROM hazem.service_orders WHERE person_id IN (SELECT id FROM hazem.persons WHERE wa_id IN ($ALL)));
+      DELETE FROM hazem.service_files WHERE order_id IN (
+        SELECT id FROM hazem.service_orders WHERE person_id IN (SELECT id FROM hazem.persons WHERE wa_id IN ($ALL)));
+      DELETE FROM hazem.service_orders WHERE person_id IN (SELECT id FROM hazem.persons WHERE wa_id IN ($ALL));
+      UPDATE hazem.approved_texts SET active = false
+       WHERE source = 'proposal TASK 10'
+         AND key = ANY (string_to_array(COALESCE((SELECT value FROM hazem.settings WHERE key = 'e2e.texts10'), ''), ','));
+      DELETE FROM hazem.settings WHERE key = 'e2e.texts10';
       DELETE FROM hazem.panel_audit WHERE target_type = 'payment'
          AND target_id IN (SELECT id FROM hazem.appointments WHERE person_id IN (SELECT id FROM hazem.persons WHERE wa_id IN ($ALL)));
       DELETE FROM hazem.payment_receipts WHERE payment_id IN (
@@ -162,7 +182,7 @@ case "${1:-}" in
   setup)
     "$0" cleanup >/dev/null
     backup_set whatsapp.dry_run true
-    backup_set whatsapp.test_recipients "$A,$B,$C,$D,$E,$F,$G,$H,$I,$K,$L"   # 0006: only test numbers get sends
+    backup_set whatsapp.test_recipients "$A,$B,$C,$D,$E,$F,$G,$H,$I,$K,$L,$M"   # 0006: only test numbers get sends
     backup_set whatsapp.graph_base_url "$STUB"
     backup_set ai.openai_base_url "$STUB/v1"
     if [[ -z "$(q "SELECT value FROM app.settings WHERE key = 'whatsapp.graph_api_version'")" ]]; then
@@ -683,6 +703,123 @@ SQL
   check-hazem09-refunded)
     wait_eq "B-22: only then the client hears it (the worker)" \
       "SELECT count(*) FROM app.wa_outbound_messages WHERE wa_id = '$L' AND request_payload->'text'->>'body' = '✅ تم رد 300 جنيه لحضرتك على فودافون كاش.'" "1"
+    finish
+    ;;
+
+  # ---------------------------------------------------------------- TASK 10
+  # A document review (B-16) from M: the request, the document (never to the AI), the lawyer's price, the
+  # receipt, the staff's review, the file uploaded through the panel's nginx straight to storage, and its
+  # delivery on WhatsApp as a document. TASK 10's proposed texts are on for the test only (e2e.texts10).
+  hazem10-setup)
+    hazem_backup_set hazem.recipients "$M"
+    hazem_backup_set office.instapay e2e@instapay
+    hazem_backup_set office.wallet_number 01000000000
+    q "INSERT INTO hazem.settings (key, value, description)
+         SELECT 'e2e.texts10', COALESCE(string_agg(t.key, ','), ''), 'hazem-e2e: TASK 10 texts switched on for the test, off again by cleanup'
+           FROM hazem.approved_texts t
+          WHERE t.source = 'proposal TASK 10' AND NOT t.active
+            AND NOT EXISTS (SELECT 1 FROM hazem.approved_texts a WHERE a.key = t.key AND a.active)
+       ON CONFLICT (key) DO NOTHING;
+       UPDATE hazem.approved_texts SET active = true
+        WHERE source = 'proposal TASK 10'
+          AND key = ANY (string_to_array((SELECT value FROM hazem.settings WHERE key = 'e2e.texts10'), ','));" >/dev/null
+    inject "$M" wamid.E2E-M1 text "$(text "السلام عليكم")" 10
+    echo "TASK 10 texts on, a new client writes"
+    ;;
+
+  hazem10-name)
+    inject "$M" wamid.E2E-M2 text "$(text "محمد أحمد علي حسن")" 10
+    echo "the name from $M"
+    ;;
+
+  hazem10-ask)
+    inject "$M" wamid.E2E-M3 text "$(text "عايز حد يراجعلي عقد")" 10
+    echo "$M asks for a contract review"
+    ;;
+
+  check-hazem10-order)
+    wait_eq "B-16.1: an order waits for the documents, the client is asked for the contract" \
+      "SELECT (SELECT o.kind || '/' || o.state FROM hazem.service_orders o JOIN hazem.persons p ON p.id = o.person_id WHERE p.wa_id = '$M') || '/' ||
+              (SELECT count(*) FROM app.wa_outbound_messages WHERE wa_id = '$M' AND request_payload->'text'->>'body' LIKE '%ابعتلي صورة العقد هنا%')" \
+      "document_review/collecting/1"
+    finish
+    ;;
+
+  hazem10-document)
+    inject "$M" wamid.E2E-M4 document '{"id":"STUB-PDF","mime_type":"application/pdf","filename":"contract.pdf"}' 10
+    echo "$M sends the contract (PDF)"
+    ;;
+
+  check-hazem10-files)
+    wait_eq "B-16.2: the document is the order's, it waits for the price, the client hears it arrived" \
+      "SELECT (SELECT o.state || '/' || (SELECT count(*) FROM hazem.service_files f WHERE f.order_id = o.id)
+                 FROM hazem.service_orders o JOIN hazem.persons p ON p.id = o.person_id WHERE p.wa_id = '$M') || '/' ||
+              (SELECT count(*) FROM app.wa_outbound_messages WHERE wa_id = '$M' AND request_payload->'text'->>'body' LIKE 'استلمت ✅. الأستاذ هيراجع%')" \
+      "awaiting_price/1/1"
+    assert_eq "T-09: the document never reached the AI (no classification)" \
+      "$(q "SELECT count(*) FROM hazem.classifications WHERE turn_id = $(turn_of wamid.E2E-M4)")" "0"
+    assert_eq "the office has a pricing task" \
+      "$(q "SELECT count(*) FROM hazem.staff_tasks t JOIN hazem.persons p ON p.id = t.person_id WHERE p.wa_id = '$M' AND t.type = 'service_pricing'")" "1"
+    finish
+    ;;
+
+  hazem10-price)
+    id="$(q "SELECT o.id FROM hazem.service_orders o JOIN hazem.persons p ON p.id = o.person_id WHERE p.wa_id = '$M'")"
+    body="$(jq -nc --arg d "$(cairo_day '+3 days')" '{price: 2000, exception: false, due_on: $d, delivery: "file"}')"
+    panel_login
+    r="$(panel_post "/services/$id/price" "$body")"
+    assert_eq "(b) a staff account cannot price" "${r##* }" "403"
+    panel_login e2e-lawyer
+    r="$(panel_post "/services/$id/price" "$body")"
+    assert_eq "the lawyer prices 2,000 (in the 1,500–3,000 range), delivery as a file" "${r##* }" "204"
+    finish
+    ;;
+
+  check-hazem10-priced)
+    wait_eq "B-16.4: the worker sends the price and how to pay" \
+      "SELECT count(*) FROM app.wa_outbound_messages WHERE wa_id = '$M' AND request_payload->'text'->>'body' LIKE '💼 مراجعة العقد: السعر النهائي 2,000 جنيه%e2e@instapay%'" "1"
+    finish
+    ;;
+
+  hazem10-receipt)
+    inject "$M" wamid.E2E-M5 image '{"id":"STUB-IMG","mime_type":"image/jpeg"}' 10
+    echo "$M sends the transfer's image"
+    ;;
+
+  check-hazem10-receipt)
+    wait_eq "B-16.5: the image is the order's receipt (flagged: L sent the same stub image), the work waits for the review" \
+      "SELECT (SELECT o.state || '/' || p.state FROM hazem.service_orders o JOIN hazem.payments p ON p.service_order_id = o.id
+                JOIN hazem.persons x ON x.id = o.person_id WHERE x.wa_id = '$M') || '/' ||
+              (SELECT count(*) FROM app.wa_outbound_messages WHERE wa_id = '$M' AND request_payload->'text'->>'body' LIKE 'استلمنا صورة التحويل ✅%')" \
+      "awaiting_payment/duplicate_suspected/1"
+    finish
+    ;;
+
+  hazem10-deliver)
+    id="$(q "SELECT o.id FROM hazem.service_orders o JOIN hazem.persons p ON p.id = o.person_id WHERE p.wa_id = '$M'")"
+    panel_login
+    r="$(panel_post "/payments/$id/review" '{"state":"verified","received":2000}')"
+    assert_eq "the staff find the money: the work starts" "${r##* }/$(q "SELECT state FROM hazem.service_orders WHERE id = '$id'")" "204/in_progress"
+    r="$(panel_post "/services/$id/upload" '{"filename":"مراجعة العقد.pdf"}')"
+    url="$(jq -r .url <<<"${r% *}")"; key="$(jq -r .key <<<"${r% *}")"; ct="$(jq -r .content_type <<<"${r% *}")"
+    assert_eq "(a) the API signs an upload link through the panel's nginx, for that key only" \
+      "${r##* }/$([[ "$url" == "/storage/office-sensitive/$key?"* && "$key" == deliverables/"$id"/* ]] && echo ok)" "200/ok"
+    printf '%%PDF-1.4 e2e deliverable\n' > /tmp/e2e-deliverable.pdf
+    assert_eq "the file goes straight to storage (PUT through web:8080/storage, the API never sees it)" \
+      "$(curl -s -o /dev/null -w '%{http_code}' -X PUT -H "Content-Type: $ct" --data-binary @/tmp/e2e-deliverable.pdf "http://web:8080$url")" "200"
+    assert_eq "nginx refuses anything but that PUT (a GET of the same path)" \
+      "$(curl -s -o /dev/null -w '%{http_code}' "http://web:8080$url")" "403"
+    r="$(panel_post "/services/$id/deliver" "$(jq -nc --arg k "$key" '{key: $k, filename: "مراجعة العقد.pdf"}')")"
+    assert_eq "the panel records the delivery" "${r##* }" "204"
+    finish
+    ;;
+
+  check-hazem10-delivered)
+    wait_eq "B-16.6: the worker sends the file as a WhatsApp document with its name and a link to storage" \
+      "SELECT (request_payload->>'type') || '|' || (request_payload->'document'->>'filename') || '|' || ((request_payload->'document'->>'link') LIKE 'http%deliverables/%')
+         FROM app.wa_outbound_messages WHERE wa_id = '$M' AND request_payload->>'type' = 'document'" "document|مراجعة العقد.pdf|true"
+    assert_eq "the order is delivered" \
+      "$(q "SELECT o.state FROM hazem.service_orders o JOIN hazem.persons p ON p.id = o.person_id WHERE p.wa_id = '$M'")" "delivered"
     finish
     ;;
 

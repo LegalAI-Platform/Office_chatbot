@@ -8,6 +8,9 @@ const dateFmt = new Intl.DateTimeFormat("ar-EG-u-nu-latn", { timeZone: CAIRO, da
 
 const cairoDay = (d: Date): string => dayFmt.format(d);
 
+/** The Cairo date of an instant, «yyyy-mm-dd». */
+export const cairoDate = cairoDay;
+
 /** «النهارده 10:00 ص» / «بكرة 10:00 ص» / «امبارح …» / «23 أكتوبر 10:00 ص». */
 export function cairoWhen(iso: string, now: Date = new Date()): string {
   const d = new Date(iso);

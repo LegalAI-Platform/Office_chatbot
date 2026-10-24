@@ -275,7 +275,7 @@ public sealed class BookingFlowTests
     }
 
     private HazemResponder Hazem => new(new Store(_rows), new Scripted(_script), new Texts(_texts), new NoLists(), new Clock(_now),
-        new BookingDesk(_booking, _calendar));
+        new BookingDesk(_booking, _calendar), new Office.Application.Services.ServiceDesk(_booking));
 
     private Task<TurnDecision> Send(IncomingMessage m) => Send(new Turn($"wt:{++_turn}", Number, null, [m]));
 
@@ -642,6 +642,95 @@ public sealed class BookingFlowTests
         Assert.DoesNotContain(PendingTask.UnclearMessage, TaskKinds(alone));
     }
 
+    // ---------- TASK 10: the written services ----------
+
+    private void ServicesOn()
+    {
+        foreach (var k in HazemResponder.ServiceTextKeys)
+        {
+            _texts[k] = new ApprovedText(k, 1, "T:" + k, 600, true);
+        }
+
+        _texts[TextKeys.MediaReceived] = new ApprovedText(TextKeys.MediaReceived, 1, "وصلت {{media}}", 300, true);
+        _script["عايز حد يراجعلي عقد"] = new("service_by_name", "document_review", "unknown", null, 0.9);
+    }
+
+    private Task<TurnDecision> Files(params (MessageType Type, string Mime)[] files) =>
+        Send(new Turn($"wt:{++_turn}", Number, null, files.Select(f => new IncomingMessage($"wamid.{++_turn}", f.Type, null, null, null, null,
+            new MediaRef(MediaStatus.Stored, "office-sensitive", $"k{_turn}", f.Mime, 1000, $"sha{_turn}", "contract"))).ToList()));
+
+    [Fact]
+    public async Task A_named_service_opens_an_order_and_its_documents_never_reach_the_ai()
+    {
+        ServicesOn();
+        await ToTheOffer();
+        var asked = await Say("عايز حد يراجعلي عقد");
+        Assert.Equal([TextKeys.DocumentReviewRequest], Keys(asked));
+        var order = Assert.Single(_booking.Orders);
+        Assert.Equal(("document_review", "collecting"), (order.Kind, order.State));
+
+        var pages = await Files((MessageType.Image, "image/jpeg"), (MessageType.Image, "image/jpeg"));
+        Assert.Null(pages.Effects!.Classification); // T-09
+        Assert.Equal([TextKeys.ServiceFilesReceived], Keys(pages));
+        Assert.Contains(PendingTask.ServicePricing, TaskKinds(pages));
+        Assert.Equal(("awaiting_price", 2), (order.State, order.Files.Count));
+
+        var more = await Files((MessageType.Document, "application/pdf")); // a PDF is a document here, not a receipt
+        Assert.Equal([TextKeys.MediaReceived], Keys(more));
+        Assert.DoesNotContain(PendingTask.ServicePricing, TaskKinds(more));
+        Assert.Equal(3, order.Files.Count);
+    }
+
+    [Fact]
+    public async Task With_a_hold_waiting_an_image_is_its_receipt_and_a_pdf_goes_to_the_order()
+    {
+        ServicesOn();
+        await ToTheOffer();
+        await Say("عايز حد يراجعلي عقد");
+        await Press(BookingChoice.Pick(BookingService.PhoneVideo, AvailabilityTests.At(20, 12)));
+        Assert.Equal([TextKeys.BookingPaid], Keys(await Files((MessageType.Image, "image/jpeg"))));
+        Assert.Equal(AppointmentInfo.Confirmed, Assert.Single(_booking.Appointments).State);
+        Assert.Equal([TextKeys.ServiceFilesReceived], Keys(await Files((MessageType.Document, "application/pdf"))));
+    }
+
+    [Fact]
+    public async Task The_request_with_the_contract_in_one_turn_opens_the_order_with_it()
+    {
+        ServicesOn();
+        await ToTheOffer();
+        var both = await Send(new Turn($"wt:{++_turn}", Number, null,
+        [
+            new IncomingMessage($"wamid.{++_turn}", MessageType.Text, "عايز حد يراجعلي عقد", null, null),
+            new IncomingMessage($"wamid.{++_turn}", MessageType.Document, null, null, null, null,
+                new MediaRef(MediaStatus.Stored, "office-sensitive", $"k{_turn}", "application/pdf", 1000, $"sha{_turn}", "contract.pdf")),
+        ]));
+        Assert.Equal([TextKeys.ServiceFilesReceived], Keys(both)); // not «ابعتلي صورة العقد»
+        Assert.Contains(PendingTask.ServicePricing, TaskKinds(both));
+        var order = Assert.Single(_booking.Orders);
+        Assert.Equal(("awaiting_price", 1), (order.State, order.Files.Count));
+    }
+
+    [Fact]
+    public async Task A_message_from_the_client_sends_again_what_could_not_reach_him()
+    {
+        ServicesOn();
+        await ToTheOffer();
+        var before = _booking.Retries;
+        await Say("شكرا");
+        Assert.Equal(before + 1, _booking.Retries);
+    }
+
+    [Fact]
+    public async Task Without_the_service_texts_a_named_service_is_answered_as_before()
+    {
+        await ToTheOffer();
+        _script["عايز حد يراجعلي عقد"] = new("service_by_name", "document_review", "unknown", null, 0.9);
+        var d = await Say("عايز حد يراجعلي عقد");
+        Assert.Equal([TextKeys.DocumentReviewRequest], Keys(d));
+        Assert.Contains(PendingTask.ServiceRequest, TaskKinds(d));
+        Assert.Empty(_booking.Orders);
+    }
+
     [Fact]
     public void Chatwoot_shows_the_choices_hazem_offered()
     {
@@ -694,7 +783,7 @@ public sealed class BookingFlowTests
     }
 
     /// <summary>The same rules as the SQL functions of migrations 0013 and 0014, in memory.</summary>
-    private sealed class MemoryBooking(Func<DateTimeOffset> now) : IBookingStore
+    private sealed class MemoryBooking(Func<DateTimeOffset> now) : IBookingStore, Office.Application.Services.IServiceStore
     {
         private readonly Dictionary<string, Guid> _byTurn = [];
         private readonly HashSet<string> _receipts = [];
@@ -852,5 +941,79 @@ public sealed class BookingFlowTests
         }
 
         private static Task<BookOutcome> Done(BookStatus status, Guid id) => Task.FromResult(new BookOutcome(status, id));
+
+        // ---------- TASK 10: the service orders, as migration 0015's functions ----------
+
+        public List<Order> Orders { get; } = [];
+
+        public sealed class Order(Guid person, string kind)
+        {
+            public Guid Id { get; } = Guid.NewGuid();
+            public Guid Person { get; } = person;
+            public string Kind { get; } = kind;
+            public string State { get; set; } = "collecting";
+            public List<string> Files { get; } = [];
+        }
+
+        /// <summary>hazem.file_target: a hold or a booking waiting for a receipt first, then an order's documents, then a late hold.</summary>
+        public async Task<Office.Application.Services.FileFor> FileTargetAsync(Guid personId, bool image, CancellationToken ct)
+        {
+            var docs = Orders.LastOrDefault(o => o.Person == personId && o.State is "collecting" or "awaiting_price");
+            var receipt = await ReceiptTargetAsync(personId, now(), ct);
+            var kind = receipt?.State switch
+            {
+                AppointmentInfo.PendingPayment => Office.Application.Services.FileTarget.Hold,
+                AppointmentInfo.Confirmed => Office.Application.Services.FileTarget.BookingPayment,
+                AppointmentInfo.Expired => Office.Application.Services.FileTarget.LateHold,
+                _ => Office.Application.Services.FileTarget.None,
+            };
+            if (image)
+            {
+                return kind is Office.Application.Services.FileTarget.Hold or Office.Application.Services.FileTarget.BookingPayment
+                    ? new(kind, receipt!.Id)
+                    : docs is not null ? new(Office.Application.Services.FileTarget.OrderDocuments, docs.Id)
+                    : receipt is not null ? new(kind, receipt.Id)
+                    : Office.Application.Services.FileFor.Nothing;
+            }
+
+            return docs is not null ? new(Office.Application.Services.FileTarget.OrderDocuments, docs.Id)
+                : receipt is not null ? new(Office.Application.Services.FileTarget.AskImage, receipt.Id)
+                : Office.Application.Services.FileFor.Nothing;
+        }
+
+        public Task<Office.Application.Services.OpenOrderOutcome> OpenAsync(Guid personId, Guid? intakeId, Office.Application.Services.ServiceKind kind,
+            string key, CancellationToken ct)
+        {
+            if (Orders.FirstOrDefault(o => o.Person == personId && o.Kind == kind.Code && o.State is not ("delivered" or "closed")) is { } open)
+            {
+                return Task.FromResult(new Office.Application.Services.OpenOrderOutcome(Office.Application.Services.OpenOrderStatus.Open, open.Id, open.State));
+            }
+
+            var o = new Order(personId, kind.Code);
+            Orders.Add(o);
+            return Task.FromResult(new Office.Application.Services.OpenOrderOutcome(Office.Application.Services.OpenOrderStatus.Opened, o.Id, o.State));
+        }
+
+        public int Retries { get; private set; }
+
+        public Task RetryNoticesAsync(Guid personId, CancellationToken ct)
+        {
+            Retries++;
+            return Task.CompletedTask;
+        }
+
+        public async Task<Office.Application.Services.AddFileOutcome> AddFileAsync(Guid personId, Office.Application.Services.StoredFile file, CancellationToken ct)
+        {
+            if ((await FileTargetAsync(personId, false, ct)) is not { Target: Office.Application.Services.FileTarget.OrderDocuments } t)
+            {
+                return new(Office.Application.Services.AddFileStatus.None, null, null);
+            }
+
+            var o = Orders.Single(x => x.Id == t.Id);
+            var first = o.State == "collecting";
+            o.Files.Add(file.Key);
+            o.State = "awaiting_price";
+            return new(first ? Office.Application.Services.AddFileStatus.First : Office.Application.Services.AddFileStatus.More, o.Id, o.Kind);
+        }
     }
 }

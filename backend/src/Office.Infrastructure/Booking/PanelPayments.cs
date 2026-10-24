@@ -14,9 +14,15 @@ namespace Office.Infrastructure.Booking;
 // is opened like a client's file in 07c (never cached, every opening in hazem.panel_audit). What the
 // client must hear (partial, not received, refunded) is sent by the worker (BookingNotices).
 
+/// <summary>
+/// <see cref="AppointmentId"/> is the payment's owner: a booking, or (TASK 10, <see cref="Order"/>) a service order, whose
+/// <see cref="Service"/> is its kind, <see cref="Start"/> its delivery day (or when it was asked) and
+/// <see cref="Appointment"/> its state (S-07).
+/// </summary>
 public sealed record PaymentView(Guid AppointmentId, string Service, DateTimeOffset Start, string Appointment, string? Name, string WaId,
     string State, int AmountDue, int? AmountReceived, DateTimeOffset? ProofAt, int Receipts, bool Duplicate, string? ReviewedBy,
-    DateTimeOffset? ReviewedAt, int? RefundDue, string? RefundReason, string? RefundedBy, DateTimeOffset? RefundedAt, string? RefundMethod);
+    DateTimeOffset? ReviewedAt, int? RefundDue, string? RefundReason, string? RefundedBy, DateTimeOffset? RefundedAt, string? RefundMethod,
+    bool Order = false);
 
 public sealed class PanelPayments(HazemDbContext db, BookingStore store, TimeProvider clock)
 {
@@ -38,36 +44,42 @@ public sealed class PanelPayments(HazemDbContext db, BookingStore store, TimePro
         }
 
         var since = clock.GetUtcNow().AddDays(-60).ToUniversalTime();
-        var rows = from pay in db.Payments.AsNoTracking()
-                   join a in db.Appointments.AsNoTracking() on pay.AppointmentId equals a.Id
-                   join p in db.Persons.AsNoTracking() on a.PersonId equals p.Id
-                   select new { pay, a, p };
-        rows = show switch
+        var payments = db.Payments.AsNoTracking();
+        payments = show switch
         {
-            ShowRefunds => rows.Where(x => x.pay.State == PaymentInfo.RefundRequested),
-            ShowAll => rows.Where(x => x.a.StartsAt >= since && x.a.State != AppointmentInfo.Expired),
-            _ => rows.Where(x => x.pay.State == PaymentInfo.ProofReceived || x.pay.State == PaymentInfo.DuplicateSuspected),
+            ShowRefunds => payments.Where(p => p.State == PaymentInfo.RefundRequested),
+            ShowAll => payments,
+            _ => payments.Where(p => p.State == PaymentInfo.ProofReceived || p.State == PaymentInfo.DuplicateSuspected),
         };
 
-        var list = await rows.OrderBy(x => x.pay.ProofAt ?? x.a.StartsAt).Take(300)
-            .Select(x => new
-            {
-                x.pay,
-                x.a.Service,
-                x.a.StartsAt,
-                AppointmentState = x.a.State,
-                x.p.NameRaw,
-                x.p.WaId,
-                Receipts = db.PaymentReceipts.Count(r => r.PaymentId == x.pay.Id),
-                Duplicate = db.PaymentReceipts.Any(r => r.PaymentId == x.pay.Id && r.DuplicateOf != null),
-            }).ToListAsync(ct);
-        var people = list.SelectMany(x => new[] { x.pay.ReviewedBy, x.pay.RefundedBy }).OfType<Guid>().Distinct().ToList();
+        var all = show == ShowAll;
+        var bookings = await (from pay in payments
+                              join a in db.Appointments.AsNoTracking() on pay.AppointmentId equals (Guid?)a.Id
+                              join p in db.Persons.AsNoTracking() on a.PersonId equals p.Id
+                              where !all || a.StartsAt >= since && a.State != AppointmentInfo.Expired
+                              orderby pay.ProofAt ?? a.StartsAt
+                              select new Row(pay, a.Id, a.Service, a.StartsAt, a.State, p.NameRaw, p.WaId,
+                                  db.PaymentReceipts.Count(r => r.PaymentId == pay.Id),
+                                  db.PaymentReceipts.Any(r => r.PaymentId == pay.Id && r.DuplicateOf != null), false)).Take(300).ToListAsync(ct);
+        var orders = await (from pay in payments
+                            join o in db.ServiceOrders.AsNoTracking() on pay.ServiceOrderId equals (Guid?)o.Id
+                            join p in db.Persons.AsNoTracking() on o.PersonId equals p.Id
+                            where !all || o.CreatedAt >= since
+                            orderby pay.ProofAt ?? o.CreatedAt
+                            select new Row(pay, o.Id, o.Kind, o.CreatedAt, o.State, p.NameRaw, p.WaId,
+                                db.PaymentReceipts.Count(r => r.PaymentId == pay.Id),
+                                db.PaymentReceipts.Any(r => r.PaymentId == pay.Id && r.DuplicateOf != null), true)).Take(300).ToListAsync(ct);
+        var list = bookings.Concat(orders).OrderBy(x => x.Pay.ProofAt ?? x.Start).ToList();
+        var people = list.SelectMany(x => new[] { x.Pay.ReviewedBy, x.Pay.RefundedBy }).OfType<Guid>().Distinct().ToList();
         var names = await db.PanelUsers.AsNoTracking().Where(u => people.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.DisplayName, ct);
         string? Who(Guid? id) => id is { } g && names.TryGetValue(g, out var n) ? n : null;
-        return list.Select(x => new PaymentView(x.pay.AppointmentId, x.Service, x.StartsAt, x.AppointmentState, x.NameRaw, x.WaId, x.pay.State,
-            x.pay.AmountDue, x.pay.AmountReceived, x.pay.ProofAt, x.Receipts, x.Duplicate, Who(x.pay.ReviewedBy), x.pay.ReviewedAt, x.pay.RefundDue,
-            x.pay.RefundReason, Who(x.pay.RefundedBy), x.pay.RefundedAt, x.pay.RefundMethod)).ToList();
+        return list.Select(x => new PaymentView(x.OwnerId, x.Service, x.Start, x.OwnerState, x.Name, x.WaId, x.Pay.State,
+            x.Pay.AmountDue, x.Pay.AmountReceived, x.Pay.ProofAt, x.Receipts, x.Duplicate, Who(x.Pay.ReviewedBy), x.Pay.ReviewedAt, x.Pay.RefundDue,
+            x.Pay.RefundReason, Who(x.Pay.RefundedBy), x.Pay.RefundedAt, x.Pay.RefundMethod, x.Order)).ToList();
     }
+
+    private sealed record Row(PaymentRow Pay, Guid OwnerId, string Service, DateTimeOffset Start, string OwnerState, string? Name, string WaId,
+        int Receipts, bool Duplicate, bool Order);
 
     /// <summary>The n-th receipt (0 = the first) of an appointment's payment, for the panel to show.</summary>
     public async Task<ClientFileRef?> ReceiptAsync(Guid appointmentId, int index, CancellationToken ct)
@@ -79,7 +91,7 @@ public sealed class PanelPayments(HazemDbContext db, BookingStore store, TimePro
 
         var receipt = await (from r in db.PaymentReceipts.AsNoTracking()
                              join pay in db.Payments.AsNoTracking() on r.PaymentId equals pay.Id
-                             where pay.AppointmentId == appointmentId
+                             where pay.AppointmentId == appointmentId || pay.ServiceOrderId == appointmentId
                              orderby r.ReceivedAt, r.Id
                              select r).Skip(index).FirstOrDefaultAsync(ct);
         return receipt is null ? null : new ClientFileRef("image", receipt.Bucket, receipt.Key, receipt.Mime, null);
@@ -152,6 +164,8 @@ public sealed class PanelPayments(HazemDbContext db, BookingStore store, TimePro
         return null;
     }
 
-    private async Task<Guid?> PersonOfAsync(Guid appointmentId, CancellationToken ct) =>
-        await db.Appointments.AsNoTracking().Where(a => a.Id == appointmentId).Select(a => (Guid?)a.PersonId).FirstOrDefaultAsync(ct);
+    /// <summary>The client of a payment's owner: a booking or a service order (TASK 10).</summary>
+    private async Task<Guid?> PersonOfAsync(Guid ownerId, CancellationToken ct) =>
+        await db.Appointments.AsNoTracking().Where(a => a.Id == ownerId).Select(a => (Guid?)a.PersonId).FirstOrDefaultAsync(ct)
+        ?? await db.ServiceOrders.AsNoTracking().Where(o => o.Id == ownerId).Select(o => (Guid?)o.PersonId).FirstOrDefaultAsync(ct);
 }
