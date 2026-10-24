@@ -213,19 +213,26 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
     [Fact]
     public async Task Every_active_text_is_word_for_word_in_decisions()
     {
-        var decisions = await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.6.md"), Ct);
+        var decisions = await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.12.md"), Ct);
         await using var c = new NpgsqlConnection(db.ApiConnectionString);
         await c.OpenAsync(Ct);
         await using var cmd = new NpgsqlCommand("SELECT key, text FROM hazem.approved_texts WHERE active AND source LIKE 'DECISIONS%'", c);
         await using var r = await cmd.ExecuteReaderAsync(Ct);
+        // TASK 08: the system fills B-08's [brackets] itself; stored as {{slots}}, they read back as DECISIONS writes them.
+        var slots = new Dictionary<string, string>
+        {
+            ["{{service}}"] = "[الخدمة]", ["{{day}}"] = "[اليوم]", ["{{time}}"] = "[الساعة]", ["{{amount}}"] = "[المبلغ]",
+            ["{{instapay}}"] = "[العنوان]", ["{{wallet}}"] = "[الرقم]",
+        };
         var count = 0;
         while (await r.ReadAsync(Ct))
         {
             count++;
-            Assert.True(decisions.Contains(r.GetString(1), StringComparison.Ordinal), $"{r.GetString(0)} is not word for word in DECISIONS v1.6");
+            var text = slots.Aggregate(r.GetString(1), (t, s) => t.Replace(s.Key, s.Value, StringComparison.Ordinal));
+            Assert.True(decisions.Contains(text, StringComparison.Ordinal), $"{r.GetString(0)} is not word for word in DECISIONS v1.12");
         }
 
-        Assert.Equal(11, count); // 8 (TASK 04) + B-04 question + the two B-25 texts (TASK 05a)
+        Assert.Equal(13, count); // 8 (TASK 04) + B-04 question + the two B-25 texts (TASK 05a) + B-08 and B-22 (TASK 08)
     }
 
     [Fact]

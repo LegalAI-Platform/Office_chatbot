@@ -123,6 +123,33 @@ Response `200`:
 }
 ```
 
+TASK 08 adds `send_interactive`: the text with WhatsApp reply buttons or a list under it. Every
+word (the text, each title, the list's button) comes from the API's approved texts or is a value of
+the system (a day and a time); n8n only builds Meta's JSON. It is a session message (the 24-hour
+window applies, like `send_text`).
+
+```json
+{
+  "type": "send_interactive",
+  "text": "اختار الميعاد اللي يناسبك من القايمة 👇",
+  "interactive": {
+    "kind": "list",
+    "button": "المواعيد",
+    "choices": [
+      { "id": "bk:s:pv:1795089600", "title": "النهارده 2:00 م" },
+      { "id": "bk:n:pv:1795089600", "title": "مواعيد تانية" }
+    ]
+  },
+  "idempotency_key": "hazem:wt:…:0"
+}
+```
+
+- `kind` `buttons`: 1–3 choices, title ≤ 20 characters. `kind` `list`: 1–10 rows, title ≤ 24, and
+  `button` (≤ 20). `text` ≤ 1024. Ids ≤ 200 characters.
+- What the client presses comes back as a message of type `interactive` (`button_reply` /
+  `list_reply`) with the same `id`. Ids starting with `bk:` are the booking's and are read by the
+  API without the AI.
+
 - `status` is `processed` the first time and `duplicate` when the same `turn_id` comes again;
   a duplicate returns **the same actions** so n8n can safely finish a turn it lost half-way
   (the idempotency keys stop anything from being sent twice).
@@ -193,6 +220,9 @@ Response `200` (always, the outcome is in the body):
 ```json
 { "ok": true, "outbound_id": "…", "wamid": "wamid…", "status": "sent", "error_code": null, "error_message": null }
 ```
+
+TASK 08: `send_interactive` with `interactive` (as above) works here too (the panel's booking tells
+a client when the office cancels).
 
 - Same rules as any other send: 24-hour window for text, `APPROVED` templates only, and the
   same `idempotency_key` never sends twice (the first result is returned with `DUPLICATE`

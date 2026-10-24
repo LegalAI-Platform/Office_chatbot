@@ -48,6 +48,7 @@ contains `CHANGE_ME`, or has the wrong format.
 | `CHATWOOT_WEBHOOK_TOKEN` | api (`Chatwoot__WebhookSecret`); the inbox's webhook secret | **yes** | from `gen-secrets`: Chatwoot signs every webhook with it | 07b |
 | `CHATWOOT_URL` | api (`Chatwoot__PublicUrl`), chatwoot (`FRONTEND_URL`) | no | empty = `http://127.0.0.1:3000`: where people open Chatwoot | 07b |
 | `OPENAI_BASE_URL` | api (`Hazem__OpenAiBaseUrl`) | no | empty = `https://api.openai.com/v1` (healthcheck checks it). Tests never change it: `hazem-e2e` uses `hazem.settings ai.stub_*` | 04 |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | api (`Hazem__GoogleServiceAccountJson`): the lawyer's Google Calendar (T-14, P2) | **yes** | the service account's key file as one line of base64 ([runbooks/booking.md](runbooks/booking.md)). Not made by `gen-secrets`; the owner only. **May be empty**: Hazem offers no booking times, healthcheck WARN. Never printed or logged | 08 |
 
 ## Non-secret API settings: `hazem.settings`
 
@@ -61,6 +62,12 @@ contains `CHANGE_ME`, or has the wrong format.
 | `echo.enabled`, `echo.recipients` | the TASK 02/03 test echo (`false` / empty) |
 | `handoff.enabled` | `false` (TASK 05a). `true` = «موظف» hands the conversation to the staff and Hazem goes silent (B-12). Stays `false` until staff can answer from Chatwoot (TASK 07b, DECISIONS v1.8): nobody would answer the client. The healthcheck fails while it is `true` |
 | `source.link_codes` | comma-separated codes put in wa.me links (e.g. `FB-OCT`); a first message containing one is recorded as source `link` (B-13) |
+| `booking.enabled` | `false` (TASK 08). `true` = Hazem offers free times and books; changed in the panel (إعدادات الحجز). Works only when the booking's texts are approved too |
+| `booking.buffer_minutes`, `booking.min_notice_hours`, `booking.horizon_days`, `booking.max_per_day`, `booking.slot_step_minutes`, `booking.offer_count` | `10`, `2`, `14`, empty (no limit), `15`, `4` (B-24, P5): changed in the panel |
+| `booking.calendar_id` | the lawyer's Google Calendar (his e-mail), shared with the service account; the panel |
+| `booking.google_base_url` | empty. Only inside `hazem-e2e` (the Google Calendar stub), honoured only when `ENVIRONMENT=test`; the healthcheck fails otherwise |
+| `booking.conflict_auto_message` | `false` (P3): a calendar event over a booking makes a task only |
+| `office.instapay`, `office.wallet_number`, `office.wallet_provider`, `office.address`, `office.map_url` | P1: written by the manager or the lawyer in the panel (بيانات المكتب); the booking's confirmation uses the first three |
 
 ## Non-secret WhatsApp settings: `app.settings`, not `.env`
 

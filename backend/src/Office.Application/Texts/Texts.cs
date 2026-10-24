@@ -59,10 +59,42 @@ public static class TextKeys
     public const string VoiceFailed = "voice_failed";
     public const string Unsupported = "unsupported";
     public const string LocationReceived = "location_received";
+
+    // TASK 08 (booking). From DECISIONS, word for word (active).
+    public const string BookingConfirmed = "booking_confirmed";              // B-08
+    public const string BookingCancelledByOffice = "booking_cancelled_by_office"; // B-22
+
+    // Proposed in TASK 08 (inactive until approved). Titles of buttons and list rows too.
+    public const string BtnBookPhoneVideo = "btn_book_phone_video";
+    public const string BtnBookOffice = "btn_book_office";
+    public const string BookingChooseSlot = "booking_choose_slot";
+    public const string BtnSlotsList = "btn_slots_list";
+    public const string BtnMoreSlots = "btn_more_slots";
+    public const string BookingSlotTaken = "booking_slot_taken";
+    public const string BookingNoSlots = "booking_no_slots";
+    public const string BookingUnavailable = "booking_unavailable";
+    public const string BookingUrgentNoneToday = "booking_urgent_none_today";
+    public const string BookingExisting = "booking_existing";
+    public const string BtnReschedule = "btn_reschedule";
+    public const string BtnCancelBooking = "btn_cancel_booking";
+    public const string BookingRescheduled = "booking_rescheduled";
+    public const string BookingCancelled = "booking_cancelled";
+    public const string BtnRefund = "btn_refund";
+    public const string BookingRefundRequested = "booking_refund_requested";
 }
 
-/// <summary>One reply Hazem wants to send: a text key, and what to send instead when it cannot be sent.</summary>
-public sealed record ReplyStep(string Key, string? Fallback = null, IReadOnlyDictionary<string, string>? Fill = null);
+/// <summary>
+/// One reply Hazem wants to send: a text key, and what to send instead when it cannot be sent.
+/// <see cref="Choices"/> (TASK 08): buttons or a list under that text.
+/// </summary>
+public sealed record ReplyStep(string Key, string? Fallback = null, IReadOnlyDictionary<string, string>? Fill = null,
+    ReplyChoices? Choices = null);
+
+/// <summary>Buttons or a list. <see cref="ButtonKey"/>: the text of the list's button (a list only).</summary>
+public sealed record ReplyChoices(string Kind, IReadOnlyList<ReplyChoice> Items, string? ButtonKey = null);
+
+/// <summary>One button or row: its title is an approved text (<see cref="TitleKey"/>) or a value of the system (<see cref="Title"/>).</summary>
+public sealed record ReplyChoice(string Id, string? TitleKey = null, string? Title = null);
 
 /// <summary>Which approved text (key and version) went out under which idempotency key, or why another one did.</summary>
 public sealed record ReplyRecord(string IdempotencyKey, string Key, int Version, int Part, string? InsteadOf, string? Reason);
@@ -174,6 +206,23 @@ public static class ReplyComposer
                 continue; // the same text twice in one answer (e.g. a fallback equal to the next step)
             }
 
+            // TASK 08: buttons or a list under the text. A title that cannot be sent (not approved
+            // yet, too long) sends the text alone: the client can still answer in words.
+            if (step.Choices is { } choices && insteadOf is null)
+            {
+                var (payload, problem) = Interactive(choices, texts);
+                if (payload is not null && rendered!.Length <= InteractivePayload.MaxBody)
+                {
+                    var key = OutboundAction.KeyFor(turnId, actions.Count);
+                    actions.Add(new OutboundAction(ActionType.SendInteractive, key, Text: rendered,
+                        ContextWamid: actions.Count == 0 ? contextWamid : null, Interactive: payload));
+                    records.Add(new ReplyRecord(key, chosen.Key, chosen.Version, 0, null, null));
+                    continue;
+                }
+
+                skipped.Add(problem ?? new SkippedText(chosen.Key, "too_long_for_buttons"));
+            }
+
             var parts = TextRenderer.Split(rendered!, chosen.MaxChars);
             for (var p = 0; p < parts.Count; p++)
             {
@@ -184,6 +233,62 @@ public static class ReplyComposer
         }
 
         return new Composed(actions, records, skipped);
+    }
+
+    public const string TitleTooLong = "title_too_long";
+    public const string TooManyChoices = "too_many_choices";
+
+    /// <summary>The buttons or the list, every title within WhatsApp's limits; or what stopped it.</summary>
+    private static (InteractivePayload? Payload, SkippedText? Problem) Interactive(ReplyChoices choices,
+        IReadOnlyDictionary<string, ApprovedText> texts)
+    {
+        var isList = choices.Kind == InteractivePayload.List;
+        var maxTitle = isList ? InteractivePayload.MaxRowTitle : InteractivePayload.MaxButtonTitle;
+        if (choices.Items.Count == 0 || choices.Items.Count > (isList ? InteractivePayload.MaxRows : InteractivePayload.MaxButtons))
+        {
+            return (null, new SkippedText(choices.Kind, TooManyChoices));
+        }
+
+        string? button = null;
+        if (isList)
+        {
+            var (b, _, reason) = Resolve(choices.ButtonKey ?? "", null, texts);
+            if (b is null)
+            {
+                return (null, new SkippedText(choices.ButtonKey ?? "list_button", reason!));
+            }
+
+            button = b.Text.Trim();
+            if (button.Length > InteractivePayload.MaxButtonTitle)
+            {
+                return (null, new SkippedText(b.Key, TitleTooLong));
+            }
+        }
+
+        var items = new List<InteractiveChoice>();
+        foreach (var item in choices.Items)
+        {
+            var title = item.Title;
+            if (item.TitleKey is { } key)
+            {
+                var (t, rendered, reason) = Resolve(key, null, texts);
+                if (t is null)
+                {
+                    return (null, new SkippedText(key, reason!));
+                }
+
+                title = rendered!.Trim();
+            }
+
+            if (string.IsNullOrWhiteSpace(title) || title.Length > maxTitle)
+            {
+                return (null, new SkippedText(item.TitleKey ?? item.Id, TitleTooLong));
+            }
+
+            items.Add(new InteractiveChoice(item.Id, title));
+        }
+
+        return (new InteractivePayload(choices.Kind, button, items), null);
     }
 
     private static (ApprovedText? Text, string? Rendered, string? Reason) Resolve(string key,

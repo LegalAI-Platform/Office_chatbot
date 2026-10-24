@@ -269,6 +269,8 @@ services:
       Chatwoot__BotToken: ${CHATWOOT_BOT_TOKEN:-}
       Chatwoot__PlatformToken: ${CHATWOOT_PLATFORM_TOKEN:-}
       Chatwoot__WebhookSecret: ${CHATWOOT_WEBHOOK_TOKEN:-}
+      # TASK 08 (T-14, P2): the lawyer's Google Calendar through a service account. Empty = no times offered.
+      Hazem__GoogleServiceAccountJson: ${GOOGLE_SERVICE_ACCOUNT_JSON:-}
     healthcheck:
       # Process only; /health/ready (database and migration 0003) is checked by the healthcheck job.
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health/live | grep -q Healthy"]

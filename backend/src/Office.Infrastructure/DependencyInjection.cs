@@ -111,6 +111,18 @@ public static class DependencyInjection
         services.AddScoped<Application.Chatwoot.ChatwootEvents>();
         services.AddScoped<Application.Chatwoot.ChatwootAccounts>();
 
+        // TASK 08 (DECISIONS v1.12): the booking. The hours from the panel, the busy times from the
+        // lawyer's Google Calendar (a service account; no loggers: the requests carry its token).
+        services.AddScoped<Booking.BookingStore>();
+        services.AddScoped<Application.Booking.IBookingStore>(sp => sp.GetRequiredService<Booking.BookingStore>());
+        services.AddHttpClient<Booking.GoogleCalendar>(Booking.GoogleCalendar.HttpClientName, c => c.Timeout = Timeout.InfiniteTimeSpan)
+            .RemoveAllLoggers();
+        services.AddScoped<Application.Booking.IBusyCalendar>(sp => sp.GetRequiredService<Booking.GoogleCalendar>());
+        services.AddScoped<Application.Booking.BookingDesk>();
+        services.AddScoped<Booking.CalendarSync>();
+        services.AddScoped<Booking.BookingNotices>();
+        services.AddScoped<Booking.PanelBooking>();
+
         return services;
     }
 }

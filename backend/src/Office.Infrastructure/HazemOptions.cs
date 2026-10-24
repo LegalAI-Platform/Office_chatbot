@@ -32,6 +32,12 @@ public sealed class HazemOptions
     /// <summary>OPENAI_BASE_URL.</summary>
     public string OpenAiBaseUrl { get; set; } = DefaultOpenAiBaseUrl;
 
+    /// <summary>
+    /// GOOGLE_SERVICE_ACCOUNT_JSON (TASK 08, P2): the Google Cloud service account's key file, as
+    /// base64. Entered by the owner only; may be empty (booking then offers no times).
+    /// </summary>
+    public string GoogleServiceAccountJson { get; set; } = "";
+
     public const string DefaultOpenAiModel = "gpt-4.1-mini";
     public const string DefaultOpenAiBaseUrl = "https://api.openai.com/v1";
 }

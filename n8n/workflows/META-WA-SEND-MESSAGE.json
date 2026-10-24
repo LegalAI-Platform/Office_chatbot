@@ -13,7 +13,7 @@
         0
       ],
       "parameters": {
-        "content": "## META-WA-SEND-MESSAGE\nInput: `wa_id`, `text`, `idempotency_key`, `requested_by`, optional `context_wamid`.\nOutput: `{ ok, outbound_id, wamid, status, error_code, error_message }`.\nNever sends twice for the same idempotency key. Refuses (OUTSIDE_24H_WINDOW) without calling Meta when the client has not written in the last 24 hours: use META-WA-SEND-TEMPLATE.\nRetries: one retry after 3 s only for HTTP 429/502/503/504. No retry after a timeout or HTTP 500 (Meta may already have sent it): the result is NETWORK_OR_UNKNOWN / META_ERROR and the caller decides.\nDry run (`whatsapp.dry_run = true`, tests only): recorded as sent with wamid.DRYRUN-<outbound_id>, Meta is never called.",
+        "content": "## META-WA-SEND-MESSAGE\nInput: `wa_id`, `text`, `idempotency_key`, `requested_by`, optional `context_wamid`, optional `interactive` (TASK 08: `{ kind: buttons|list, button?, choices: [{id, title}] }`; buttons ≤ 3 with titles ≤ 20, a list ≤ 10 rows with titles ≤ 24; `text` is its body, ≤ 1024). The words all come from the API; this only builds Meta's JSON.\nOutput: `{ ok, outbound_id, wamid, status, error_code, error_message }`.\nNever sends twice for the same idempotency key. Refuses (OUTSIDE_24H_WINDOW) without calling Meta when the client has not written in the last 24 hours: use META-WA-SEND-TEMPLATE.\nRetries: one retry after 3 s only for HTTP 429/502/503/504. No retry after a timeout or HTTP 500 (Meta may already have sent it): the result is NETWORK_OR_UNKNOWN / META_ERROR and the caller decides.\nDry run (`whatsapp.dry_run = true`, tests only): recorded as sent with wamid.DRYRUN-<outbound_id>, Meta is never called.",
         "height": 220,
         "width": 520
       }
@@ -51,7 +51,7 @@
           "conditions": [
             {
               "id": "8169b12e-0370-5455-9ab0-7723e2d1f458",
-              "leftValue": "={{ /^[0-9]{8,15}$/.test(String($json.wa_id || '')) && typeof $json.text === 'string' && $json.text.trim().length > 0 && $json.text.length <= 4096 && !!$json.idempotency_key && !!$json.requested_by }}",
+              "leftValue": "={{ /^[0-9]{8,15}$/.test(String($json.wa_id || '')) && typeof $json.text === 'string' && $json.text.trim().length > 0 && $json.text.length <= 4096 && !!$json.idempotency_key && !!$json.requested_by && (() => { const i = $json.interactive ? (typeof $json.interactive === 'string' ? JSON.parse($json.interactive) : $json.interactive) : null; if (!i) return true; const list = i.kind === 'list'; const max = list ? 24 : 20; return (i.kind === 'buttons' || list) && $json.text.length <= 1024 && Array.isArray(i.choices) && i.choices.length >= 1 && i.choices.length <= (list ? 10 : 3) && i.choices.every((c) => c && typeof c.id === 'string' && c.id.length >= 1 && c.id.length <= 200 && typeof c.title === 'string' && c.title.length >= 1 && c.title.length <= max) && (!list || (typeof i.button === 'string' && i.button.length >= 1 && i.button.length <= 20)); })() }}",
               "rightValue": "",
               "operator": {
                 "type": "boolean",
@@ -121,7 +121,7 @@
         "operation": "executeQuery",
         "query": "SELECT app.wa_outbound_prepare($1, $2, 'text', $3::jsonb, $4) AS r, $3::jsonb AS payload, COALESCE((SELECT value = 'true' FROM app.settings WHERE key = 'whatsapp.dry_run'), false) AS dry_run",
         "options": {
-          "queryReplacement": "={{ [ $json.idempotency_key, $json.wa_id, JSON.stringify(Object.assign({ messaging_product: 'whatsapp', recipient_type: 'individual', to: $json.wa_id, type: 'text', text: { preview_url: false, body: $json.text } }, $json.context_wamid ? { context: { message_id: $json.context_wamid } } : {})), $json.requested_by ] }}"
+          "queryReplacement": "={{ (() => { const i = $json.interactive ? (typeof $json.interactive === 'string' ? JSON.parse($json.interactive) : $json.interactive) : null; const body = !i ? { type: 'text', text: { preview_url: false, body: $json.text } } : { type: 'interactive', interactive: i.kind === 'list' ? { type: 'list', body: { text: $json.text }, action: { button: i.button, sections: [{ rows: i.choices.map((c) => Object.assign({ id: c.id, title: c.title }, c.description ? { description: c.description } : {})) }] } } : { type: 'button', body: { text: $json.text }, action: { buttons: i.choices.map((c) => ({ type: 'reply', reply: { id: c.id, title: c.title } })) } } }; return [ $json.idempotency_key, $json.wa_id, JSON.stringify(Object.assign({ messaging_product: 'whatsapp', recipient_type: 'individual', to: $json.wa_id }, body, $json.context_wamid ? { context: { message_id: $json.context_wamid } } : {})), $json.requested_by ]; })() }}"
         }
       },
       "credentials": {

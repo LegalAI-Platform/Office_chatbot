@@ -34,6 +34,10 @@ using Office.Infrastructure.Lists;
 //                                         reported by line number, never with the whole number
 //   tasks-overdue                         marks staff tasks past due_at as overdue (S-05)
 //   unmute --to <wa_id>                   the manager brings a muted conversation back (S-01)
+//   calendar-check [--calendar ID] [--write]  TASK 08: can the API read (and with --write, write: one test event
+//                                         made and deleted at once) the lawyer's Google Calendar? (the key in
+//                                         .env, the calendar of booking.calendar_id or --calendar shared with
+//                                         the service account). Prints the account's e-mail, never the key
 // Panel accounts (TASK 07a, T-23): the first manager and emergencies only; the manager manages
 // every other account from the panel. Passwords are typed in the terminal (twice, hidden) or, for
 // scripts, read from stdin; never an argument, never printed.
@@ -70,6 +74,7 @@ try
         "import-lists" => await ImportLists(),
         "tasks-overdue" => await TasksOverdue(),
         "unmute" => await Unmute(),
+        "calendar-check" => await CalendarCheck(),
         "create-user" => await CreateUser(),
         "reset-password" => await ResetPassword(),
         "unlock-user" => await UnlockUser(),
@@ -123,6 +128,53 @@ async Task<JsonNode> ImportLists()
 
 async Task<JsonNode> TasksOverdue() =>
     new JsonObject { ["ok"] = true, ["marked_overdue"] = await sp.GetRequiredService<TaskMaintenance>().MarkOverdueAsync(ct) };
+
+// TASK 08: the same freeBusy call the booking makes, for today and the next 14 days.
+async Task<JsonNode> CalendarCheck()
+{
+    var google = sp.GetRequiredService<Office.Infrastructure.Booking.GoogleCalendar>();
+    var stored = await sp.GetRequiredService<ISettingsReader>().GetAsync(ct);
+    var values = stored.Values.ToDictionary(kv => kv.Key, kv => kv.Value);
+    if (Option("--calendar") is { Length: > 0 } id)
+    {
+        values[Office.Application.Booking.BookingSettings.CalendarIdKey] = id;
+    }
+
+    var settings = new HazemSettings(values);
+    var calendar = settings.Get(Office.Application.Booking.BookingSettings.CalendarIdKey);
+    var now = DateTimeOffset.UtcNow;
+    var busy = await google.BusyAsync(now, now.AddDays(14), settings, ct);
+    // --write: one test event («حازم: اختبار الربط») tomorrow at 03:00 Cairo for 5 minutes, deleted at once.
+    string? write = null;
+    if (busy.Available && args.Contains("--write"))
+    {
+        var day = Office.Application.Booking.BookingDesk.Today(now).AddDays(1);
+        var start = Office.Domain.Booking.Availability.At(day, 180, Office.Application.Booking.BookingDesk.Zone)!.Value;
+        var eventId = await google.CreateEventAsync(settings, "حازم: اختبار الربط", start, start.AddMinutes(5), Guid.Empty, ct);
+        write = eventId is null ? "create_failed: is it shared with «Make changes to events»?"
+            : await google.DeleteEventAsync(settings, eventId, ct) ? "created_and_deleted" : "created_but_not_deleted (delete it by hand)";
+    }
+
+    return new JsonObject
+    {
+        ["ok"] = busy.Available,
+        ["key_in_env"] = google.HasKey,
+        ["service_account"] = google.ServiceAccountEmail,
+        ["calendar"] = calendar,
+        ["problem"] = busy.Problem switch
+        {
+            null => null,
+            "not_configured" when !google.HasKey => "GOOGLE_SERVICE_ACCOUNT_JSON is empty or unreadable",
+            "not_configured" => "no calendar id: set it in the panel (إعدادات الحجز) or pass --calendar",
+            "calendar_error" => "Google answered for the calendar with an error: is it shared with the service account?",
+            "http_403" => "403: is the Google Calendar API enabled in the service account's project?",
+            "http_404" => "404: no such calendar for this account (not shared, or a wrong id)",
+            var p => p,
+        },
+        ["busy_times_next_14_days"] = busy.Available ? busy.Busy.Count : null,
+        ["write_test"] = write,
+    };
+}
 
 async Task<JsonNode> Unmute()
 {

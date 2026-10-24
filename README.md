@@ -17,7 +17,7 @@ the staff answer clients there; [docs/runbooks/chatwoot.md](docs/runbooks/chatwo
 (alerts by e-mail and in the panel, the office's lists, Hazem's texts, client files, reports). Hazem answers only the numbers in
 `hazem.settings hazem.recipients` until the owner opens it to everyone.
 
-- All decisions: [docs/decisions/DECISIONS-v1.11.md](docs/decisions/DECISIONS-v1.11.md)
+- All decisions: [docs/decisions/DECISIONS-v1.12.md](docs/decisions/DECISIONS-v1.12.md)
 - n8n ↔ .NET API contract: [docs/hazem-internal-api.md](docs/hazem-internal-api.md)
 - Backend: [backend/README.md](backend/README.md)
 - Architecture and permissions: [docs/infrastructure.md](docs/infrastructure.md)

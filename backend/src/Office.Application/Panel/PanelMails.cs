@@ -91,7 +91,6 @@ public static class PanelMails
     private static TimeZoneInfo Cairo => global::Office.Domain.Tasks.OfficeHours.Cairo;
 
     // The API runs with InvariantGlobalization (no culture data), so the Arabic names are written here.
-    private static readonly string[] Days = ["الأحد", "الاتنين", "التلات", "الأربع", "الخميس", "الجمعة", "السبت"];
     private static readonly string[] Months =
         ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
 
@@ -99,7 +98,7 @@ public static class PanelMails
     public static string ArabicTime(DateTimeOffset t)
     {
         var hour = t.Hour % 12 == 0 ? 12 : t.Hour % 12;
-        return $"{Days[(int)t.DayOfWeek]} {t.Day} {Months[t.Month - 1]}، {hour}:{t.Minute:00} {(t.Hour < 12 ? "ص" : "م")}";
+        return $"{Booking.BookingWords.DayName(t.DayOfWeek)} {t.Day} {Months[t.Month - 1]}، {hour}:{t.Minute:00} {(t.Hour < 12 ? "ص" : "م")}";
     }
 
     /// <summary>The task types as the panel names them.</summary>
@@ -119,6 +118,11 @@ public static class PanelMails
         "urgent_request" => "طلب عاجل",
         "service_request" => "طلب خدمة",
         "reschedule_or_cancel" => "تغيير أو إلغاء ميعاد",
+        "booking_unavailable" => "حجز: مفيش مواعيد أو الكالندر مش متاح",
+        "booking_cancelled" => "عميل لغى حجزه",
+        "booking_message_failed" => "رسالة حجز ما وصلتش للعميل",
+        "calendar_conflict" => "حدث في الكالندر فوق حجز",
+        "office_cancelled" => "المكتب لغى حجز: ميعاد تاني أو استرداد",
         _ => type,
     };
 

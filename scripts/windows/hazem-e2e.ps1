@@ -126,6 +126,28 @@ try {
     & docker compose run --rm --no-deps -e E2E_PANEL_PASSWORD tools hazem-e2e check-panel 2>&1 |
         ForEach-Object { "$_" } | Where-Object { $_ -notmatch '^#\d+ |Image office-tools|^\s*$' } | Write-Host
     if ($LASTEXITCODE -ne 0) { $script:failed = $true }
+
+    Write-Host "==== 11. TASK 08: booking from the buttons, the panel closes days, the lawyer's calendar (stub)"
+    function PanelStep([string]$Name) {
+        & docker compose run --rm --no-deps -e E2E_PANEL_PASSWORD tools hazem-e2e $Name 2>&1 |
+            ForEach-Object { "$_" } | Where-Object { $_ -notmatch '^#\d+ |Image office-tools|^\s*$' } | Write-Host
+        if ($LASTEXITCODE -ne 0) { $script:failed = $true }
+    }
+    Step @('hazem08-setup') | Out-Null
+    Forward
+    Check 'check-hazem08-welcome'
+    Step @('hazem08-name') | Out-Null
+    Forward
+    Check 'check-hazem08-offer'
+    PanelStep 'hazem08-close-today'
+    Step @('hazem08-mode') | Out-Null
+    Forward
+    Check 'check-hazem08-times'
+    Step @('hazem08-pick') | Out-Null
+    Forward
+    Check 'check-hazem08-booked'
+    PanelStep 'hazem08-office-closes'
+    PanelStep 'check-hazem08-office-closed'
     Remove-Item env:E2E_PANEL_PASSWORD -ErrorAction SilentlyContinue
 } catch {
     Write-Host "FAIL  $_"; $script:failed = $true

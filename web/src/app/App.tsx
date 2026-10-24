@@ -19,6 +19,7 @@ import { ListsPage } from "../features/lists/ListsPage";
 import { ReportsPage } from "../features/reports/ReportsPage";
 import { TextsPage } from "../features/texts/TextsPage";
 import { HomePage } from "../features/home/HomePage";
+import { BookingPage } from "../features/booking/BookingPage";
 import { Layout } from "./Layout";
 import { ComingSoon, SettingsPage } from "./Pages";
 
@@ -70,7 +71,10 @@ export const routes = [
           { path: "/account", element: <AccountPage /> },
           { path: "/settings", element: <SettingsPage /> },
           { path: "/clients", element: <ComingSoon title="العملاء / الشركات" icon="clients" what="ملف لكل عميل: بياناته، قضاياه، مواعيده ومستنداته في مكان واحد." when="بعد ربط المحادثات (TASK 07b)" /> },
-          { path: "/appointments", element: <ComingSoon title="المواعيد" icon="calendar" what="الحجز من واتساب، تقويم الأستاذ، والتذكير قبل الميعاد." when="مع الحجز (TASK 08)" /> },
+          {
+            element: <RequirePermission permission="schedule.manage" />,
+            children: [{ path: "/appointments", element: <BookingPage /> }],
+          },
           { path: "/chats", element: <ChatsPage /> },
           { path: "/documents", element: <ComingSoon title="المستندات" icon="document" what="العقود والصور والمستندات اللي العملاء بعتوها، مرتبة على كل عميل." when="بعد المحادثات" /> },
           {

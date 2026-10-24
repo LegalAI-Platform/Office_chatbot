@@ -9,6 +9,7 @@ using System.Text.Json.Nodes;
 //   GET  /files/{media_id}             the file behind that url
 //   POST /v1/audio/transcriptions      OpenAI transcription (multipart), fixed Arabic text
 //   POST /v1/chat/completions          OpenAI classification (TASK 04), keyword answers; /_ai/down, /_ai/up
+//   /google/...                        Google Calendar (TASK 08): token, freeBusy, events; /_google/*
 //   GET  /_log, POST /_log/reset       what was received, for the test's assertions
 // The log records whether an Authorization header was present, NEVER its value: if a real
 // credential exists in n8n, its value would reach this container.
@@ -135,6 +136,113 @@ app.MapPost("/_ai/up", () =>
     return Results.Ok();
 });
 
+// TASK 08: Google Calendar for the booking (hazem-e2e sets booking.google_base_url to /google).
+// The token endpoint takes any signed assertion; the calendar keeps its events in memory.
+// /_google/busy adds an event of the lawyer's own, /_google/events lists them, /_google/down and
+// /_google/up make it fail, /_google/reset empties it.
+var calendarEvents = new ConcurrentDictionary<string, StubEvent>();
+var googleDown = false;
+app.MapPost("/google/token", async (HttpRequest request) =>
+{
+    var form = await request.ReadFormAsync();
+    log.Enqueue(Received.From(request, "google-token", null));
+    return googleDown ? Results.StatusCode(503)
+        : form["grant_type"] != "urn:ietf:params:oauth:grant-type:jwt-bearer" || form["assertion"].ToString().Split('.').Length != 3
+            ? Results.Json(new { error = "invalid_grant" }, statusCode: 400)
+            : Results.Json(new { access_token = "stub-google-token", expires_in = 3600, token_type = "Bearer" });
+});
+app.MapPost("/google/calendar/v3/freeBusy", async (HttpRequest request) =>
+{
+    var body = await JsonNode.ParseAsync(request.Body);
+    log.Enqueue(Received.From(request, "google-freebusy", null));
+    if (googleDown || !request.Headers.ContainsKey("Authorization"))
+    {
+        return Results.StatusCode(googleDown ? 503 : 401);
+    }
+
+    var id = (string?)body?["items"]?[0]?["id"] ?? "";
+    var from = DateTimeOffset.Parse((string)body!["timeMin"]!);
+    var to = DateTimeOffset.Parse((string)body["timeMax"]!);
+    var busy = calendarEvents.Values.Where(e => e.Start < to && from < e.End).OrderBy(e => e.Start)
+        .Select(e => new JsonObject { ["start"] = e.Start.ToString("O"), ["end"] = e.End.ToString("O") }).ToArray<JsonNode?>();
+    return Results.Json(new JsonObject { ["calendars"] = new JsonObject { [id] = new JsonObject { ["busy"] = new JsonArray(busy) } } });
+});
+app.MapPost("/google/calendar/v3/calendars/{calendarId}/events", async (string calendarId, HttpRequest request) =>
+{
+    var body = await JsonNode.ParseAsync(request.Body);
+    var summary = (string?)body?["summary"] ?? "";
+    log.Enqueue(Received.From(request, "google-event-create", null) with { Text = summary });
+    if (googleDown)
+    {
+        return Results.StatusCode(503);
+    }
+
+    var e = new StubEvent(Guid.NewGuid().ToString("N"), summary, DateTimeOffset.Parse((string)body!["start"]!["dateTime"]!),
+        DateTimeOffset.Parse((string)body["end"]!["dateTime"]!), (string?)body["extendedProperties"]?["private"]?["hazem_appointment"]);
+    calendarEvents[e.Id] = e;
+    return Results.Json(new { id = e.Id });
+});
+app.MapMethods("/google/calendar/v3/calendars/{calendarId}/events/{eventId}", ["PATCH"], async (string calendarId, string eventId, HttpRequest request) =>
+{
+    var body = await JsonNode.ParseAsync(request.Body);
+    log.Enqueue(Received.From(request, "google-event-update", null) with { Text = (string?)body?["summary"] });
+    if (!calendarEvents.TryGetValue(eventId, out var e))
+    {
+        return Results.NotFound();
+    }
+
+    calendarEvents[eventId] = e with
+    {
+        Summary = (string?)body?["summary"] ?? e.Summary,
+        Start = DateTimeOffset.Parse((string)body!["start"]!["dateTime"]!),
+        End = DateTimeOffset.Parse((string)body["end"]!["dateTime"]!),
+    };
+    return Results.Json(new { id = eventId });
+});
+app.MapDelete("/google/calendar/v3/calendars/{calendarId}/events/{eventId}", (string calendarId, string eventId, HttpRequest request) =>
+{
+    log.Enqueue(Received.From(request, "google-event-delete", null));
+    return calendarEvents.TryRemove(eventId, out _) ? Results.NoContent() : Results.NotFound();
+});
+app.MapGet("/google/calendar/v3/calendars/{calendarId}/events", (string calendarId, HttpRequest request) =>
+{
+    log.Enqueue(Received.From(request, "google-event-list", null));
+    var items = calendarEvents.Values.OrderBy(e => e.Start).Select(e => new JsonObject
+    {
+        ["id"] = e.Id,
+        ["status"] = "confirmed",
+        ["start"] = new JsonObject { ["dateTime"] = e.Start.ToString("O") },
+        ["end"] = new JsonObject { ["dateTime"] = e.End.ToString("O") },
+        ["extendedProperties"] = e.Appointment is null ? null
+            : new JsonObject { ["private"] = new JsonObject { ["hazem_appointment"] = e.Appointment } },
+    }).ToArray<JsonNode?>();
+    return Results.Json(new JsonObject { ["items"] = new JsonArray(items) });
+});
+app.MapPost("/_google/busy", async (HttpRequest request) =>
+{
+    var body = await JsonNode.ParseAsync(request.Body);
+    var e = new StubEvent(Guid.NewGuid().ToString("N"), "مشغول", DateTimeOffset.Parse((string)body!["start"]!), DateTimeOffset.Parse((string)body["end"]!), null);
+    calendarEvents[e.Id] = e;
+    return Results.Json(new { id = e.Id });
+});
+app.MapGet("/_google/events", () => Results.Json(calendarEvents.Values.OrderBy(e => e.Start).ToArray()));
+app.MapPost("/_google/down", () =>
+{
+    googleDown = true;
+    return Results.Ok();
+});
+app.MapPost("/_google/up", () =>
+{
+    googleDown = false;
+    return Results.Ok();
+});
+app.MapPost("/_google/reset", () =>
+{
+    calendarEvents.Clear();
+    googleDown = false;
+    return Results.Ok();
+});
+
 app.MapGet("/_log", () => Results.Json(log.ToArray()));
 app.MapPost("/_log/reset", () =>
 {
@@ -179,6 +287,9 @@ internal static class StubAi
 }
 
 internal sealed record StubFile(string MimeType, byte[] Bytes, string AnnouncedSha256, long AnnouncedSize);
+
+/// <summary>An event in the stub's calendar. <see cref="Appointment"/>: set on the events the API made.</summary>
+internal sealed record StubEvent(string Id, string Summary, DateTimeOffset Start, DateTimeOffset End, string? Appointment);
 
 /// <summary>Small fixed files. Media ids are what hazem-e2e puts in its fake Meta events.</summary>
 internal static class StubFiles

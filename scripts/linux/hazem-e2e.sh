@@ -130,4 +130,22 @@ export E2E_PANEL_PASSWORD="$(head -c 12 /dev/urandom | od -An -tx1 | tr -d '
 printf '%s
 ' "$E2E_PANEL_PASSWORD" | docker compose exec -T api dotnet /app/cli/Office.Cli.dll create-user   --name e2e-panel --display E2E --email e2e-panel@example.test --role staff --staff e2e-staff >/dev/null 2>&1   || { echo "FAIL  create-user e2e-panel (CLI)"; failed=1; }
 docker compose run --rm --no-deps -e E2E_PANEL_PASSWORD tools hazem-e2e check-panel   2> >(grep -vE '^#[0-9]+ |Image office-tools|^\s*$' >&2) || failed=1
+
+echo "==== 11. TASK 08: booking from the buttons, the panel closes days, the lawyer's calendar (stub)"
+panel_step() { docker compose run --rm --no-deps -e E2E_PANEL_PASSWORD tools hazem-e2e "$1" 2> >(grep -vE '^#[0-9]+ |Image office-tools|^\s*$' >&2); }
+step hazem08-setup
+forward
+step check-hazem08-welcome || failed=1
+step hazem08-name
+forward
+step check-hazem08-offer || failed=1
+panel_step hazem08-close-today || failed=1
+step hazem08-mode
+forward
+step check-hazem08-times || failed=1
+step hazem08-pick
+forward
+step check-hazem08-booked || failed=1
+panel_step hazem08-office-closes || failed=1
+panel_step check-hazem08-office-closed || failed=1
 unset E2E_PANEL_PASSWORD

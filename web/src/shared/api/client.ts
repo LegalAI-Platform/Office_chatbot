@@ -49,6 +49,20 @@ const MESSAGES: Record<string, string> = {
   invalid_role: "اختار الدور.",
   two_factor_required: "لازم تشغّل التحقق بخطوتين الأول.",
   chatwoot_unavailable: "Chatwoot مش بيرد دلوقتي. جرّب تاني بعد شوية.",
+  // TASK 08: the booking
+  overlapping_ranges: "فيه فترتين في نفس اليوم داخلين في بعض.",
+  invalid_range: "نهاية الفترة لازم تبقى بعد بدايتها.",
+  past_day: "اليوم ده عدّى.",
+  nothing_to_undo: "مفيش تعديل تتراجع عنه.",
+  not_confirmed: "الحجز ده مش مؤكد دلوقتي.",
+  calendar_id: "إيميل الكالندر مش صحيح.",
+  buffer_minutes: "الوقت بين المواعيد من 0 لـ 240 دقيقة.",
+  min_notice_hours: "أقل مدة قبل الحجز من 0 لـ 168 ساعة.",
+  horizon_days: "أبعد يوم من 1 لـ 180 يوم.",
+  max_per_day: "أقصى عدد في اليوم من 1 لـ 100، أو سيبه فاضي.",
+  slot_step_minutes: "اختار كل قد إيه يبدأ ميعاد.",
+  offer_count: "عدد المواعيد اللي حازم يعرضها من 1 لـ 9.",
+  invalid: "في حاجة مش مظبوطة في البيانات.",
 };
 
 export function errorMessage(error: unknown): string {

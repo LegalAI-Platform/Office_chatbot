@@ -16,7 +16,8 @@ G=201000000067   # TASK 04: a photo without words never reaches the AI
 H=201000000068   # TASK 05a: a listed existing client asks about their case
 I=201000000069   # TASK 05a: a blocked number
 K=201000000070   # TASK 05a: a client who tells the topic first (B-25)
-ALL="'$A','$B','$C','$D','$E','$F','$G','$H','$I','$K'"
+L=201000000071   # TASK 08: books from the buttons; the panel closes days
+ALL="'$A','$B','$C','$D','$E','$F','$G','$H','$I','$K','$L'"
 STUB=http://meta-stub:8080
 
 passed=0; failed=0
@@ -78,6 +79,23 @@ EXISTING="رسالة حضرتك وصلت للمكتب، وهتتبلّغ للم�
 UNCLEAR="معلش مش واضحلي المطلوب. ممكن تكتبلي حضرتك محتاج إيه؟"   # approved by the owner (0007)
 stub_log() { curl -s "$STUB/_log"; }
 finish() { echo "Result: $passed passed, $failed failed."; [[ $failed -eq 0 ]]; }
+# The panel as the e2e-panel account (made by the driver, TASK 07a), through the web container.
+PANEL=http://web:8080/api/panel
+JAR=/tmp/e2e-panel.jar
+panel_login() {
+  [[ -n "${E2E_PANEL_PASSWORD:-}" ]] || die "E2E_PANEL_PASSWORD is not set"
+  rm -f "$JAR"
+  curl -s -b "$JAR" -c "$JAR" -X POST -H "X-CSRF-TOKEN: $(panel_csrf)" -H 'Content-Type: application/json' \
+    -d "$(jq -nc --arg p "$E2E_PANEL_PASSWORD" '{username: "e2e-panel", password: $p}')" "$PANEL/auth/login" >/dev/null
+}
+panel_csrf() { curl -s -b "$JAR" -c "$JAR" "$PANEL/auth/csrf" | jq -r .token; }
+panel_post() {  # panel_post PATH JSON: prints «status body»
+  curl -s -b "$JAR" -c "$JAR" -X POST -H "X-CSRF-TOKEN: $(panel_csrf)" -H 'Content-Type: application/json' -w ' %{http_code}' -d "${2:-}" "$PANEL$1"
+}
+interactive() { jq -nc --arg id "$2" --arg kind "$1" '{type: $kind} + {($kind): {id: $id, title: "e2e"}}'; }
+# TASK 08: the last list Hazem sent to L, and the Cairo date of a day from now.
+last_list() { q "SELECT request_payload->'interactive'->'action'->'sections'->0->'rows' FROM app.wa_outbound_messages WHERE wa_id = '$L' AND request_payload->>'type' = 'interactive' AND request_payload->'interactive'->>'type' = 'list' ORDER BY created_at DESC, idempotency_key DESC LIMIT 1"; }
+cairo_day() { TZ=Africa/Cairo date -d "${1:-today}" +%F; }
 
 case "${1:-}" in
   cleanup)
@@ -86,7 +104,16 @@ case "${1:-}" in
       [[ -n "$bucket" ]] && s3_as n8n s3 rm "s3://$bucket/$key" >/dev/null 2>&1
     done < <(q "SELECT w.bucket || '|' || w.object_key FROM app.wa_media w JOIN app.wa_inbound_messages m ON m.id = w.inbound_message_id
                  WHERE m.wa_id IN ($ALL) AND w.object_key IS NOT NULL")
+    curl -s -X POST "$STUB/_google/reset" >/dev/null 2>&1
     q "
+      DELETE FROM hazem.appointments WHERE person_id IN (SELECT id FROM hazem.persons WHERE wa_id IN ($ALL));
+      DELETE FROM hazem.booking_changes WHERE user_id IN (SELECT id FROM hazem.panel_users WHERE username LIKE 'e2e-%');
+      DELETE FROM hazem.booking_exceptions WHERE reason = 'e2e'
+                                            OR created_by IN (SELECT id FROM hazem.panel_users WHERE username LIKE 'e2e-%');
+      UPDATE hazem.approved_texts SET active = false
+       WHERE source = 'proposal TASK 08'
+         AND key = ANY (string_to_array(COALESCE((SELECT value FROM hazem.settings WHERE key = 'e2e.texts08'), ''), ','));
+      DELETE FROM hazem.settings WHERE key = 'e2e.texts08';
       DELETE FROM hazem.panel_audit WHERE user_id IN (SELECT id FROM hazem.panel_users WHERE username LIKE 'e2e-%')
                                      OR target_id IN (SELECT id FROM hazem.panel_users WHERE username LIKE 'e2e-%')
                                      OR target_id IN (SELECT id FROM hazem.staff_tasks WHERE person_id IN (SELECT id FROM hazem.persons WHERE wa_id IN ($ALL)));
@@ -105,6 +132,7 @@ case "${1:-}" in
       UPDATE hazem.settings SET value = 'hazem', updated_by = 'hazem-e2e' WHERE key = 'responder';
       UPDATE hazem.settings SET value = 'false', updated_by = 'hazem-e2e' WHERE key = 'ai.stub_enabled';
       UPDATE hazem.settings SET value = '', updated_by = 'hazem-e2e' WHERE key = 'ai.stub_base_url';
+      UPDATE hazem.settings SET value = '', updated_by = 'hazem-e2e' WHERE key = 'booking.google_base_url';
       DELETE FROM hazem.send_results WHERE idempotency_key IN
         (SELECT idempotency_key FROM app.wa_outbound_messages WHERE wa_id IN ($ALL));
       DELETE FROM hazem.send_results WHERE idempotency_key LIKE 'e2e:%';
@@ -126,7 +154,7 @@ case "${1:-}" in
   setup)
     "$0" cleanup >/dev/null
     backup_set whatsapp.dry_run true
-    backup_set whatsapp.test_recipients "$A,$B,$C,$D,$E,$F,$G,$H,$I,$K"   # 0006: only test numbers get sends
+    backup_set whatsapp.test_recipients "$A,$B,$C,$D,$E,$F,$G,$H,$I,$K,$L"   # 0006: only test numbers get sends
     backup_set whatsapp.graph_base_url "$STUB"
     backup_set ai.openai_base_url "$STUB/v1"
     if [[ -z "$(q "SELECT value FROM app.settings WHERE key = 'whatsapp.graph_api_version'")" ]]; then
@@ -330,6 +358,7 @@ SQL
     hazem_backup_set hazem.recipients "$F,$G"
     hazem_backup_set ai.stub_enabled true
     hazem_backup_set ai.stub_base_url "$STUB/v1"
+    hazem_backup_set booking.enabled false  # TASK 06's checks are the text offer; TASK 08's steps switch it on
     curl -s -X POST "$STUB/_log/reset" >/dev/null && curl -s -X POST "$STUB/_ai/up" >/dev/null || die "meta-stub is not running"
     inject "$F" wamid.E2E-F1 text "$(text "السلام عليكم عايز أحجز استشارة")" 10
     inject "$G" wamid.E2E-G1 image '{"id":"STUB-IMG","mime_type":"image/jpeg"}' 10
@@ -466,6 +495,123 @@ SQL
     finish
     ;;
 
+  # ---------------------------------------------------------------- TASK 08
+  # Booking with the stub's Google Calendar. The booking's proposed texts are switched on for the
+  # test only; their keys are kept in e2e.texts08 so cleanup switches exactly those off again.
+  hazem08-setup)
+    hazem_backup_set hazem.recipients "$L"
+    hazem_backup_set booking.enabled true
+    hazem_backup_set booking.calendar_id e2e-lawyer@example.test
+    hazem_backup_set booking.google_base_url "$STUB/google"
+    hazem_backup_set office.instapay e2e@instapay
+    hazem_backup_set office.wallet_number 01000000000
+    q "INSERT INTO hazem.settings (key, value, description)
+         SELECT 'e2e.texts08', COALESCE(string_agg(t.key, ','), ''), 'hazem-e2e: TASK 08 texts switched on for the test, off again by cleanup'
+           FROM hazem.approved_texts t
+          WHERE t.source = 'proposal TASK 08' AND NOT t.active
+            AND NOT EXISTS (SELECT 1 FROM hazem.approved_texts a WHERE a.key = t.key AND a.active)
+       ON CONFLICT (key) DO NOTHING;
+       UPDATE hazem.approved_texts SET active = true
+        WHERE source = 'proposal TASK 08'
+          AND key = ANY (string_to_array((SELECT value FROM hazem.settings WHERE key = 'e2e.texts08'), ','));" >/dev/null
+    curl -s -X POST "$STUB/_google/reset" >/dev/null || die "meta-stub is not running"
+    inject "$L" wamid.E2E-L1 text "$(text "السلام عليكم")" 10
+    echo "booking on with the calendar stub, a new client writes"
+    ;;
+
+  check-hazem08-welcome)
+    wait_eq "B-01: the welcome first" \
+      "SELECT COALESCE((SELECT string_agg(request_payload->'text'->>'body', ' || ') FROM app.wa_outbound_messages WHERE wa_id = '$L'), '')" "$WELCOME"
+    finish
+    ;;
+
+  hazem08-name)
+    inject "$L" wamid.E2E-L2 text "$(text "محمد أحمد علي حسن")" 10
+    echo "the name from $L"
+    ;;
+
+  check-hazem08-offer)
+    wait_eq "B-08: the offer comes with two buttons (phone or video / the office), the words from the API" \
+      "SELECT (request_payload->'interactive'->'body'->>'text') || '|' || (request_payload->'interactive'->'action'->'buttons'->0->'reply'->>'id') || '|' || (request_payload->'interactive'->'action'->'buttons'->1->'reply'->>'id')
+         FROM app.wa_outbound_messages WHERE wa_id = '$L' AND request_payload->>'type' = 'interactive'" "$OFFER|bk:m:pv|bk:m:of"
+    finish
+    ;;
+
+  hazem08-close-today)
+    panel_login
+    r="$(panel_post /booking/exceptions "$(jq -nc --arg d "$(cairo_day)" '{day: $d, kind: "closed_day", reason: "e2e"}')")"
+    assert_eq "the panel closes today (a staff account, through the web container)" "${r##* }" "200"
+    finish
+    ;;
+
+  hazem08-mode)
+    inject "$L" wamid.E2E-L3 interactive "$(interactive button_reply bk:m:pv)" 10
+    echo "$L presses «تليفون أو فيديو»"
+    ;;
+
+  check-hazem08-times)
+    wait_eq "B-08: the free times come as a list, read without the AI (no classification for the button)" \
+      "SELECT ((SELECT count(*) FROM app.wa_outbound_messages WHERE wa_id = '$L' AND request_payload->'interactive'->>'type' = 'list') > 0)::text || '/' ||
+              (SELECT count(*) FROM hazem.classifications WHERE turn_id = (SELECT turn_id FROM app.wa_inbound_messages WHERE wamid = 'wamid.E2E-L3'))" "true/0"
+    rows="$(last_list)"
+    assert_eq "the day the panel closed is never offered (no «النهارده»)" \
+      "$(jq -r '[.[] | select(.title | startswith("النهارده"))] | length' <<<"${rows:-[]}")" "0"
+    finish
+    ;;
+
+  hazem08-pick)
+    id="$(last_list | jq -r '.[0].id')"
+    [[ "$id" == bk:s:* ]] || die "no time to pick (got '$id')"
+    inject "$L" wamid.E2E-L4 interactive "$(interactive list_reply "$id")" 10
+    echo "$L picks the first time"
+    ;;
+
+  check-hazem08-booked)
+    wait_eq "B-08: booked at once (confirmed), the confirmation carries the office's InstaPay" \
+      "SELECT (SELECT state FROM hazem.appointments a JOIN hazem.persons p ON p.id = a.person_id WHERE p.wa_id = '$L') || '/' ||
+              (SELECT count(*) FROM app.wa_outbound_messages WHERE wa_id = '$L' AND request_payload->'text'->>'body' LIKE '✅ تم حجز%e2e@instapay%')" "confirmed/1"
+    got=""
+    for _ in $(seq 1 45); do  # the booking worker runs every 10 seconds
+      got="$(curl -s "$STUB/_google/events" | jq -r --arg wa "+$L" '[.[] | select(.summary | contains($wa))] | length')"
+      [[ "$got" == "1" ]] && break
+      sleep 1
+    done
+    assert_eq "the appointment reached the lawyer's calendar (the stub) once" "$got" "1"
+    assert_eq "the event holds the service, the name, the number and the kind only, never the client's words" \
+      "$(curl -s "$STUB/_google/events" | jq -r --arg wa "+$L" '.[] | select(.summary | contains($wa)) | .summary')" \
+      "استشارة بالتليفون أو الفيديو – محمد أحمد علي حسن – +$L – غير معروف – إيصال: لسه ❌"
+    finish
+    ;;
+
+  hazem08-office-closes)
+    panel_login
+    day="$(q "SELECT to_char(a.starts_at AT TIME ZONE 'Africa/Cairo', 'YYYY-MM-DD') FROM hazem.appointments a JOIN hazem.persons p ON p.id = a.person_id WHERE p.wa_id = '$L'")"
+    r="$(panel_post /booking/exceptions "$(jq -nc --arg d "$day" '{day: $d, kind: "closed_day", reason: "e2e"}')")"
+    assert_eq "closing a day with a booking asks first (409 with the booking)" "${r##* }/$(jq -r '.appointments | length' <<<"${r% *}")" "409/1"
+    r="$(panel_post /booking/exceptions "$(jq -nc --arg d "$day" '{day: $d, kind: "closed_day", reason: "e2e", confirm: true}')")"
+    assert_eq "confirmed: the booking is cancelled by the office" "${r##* }/$(jq -r .cancelled <<<"${r% *}")" "200/1"
+    finish
+    ;;
+
+  check-hazem08-office-closed)
+    wait_eq "B-22: the client is told (another time or a full refund), as a list" \
+      "SELECT (request_payload->'interactive'->'body'->>'text') || '|' || (request_payload->'interactive'->'action'->'sections'->0->'rows'->-1->>'id' LIKE 'bk:f:%')
+         FROM app.wa_outbound_messages WHERE wa_id = '$L' AND idempotency_key LIKE 'hazem:booking:%:office:%'" \
+      "الأستاذ عنده ظرف في الميعاد ده، تحب ميعاد تاني ولا استرداد كامل؟|true"
+    got=""
+    for _ in $(seq 1 45); do  # the booking worker runs every 10 seconds
+      got="$(q "SELECT a.state || '/' || a.calendar_state || '/' || (SELECT count(*) FROM jsonb_array_elements('$(curl -s "$STUB/_google/events")'::jsonb) e WHERE e->>'summary' LIKE '%+$L%')
+                  FROM hazem.appointments a JOIN hazem.persons p ON p.id = a.person_id WHERE p.wa_id = '$L'")"
+      [[ "$got" == "cancelled_by_office/removed/0" ]] && break
+      sleep 1
+    done
+    assert_eq "the appointment is cancelled_by_office and its event left the calendar (the worker)" "$got" "cancelled_by_office/removed/0"
+    panel_login
+    u1="$(panel_post /booking/undo '{"confirm":false}')"; u2="$(panel_post /booking/undo '{"confirm":false}')"
+    assert_eq "«تراجع» twice reopens both days" "${u1##* }/${u2##* }/$(q "SELECT count(*) FROM hazem.booking_exceptions WHERE reason = 'e2e'")" "200/200/0"
+    finish
+    ;;
+
   check-restored)
     assert_eq "settings back to normal: dry run off, stale 300, real Graph and OpenAI URLs, no backups left" \
       "$(q "SELECT string_agg(key || '=' || value, ',' ORDER BY key) FROM app.settings WHERE key IN ('whatsapp.dry_run','whatsapp.turn_stale_seconds','whatsapp.graph_base_url','ai.openai_base_url') OR key LIKE 'e2e.backup.%'")" \
@@ -474,6 +620,10 @@ SQL
       "$(q "SELECT string_agg(key || '=' || value, ',' ORDER BY key) FROM hazem.settings WHERE key IN ('responder','ai.stub_enabled','ai.stub_base_url','echo.enabled') OR key LIKE 'e2e.backup.%'")" \
       "ai.stub_base_url=,ai.stub_enabled=false,echo.enabled=false,responder=hazem"
     assert_eq "no test panel account left (e2e-*)"       "$(q "SELECT count(*) FROM hazem.panel_users WHERE username LIKE 'e2e-%'")" "0"
+    assert_eq "TASK 08: the booking settings and texts as before, no test day closed, the calendar stub off" \
+      "$(q "SELECT (SELECT count(*) FROM hazem.booking_exceptions WHERE reason = 'e2e') || '/' ||
+                   (SELECT count(*) FROM hazem.settings WHERE key = 'e2e.texts08') || '/' ||
+                   (SELECT value FROM hazem.settings WHERE key = 'booking.google_base_url')")" "0/0/"
     assert_eq "no test number left in the API's tables" \
       "$(q "SELECT count(*) FROM hazem.persons WHERE wa_id IN ($ALL)")" "0"
     assert_eq "no test credential left in n8n" \
@@ -482,6 +632,6 @@ SQL
     ;;
 
   *)
-    die "usage: hazem-e2e setup|check-loop|replay|check-replay|inject-b|check-api-down|check-recovered|check-api-send|check-auth|group-c|check-group|media-d|check-media|stale-e|check-stale|cleanup|remove-test-credentials|check-restored|hazem-setup|check-hazem-welcome|hazem-name|check-hazem-offer|hazem-legal|check-hazem-legal|hazem-ai-down|check-hazem-fallback|hazem05-setup|check-hazem05|hazem05-name|check-hazem05-name|check-panel"
+    die "usage: hazem-e2e setup|check-loop|replay|check-replay|inject-b|check-api-down|check-recovered|check-api-send|check-auth|group-c|check-group|media-d|check-media|stale-e|check-stale|cleanup|remove-test-credentials|check-restored|hazem-setup|check-hazem-welcome|hazem-name|check-hazem-offer|hazem-legal|check-hazem-legal|hazem-ai-down|check-hazem-fallback|hazem05-setup|check-hazem05|hazem05-name|check-hazem05-name|check-panel|hazem08-setup|check-hazem08-welcome|hazem08-name|check-hazem08-offer|hazem08-close-today|hazem08-mode|check-hazem08-times|hazem08-pick|check-hazem08-booked|hazem08-office-closes|check-hazem08-office-closed"
     ;;
 esac

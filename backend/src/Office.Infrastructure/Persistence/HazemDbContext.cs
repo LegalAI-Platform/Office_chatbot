@@ -127,7 +127,35 @@ public sealed class HazemDbContext(DbContextOptions<HazemDbContext> options) : D
             e.ToTable("panel_alert_reads");
             e.HasKey(x => new { x.AlertId, x.UserId });
         });
+        // Migration 0013 (TASK 08): the booking. Read here; appointments are written by the SQL functions.
+        b.Entity<BookingWeeklyHourRow>(e =>
+        {
+            e.ToTable("booking_weekly_hours");
+            e.HasKey(x => new { x.Weekday, x.StartMinute });
+        });
+        b.Entity<BookingExceptionRow>(e =>
+        {
+            e.ToTable("booking_exceptions");
+            e.HasKey(x => x.Id);
+        });
+        b.Entity<BookingChangeRow>(e =>
+        {
+            e.ToTable("booking_changes");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Before).HasColumnType("jsonb");
+            e.Property(x => x.After).HasColumnType("jsonb");
+        });
+        b.Entity<AppointmentRow>(e =>
+        {
+            e.ToTable("appointments");
+            e.HasKey(x => x.Id);
+        });
     }
+
+    public DbSet<BookingWeeklyHourRow> BookingWeeklyHours => Set<BookingWeeklyHourRow>();
+    public DbSet<BookingExceptionRow> BookingExceptions => Set<BookingExceptionRow>();
+    public DbSet<BookingChangeRow> BookingChanges => Set<BookingChangeRow>();
+    public DbSet<AppointmentRow> Appointments => Set<AppointmentRow>();
 
     public DbSet<StaffRow> Staff => Set<StaffRow>();
     public DbSet<StaffTaskRow> StaffTasks => Set<StaffTaskRow>();
@@ -322,6 +350,60 @@ public sealed class PanelAuditRow
     public required string Action { get; set; }
     public string? TargetType { get; set; }
     public Guid? TargetId { get; set; }
+}
+
+public sealed class BookingWeeklyHourRow
+{
+    public short Weekday { get; set; }
+    public int StartMinute { get; set; }
+    public int EndMinute { get; set; }
+}
+
+public sealed class BookingExceptionRow
+{
+    public Guid Id { get; set; }
+    public DateOnly Day { get; set; }
+    public required string Kind { get; set; }
+    public int? StartMinute { get; set; }
+    public int? EndMinute { get; set; }
+    public string? Reason { get; set; }
+    public Guid? CreatedBy { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
+public sealed class BookingChangeRow
+{
+    public long Id { get; set; }
+    public DateTimeOffset At { get; set; }
+    public Guid? UserId { get; set; }
+    public required string What { get; set; }
+    public string? Before { get; set; }
+    public string? After { get; set; }
+    public DateTimeOffset? UndoneAt { get; set; }
+}
+
+public sealed class AppointmentRow
+{
+    public Guid Id { get; set; }
+    public Guid PersonId { get; set; }
+    public Guid? IntakeId { get; set; }
+    public required string Service { get; set; }
+    public DateTimeOffset StartsAt { get; set; }
+    public DateTimeOffset EndsAt { get; set; }
+    public required string State { get; set; }
+    public int Amount { get; set; }
+    public int Reschedules { get; set; }
+    public string? MatterType { get; set; }
+    public required string BookedTurnId { get; set; }
+    public string? LastMoveTurnId { get; set; }
+    public string? CalendarEventId { get; set; }
+    public required string CalendarState { get; set; }
+    public int CalendarAttempts { get; set; }
+    public DateTimeOffset CalendarNextAt { get; set; }
+    public DateTimeOffset? ConflictNotedAt { get; set; }
+    public string? ClientNotice { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
 }
 
 public sealed class SettingRow

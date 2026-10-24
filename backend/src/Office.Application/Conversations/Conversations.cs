@@ -53,6 +53,15 @@ public sealed record PendingTask(string Kind, DateTimeOffset DueAt, Guid? StaffI
     public const string RescheduleOrCancel = "reschedule_or_cancel";
     public const string LawyerDirectMessage = "lawyer_direct_message";
     public const string ExternalContact = "external_contact";
+
+    // TASK 08 (booking): S-05 types used by the booking, and the booking's own (documented in the report).
+    public const string LateReschedule = "late_reschedule";
+    public const string Refund = "refund";
+    public const string BookingUnavailable = "booking_unavailable";
+    public const string BookingCancelled = "booking_cancelled";
+    public const string BookingMessageFailed = "booking_message_failed";
+    public const string CalendarConflict = "calendar_conflict";
+    public const string OfficeCancelled = "office_cancelled"; // the office cancelled while booking from WhatsApp is off: the staff arrange
 }
 
 /// <summary>hazem.classifications: no client text and no name, only what the AI decided and what it cost.</summary>

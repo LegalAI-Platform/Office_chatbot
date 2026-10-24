@@ -412,6 +412,9 @@ public static class ChatwootText
     public static string? Hazem(OutboundAction a) => a.Type switch
     {
         ActionType.SendText when !string.IsNullOrWhiteSpace(a.Text) => a.Text,
+        // TASK 08: the text with the buttons or the list rows it offered, so the staff see what was pressed.
+        ActionType.SendInteractive when !string.IsNullOrWhiteSpace(a.Text) =>
+            a.Interactive is { Choices.Count: > 0 } i ? $"{a.Text}\n{string.Join("\n", i.Choices.Select(c => $"▫️ {c.Title}"))}" : a.Text,
         ActionType.SendTemplate => $"[قالب واتساب: {a.TemplateName}]",
         _ => null,
     };
