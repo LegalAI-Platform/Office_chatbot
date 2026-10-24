@@ -23,6 +23,7 @@ public sealed class ServiceStore(HazemDbContext db) : IServiceStore
                 "order_documents" => FileTarget.OrderDocuments,
                 "late_hold" => FileTarget.LateHold,
                 "ask_image" => FileTarget.AskImage,
+                "urf_documents" => FileTarget.UrfDocuments,
                 _ => FileTarget.None,
             }, row.Id);
     }

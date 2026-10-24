@@ -170,6 +170,16 @@ public sealed class HazemDbContext(DbContextOptions<HazemDbContext> options) : D
             e.ToTable("service_files");
             e.HasKey(x => x.Id);
         });
+        b.Entity<UrfCaseRow>(e =>
+        {
+            e.ToTable("urf_cases");
+            e.HasKey(x => x.Id);
+        });
+        b.Entity<UrfFileRow>(e =>
+        {
+            e.ToTable("urf_files");
+            e.HasKey(x => x.Id);
+        });
     }
 
     public DbSet<BookingWeeklyHourRow> BookingWeeklyHours => Set<BookingWeeklyHourRow>();
@@ -180,6 +190,8 @@ public sealed class HazemDbContext(DbContextOptions<HazemDbContext> options) : D
     public DbSet<PaymentReceiptRow> PaymentReceipts => Set<PaymentReceiptRow>();
     public DbSet<ServiceOrderRow> ServiceOrders => Set<ServiceOrderRow>();
     public DbSet<ServiceFileRow> ServiceFiles => Set<ServiceFileRow>();
+    public DbSet<UrfCaseRow> UrfCases => Set<UrfCaseRow>();
+    public DbSet<UrfFileRow> UrfFiles => Set<UrfFileRow>();
 
     public DbSet<StaffRow> Staff => Set<StaffRow>();
     public DbSet<StaffTaskRow> StaffTasks => Set<StaffTaskRow>();
@@ -553,4 +565,46 @@ public sealed class SendResultRow
     public required string ReportedBy { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
+}
+
+/// <summary>hazem.urf_cases (0016): an Urfi case (S-06), its answers and the lawyer's decision.</summary>
+public sealed class UrfCaseRow
+{
+    public Guid Id { get; set; }
+    public Guid PersonId { get; set; }
+    public Guid? IntakeId { get; set; }
+    public required string Kind { get; set; }
+    public required string State { get; set; }
+    public string? Step { get; set; }
+    public int? HusbandAge { get; set; }
+    public int? WifeAge { get; set; }
+    public string? WifePast { get; set; }
+    public string? Guardian { get; set; }
+    public string? Witnesses { get; set; }
+    public bool? HasCopy { get; set; }
+    public bool? Agreed { get; set; }
+    public bool? Children { get; set; }
+    public int AgeTries { get; set; }
+    public Guid? AppointmentId { get; set; }
+    public string? PolicyVersion { get; set; }
+    public Guid? DecidedBy { get; set; }
+    public DateTimeOffset? DecidedAt { get; set; }
+    public string? ClientNotice { get; set; }
+    public string? NoticeKind { get; set; }
+    public DateTimeOffset? DocsTaskAt { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
+/// <summary>hazem.urf_files (0016): where a document of an Urfi case is; never its content.</summary>
+public sealed class UrfFileRow
+{
+    public Guid Id { get; set; }
+    public Guid CaseId { get; set; }
+    public required string Wamid { get; set; }
+    public required string Bucket { get; set; }
+    public required string Key { get; set; }
+    public string? Mime { get; set; }
+    public string? Filename { get; set; }
+    public DateTimeOffset ReceivedAt { get; set; }
 }

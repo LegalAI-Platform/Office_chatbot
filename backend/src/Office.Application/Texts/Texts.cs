@@ -110,6 +110,35 @@ public static class TextKeys
     public const string ServicePaymentPartial = "service_payment_partial";  // B-05, the worker
     public const string ServicePaymentNotReceived = "service_payment_not_received"; // B-05, the worker
     public const string ServiceClosed = "service_closed";                   // B-16.7, the worker
+
+    // TASK 11 (v1.15, B-11): the Urfi questions (word for word from DECISIONS) and the proposed texts and buttons.
+    public const string UrfAskAges = "urf_ask_ages";
+    public const string UrfUnderAge = "urf_under_age";
+    public const string UrfAskWifePast = "urf_ask_wife_past";
+    public const string UrfAskGuardian = "urf_ask_guardian";
+    public const string UrfNoGuardian = "urf_no_guardian";
+    public const string UrfAskWitnesses = "urf_ask_witnesses";
+    public const string UrfAskCopy = "urf_ask_copy";
+    public const string UrfAskAgreed = "urf_ask_agreed";
+    public const string UrfAskChildren = "urf_ask_children";
+    public const string UrfConfirmed = "urf_confirmed";                     // B-11.7, the worker after the lawyer's approval
+    public const string UrfAgesAgain = "urf_ages_again";
+    public const string UrfChooseSlot = "urf_choose_slot";                  // the price, the documents and the free times
+    public const string UrfSendDocuments = "urf_send_documents";            // after the receipt
+    public const string UrfDocumentsReceived = "urf_documents_received";
+    public const string UrfRejected = "urf_rejected";                       // the worker after the lawyer's refusal
+    public const string BtnUrfFirst = "btn_urf_first";
+    public const string BtnUrfDivorced = "btn_urf_divorced";
+    public const string BtnUrfKhul = "btn_urf_khul";
+    public const string BtnUrfGuardianList = "btn_urf_guardian_list";
+    public const string BtnUrfFather = "btn_urf_father";
+    public const string BtnUrfBrother = "btn_urf_brother";
+    public const string BtnUrfUncle = "btn_urf_uncle";
+    public const string BtnUrfNoGuardian = "btn_urf_no_guardian";
+    public const string BtnUrfWitnessOffice = "btn_urf_witness_office";
+    public const string BtnUrfWitnessOwn = "btn_urf_witness_own";
+    public const string BtnYes = "btn_yes";
+    public const string BtnNo = "btn_no";
 }
 
 /// <summary>

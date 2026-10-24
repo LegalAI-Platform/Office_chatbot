@@ -64,6 +64,9 @@ public sealed record PendingTask(string Kind, DateTimeOffset DueAt, Guid? StaffI
     public const string OfficeCancelled = "office_cancelled"; // the office cancelled while booking from WhatsApp is off: the staff arrange
     public const string ServicePricing = "service_pricing";   // TASK 10: an order's documents came, the lawyer or the manager prices it
     public const string ServiceUnpaid = "service_unpaid";     // TASK 10: the price ran out unpaid, the order closed
+    public const string UrfReview = "urf_review";             // TASK 11: an Urfi case's documents came, the lawyer reviews them
+    public const string UrfDocumentsMissing = "urf_documents_missing"; // TASK 11: 24 hours left, no document yet
+    public const string UrfHelp = "urf_help";                 // TASK 11: the ages could not be read twice
 }
 
 /// <summary>hazem.classifications: no client text and no name, only what the AI decided and what it cost.</summary>

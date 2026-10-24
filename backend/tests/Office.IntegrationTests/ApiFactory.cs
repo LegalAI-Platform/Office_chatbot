@@ -124,6 +124,8 @@ public sealed class FakeOpenAi : HttpMessageHandler
             : text.Contains("السلام", StringComparison.Ordinal) ? ("greeting", null, null)
             : text.Contains("شكرا", StringComparison.Ordinal) ? ("thanks_or_closing", null, null)
             : text.Contains("الجلسة", StringComparison.Ordinal) ? ("existing_matter", null, null)
+            : text.Contains("جواز عرفي", StringComparison.Ordinal) ? ("service_by_name", "urf_marriage", null) // TASK 11
+            : text.Contains("طلاق عرفي", StringComparison.Ordinal) ? ("service_by_name", "urf_divorce", null)
             : text.Contains("يراجع", StringComparison.Ordinal) ? ("service_by_name", "document_review", null) // TASK 10
             : text.Contains("إنذار", StringComparison.Ordinal) ? ("service_by_name", "formal_notice", null)
             : text.Split(' ').Length >= 4 ? ("provide_name", (string?)null, (string?)text)

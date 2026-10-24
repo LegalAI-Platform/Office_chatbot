@@ -40,6 +40,7 @@ public enum FileTarget
     OrderDocuments, // a service order waiting for documents (or its price)
     LateHold,       // a hold whose time ran out
     AskImage,       // a PDF or Word while a payment waits: a receipt is an image
+    UrfDocuments,   // TASK 11: an Urfi case waiting for its documents (after its receipt)
 }
 
 public sealed record FileFor(FileTarget Target, Guid? Id)
@@ -99,15 +100,14 @@ public sealed class ServiceDesk(IServiceStore store)
         var best = new AddFileOutcome(AddFileStatus.None, null, null);
         foreach (var f in files)
         {
-            var r = await store.AddFileAsync(personId, f, ct);
-            if (Rank(r.Status) > Rank(best.Status))
-            {
-                best = r;
-            }
+            best = Better(best, await store.AddFileAsync(personId, f, ct));
         }
 
         return best;
     }
+
+    /// <summary>Of a turn's files, the outcome that tells the client most (the first of an order or a case wins).</summary>
+    public static AddFileOutcome Better(AddFileOutcome a, AddFileOutcome b) => Rank(b.Status) > Rank(a.Status) ? b : a;
 
     private static int Rank(AddFileStatus s) => s switch
     {

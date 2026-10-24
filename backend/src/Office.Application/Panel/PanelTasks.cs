@@ -53,7 +53,12 @@ public sealed record TaskView(TaskRecord Task, TaskAbilities Can);
 
 /// <summary>hazem.staff_tasks for the panel (Office.Infrastructure).</summary>
 /// <summary>Where a client's file is kept (n8n stored it). Never sent to the browser as such.</summary>
-public sealed record ClientFileRef(string Type, string Bucket, string Key, string? MimeType, string? Filename);
+public sealed record ClientFileRef(string Type, string Bucket, string Key, string? MimeType, string? Filename)
+{
+    /// <summary>A document a client sent for an order or a case: a picture, or a document (PDF, Word).</summary>
+    public static ClientFileRef Of(string bucket, string key, string? mime, string? filename) =>
+        new(mime?.StartsWith("image/", StringComparison.Ordinal) == true ? "image" : "document", bucket, key, mime, filename);
+}
 
 /// <summary>A client's file, read from storage.</summary>
 public sealed record ClientFile(Stream Content, string ContentType, long? Length, string? Filename);

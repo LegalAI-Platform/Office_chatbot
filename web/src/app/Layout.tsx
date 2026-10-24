@@ -27,6 +27,7 @@ export function Layout() {
     { to: "/appointments", text: "المواعيد", short: "المواعيد", icon: "nav_appointments" },
     { to: "/receipts", text: "الإيصالات والمدفوعات", short: "الإيصالات", icon: "receipt" },
     { to: "/services", text: "طلبات الخدمات", short: "الخدمات", icon: "document" },
+    { to: "/urf", text: "حالات العرفي", short: "العرفي", icon: "nav_documents" },
     { to: "/chats", text: "المحادثات", short: "المحادثات", icon: "chat" },
     { to: "/documents", text: "المستندات", short: "المستندات", icon: "nav_documents" },
     { to: "/reports", text: "التقارير", short: "التقارير", icon: "nav_reports" },

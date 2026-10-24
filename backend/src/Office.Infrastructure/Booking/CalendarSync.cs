@@ -212,7 +212,8 @@ public sealed class CalendarWorker(IServiceScopeFactory scopes, IConfiguration c
             {
                 using var scope = scopes.CreateScope();
                 var told = await scope.ServiceProvider.GetRequiredService<BookingNotices>().RunAsync(stop)
-                           + await scope.ServiceProvider.GetRequiredService<Services.ServiceNotices>().RunAsync(stop); // TASK 10
+                           + await scope.ServiceProvider.GetRequiredService<Services.ServiceNotices>().RunAsync(stop) // TASK 10
+                           + await scope.ServiceProvider.GetRequiredService<Urf.UrfNotices>().RunAsync(stop); // TASK 11
                 var sync = scope.ServiceProvider.GetRequiredService<CalendarSync>();
                 var synced = await sync.SyncAsync(stop);
                 var conflicts = round++ % 30 == 0 ? await sync.CheckConflictsAsync(stop) : 0;

@@ -22,6 +22,9 @@ export const TASK_TYPES: Record<string, string> = {
   office_cancelled: "المكتب لغى حجز: ميعاد تاني أو استرداد",
   service_pricing: "ورق خدمة وصل: حدّد السعر",
   service_unpaid: "سعر خدمة عدّى من غير دفع",
+  urf_review: "ورق عرفي وصل: راجعه قبل الميعاد",
+  urf_documents_missing: "عرفي: فاضل 24 ساعة ومفيش ورق",
+  urf_help: "عرفي: محتاج مساعدة في الأسئلة",
 };
 
 /** TASK 10 (v1.14): the written services and their order's states (S-07). */
@@ -46,6 +49,10 @@ export const BOOKING_SERVICES: Record<string, string> = {
   consultation_phone_video: "تليفون أو فيديو",
   consultation_office: "مقابلة في المكتب",
   consultation_urgent: "عاجلة بالتليفون",
+  urf_marriage_office: "عقد عرفي (شهود المكتب)",
+  urf_marriage_own: "عقد عرفي (شهودهم)",
+  urf_divorce_office: "طلاق عرفي (شهود المكتب)",
+  urf_divorce_own: "طلاق عرفي (شهودهم)",
 };
 
 export const APPOINTMENT_STATES: Record<string, string> = {
@@ -166,4 +173,24 @@ export const LIST_KINDS: Record<string, string> = {
   existing_client: "الموكلين الحاليين",
   lawyer_direct: "قايمة الأستاذ المباشرة",
   blocked: "الممنوعين",
+};
+
+/** TASK 11 (v1.15): the Urfi cases (S-06) and their answers (B-11). */
+export const URF_KINDS: Record<string, string> = { marriage: "عقد جواز عرفي", divorce: "طلاق عرفي" };
+
+export const URF_STATES: Record<string, string> = {
+  collecting: "بيجاوب على الأسئلة",
+  documents_pending: "بيختار ميعاد",
+  booked: "محجوز: راجع الورق",
+  approved: "الأستاذ وافق",
+  lawyer_rejected: "الأستاذ رفض",
+  rejected_age: "اتقفل: السن أقل من 18",
+  rejected_guardian: "اتقفل: مفيش ولي",
+  redirected_consultation: "اتحوّل لاستشارة",
+};
+
+export const URF_ANSWERS: Record<string, string> = {
+  first: "أول جوازة", divorced: "اتطلقت قبل كده", khul: "اختلعت قبل كده",
+  father: "الأب", brother: "الأخ", uncle: "العم", none: "مفيش",
+  office: "من المكتب", own: "من طرفهم",
 };

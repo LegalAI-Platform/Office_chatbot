@@ -131,6 +131,10 @@ public static class DependencyInjection
         services.AddSingleton<Services.IDeliverables, Services.S3Deliverables>();
         services.AddScoped<Services.ServiceNotices>();
         services.AddScoped<Services.PanelServices>();
+        services.AddScoped<Application.Urf.IUrfStore, Urf.UrfStore>(); // TASK 11
+        services.AddScoped<Application.Urf.UrfDesk>();
+        services.AddScoped<Urf.UrfNotices>();
+        services.AddScoped<Urf.PanelUrf>();
 
         return services;
     }

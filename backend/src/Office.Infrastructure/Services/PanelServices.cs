@@ -68,7 +68,7 @@ public sealed class PanelServices(HazemDbContext db, BookingStore store, IDelive
 
         var f = await db.ServiceFiles.AsNoTracking().Where(x => x.OrderId == orderId).OrderBy(x => x.ReceivedAt).ThenBy(x => x.Id)
             .Skip(index).FirstOrDefaultAsync(ct);
-        return f is null ? null : new ClientFileRef(f.Mime?.StartsWith("image/", StringComparison.Ordinal) == true ? "image" : "document", f.Bucket, f.Key, f.Mime, f.Filename);
+        return f is null ? null : ClientFileRef.Of(f.Bucket, f.Key, f.Mime, f.Filename);
     }
 
     public Task RecordFileOpenedAsync(Guid by, Guid orderId, int index, CancellationToken ct) =>
