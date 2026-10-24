@@ -83,7 +83,25 @@ public enum ActionType
 {
     SendText,
     SendTemplate,
+    SendInteractive,
 }
+
+/// <summary>
+/// TASK 08: WhatsApp reply buttons (up to 3, titles ≤ 20) or a list (up to 10 rows, titles ≤ 24) under
+/// a text. Every title is an approved text or a value of the system (a day and a time); n8n only sends.
+/// </summary>
+public sealed record InteractivePayload(string Kind, string? Button, IReadOnlyList<InteractiveChoice> Choices)
+{
+    public const string Buttons = "buttons";
+    public const string List = "list";
+    public const int MaxButtons = 3;
+    public const int MaxRows = 10;
+    public const int MaxButtonTitle = 20;
+    public const int MaxRowTitle = 24;
+    public const int MaxBody = 1024;
+}
+
+public sealed record InteractiveChoice(string Id, string Title, string? Description = null);
 
 /// <summary>Something n8n must do for this turn. Unused fields stay null.</summary>
 public sealed record OutboundAction(
@@ -93,7 +111,8 @@ public sealed record OutboundAction(
     string? ContextWamid = null,
     string? TemplateName = null,
     string? Language = null,
-    JsonArray? Components = null)
+    JsonArray? Components = null,
+    InteractivePayload? Interactive = null)
 {
     /// <summary>Stable key per action, so a replayed turn can never send twice.</summary>
     public static string KeyFor(string turnId, int index) => $"hazem:{turnId}:{index}";

@@ -36,6 +36,7 @@ builder.Services.AddHealthChecks().AddCheck<HazemSchemaHealthCheck>("hazem-schem
 builder.Services.AddPanelAuth(builder.Configuration, builder.Environment); // TASK 07a: the panel (/api/panel)
 builder.Services.AddHostedService<Office.Infrastructure.Chatwoot.ChatwootWorker>(); // TASK 07b: turns into Chatwoot
 builder.Services.AddHostedService<Office.Infrastructure.Panel.AlertWorker>(); // TASK 07c: overdue tasks and alerts
+builder.Services.AddHostedService<Office.Infrastructure.Booking.CalendarWorker>(); // TASK 08: the lawyer's Google Calendar
 
 var app = builder.Build();
 
@@ -57,6 +58,7 @@ app.MapHazemApi();
 app.MapPanelApi();
 app.MapChatwoot();
 app.MapPanelTools(); // TASK 07c
+app.MapPanelBooking(); // TASK 08
 
 app.Run();
 

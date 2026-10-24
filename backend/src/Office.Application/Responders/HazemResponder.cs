@@ -1,3 +1,4 @@
+using Office.Application.Booking;
 using Office.Application.Conversations;
 using Office.Application.Texts;
 using Office.Application.Turns;
@@ -12,14 +13,26 @@ namespace Office.Application.Responders;
 /// Hazem: understands the turn (AI classification only) and answers from approved texts only.
 /// TASK 04: the conversation flow. TASK 05a: who is writing (B-14 lists, B-04 existing clients,
 /// B-14.4 roles), where they came from (B-13), the topic (B-25), insults (S-01), real tasks (S-05).
+/// TASK 08: booking (B-08, B-09, B-15) when <paramref name="booking"/> is there, booking.enabled is
+/// true and its texts are approved; otherwise the consultation offer as before.
 /// </summary>
 public sealed class HazemResponder(
     IConversationStore conversations,
     IIntentClassifier classifier,
     IApprovedTexts approvedTexts,
     IClientLists lists,
-    TimeProvider clock) : ITurnResponder
+    TimeProvider clock,
+    BookingDesk? booking = null) : ITurnResponder
 {
+    /// <summary>The booking runs only when every one of its texts is approved: never half a conversation.</summary>
+    public static IReadOnlyList<string> BookingTextKeys { get; } =
+    [
+        TextKeys.BookingConfirmed, TextKeys.BtnBookPhoneVideo, TextKeys.BtnBookOffice, TextKeys.BookingChooseSlot,
+        TextKeys.BtnSlotsList, TextKeys.BtnMoreSlots, TextKeys.BookingSlotTaken, TextKeys.BookingNoSlots, TextKeys.BookingUnavailable,
+        TextKeys.BookingUrgentNoneToday, TextKeys.BookingExisting, TextKeys.BtnReschedule, TextKeys.BtnCancelBooking,
+        TextKeys.BookingRescheduled, TextKeys.BookingCancelled, TextKeys.BtnRefund, TextKeys.BookingRefundRequested,
+    ];
+
     public const string ResponderName = "hazem";
 
     /// <summary>Numbers Hazem answers while hazem.open_to_all is false (CLAUDE.md: test numbers only).</summary>
@@ -64,6 +77,9 @@ public sealed class HazemResponder(
         var plan = new Plan(now);
         Check(state.Conversation.ClientWroteAt(now)); // B-12: 12 hours after the staff
         Classification? classification = null;
+        var texts = await approvedTexts.GetActiveAsync(ct);
+        var bookingSettings = BookingSettings.From(settings);
+        var bookingOn = booking is not null && bookingSettings.Enabled && BookingTextKeys.All(k => texts.TryGetValue(k, out var t) && t.Active);
 
         if (list.Blocked)
         {
@@ -75,18 +91,33 @@ public sealed class HazemResponder(
         }
         else if (state.Conversation.HazemMayAnswer)
         {
-            var aiText = AiInput.Build(turn);
-            if (aiText is not null)
+            var flow = new Flow(turn, state, list, null, plan, settings.Flag(HandoffEnabledKey), bookingOn ? bookingSettings : null);
+            // TASK 08: a button or a list row Hazem sent is read without the AI.
+            var choice = bookingOn && flow.MayBook ? ChoiceIn(turn) : null;
+            if (choice is not null)
             {
-                classification = Classification.From(await classifier.ClassifyAsync(aiText, settings, ct), settings);
+                flow.RespondToChoice(choice);
+            }
+            else
+            {
+                var aiText = AiInput.Build(turn);
+                if (aiText is not null)
+                {
+                    classification = Classification.From(await classifier.ClassifyAsync(aiText, settings, ct), settings);
+                }
+
+                flow = new Flow(turn, state, list, classification, plan, settings.Flag(HandoffEnabledKey), bookingOn ? bookingSettings : null);
+                flow.Respond(firstContact);
             }
 
-            var flow = new Flow(turn, state, list, classification, plan, settings.Flag(HandoffEnabledKey));
-            flow.Respond(firstContact);
+            if (flow.HasBookingWork)
+            {
+                await flow.RunBookingAsync(booking!, settings, ct);
+            }
+
             state = flow.State;
         }
 
-        var texts = await approvedTexts.GetActiveAsync(ct);
         var composed = ReplyComposer.Compose(turn.TurnId, turn.Messages[^1].Wamid, plan.Steps, texts);
 
         // Keys and reasons only (never a text): the API logs them with the turn.
@@ -127,6 +158,13 @@ public sealed class HazemResponder(
         person.FirstSeen("direct", null, now);
     }
 
+    /// <summary>The booking id of the last button or list row the client pressed, if any.</summary>
+    private static BookingChoice? ChoiceIn(Turn turn)
+    {
+        var last = turn.Messages.LastOrDefault(m => m.Interactive?.Id is not null || m.Button?.Payload is not null);
+        return BookingChoice.Parse(last?.Interactive?.Id ?? last?.Button?.Payload);
+    }
+
     /// <summary>A refused transition here is a bug in the flow, not a client's mistake.</summary>
     private static void Check(Result r)
     {
@@ -137,11 +175,42 @@ public sealed class HazemResponder(
     }
 
     /// <summary>The decisions for one turn. Changes the state in memory; the store saves it with the turn.</summary>
-    private sealed class Flow(Turn turn, ClientState state, ListMatch list, Classification? c, Plan plan, bool handoffEnabled)
+    private sealed class Flow(Turn turn, ClientState state, ListMatch list, Classification? c, Plan plan, bool handoffEnabled,
+        BookingSettings? booking)
     {
         public ClientState State { get; private set; } = state;
 
         private Intake Intake => State.Intake;
+
+        /// <summary>TASK 08: what is left to do with the booking (it needs the calendar and the database).</summary>
+        private BookingWork? work;
+
+        /// <summary>The classification being answered (the turn's, or the request kept from before the name).</summary>
+        private Classification? answering;
+
+        public bool HasBookingWork => work is not null;
+
+        /// <summary>A new or current client past the name question; never the lists' lawyer or the roles (B-14).</summary>
+        public bool MayBook =>
+            booking is not null && State.Person.NameSettled && !list.LawyerDirect
+            && Intake.State is not (IntakeState.New or IntakeState.AwaitingName)
+            && Intake.ClientType is not (ClientType.Colleague or ClientType.Press or ClientType.Vendor or ClientType.LawyerDirect);
+
+        /// <summary>The client pressed one of Hazem's buttons or list rows (no AI).</summary>
+        public void RespondToChoice(BookingChoice choice)
+        {
+            work = choice.Kind switch
+            {
+                'm' => new OfferTimes(choice.Service!, null, TextKeys.BookingChooseSlot, null),
+                's' => new PickTime(choice.Service!, choice.At!.Value),
+                'n' => new OfferTimes(choice.Service!, choice.At, TextKeys.BookingChooseSlot, null),
+                'r' => new StartChange(choice.AppointmentId!.Value),
+                't' => new ChangeTo(choice.AppointmentId!.Value, choice.At!.Value),
+                'u' => new MoreChanges(choice.AppointmentId!.Value, choice.At!.Value),
+                'c' => new CancelIt(choice.AppointmentId!.Value),
+                _ => new RefundIt(choice.AppointmentId!.Value),
+            };
+        }
 
         public void Respond(bool firstContact)
         {
@@ -396,6 +465,7 @@ public sealed class HazemResponder(
 
         private void Answer(Classification turnClass)
         {
+            answering = turnClass;
             Intake.CountUnclear(turnClass.Intent == Intent.Other);
             switch (turnClass.Intent)
             {
@@ -437,6 +507,9 @@ public sealed class HazemResponder(
                         Check(State.Conversation.ClientAskedForStaff()); // B-12: Hazem stays silent from now on
                     }
 
+                    break;
+                case Intent.RescheduleOrCancel when MayBook:
+                    work = new ShowExisting(null); // B-15: the client's booking, with «change» and «cancel»
                     break;
                 case Intent.RescheduleOrCancel:
                     HandToOffice(TextKeys.RescheduleOrCancel, PendingTask.RescheduleOrCancel);
@@ -524,29 +597,299 @@ public sealed class HazemResponder(
             Offer();
         }
 
-        /// <summary>B-09 first sentence and, by the owner's decision, the offer (never the topic question).</summary>
+        /// <summary>
+        /// B-09 first sentence and, by the owner's decision, the offer (never the topic question).
+        /// TASK 08: the first sentence, then today's free times (B-09.2).
+        /// </summary>
         private void Urgent()
         {
             plan.Say(TextKeys.UrgentPrice);
             plan.Task(PendingTask.UrgentRequest);
+            if (MayBook)
+            {
+                work = new OfferTimes(BookingService.Urgent, null, TextKeys.BookingChooseSlot, null);
+                Check(Intake.MoveTo(IntakeState.OfferSent));
+                return;
+            }
+
             Offer(askTopic: false);
         }
 
         /// <summary>
         /// The consultation offer. B-25: when the topic is still unknown, the one optional question
         /// follows it in the same answer — once per request, never on the urgent path.
+        /// TASK 08: with buttons for the kind of consultation, or the free times when the kind is known.
         /// </summary>
         private void Offer(bool askTopic = true)
         {
-            plan.Say(TextKeys.ConsultationOffer);
+            var known = MayBook ? KindAsked() : null;
+            if (MayBook && known is null)
+            {
+                plan.Ask(TextKeys.ConsultationOffer, new ReplyChoices(InteractivePayload.Buttons,
+                [
+                    new ReplyChoice(BookingChoice.Mode(BookingService.PhoneVideo), TextKeys.BtnBookPhoneVideo),
+                    new ReplyChoice(BookingChoice.Mode(BookingService.Office), TextKeys.BtnBookOffice),
+                ]));
+            }
+            else
+            {
+                plan.Say(TextKeys.ConsultationOffer);
+            }
+
             if (askTopic && !Intake.MatterKnown && !Intake.MatterAsked)
             {
                 plan.Say(TextKeys.AskTopic);
                 Intake.MarkMatterAsked();
             }
 
+            if (known is not null)
+            {
+                work = new OfferTimes(known, null, TextKeys.BookingChooseSlot, null);
+            }
+
             Check(Intake.MoveTo(IntakeState.OfferSent));
         }
+
+        /// <summary>The kind of consultation the client already named (by service or by phone / office).</summary>
+        private BookingService? KindAsked() => answering switch
+        {
+            { Service: Service.ConsultationOffice } or { Mode: ConsultationMode.Office } => BookingService.Office,
+            { Service: Service.ConsultationPhoneVideo } or { Mode: ConsultationMode.PhoneVideo } => BookingService.PhoneVideo,
+            _ => null,
+        };
+
+        // ---------- TASK 08: the booking (B-08, B-09, B-15, B-22) ----------
+
+        public async Task RunBookingAsync(BookingDesk desk, HazemSettings settings, CancellationToken ct)
+        {
+            var b = booking!;
+            switch (work)
+            {
+                case OfferTimes o:
+                    await OfferTimesAsync(desk, b, settings, o.Service, o.After ?? plan.Now, o.IntroKey, o.Moving, ct);
+                    break;
+                case PickTime p:
+                    await PickAsync(desk, b, settings, p.Service, p.At, ct);
+                    break;
+                case ShowExisting s:
+                    await ShowExistingAsync(desk, s.Id, ct);
+                    break;
+                case StartChange s:
+                    await StartChangeAsync(desk, b, settings, s.Id, ct);
+                    break;
+                case ChangeTo t:
+                    await ChangeToAsync(desk, b, settings, t.Id, t.At, ct);
+                    break;
+                case MoreChanges m when await OwnAsync(desk, m.Id, ct) is { State: AppointmentInfo.Confirmed } a:
+                    await OfferTimesAsync(desk, b, settings, ServiceOf(a), m.After, TextKeys.BookingChooseSlot, a.Id, ct);
+                    break;
+                case MoreChanges:
+                    await ShowExistingAsync(desk, null, ct);
+                    break;
+                case CancelIt x:
+                    await CancelAsync(desk, x.Id, ct);
+                    break;
+                case RefundIt r when await OwnAsync(desk, r.Id, ct) is not null:
+                    plan.Say(TextKeys.BookingRefundRequested);
+                    plan.Task(PendingTask.Refund);
+                    break;
+                case RefundIt:
+                    await ShowExistingAsync(desk, null, ct);
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// B-08.2 / B-09.2: the first free times as a list, and «مواعيد تانية». No calendar → nothing is
+        /// offered (B-24) and the office gets a task. Urgent with nothing today → tomorrow (B-09.4).
+        /// </summary>
+        private async Task OfferTimesAsync(BookingDesk desk, BookingSettings b, HazemSettings settings, BookingService service,
+            DateTimeOffset after, string introKey, Guid? moving, CancellationToken ct)
+        {
+            var now = plan.Now;
+            var count = b.Rules.OfferCount;
+            var today = BookingDesk.Today(now);
+            var found = await desk.FindAsync(b, settings, service, now, after, service.IsUrgent ? today : null, count, moving, ct);
+            if (!found.CalendarAvailable)
+            {
+                plan.Say(TextKeys.BookingUnavailable);
+                plan.Task(PendingTask.BookingUnavailable);
+                return;
+            }
+
+            var slots = found.Slots;
+            if (service.IsUrgent && slots.Count == 0 && after <= now)
+            {
+                slots = (await desk.FindAsync(b, settings, service, now, now, today.AddDays(1), count, moving, ct)).Slots;
+                introKey = TextKeys.BookingUrgentNoneToday;
+            }
+
+            if (slots.Count == 0)
+            {
+                plan.Say(TextKeys.BookingNoSlots);
+                plan.Task(PendingTask.BookingUnavailable);
+                return;
+            }
+
+            var rows = slots.Select(s => new ReplyChoice(
+                moving is { } m ? BookingChoice.MoveTo(m, s.Start) : BookingChoice.Pick(service, s.Start),
+                Title: BookingWords.Row(s.Start, now))).ToList();
+            if (slots.Count == count && !service.IsUrgent)
+            {
+                var last = slots[^1].Start;
+                rows.Add(new ReplyChoice(moving is { } m ? BookingChoice.MoreMoves(m, last) : BookingChoice.More(service, last), TextKeys.BtnMoreSlots));
+            }
+
+            plan.Ask(introKey, new ReplyChoices(InteractivePayload.List, rows, TextKeys.BtnSlotsList));
+        }
+
+        /// <summary>B-08.3: booked at once, or why not.</summary>
+        private async Task PickAsync(BookingDesk desk, BookingSettings b, HazemSettings settings, BookingService service, DateTimeOffset at,
+            CancellationToken ct)
+        {
+            var request = new BookRequest(Guid.NewGuid(), State.Person.Id, Intake.Id, service, at, turn.TurnId, b.Rules.BufferMinutes,
+                Intake.MatterType);
+            var outcome = await desk.BookAsync(b, settings, request, plan.Now, ct);
+            switch (outcome?.Status)
+            {
+                case BookStatus.Booked or BookStatus.Exists:
+                    var fill = new Dictionary<string, string>
+                    {
+                        ["service"] = service.Name,
+                        ["day"] = BookingWords.Day(at, plan.Now),
+                        ["time"] = BookingWords.Time(at),
+                        ["amount"] = service.Amount.ToString("N0", System.Globalization.CultureInfo.InvariantCulture),
+                    };
+                    if (b.Office.HasPayment)
+                    {
+                        fill["instapay"] = b.Office.InstaPay;
+                        fill["wallet"] = b.Office.Wallet;
+                    }
+                    else
+                    {
+                        // P1: the payment details are not written yet. The text keeps its open slots and is
+                        // not sent (never «InstaPay: » with nothing after it); the booking stands.
+                        plan.Task(PendingTask.BookingMessageFailed);
+                    }
+
+                    plan.Say(TextKeys.BookingConfirmed, Fill: fill);
+
+                    break;
+                case BookStatus.AlreadyBooked:
+                    await ShowExistingAsync(desk, outcome.AppointmentId, ct);
+                    break;
+                default:
+                    await OfferTimesAsync(desk, b, settings, service, plan.Now, TextKeys.BookingSlotTaken, null, ct);
+                    break;
+            }
+        }
+
+        /// <summary>The client's booking with «change» and «cancel»; none → the office, as before TASK 08.</summary>
+        private async Task ShowExistingAsync(BookingDesk desk, Guid? id, CancellationToken ct)
+        {
+            var a = id is { } known ? await OwnAsync(desk, known, ct) : await desk.UpcomingForAsync(State.Person.Id, plan.Now, ct);
+            if (a is not { State: AppointmentInfo.Confirmed } || a.Start <= plan.Now)
+            {
+                HandToOffice(TextKeys.RescheduleOrCancel, PendingTask.RescheduleOrCancel);
+                return;
+            }
+
+            plan.Ask(TextKeys.BookingExisting, new ReplyChoices(InteractivePayload.Buttons,
+            [
+                new ReplyChoice(BookingChoice.Change(a.Id), TextKeys.BtnReschedule),
+                new ReplyChoice(BookingChoice.Cancel(a.Id), TextKeys.BtnCancelBooking),
+            ]), Fill: Describe(a));
+        }
+
+        /// <summary>B-15 (P6): the one free change, 12 hours before or more; otherwise the lawyer decides.</summary>
+        private async Task StartChangeAsync(BookingDesk desk, BookingSettings b, HazemSettings settings, Guid id, CancellationToken ct)
+        {
+            if (await OwnAsync(desk, id, ct) is not { State: AppointmentInfo.Confirmed } a || a.Start <= plan.Now)
+            {
+                await ShowExistingAsync(desk, null, ct);
+                return;
+            }
+
+            if (a.Reschedules >= 1 || a.Start - plan.Now < TimeSpan.FromHours(12))
+            {
+                plan.Say(TextKeys.RescheduleOrCancel);
+                plan.Task(PendingTask.LateReschedule);
+                return;
+            }
+
+            await OfferTimesAsync(desk, b, settings, ServiceOf(a), plan.Now, TextKeys.BookingChooseSlot, a.Id, ct);
+        }
+
+        private async Task ChangeToAsync(BookingDesk desk, BookingSettings b, HazemSettings settings, Guid id, DateTimeOffset at,
+            CancellationToken ct)
+        {
+            if (await OwnAsync(desk, id, ct) is not { } a)
+            {
+                await ShowExistingAsync(desk, null, ct);
+                return;
+            }
+
+            if (a.Reschedules >= 1 || a.Start - plan.Now < TimeSpan.FromHours(12))
+            {
+                plan.Say(TextKeys.RescheduleOrCancel);
+                plan.Task(PendingTask.LateReschedule);
+                return;
+            }
+
+            switch (await desk.MoveAsync(b, settings, a, at, turn.TurnId, plan.Now, ct))
+            {
+                case MoveStatus.Moved or MoveStatus.Exists:
+                    plan.Say(TextKeys.BookingRescheduled, Fill: new Dictionary<string, string>
+                    {
+                        ["day"] = BookingWords.Day(at, plan.Now),
+                        ["time"] = BookingWords.Time(at),
+                    });
+                    break;
+                case MoveStatus.Taken:
+                    await OfferTimesAsync(desk, b, settings, ServiceOf(a), plan.Now, TextKeys.BookingSlotTaken, a.Id, ct);
+                    break;
+                case MoveStatus.NotAllowed:
+                    plan.Say(TextKeys.RescheduleOrCancel);
+                    plan.Task(PendingTask.LateReschedule);
+                    break;
+                default:
+                    await ShowExistingAsync(desk, null, ct);
+                    break;
+            }
+        }
+
+        /// <summary>The client cancels (the refund follows B-22 in TASK 09: a task for the office now).</summary>
+        private async Task CancelAsync(BookingDesk desk, Guid id, CancellationToken ct)
+        {
+            var a = await OwnAsync(desk, id, ct);
+            if (a is { State: AppointmentInfo.CancelledByClient })
+            {
+                plan.Say(TextKeys.BookingCancelled); // pressed twice
+                return;
+            }
+
+            if (a is not { State: AppointmentInfo.Confirmed } || !await desk.CancelAsync(a.Id, AppointmentInfo.CancelledByClient, ct))
+            {
+                await ShowExistingAsync(desk, null, ct);
+                return;
+            }
+
+            plan.Say(TextKeys.BookingCancelled);
+            plan.Task(PendingTask.BookingCancelled);
+        }
+
+        /// <summary>The appointment, only if it is this client's (an id in a button is never trusted alone).</summary>
+        private async Task<AppointmentInfo?> OwnAsync(BookingDesk desk, Guid id, CancellationToken ct) =>
+            await desk.FindAppointmentAsync(id, ct) is { } a && a.PersonId == State.Person.Id ? a : null;
+
+        private static BookingService ServiceOf(AppointmentInfo a) => BookingService.ByCode(a.Service) ?? BookingService.PhoneVideo;
+
+        private Dictionary<string, string> Describe(AppointmentInfo a) => new()
+        {
+            ["service"] = ServiceOf(a).Name,
+            ["day"] = BookingWords.Day(a.Start, plan.Now),
+            ["time"] = BookingWords.Time(a.Start),
+        };
 
         private void InService(string key)
         {
@@ -634,14 +977,39 @@ public sealed class HazemResponder(
             string.Join(' ', turn.Messages.Where(m => m.Type == MessageType.Text).Select(m => m.Text));
     }
 
+    // TASK 08: what the booking still has to do after the flow (it needs the calendar and the database).
+    private abstract record BookingWork;
+
+    private sealed record OfferTimes(BookingService Service, DateTimeOffset? After, string IntroKey, Guid? Moving) : BookingWork;
+
+    private sealed record PickTime(BookingService Service, DateTimeOffset At) : BookingWork;
+
+    private sealed record ShowExisting(Guid? Id) : BookingWork;
+
+    private sealed record StartChange(Guid Id) : BookingWork;
+
+    private sealed record ChangeTo(Guid Id, DateTimeOffset At) : BookingWork;
+
+    private sealed record MoreChanges(Guid Id, DateTimeOffset After) : BookingWork;
+
+    private sealed record CancelIt(Guid Id) : BookingWork;
+
+    private sealed record RefundIt(Guid Id) : BookingWork;
+
     private sealed class Plan(DateTimeOffset now)
     {
+        public DateTimeOffset Now => now;
+
         public List<ReplyStep> Steps { get; } = [];
 
         public List<PendingTask> Tasks { get; } = [];
 
         public void Say(string key, string? fallback = null, IReadOnlyDictionary<string, string>? Fill = null) =>
             Steps.Add(new ReplyStep(key, fallback, Fill));
+
+        /// <summary>A text with buttons or a list under it (TASK 08).</summary>
+        public void Ask(string key, ReplyChoices choices, IReadOnlyDictionary<string, string>? Fill = null) =>
+            Steps.Add(new ReplyStep(key, null, Fill, choices));
 
         /// <summary>A staff task, due by the B-06 table.</summary>
         public void Task(string kind, Guid? staffId = null)

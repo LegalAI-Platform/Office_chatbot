@@ -3,7 +3,7 @@
   "nodes": [
     {
       "parameters": {
-        "content": "## WA-SEND-ACTION\nSends ONE action from the API: `type` = `send_text` → META-WA-SEND-MESSAGE, `send_template` → META-WA-SEND-TEMPLATE. Same input fields as those workflows plus `type`. Output: `{ ok, outbound_id, wamid, status, error_code, error_message }`. Used by WA-HANDLE-TURN and WA-INTERNAL-SEND (DECISIONS v1.3).",
+        "content": "## WA-SEND-ACTION\nSends ONE action from the API: `type` = `send_text` or `send_interactive` (TASK 08: buttons or a list under the text) → META-WA-SEND-MESSAGE, `send_template` → META-WA-SEND-TEMPLATE. Same input fields as those workflows plus `type`. Output: `{ ok, outbound_id, wamid, status, error_code, error_message }`. Used by WA-HANDLE-TURN and WA-INTERNAL-SEND (DECISIONS v1.3).",
         "height": 260,
         "width": 520
       },
@@ -41,7 +41,7 @@
           "conditions": [
             {
               "id": "ac88da3d-b036-52f0-952a-f9c55be4eefd",
-              "leftValue": "={{ $json.type === 'send_text' }}",
+              "leftValue": "={{ $json.type === 'send_text' || $json.type === 'send_interactive' }}",
               "rightValue": "",
               "operator": {
                 "type": "boolean",
@@ -187,7 +187,7 @@
             {
               "id": "ed46460a-c173-5a26-bc8e-22a0c566ecf1",
               "name": "error_message",
-              "value": "type must be send_text or send_template",
+              "value": "type must be send_text, send_interactive or send_template",
               "type": "string"
             }
           ]

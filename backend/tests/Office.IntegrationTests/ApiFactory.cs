@@ -40,6 +40,9 @@ public sealed class ApiFactory(TestDatabase db, TimeProvider? clock = null) : We
     public bool ChatwootConfigured { get; init; }
     public const string ChatwootWebhookSecret = "integration-test-chatwoot-webhook-secret-0123456789";
 
+    /// <summary>TASK 08: the lawyer's Google Calendar at the HTTP boundary (a throwaway service account key).</summary>
+    public FakeGoogle Google { get; } = new();
+
     /// <summary>The v1.9 rule that a manager must turn the authenticator on; off unless a test is about it.</summary>
     public bool ManagersNeedTwoFactor { get; init; }
 
@@ -64,6 +67,8 @@ public sealed class ApiFactory(TestDatabase db, TimeProvider? clock = null) : We
         builder.UseSetting("Chatwoot:BotToken", ChatwootConfigured ? "integration-test-chatwoot-bot-token" : "");
         builder.UseSetting("Chatwoot:PlatformToken", ChatwootConfigured ? "integration-test-chatwoot-platform-token" : "");
         builder.UseSetting("Chatwoot:WebhookSecret", ChatwootWebhookSecret);
+        builder.UseSetting("Booking:RunWorker", "false");
+        builder.UseSetting("Hazem:GoogleServiceAccountJson", FakeGoogle.ServiceAccountJson);
         Mail.Configured = SignupConfigured;
         builder.ConfigureLogging(l => l.AddProvider(Logs));
         builder.ConfigureTestServices(services =>
@@ -73,6 +78,7 @@ public sealed class ApiFactory(TestDatabase db, TimeProvider? clock = null) : We
             services.AddSingleton<IPanelMailer>(Mail);
             services.AddSingleton<IClientFiles>(Files);
             services.AddHttpClient(Office.Infrastructure.Chatwoot.ChatwootApi.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => Chatwoot);
+            services.AddHttpClient(Office.Infrastructure.Booking.GoogleCalendar.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => Google);
             if (clock is not null)
             {
                 services.AddSingleton(clock);
@@ -128,6 +134,67 @@ public sealed class FakeOpenAi : HttpMessageHandler
                 ["usage"] = new JsonObject { ["prompt_tokens"] = 400, ["completion_tokens"] = 20 },
             }.ToJsonString(), Encoding.UTF8, "application/json"),
         };
+    }
+}
+
+/// <summary>
+/// Google Calendar at the HTTP boundary (TASK 08): the token, freeBusy and the events, in memory.
+/// The service account key is made for the test run and thrown away.
+/// </summary>
+public sealed class FakeGoogle : HttpMessageHandler
+{
+    public static readonly string ServiceAccountJson = new JsonObject
+    {
+        ["type"] = "service_account",
+        ["client_email"] = "hazem-test@example.iam.gserviceaccount.com",
+        ["private_key"] = System.Security.Cryptography.RSA.Create(2048).ExportPkcs8PrivateKeyPem(),
+        ["token_uri"] = "https://oauth2.googleapis.com/token",
+    }.ToJsonString();
+
+    public bool Down { get; set; }
+    public ConcurrentDictionary<string, (DateTimeOffset Start, DateTimeOffset End, string Summary, string? Appointment)> Events { get; } = new();
+    public ConcurrentQueue<string> Calls { get; } = new();
+
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+    {
+        var path = request.RequestUri!.AbsolutePath;
+        Calls.Enqueue($"{request.Method} {path}");
+        if (Down)
+        {
+            return new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
+        }
+
+        var body = request.Content is null || path == "/token" ? null : JsonNode.Parse(await request.Content.ReadAsStringAsync(ct));
+        JsonObject answer;
+        if (path == "/token")
+        {
+            answer = new JsonObject { ["access_token"] = "test-google-token", ["expires_in"] = 3600 };
+        }
+        else if (path.EndsWith("/freeBusy", StringComparison.Ordinal))
+        {
+            var from = DateTimeOffset.Parse((string)body!["timeMin"]!);
+            var to = DateTimeOffset.Parse((string)body["timeMax"]!);
+            var busy = Events.Values.Where(e => e.Start < to && from < e.End)
+                .Select(e => (JsonNode?)new JsonObject { ["start"] = e.Start.ToString("O"), ["end"] = e.End.ToString("O") }).ToArray();
+            answer = new JsonObject { ["calendars"] = new JsonObject { [(string)body["items"]![0]!["id"]!] = new JsonObject { ["busy"] = new JsonArray(busy) } } };
+        }
+        else if (request.Method == HttpMethod.Post && path.EndsWith("/events", StringComparison.Ordinal))
+        {
+            var id = Guid.NewGuid().ToString("N");
+            Events[id] = (DateTimeOffset.Parse((string)body!["start"]!["dateTime"]!), DateTimeOffset.Parse((string)body["end"]!["dateTime"]!),
+                (string)body["summary"]!, (string?)body["extendedProperties"]?["private"]?["hazem_appointment"]);
+            answer = new JsonObject { ["id"] = id };
+        }
+        else if (request.Method == HttpMethod.Delete)
+        {
+            return new HttpResponseMessage(Events.TryRemove(path[(path.LastIndexOf('/') + 1)..], out _) ? HttpStatusCode.NoContent : HttpStatusCode.NotFound);
+        }
+        else
+        {
+            answer = new JsonObject { ["items"] = new JsonArray() };
+        }
+
+        return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(answer.ToJsonString(), Encoding.UTF8, "application/json") };
     }
 }
 

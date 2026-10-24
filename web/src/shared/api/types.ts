@@ -12,7 +12,9 @@ export type Permission =
   | "lists.manage"
   | "texts.manage"
   | "reports.view"
-  | "conversations.unmute";
+  | "conversations.unmute"
+  | "schedule.manage"
+  | "office.manage";
 
 export interface Me {
   id: string;

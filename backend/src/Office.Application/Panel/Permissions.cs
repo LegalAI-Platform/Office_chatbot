@@ -19,8 +19,14 @@ public static class Permissions
     public const string ReportsView = "reports.view";
     public const string ConversationsUnmute = "conversations.unmute";
 
+    // TASK 08 (DECISIONS v1.12): everyone keeps the booking hours and sees every appointment (owner: b,
+    // P4); the office's payment details are the manager's and the lawyer's (P1).
+    public const string ScheduleManage = "schedule.manage";
+    public const string OfficeManage = "office.manage";
+
     public static IReadOnlyList<string> All { get; } =
-        [TasksViewOwn, TasksViewAll, TasksUpdate, TasksAssign, UsersManage, AccountSelf, ListsManage, TextsManage, ReportsView, ConversationsUnmute];
+        [TasksViewOwn, TasksViewAll, TasksUpdate, TasksAssign, UsersManage, AccountSelf, ListsManage, TextsManage, ReportsView, ConversationsUnmute,
+            ScheduleManage, OfficeManage];
 
     public const string Manager = "manager";
     public const string Lawyer = "lawyer";
@@ -31,9 +37,10 @@ public static class Permissions
     private static readonly Dictionary<string, string[]> ByRole = new(StringComparer.Ordinal)
     {
         [Manager] = [TasksViewOwn, TasksViewAll, TasksUpdate, TasksAssign, UsersManage, AccountSelf, ListsManage, TextsManage, ReportsView,
-            ConversationsUnmute],
-        [Lawyer] = [TasksViewOwn, TasksViewAll, TasksUpdate, TasksAssign, AccountSelf, ListsManage, TextsManage, ReportsView],
-        [Staff] = [TasksViewOwn, TasksUpdate, AccountSelf],
+            ConversationsUnmute, ScheduleManage, OfficeManage],
+        [Lawyer] = [TasksViewOwn, TasksViewAll, TasksUpdate, TasksAssign, AccountSelf, ListsManage, TextsManage, ReportsView, ScheduleManage,
+            OfficeManage],
+        [Staff] = [TasksViewOwn, TasksUpdate, AccountSelf, ScheduleManage],
     };
 
     public static IReadOnlyList<string> Of(string role) =>

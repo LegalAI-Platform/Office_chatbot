@@ -80,6 +80,27 @@ Alerts are made every minute by the api (tasks past their due time become `overd
 e-mailed once to everyone who may see the task; the e-mail holds the task's kind, due time and a
 link, never the client's name, number or words.
 
+## The booking (TASK 08, DECISIONS v1.12 B-24)
+
+Minutes of the Cairo day: 0–1440 (1440 = midnight at the end of the day). A change that leaves
+confirmed appointments outside the hours answers `409 { error: "has_bookings", appointments }`;
+the same request with `confirm: true` cancels them (`cancelled_by_office`) and Hazem tells each
+client (B-22) → `{ cancelled, not_told }`. Every change: `booking_changes` and `panel_audit`.
+
+| Endpoint | Permission | What |
+|---|---|---|
+| `GET /booking/week` · `PUT /booking/week` | schedule.manage | `[{ weekday (0 = Sunday), ranges: [{ start, end }] }]` · `{ days, confirm }`; `overlapping_ranges`, `invalid_range` |
+| `GET /booking/month?month=YYYY-MM` | schedule.manage | per day: `status` (open, weekly_off, closed, custom_hours, partly_closed), the hours, confirmed bookings, the exceptions |
+| `POST /booking/exceptions` | schedule.manage | `{ day, kind: closed_day\|closed_hours\|custom_hours, start?, end?, reason?, confirm? }`; `past_day` |
+| `DELETE /booking/exceptions/{id}` | schedule.manage | |
+| `GET /booking/settings` · `PUT /booking/settings` | schedule.manage | `{ enabled, buffer_minutes, min_notice_hours, horizon_days, max_per_day, slot_step_minutes, offer_count, calendar_id }` (+ read only `calendar_key`, `texts_approved`); a value out of range → its name as the error |
+| `GET /booking/changes` · `POST /booking/undo` | schedule.manage | the last 30 changes · the last one put back (`409 nothing_to_undo`) |
+| `GET /booking/appointments?from&to` | schedule.manage | up to 92 days: service, start, end, state (S-03), name, number, topic, changes, calendar state |
+| `POST /booking/appointments/{id}/state` | schedule.manage | `{ state: completed\|no_show }` |
+| `POST /booking/appointments/{id}/cancel` | schedule.manage | cancelled by the office, the client told (B-22) |
+| `GET /booking/preview?day&service=pv\|of\|ur` | schedule.manage | `{ calendar: ok\|unavailable\|not_configured, slots[] }`: what Hazem would offer that day now |
+| `GET /office` · `PUT /office` | office.manage | P1: `{ instapay, wallet_number, wallet_provider, address, map_url (https) }` |
+
 ## Chatwoot (TASK 07b, T-24)
 
 | Endpoint | Permission | What |
@@ -103,6 +124,10 @@ The code checks permissions, never role names. A role is a set of permissions, d
 | `tasks.assign` | ✅ | ✅ | |
 | `users.manage` | ✅ | | |
 | `account.self` (me, change password) | ✅ | ✅ | ✅ |
+| `lists.manage`, `texts.manage`, `reports.view` (TASK 07c) | ✅ | ✅ | |
+| `conversations.unmute` (TASK 07c) | ✅ | | |
+| `schedule.manage` (TASK 08: the booking hours, the appointments) | ✅ | ✅ | ✅ |
+| `office.manage` (TASK 08: InstaPay, the wallet, the address) | ✅ | ✅ | |
 
 No permission → `403`. Not signed in → `401`. A task the user may not see → `404`.
 

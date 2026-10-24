@@ -26,6 +26,14 @@ Office.Api ──► Office.Infrastructure ──► Office.Application ──�
 (B-25, `Intake.MatterType`), abuse (S-01: one warning, then muted), and `classify-v4` (two new
 intents, the topic and the sender role in the same call).
 
+**TASK 08 additions (DECISIONS v1.12):** the booking. `Office.Domain/Booking/Availability.cs` (the
+free times from the panel's week and exceptions, the buffer, the notice, the horizon, a daily limit,
+the clock change), `Office.Application/Booking` (`BookingDesk`, the services of B-23, the ids of the
+WhatsApp buttons), buttons and lists in `ReplyComposer` (`send_interactive`), the booking in
+`HazemResponder` (B-08, B-09, B-15, B-22), `Office.Infrastructure/Booking` (`BookingStore` over the
+SQL functions of migration 0013, `GoogleCalendar` with a service account, `CalendarSync` + its
+worker, `PanelBooking` for `/api/panel/booking`). Runbook: [docs/runbooks/booking.md](../docs/runbooks/booking.md).
+
 **TASK 07a additions (the panel, T-11 / T-23):** `Application/Panel`: `Permissions` (RBAC: a role is
 a set of permissions, defined once; the code checks permissions, never role names; no super
 admin), `PanelAccounts` (sign-in with lockout, sessions ended by a new security stamp, accounts

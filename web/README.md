@@ -24,6 +24,8 @@ src/
     auth/       login, change password, my account
     tasks/      task list and task detail (S-05)
     users/      accounts (the manager only)
+    booking/    «المواعيد» (TASK 08): the month, a day's exceptions and preview, the appointments,
+                the default week, the booking settings, the office's details (P1)
   shared/
     api/        the one HTTP client (cookie, antiforgery, Arabic errors), the session, the types
     ui/         buttons, fields, chips, states, the line icons

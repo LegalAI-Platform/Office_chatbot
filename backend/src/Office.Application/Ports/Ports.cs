@@ -39,7 +39,8 @@ public sealed record OutboundMessage(
     string RequestedBy,
     string? Text = null,
     string? TemplateName = null,
-    string? Language = null);
+    string? Language = null,
+    InteractivePayload? Interactive = null);
 
 /// <summary>Outcome of one send, reported by n8n (POST /api/hazem/send-results) or by the API itself.</summary>
 public sealed record SendResult(

@@ -15,6 +15,25 @@ export const TASK_TYPES: Record<string, string> = {
   urgent_request: "طلب عاجل",
   service_request: "طلب خدمة",
   reschedule_or_cancel: "تغيير أو إلغاء ميعاد",
+  booking_unavailable: "حجز: مفيش مواعيد أو الكالندر مش متاح",
+  booking_cancelled: "عميل لغى حجزه",
+  booking_message_failed: "رسالة حجز ما وصلتش للعميل",
+  calendar_conflict: "حدث في الكالندر فوق حجز",
+};
+
+/** TASK 08: the services booked from the calendar (B-23) and the appointment's states (S-03). */
+export const BOOKING_SERVICES: Record<string, string> = {
+  consultation_phone_video: "تليفون أو فيديو",
+  consultation_office: "مقابلة في المكتب",
+  consultation_urgent: "عاجلة بالتليفون",
+};
+
+export const APPOINTMENT_STATES: Record<string, string> = {
+  confirmed: "مؤكد",
+  completed: "خلص",
+  no_show: "ماحضرش",
+  cancelled_by_client: "العميل لغى",
+  cancelled_by_office: "المكتب لغى",
 };
 
 export const TASK_STATES: Record<string, string> = {

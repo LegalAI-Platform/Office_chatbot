@@ -60,11 +60,18 @@ public sealed record TurnAction(
     string? ContextWamid = null,
     string? TemplateName = null,
     string? Language = null,
-    JsonArray? Components = null)
+    JsonArray? Components = null,
+    TurnInteractivePayload? Interactive = null)
 {
     public const string SendText = "send_text";
     public const string SendTemplate = "send_template";
+    public const string SendInteractive = "send_interactive"; // TASK 08: buttons or a list under the text
 }
+
+/// <summary>TASK 08: <c>kind</c> buttons (≤ 3, title ≤ 20) or list (≤ 10 rows, title ≤ 24, with <c>button</c>).</summary>
+public sealed record TurnInteractivePayload(string Kind, string? Button, IReadOnlyList<TurnInteractiveChoice> Choices);
+
+public sealed record TurnInteractiveChoice(string Id, string Title, string? Description = null);
 
 public sealed record TurnResponse(string TurnId, string Status, IReadOnlyList<TurnAction> Actions)
 {
@@ -314,8 +321,16 @@ public static class TurnMapping
             r.Actions.Select(ToAction).ToList());
 
     private static TurnAction ToAction(OutboundAction a) => new(
-        a.Type == ActionType.SendText ? TurnAction.SendText : TurnAction.SendTemplate,
-        a.IdempotencyKey, a.Text, a.ContextWamid, a.TemplateName, a.Language, a.Components);
+        a.Type switch
+        {
+            ActionType.SendText => TurnAction.SendText,
+            ActionType.SendInteractive => TurnAction.SendInteractive,
+            _ => TurnAction.SendTemplate,
+        },
+        a.IdempotencyKey, a.Text, a.ContextWamid, a.TemplateName, a.Language, a.Components,
+        a.Interactive is { } i
+            ? new TurnInteractivePayload(i.Kind, i.Button, i.Choices.Select(c => new TurnInteractiveChoice(c.Id, c.Title, c.Description)).ToList())
+            : null);
 }
 
 /// <summary>POST /api/hazem/staff-events (TASK 05a, B-12).</summary>

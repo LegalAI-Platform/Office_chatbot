@@ -226,7 +226,29 @@ if [[ "$(psql_super office -c "SELECT count(*) FROM hazem.panel_users WHERE acti
   warn "no panel manager yet: the owner creates the first one from the terminal (docs/runbooks/panel.md)"
 fi
 
+echo "== The booking (TASK 08, DECISIONS v1.12 B-24)"
+check "tables booking_weekly_hours, booking_exceptions, booking_changes, appointments exist" \
+  sql_equals office "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'hazem' AND table_name IN ('booking_weekly_hours', 'booking_exceptions', 'booking_changes', 'appointments')" "4"
+check "two confirmed appointments can never overlap (constraint appointments_no_overlap)" \
+  sql_equals office "SELECT count(*) FROM pg_constraint WHERE conname = 'appointments_no_overlap'" "1"
+check "office_app (n8n) cannot read the appointments or the booking hours" \
+  expect_fail psql_as office_app "$OFFICE_APP_PASSWORD" office -c 'SELECT 1 FROM hazem.appointments UNION ALL SELECT 1 FROM hazem.booking_weekly_hours LIMIT 1'
+check "the calendar is the real Google (booking.google_base_url empty: no test stub left)" \
+  sql_equals office "SELECT value FROM hazem.settings WHERE key = 'booking.google_base_url'" ""
+check "no test booking left behind (no day closed by hazem-e2e, its texts switched off again)" \
+  sql_equals office "SELECT (SELECT count(*) FROM hazem.booking_exceptions WHERE reason = 'e2e') + (SELECT count(*) FROM hazem.settings WHERE key = 'e2e.texts08')" "0"
+check "no calendar event stuck (an appointment tried 6 times or more)" \
+  sql_equals office "SELECT count(*) FROM hazem.appointments WHERE calendar_state IN ('create', 'update', 'remove') AND calendar_attempts >= 6" "0"
+if [[ "$(psql_super office -c "SELECT count(*) FROM hazem.settings WHERE key IN ('office.instapay', 'office.wallet_number') AND (value ILIKE '%test%' OR value = '01000000000')")" != "0" ]]; then
+  warn "the office's InstaPay or wallet are TEST values: write the real ones in the panel (المواعيد ← بيانات المكتب) before clients book"
+fi
+if [[ -z "${GOOGLE_SERVICE_ACCOUNT_JSON:-}" ]]; then
+  warn "GOOGLE_SERVICE_ACCOUNT_JSON is empty: Hazem offers no booking times until the lawyer's calendar is connected (docs/runbooks/booking.md, owner only)"
+fi
+
 echo "== Migrations"
+check "migration 0013 (the booking) is applied" \
+  sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0013'" "1"
 check "migration 0009 (panel accounts) is applied"   sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0009'" "1"
 check "migration 0008 (lists, staff tasks, sources, topics) is applied" \
   sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0008'" "1"

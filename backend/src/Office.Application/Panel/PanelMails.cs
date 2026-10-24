@@ -119,6 +119,10 @@ public static class PanelMails
         "urgent_request" => "طلب عاجل",
         "service_request" => "طلب خدمة",
         "reschedule_or_cancel" => "تغيير أو إلغاء ميعاد",
+        "booking_unavailable" => "حجز: مفيش مواعيد أو الكالندر مش متاح",
+        "booking_cancelled" => "عميل لغى حجزه",
+        "booking_message_failed" => "رسالة حجز ما وصلتش للعميل",
+        "calendar_conflict" => "حدث في الكالندر فوق حجز",
         _ => type,
     };
 
