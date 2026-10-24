@@ -1,4 +1,3 @@
-using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Office.Application.Booking;
 using Office.Application.Conversations;
@@ -90,14 +89,14 @@ public sealed class BookingNotices(HazemDbContext db, BookingStore store, Bookin
             {
                 "payment_partial" => (TextKeys.PaymentPartial, new Dictionary<string, string>(When(a, now))
                 {
-                    ["received"] = Money(pay.AmountReceived ?? 0),
-                    ["amount"] = Money(pay.AmountDue),
-                    ["rest"] = Money(pay.AmountDue - (pay.AmountReceived ?? 0)),
+                    ["received"] = BookingWords.Money(pay.AmountReceived ?? 0),
+                    ["amount"] = BookingWords.Money(pay.AmountDue),
+                    ["rest"] = BookingWords.Money(pay.AmountDue - (pay.AmountReceived ?? 0)),
                 }, pay.ReviewedAt),
                 "payment_not_received" => (TextKeys.PaymentNotReceived, When(a, now), pay.ReviewedAt),
                 _ => (TextKeys.RefundCompleted, new Dictionary<string, string>
                 {
-                    ["amount"] = Money(pay.RefundDue ?? 0),
+                    ["amount"] = BookingWords.Money(pay.RefundDue ?? 0),
                     ["method"] = pay.RefundMethod ?? "",
                 }, pay.RefundedAt),
             };
@@ -165,7 +164,7 @@ public sealed class BookingNotices(HazemDbContext db, BookingStore store, Bookin
         var fill = new Dictionary<string, string>(When(a, now))
         {
             ["deadline"] = BookingWords.Deadline(a.HoldUntil ?? a.StartsAt, now),
-            ["amount"] = Money(a.Amount),
+            ["amount"] = BookingWords.Money(a.Amount),
         };
         if (booking.Office.HasPayment)
         {
@@ -175,8 +174,6 @@ public sealed class BookingNotices(HazemDbContext db, BookingStore store, Bookin
 
         return fill;
     }
-
-    private static string Money(int amount) => amount.ToString("N0", CultureInfo.InvariantCulture);
 
     /// <summary>The idempotency key's word for each notice (office keeps TASK 08's key).</summary>
     private static string Short(string kind) => kind switch

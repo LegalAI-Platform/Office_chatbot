@@ -69,8 +69,8 @@ public sealed class PanelPayments(HazemDbContext db, BookingStore store, TimePro
             x.pay.RefundReason, Who(x.pay.RefundedBy), x.pay.RefundedAt, x.pay.RefundMethod)).ToList();
     }
 
-    /// <summary>The n-th receipt (0 = the first) of an appointment's payment, for the panel to show. Recorded.</summary>
-    public async Task<ClientFileRef?> ReceiptAsync(Guid by, Guid appointmentId, int index, CancellationToken ct)
+    /// <summary>The n-th receipt (0 = the first) of an appointment's payment, for the panel to show.</summary>
+    public async Task<ClientFileRef?> ReceiptAsync(Guid appointmentId, int index, CancellationToken ct)
     {
         if (index < 0)
         {
@@ -82,15 +82,13 @@ public sealed class PanelPayments(HazemDbContext db, BookingStore store, TimePro
                              where pay.AppointmentId == appointmentId
                              orderby r.ReceivedAt, r.Id
                              select r).Skip(index).FirstOrDefaultAsync(ct);
-        if (receipt is null)
-        {
-            return null;
-        }
-
-        await PanelAudit.WriteAsync(db, clock, by, "payment.receipt_open", "payment", appointmentId,
-            new Dictionary<string, string?> { ["index"] = index.ToString(System.Globalization.CultureInfo.InvariantCulture) }, ct);
-        return new ClientFileRef("image", receipt.Bucket, receipt.Key, receipt.Mime, null);
+        return receipt is null ? null : new ClientFileRef("image", receipt.Bucket, receipt.Key, receipt.Mime, null);
     }
+
+    /// <summary>Who saw a client's receipt: written once the file was really read from storage.</summary>
+    public Task RecordOpenedAsync(Guid by, Guid appointmentId, int index, CancellationToken ct) =>
+        PanelAudit.WriteAsync(db, clock, by, "payment.receipt_open", "payment", appointmentId,
+            new Dictionary<string, string?> { ["index"] = index.ToString(System.Globalization.CultureInfo.InvariantCulture) }, ct);
 
     /// <summary>
     /// B-05: verified (with the amount that came: more than due opens a refund of the difference, P4),

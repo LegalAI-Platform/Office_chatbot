@@ -429,7 +429,7 @@ public sealed class BookingFlowTests
         await Press(BookingChoice.Pick(BookingService.PhoneVideo, AvailabilityTests.At(20, 12)));
         var d = await Press(BookingChoice.Pick(BookingService.PhoneVideo, AvailabilityTests.At(21, 12)));
         Assert.Equal([TextKeys.BookingHold], Keys(d));
-        Assert.Equal([AppointmentInfo.Expired, AppointmentInfo.PendingPayment], _booking.Appointments.Select(a => a.State));
+        Assert.Equal([AppointmentInfo.CancelledByClient, AppointmentInfo.PendingPayment], _booking.Appointments.Select(a => a.State));
     }
 
     [Fact]
@@ -553,6 +553,19 @@ public sealed class BookingFlowTests
         var cancelledHold = await Press(BookingChoice.Cancel(hold));
         Assert.Equal([TextKeys.BookingHoldCancelled], Keys(cancelledHold));
         Assert.Empty(TaskKinds(cancelledHold));
+    }
+
+    [Fact]
+    public async Task A_refund_press_with_nothing_to_give_back_is_never_promised()
+    {
+        await ToTheOffer();
+        // The office cancelled it, but its money already pays another booking (or never came): nothing to refund.
+        var cancelled = new AppointmentInfo(Guid.NewGuid(), _rows[Number].Person.Id, BookingService.PhoneVideo.Code, AvailabilityTests.At(21, 12),
+            AvailabilityTests.At(21, 12, 15), AppointmentInfo.CancelledByOffice, 0, 500, null);
+        _booking.Appointments.Add(cancelled);
+        var d = await Press(BookingChoice.Refund(cancelled.Id));
+        Assert.DoesNotContain(TextKeys.BookingRefundRequested, Keys(d));
+        Assert.DoesNotContain(PendingTask.Refund, TaskKinds(d));
     }
 
     [Fact]
@@ -728,13 +741,13 @@ public sealed class BookingFlowTests
                 }
 
                 until = hold.HoldUntil > now() && hold.HoldUntil < until ? hold.HoldUntil.Value : until;
-                Set(a => a.Id == hold.Id, AppointmentInfo.Expired);
+                Set(a => a.Id == hold.Id, AppointmentInfo.CancelledByClient); // given up, never an expired hold that could take a late receipt
             }
 
             var credit = Appointments.Where(a => a.PersonId == r.PersonId && a.Service == r.Service.Code
                                                   && a.State is AppointmentInfo.Expired or AppointmentInfo.CancelledByOffice
                                                   && Payments.TryGetValue(a.Id, out var p) && p.ProofAt is not null
-                                                  && p.State is not (PaymentInfo.RefundRequested or PaymentInfo.Refunded))
+                                                  && p.State is not (PaymentInfo.NotReceived or PaymentInfo.RefundRequested or PaymentInfo.Refunded))
                 .Select(a => a.Id).FirstOrDefault();
             var paid = credit != Guid.Empty;
             Appointments.Add(new AppointmentInfo(r.Id, r.PersonId, r.Service.Code, r.Start, r.Start.AddMinutes(r.Service.Minutes),

@@ -51,23 +51,11 @@ public sealed class BookingStore(HazemDbContext db) : IBookingStore
         return row is null ? null : ToInfo(row);
     }
 
-    /// <summary>The same order as hazem.attach_receipt: the hold, a confirmed booking still waiting, a hold that ran out.</summary>
-    public async Task<AppointmentInfo?> ReceiptTargetAsync(Guid personId, DateTimeOffset now, CancellationToken ct)
-    {
-        var n = now.ToUniversalTime();
-        var rows = await (from a in db.Appointments.AsNoTracking()
-                          join p in db.Payments.AsNoTracking() on a.Id equals p.AppointmentId
-                          where a.PersonId == personId
-                                && (a.State == AppointmentInfo.PendingPayment
-                                    || a.State == AppointmentInfo.Confirmed && a.EndsAt > n
-                                       && (p.State == PaymentInfo.Requested || p.State == PaymentInfo.Partial || p.State == PaymentInfo.NotReceived)
-                                    || a.State == AppointmentInfo.Expired && a.StartsAt > n && p.State == PaymentInfo.Requested)
-                          select a).ToListAsync(ct);
-        var target = rows.FirstOrDefault(a => a.State == AppointmentInfo.PendingPayment)
-                     ?? rows.Where(a => a.State == AppointmentInfo.Confirmed).OrderBy(a => a.StartsAt).FirstOrDefault()
-                     ?? rows.OrderByDescending(a => a.UpdatedAt).FirstOrDefault();
-        return target is null ? null : ToInfo(target);
-    }
+    /// <summary>hazem.receipt_target: the one rule attach_receipt uses too (the database's clock).</summary>
+    public async Task<AppointmentInfo?> ReceiptTargetAsync(Guid personId, DateTimeOffset now, CancellationToken ct) =>
+        await db.Database.SqlQuery<Guid?>($"""SELECT hazem.receipt_target({personId}) AS "Value" """).SingleAsync(ct) is { } id
+            ? await FindAsync(id, ct)
+            : null;
 
     public async Task<ReceiptOutcome> AttachReceiptAsync(ReceiptRequest r, bool lateFree, int bufferMinutes, CancellationToken ct)
     {

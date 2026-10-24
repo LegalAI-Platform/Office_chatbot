@@ -119,10 +119,13 @@ BEGIN
       RETURN jsonb_build_object('status', 'has_hold', 'id', v_hold.id); -- P3: one hold at a time
     END IF;
     -- B-15 (1.13): another time for the same service replaces the hold, never for longer than it had.
+    -- The old one is given up by the client (never 'expired': an expired hold may still take a late receipt).
     IF v_hold.hold_until > now() THEN
       v_until := LEAST(p_hold_until, v_hold.hold_until);
     END IF;
-    UPDATE hazem.appointments SET state = 'expired', calendar_state = 'removed' WHERE id = v_hold.id;
+    UPDATE hazem.appointments SET state = 'cancelled_by_client', calendar_state = 'removed',
+           client_notice = CASE WHEN client_notice = 'pending' THEN NULL ELSE client_notice END
+     WHERE id = v_hold.id;
   END IF;
 
   IF EXISTS (SELECT 1 FROM hazem.appointments
@@ -131,10 +134,11 @@ BEGIN
     RETURN jsonb_build_object('status', 'taken');
   END IF;
 
+  -- A receipt the office found nothing for («ما وصلش») is never a credit.
   SELECT p.id INTO v_credit FROM hazem.payments p JOIN hazem.appointments a ON a.id = p.appointment_id
    WHERE a.person_id = p_person AND a.service = p_service AND a.state IN ('expired', 'cancelled_by_office')
      AND p.proof_at IS NOT NULL
-     AND p.state IN ('proof_received', 'duplicate_suspected', 'verified', 'partial', 'not_received')
+     AND p.state IN ('proof_received', 'duplicate_suspected', 'verified', 'partial')
    ORDER BY p.proof_at DESC LIMIT 1;
 
   IF v_credit IS NOT NULL THEN
@@ -186,10 +190,27 @@ BEGIN
   RETURN jsonb_build_object('status', 'moved');
 END $$;
 
--- B-05 (1.13): a receipt image from the client, for (1) his hold → confirmed, (2) else his next confirmed
--- booking still waiting for a (new) receipt, (3) else a hold whose time ran out: confirmed again when the
--- time is still free (p_late_free: the API checked the calendar and the hours), otherwise kept as a credit
--- for the time he picks next. The same image on another booking: duplicate_suspected, an alert only.
+-- B-05 (1.13): what a receipt image from this client is for, in this order: (1) his hold, (2) else his next
+-- confirmed booking still waiting for a (new) receipt (partial / not received first), (3) else the last hold
+-- whose time ran out and is still to come. The one rule, for the API (does anything wait?) and attach_receipt.
+CREATE FUNCTION hazem.receipt_target(p_person uuid)
+RETURNS uuid LANGUAGE sql STABLE SET search_path = hazem, pg_temp AS $$
+  SELECT a.id FROM hazem.appointments a LEFT JOIN hazem.payments p ON p.appointment_id = a.id
+   WHERE a.person_id = p_person
+     AND (a.state = 'pending_payment'
+          OR a.state = 'confirmed' AND a.ends_at > now() AND p.state IN ('partial', 'not_received', 'requested')
+          OR a.state = 'expired' AND a.starts_at > now() AND p.state = 'requested')
+   ORDER BY CASE a.state WHEN 'pending_payment' THEN 0 WHEN 'confirmed' THEN 1 ELSE 2 END,
+            (p.state = 'requested'),
+            CASE WHEN a.state = 'confirmed' THEN a.starts_at END,
+            a.updated_at DESC
+   LIMIT 1
+$$;
+
+-- B-05 (1.13): a receipt image from the client, for hazem.receipt_target: a hold → confirmed; a confirmed
+-- booking → its new receipt; a hold whose time ran out → confirmed again when the time is still free
+-- (p_late_free: the API checked the calendar and the hours), otherwise kept as a credit for the time he picks
+-- next. The same image on another booking: duplicate_suspected, an alert only.
 CREATE FUNCTION hazem.attach_receipt(
   p_person uuid, p_wamid text, p_bucket text, p_key text, p_sha256 text, p_mime text, p_late_free boolean, p_buffer_minutes int)
 RETURNS jsonb LANGUAGE plpgsql SET search_path = hazem, pg_temp AS $$
@@ -208,8 +229,12 @@ BEGIN
 
   PERFORM pg_advisory_xact_lock(hashtext('hazem.appointments'));
 
-  SELECT * INTO v_a FROM hazem.appointments WHERE person_id = p_person AND state = 'pending_payment' FOR UPDATE;
-  IF FOUND THEN
+  SELECT * INTO v_a FROM hazem.appointments WHERE id = hazem.receipt_target(p_person) FOR UPDATE;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('status', 'none');
+  END IF;
+
+  IF v_a.state = 'pending_payment' THEN
     -- Still held (even a moment after its time, before the worker freed it): nobody else has it.
     UPDATE hazem.appointments
        SET state = 'confirmed', calendar_state = 'create', calendar_attempts = 0, calendar_next_at = now(),
@@ -217,20 +242,9 @@ BEGIN
      WHERE id = v_a.id;
     v_status := 'confirmed';
   ELSE
-    SELECT a.* INTO v_a FROM hazem.appointments a JOIN hazem.payments p ON p.appointment_id = a.id
-     WHERE a.person_id = p_person AND a.state = 'confirmed' AND a.ends_at > now()
-       AND p.state IN ('partial', 'not_received', 'requested')
-     ORDER BY (p.state = 'requested'), a.starts_at LIMIT 1;
-    IF FOUND THEN
+    IF v_a.state = 'confirmed' THEN
       v_status := 'received';
     ELSE
-      SELECT a.* INTO v_a FROM hazem.appointments a JOIN hazem.payments p ON p.appointment_id = a.id
-       WHERE a.person_id = p_person AND a.state = 'expired' AND a.starts_at > now() AND p.state = 'requested'
-       ORDER BY a.updated_at DESC LIMIT 1;
-      IF NOT FOUND THEN
-        RETURN jsonb_build_object('status', 'none');
-      END IF;
-
       IF p_late_free AND NOT EXISTS (SELECT 1 FROM hazem.appointments
                                       WHERE id <> v_a.id AND state IN ('confirmed', 'pending_payment')
                                         AND tstzrange(starts_at - v_buffer, ends_at + v_buffer) && tstzrange(v_a.starts_at, v_a.ends_at)) THEN
@@ -288,12 +302,13 @@ END $$;
 
 -- B-05 / S-04: an office person marks what he found (P1). The three marks may correct each other until a
 -- refund starts. Verified with more than due → refund_requested for the difference (P4). Partial and
--- not received are told to the client by the worker.
+-- not received are told to the client by the worker, only while his booking stands (never for one cancelled).
 CREATE FUNCTION hazem.mark_payment(p_appointment uuid, p_state text, p_received int, p_by uuid)
 RETURNS jsonb LANGUAGE plpgsql SET search_path = hazem, pg_temp AS $$
 DECLARE
   v hazem.payments;
   v_over boolean;
+  v_tell boolean;
 BEGIN
   SELECT * INTO v FROM hazem.payments WHERE appointment_id = p_appointment FOR UPDATE;
   IF NOT FOUND THEN
@@ -312,14 +327,16 @@ BEGIN
   END IF;
 
   v_over := p_state = 'verified' AND p_received > v.amount_due;
+  v_tell := p_state IN ('partial', 'not_received')
+            AND EXISTS (SELECT 1 FROM hazem.appointments WHERE id = p_appointment AND state = 'confirmed' AND ends_at > now());
   UPDATE hazem.payments
      SET state = CASE WHEN v_over THEN 'refund_requested' ELSE p_state END,
          amount_received = CASE WHEN p_state = 'not_received' THEN NULL ELSE p_received END,
          refund_due = CASE WHEN v_over THEN p_received - v.amount_due END,
          refund_reason = CASE WHEN v_over THEN 'overpaid' END,
          reviewed_by = p_by, reviewed_at = now(),
-         client_notice = CASE WHEN p_state IN ('partial', 'not_received') THEN 'pending' ELSE client_notice END,
-         notice_kind = CASE WHEN p_state IN ('partial', 'not_received') THEN 'payment_' || p_state ELSE notice_kind END
+         client_notice = CASE WHEN v_tell THEN 'pending' ELSE client_notice END,
+         notice_kind = CASE WHEN v_tell THEN 'payment_' || p_state ELSE notice_kind END
    WHERE id = v.id;
   UPDATE hazem.appointments SET calendar_state = 'update', calendar_attempts = 0, calendar_next_at = now()
    WHERE id = p_appointment AND state = 'confirmed' AND calendar_state = 'synced';
@@ -327,7 +344,8 @@ BEGIN
 END $$;
 
 -- B-22: a refund is due (the client cancelled within 24 hours of his receipt, or chose the refund after
--- the office cancelled). Only money that came: a receipt at least. Returns the amount, or null.
+-- the office cancelled). Only money that came: a receipt at least. A refund of an overpaid difference not
+-- transferred yet grows to everything that came. Returns the amount, or null.
 CREATE FUNCTION hazem.request_refund(p_appointment uuid, p_reason text)
 RETURNS int LANGUAGE plpgsql SET search_path = hazem, pg_temp AS $$
 DECLARE
@@ -335,8 +353,10 @@ DECLARE
 BEGIN
   UPDATE hazem.payments
      SET state = 'refund_requested', refund_due = COALESCE(amount_received, amount_due), refund_reason = p_reason
-   WHERE appointment_id = p_appointment AND state IN ('proof_received', 'duplicate_suspected', 'verified', 'partial')
-         AND COALESCE(amount_received, amount_due) > 0
+   WHERE appointment_id = p_appointment
+     AND (state IN ('proof_received', 'duplicate_suspected', 'verified', 'partial')
+          OR state = 'refund_requested' AND refund_reason = 'overpaid')
+     AND COALESCE(amount_received, amount_due) > 0
   RETURNING refund_due INTO v_due;
   RETURN v_due;
 END $$;
@@ -402,6 +422,7 @@ ON CONFLICT (key, version) DO UPDATE SET active = true; -- kept by an earlier do
 GRANT SELECT, INSERT, UPDATE, DELETE ON hazem.payments, hazem.payment_receipts TO office_api;
 GRANT EXECUTE ON FUNCTION hazem.book_appointment(uuid, uuid, uuid, text, timestamptz, timestamptz, int, text, int, text, timestamptz),
   hazem.move_appointment(uuid, timestamptz, timestamptz, text, int, int),
+  hazem.receipt_target(uuid),
   hazem.attach_receipt(uuid, text, text, text, text, text, boolean, int),
   hazem.booking_due(int, int),
   hazem.mark_payment(uuid, text, int, uuid),
@@ -411,6 +432,7 @@ GRANT SELECT ON hazem.payments, hazem.payment_receipts TO office_readonly;
 REVOKE ALL ON hazem.payments, hazem.payment_receipts FROM office_app;
 REVOKE ALL ON FUNCTION hazem.book_appointment(uuid, uuid, uuid, text, timestamptz, timestamptz, int, text, int, text, timestamptz),
   hazem.move_appointment(uuid, timestamptz, timestamptz, text, int, int),
+  hazem.receipt_target(uuid),
   hazem.attach_receipt(uuid, text, text, text, text, text, boolean, int),
   hazem.booking_due(int, int),
   hazem.mark_payment(uuid, text, int, uuid),
@@ -423,6 +445,7 @@ DROP FUNCTION IF EXISTS hazem.request_refund(uuid, text);
 DROP FUNCTION IF EXISTS hazem.mark_payment(uuid, text, int, uuid);
 DROP FUNCTION IF EXISTS hazem.booking_due(int, int);
 DROP FUNCTION IF EXISTS hazem.attach_receipt(uuid, text, text, text, text, text, boolean, int);
+DROP FUNCTION IF EXISTS hazem.receipt_target(uuid);
 DROP FUNCTION IF EXISTS hazem.book_appointment(uuid, uuid, uuid, text, timestamptz, timestamptz, int, text, int, text, timestamptz);
 DROP FUNCTION IF EXISTS hazem.move_appointment(uuid, timestamptz, timestamptz, text, int, int);
 

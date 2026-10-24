@@ -263,6 +263,96 @@ public sealed class Task09ApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync("/api/panel/payments", Ct)).StatusCode);
     }
 
+    // ---------- the PR #10 review ----------
+
+    [Fact]
+    public async Task A_receipt_marked_not_received_never_pays_the_next_booking()
+    {
+        await BookingOn();
+        var id = await HeldTomorrow();
+        await Receipt();
+        var staff = await SignIn("yasmin", Permissions.Staff, "ياسمين");
+        Assert.Equal(HttpStatusCode.NoContent, (await staff.PostAsJsonAsync($"/api/panel/payments/{id}/review", new { state = "not_received" }, Ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await staff.PostAsync($"/api/panel/booking/appointments/{id}/cancel", null, Ct)).StatusCode);
+
+        var next = "bk:s:pv:" + new DateTimeOffset(2026, 11, 22, 12, 0, 0, TimeSpan.FromHours(2)).ToUnixTimeSeconds();
+        Assert.StartsWith("⏳", (string?)(await Press(next)).Single()!["text"]); // held again, waiting for a real transfer
+        Assert.Equal("pending_payment", await db.ScalarAsync<string>("SELECT state FROM hazem.appointments WHERE starts_at = '2026-11-22 12:00+02'"));
+    }
+
+    [Fact]
+    public async Task A_refund_press_whose_money_pays_another_booking_promises_nothing()
+    {
+        await BookingOn();
+        var paid = await HeldTomorrow();
+        await Receipt();
+        var staff = await SignIn("yasmin", Permissions.Staff, "ياسمين");
+        Assert.Equal(HttpStatusCode.OK, (await staff.PostAsync($"/api/panel/booking/appointments/{paid}/cancel", null, Ct)).StatusCode);
+        await Press("bk:s:pv:" + new DateTimeOffset(2026, 11, 22, 12, 0, 0, TimeSpan.FromHours(2)).ToUnixTimeSeconds()); // the receipt moves here
+
+        var reply = await Press($"bk:f:{paid:N}"); // the old «استرداد كامل» row
+        Assert.DoesNotContain(reply, a => ((string?)a!["text"] ?? "").Contains("بطلب الاسترداد", StringComparison.Ordinal));
+        Assert.Equal(0L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.staff_tasks WHERE type = 'refund'"));
+        Assert.Equal("proof_received", await db.ScalarAsync<string>("SELECT state FROM hazem.payments WHERE proof_at IS NOT NULL"));
+    }
+
+    [Fact]
+    public async Task Overpaid_then_cancelled_within_24_hours_gives_everything_back()
+    {
+        await BookingOn();
+        var id = await HeldTomorrow();
+        await Receipt();
+        var staff = await SignIn("yasmin", Permissions.Staff, "ياسمين");
+        await staff.PostAsJsonAsync($"/api/panel/payments/{id}/review", new { state = "verified", received = 600 }, Ct);
+        await db.ExecAsync("UPDATE hazem.payments SET proof_at = '2026-11-19 11:30+02'");
+        await Press($"bk:c:{id:N}");
+        Assert.Equal("refund_requested|600|client_within_24h", await db.ScalarAsync<string>(
+            "SELECT state || '|' || refund_due || '|' || refund_reason FROM hazem.payments"));
+    }
+
+    [Fact]
+    public async Task A_replaced_hold_never_takes_a_later_receipt()
+    {
+        await BookingOn();
+        var first = await HeldTomorrow();
+        var second = "bk:s:pv:" + new DateTimeOffset(2026, 11, 22, 12, 0, 0, TimeSpan.FromHours(2)).ToUnixTimeSeconds();
+        await Press(second); // replaces the first
+        var replaced = await db.ScalarAsync<Guid>("SELECT id FROM hazem.appointments WHERE state = 'pending_payment'");
+        await Press($"bk:c:{replaced:N}");
+        Assert.Equal("cancelled_by_client", await db.ScalarAsync<string>($"SELECT state FROM hazem.appointments WHERE id = '{first}'"));
+
+        await Receipt(); // a photo later: nothing waits for it
+        Assert.Equal(0L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.appointments WHERE state = 'confirmed'"));
+        Assert.Equal(0L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.payment_receipts"));
+    }
+
+    [Fact]
+    public async Task A_review_of_a_cancelled_booking_tells_the_client_nothing()
+    {
+        await BookingOn();
+        var id = await HeldTomorrow();
+        await Receipt();
+        var staff = await SignIn("yasmin", Permissions.Staff, "ياسمين");
+        Assert.Equal(HttpStatusCode.OK, (await staff.PostAsync($"/api/panel/booking/appointments/{id}/cancel", null, Ct)).StatusCode);
+        await Notices();
+        Assert.Equal(HttpStatusCode.NoContent, (await staff.PostAsJsonAsync($"/api/panel/payments/{id}/review",
+            new { state = "partial", received = 300 }, Ct)).StatusCode);
+        Assert.Equal("partial|", await db.ScalarAsync<string>("SELECT state || '|' || COALESCE(client_notice, '') FROM hazem.payments"));
+        Assert.Equal(0, await Notices());
+    }
+
+    [Fact]
+    public async Task A_receipt_that_cannot_be_read_is_not_recorded_as_opened()
+    {
+        await BookingOn();
+        var id = await HeldTomorrow();
+        await Receipt();
+        _factory.Files.Objects.Clear(); // gone from storage
+        var staff = await SignIn("yasmin", Permissions.Staff, "ياسمين");
+        Assert.Equal(HttpStatusCode.NotFound, (await staff.GetAsync($"/api/panel/payments/{id}/receipts/0", Ct)).StatusCode);
+        Assert.Equal(0L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.panel_audit WHERE action = 'payment.receipt_open'"));
+    }
+
     // ---------- B-22 ----------
 
     [Fact]

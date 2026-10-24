@@ -119,11 +119,12 @@ public static class PanelBookingEndpoints
                 return Results.Json(new { error = "not_configured" }, statusCode: StatusCodes.Status503ServiceUnavailable);
             }
 
-            if (await p.ReceiptAsync(ctx.CurrentUser().Id, id, index, ct) is not { } receipt || await files.OpenAsync(receipt, ct) is not { } file)
+            if (await p.ReceiptAsync(id, index, ct) is not { } receipt || await files.OpenAsync(receipt, ct) is not { } file)
             {
                 return Results.NotFound(new { error = PanelPayments.ErrNotFound });
             }
 
+            await p.RecordOpenedAsync(ctx.CurrentUser().Id, id, index, ct);
             var type = ClientFileTypes.Safe(file.ContentType);
             ctx.Response.Headers.ContentSecurityPolicy = "sandbox; default-src 'none'; img-src 'self'";
             return type.StartsWith("image/", StringComparison.Ordinal)

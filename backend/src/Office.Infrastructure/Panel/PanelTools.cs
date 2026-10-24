@@ -27,7 +27,7 @@ public sealed record StaffReportRow(string Staff, int Assigned, int Done, int On
 
 /// <summary>
 /// TASK 09: <see cref="ByBooking"/> the month's appointments by state (S-03, the holds that ran out too);
-/// the money of those appointments as the office marked it: <see cref="Received"/> what came,
+/// the money of those appointments as the office marked it: <see cref="Received"/> what came and was not given back,
 /// <see cref="Missing"/> what is still missing on «ناقص», and <see cref="Refunded"/> what was given back this month.
 /// </summary>
 public sealed record MonthReport(string Month, int Tasks, int Done, int DoneOnTime, int Late, IReadOnlyList<ReportRow> ByType,
@@ -267,7 +267,11 @@ public sealed partial class PanelTools(HazemDbContext db, ListImporter importer,
                               join p in db.Payments.AsNoTracking() on a.Id equals p.AppointmentId into pays
                               from p in pays.DefaultIfEmpty()
                               where a.StartsAt >= start && a.StartsAt < end
-                              select new { a.State, Payment = p == null ? null : p.State, Due = p == null ? 0 : p.AmountDue, Came = p == null ? null : p.AmountReceived })
+                              select new
+                              {
+                                  a.State, Payment = p == null ? null : p.State, Due = p == null ? 0 : p.AmountDue,
+                                  Came = p == null ? null : p.AmountReceived, GaveBack = p != null && p.State == "refunded" ? p.RefundDue : null,
+                              })
             .ToListAsync(ct);
         var refunded = await db.Payments.AsNoTracking().Where(p => p.State == "refunded" && p.RefundedAt >= start && p.RefundedAt < end)
             .SumAsync(p => p.RefundDue ?? 0, ct);
@@ -287,7 +291,7 @@ public sealed partial class PanelTools(HazemDbContext db, ListImporter importer,
             Count(people.Select(p => p.Intake?.MatterType)),
             Count(people.Select(p => p.Intake?.ClientType)),
             Count(bookings.Select(b => b.State)),
-            bookings.Sum(b => b.Came ?? 0),
+            bookings.Sum(b => (b.Came ?? 0) - (b.GaveBack ?? 0)), // what came and stayed: a refund given back is not income
             bookings.Where(b => b.Payment == "partial").Sum(b => b.Due - (b.Came ?? 0)),
             refunded);
     }

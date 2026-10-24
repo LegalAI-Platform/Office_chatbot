@@ -755,16 +755,16 @@ public sealed class HazemResponder(
                 case CancelIt x:
                     await CancelAsync(desk, x.Id, ct);
                     break;
-                case RefundIt r when await OwnAsync(desk, r.Id, ct) is { } a:
+                case RefundIt r when await OwnAsync(desk, r.Id, ct) is { State: AppointmentInfo.CancelledByOffice } a
+                                     && await desk.RequestRefundAsync(a.Id, "office_cancelled", ct) is not null:
                     // B-22: the office cancelled and the client chose the refund. The amount is what came
                     // (or what was due, before the review); the office transfers it (P2).
-                    if (a.State == AppointmentInfo.CancelledByOffice)
-                    {
-                        await desk.RequestRefundAsync(a.Id, "office_cancelled", ct);
-                    }
-
                     plan.Say(TextKeys.BookingRefundRequested);
                     plan.Task(PendingTask.Refund);
+                    break;
+                case RefundIt r when await OwnAsync(desk, r.Id, ct) is { State: AppointmentInfo.CancelledByOffice } a
+                                     && await desk.PaymentAsync(a.Id, ct) is { State: PaymentInfo.RefundRequested or PaymentInfo.Refunded }:
+                    plan.Say(TextKeys.BookingRefundRequested); // pressed twice: already with the office
                     break;
                 case RefundIt:
                     await ShowExistingAsync(desk, null, ct);
@@ -888,7 +888,7 @@ public sealed class HazemResponder(
         {
             var fill = new Dictionary<string, string>(Describe(a))
             {
-                ["amount"] = a.Amount.ToString("N0", System.Globalization.CultureInfo.InvariantCulture),
+                ["amount"] = BookingWords.Money(a.Amount),
                 ["deadline"] = BookingWords.Deadline(a.HoldUntil ?? a.Start, plan.Now),
             };
             if (b.Office.HasPayment)

@@ -422,6 +422,9 @@ public static class BookingWords
         return day == today ? "النهارده" : day == today.AddDays(1) ? "بكرة" : $"{Days[(int)local.DayOfWeek]} {local.Day}/{local.Month}";
     }
 
+    /// <summary>An amount as Hazem writes it: «1,000».</summary>
+    public static string Money(int pounds) => pounds.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+
     /// <summary>A hold's end as the client reads it after «قبل الساعة»: «4:30 م النهارده», «10:15 ص بكرة».</summary>
     public static string Deadline(DateTimeOffset at, DateTimeOffset now) => $"{Time(at)} {Day(at, now)}";
 
