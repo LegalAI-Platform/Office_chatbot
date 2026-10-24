@@ -358,6 +358,7 @@ SQL
     hazem_backup_set hazem.recipients "$F,$G"
     hazem_backup_set ai.stub_enabled true
     hazem_backup_set ai.stub_base_url "$STUB/v1"
+    hazem_backup_set booking.enabled false  # TASK 06's checks are the text offer; TASK 08's steps switch it on
     curl -s -X POST "$STUB/_log/reset" >/dev/null && curl -s -X POST "$STUB/_ai/up" >/dev/null || die "meta-stub is not running"
     inject "$F" wamid.E2E-F1 text "$(text "السلام عليكم عايز أحجز استشارة")" 10
     inject "$G" wamid.E2E-G1 image '{"id":"STUB-IMG","mime_type":"image/jpeg"}' 10
@@ -570,7 +571,7 @@ SQL
       "SELECT (SELECT state FROM hazem.appointments a JOIN hazem.persons p ON p.id = a.person_id WHERE p.wa_id = '$L') || '/' ||
               (SELECT count(*) FROM app.wa_outbound_messages WHERE wa_id = '$L' AND request_payload->'text'->>'body' LIKE '✅ تم حجز%e2e@instapay%')" "confirmed/1"
     got=""
-    for _ in $(seq 1 75); do  # the calendar worker runs every 30 seconds
+    for _ in $(seq 1 45); do  # the booking worker runs every 10 seconds
       got="$(curl -s "$STUB/_google/events" | jq -r --arg wa "+$L" '[.[] | select(.summary | contains($wa))] | length')"
       [[ "$got" == "1" ]] && break
       sleep 1
@@ -598,7 +599,7 @@ SQL
          FROM app.wa_outbound_messages WHERE wa_id = '$L' AND idempotency_key LIKE 'hazem:booking:%:office:%'" \
       "الأستاذ عنده ظرف في الميعاد ده، تحب ميعاد تاني ولا استرداد كامل؟|true"
     got=""
-    for _ in $(seq 1 75); do  # the calendar worker runs every 30 seconds
+    for _ in $(seq 1 45); do  # the booking worker runs every 10 seconds
       got="$(q "SELECT a.state || '/' || a.calendar_state || '/' || (SELECT count(*) FROM jsonb_array_elements('$(curl -s "$STUB/_google/events")'::jsonb) e WHERE e->>'summary' LIKE '%+$L%')
                   FROM hazem.appointments a JOIN hazem.persons p ON p.id = a.person_id WHERE p.wa_id = '$L'")"
       [[ "$got" == "cancelled_by_office/removed/0" ]] && break
@@ -606,8 +607,8 @@ SQL
     done
     assert_eq "the appointment is cancelled_by_office and its event left the calendar (the worker)" "$got" "cancelled_by_office/removed/0"
     panel_login
-    u1="$(panel_post /booking/undo)"; u2="$(panel_post /booking/undo)"
-    assert_eq "«تراجع» twice reopens both days" "${u1##* }/${u2##* }/$(q "SELECT count(*) FROM hazem.booking_exceptions WHERE reason = 'e2e'")" "204/204/0"
+    u1="$(panel_post /booking/undo '{"confirm":false}')"; u2="$(panel_post /booking/undo '{"confirm":false}')"
+    assert_eq "«تراجع» twice reopens both days" "${u1##* }/${u2##* }/$(q "SELECT count(*) FROM hazem.booking_exceptions WHERE reason = 'e2e'")" "200/200/0"
     finish
     ;;
 

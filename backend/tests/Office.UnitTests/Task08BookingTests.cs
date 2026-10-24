@@ -264,9 +264,11 @@ public sealed class BookingFlowTests
     private HazemResponder Hazem => new(new Store(_rows), new Scripted(_script), new Texts(_texts), new NoLists(), new Clock(_now),
         new BookingDesk(_booking, _calendar));
 
-    private async Task<TurnDecision> Send(IncomingMessage m)
+    private Task<TurnDecision> Send(IncomingMessage m) => Send(new Turn($"wt:{++_turn}", Number, null, [m]));
+
+    private async Task<TurnDecision> Send(Turn turn)
     {
-        var d = await Hazem.DecideAsync(new Turn($"wt:{++_turn}", Number, null, [m]), new HazemSettings(_settings), CancellationToken.None);
+        var d = await Hazem.DecideAsync(turn, new HazemSettings(_settings), CancellationToken.None);
         if (d.Effects is { } e)
         {
             _rows[Number] = e.State;
@@ -452,6 +454,32 @@ public sealed class BookingFlowTests
         var d = await Press(BookingChoice.Pick(BookingService.PhoneVideo, AvailabilityTests.At(21, 12)));
         Assert.Equal([TextKeys.BookingExisting], Keys(d));
         Assert.Single(_booking.Appointments);
+    }
+
+    [Fact]
+    public async Task Words_typed_with_a_press_are_not_lost_the_office_gets_a_task()
+    {
+        await ToTheOffer();
+        var d = await Send(new Turn($"wt:{++_turn}", Number, null,
+        [
+            new IncomingMessage($"wamid.{++_turn}", MessageType.Interactive, null, null, null,
+                Interactive: new Interactive("button_reply", BookingChoice.Mode(BookingService.PhoneVideo), "x")),
+            new IncomingMessage($"wamid.{++_turn}", MessageType.Text, "وممكن أجيب معايا أخويا؟", null, null),
+        ]));
+        Assert.Equal(InteractivePayload.List, Assert.Single(d.Actions).Interactive!.Kind); // the press is answered
+        Assert.Contains(PendingTask.UnclearMessage, TaskKinds(d)); // and the words go to the office
+
+        var alone = await Press(BookingChoice.Mode(BookingService.PhoneVideo));
+        Assert.DoesNotContain(PendingTask.UnclearMessage, TaskKinds(alone));
+    }
+
+    [Fact]
+    public void Chatwoot_shows_the_choices_hazem_offered()
+    {
+        var a = new OutboundAction(ActionType.SendInteractive, "k", "اختار ميعاد",
+            Interactive: new InteractivePayload(InteractivePayload.List, "المواعيد", [new("bk:s:pv:1", "بكره 2:00 م"), new("bk:n:pv:1", "مواعيد تانية")]));
+        Assert.Equal("اختار ميعاد\n▫️ بكره 2:00 م\n▫️ مواعيد تانية", Office.Application.Chatwoot.ChatwootText.Hazem(a));
+        Assert.Equal("اختار ميعاد", Office.Application.Chatwoot.ChatwootText.Hazem(a with { Interactive = null }));
     }
 
     // ---------- fakes ----------

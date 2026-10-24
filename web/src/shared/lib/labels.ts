@@ -19,6 +19,7 @@ export const TASK_TYPES: Record<string, string> = {
   booking_cancelled: "عميل لغى حجزه",
   booking_message_failed: "رسالة حجز ما وصلتش للعميل",
   calendar_conflict: "حدث في الكالندر فوق حجز",
+  office_cancelled: "المكتب لغى حجز: ميعاد تاني أو استرداد",
 };
 
 /** TASK 08: the services booked from the calendar (B-23) and the appointment's states (S-03). */

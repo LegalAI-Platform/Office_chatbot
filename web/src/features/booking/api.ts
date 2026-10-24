@@ -10,7 +10,7 @@ export interface Settings { enabled: boolean; buffer_minutes: number; min_notice
 export interface Office { instapay: string; wallet_number: string; wallet_provider: string; address: string; map_url: string }
 export interface Change { id: number; at: string; what: string; by: string | null; undone: boolean }
 export interface Preview { calendar: "ok" | "unavailable" | "not_configured"; slots: string[] }
-export interface Done { cancelled: number; not_told: number }
+export interface Done { cancelled: number }
 
 export const booking = {
   week: () => api<WeekDay[]>("GET", "/booking/week"),
@@ -18,11 +18,11 @@ export const booking = {
   month: (month: string) => api<Day[]>("GET", `/booking/month?month=${month}`),
   addException: (body: { day: string; kind: string; start?: number; end?: number; reason?: string; confirm?: boolean }) =>
     api<Done>("POST", "/booking/exceptions", body),
-  removeException: (id: string) => api<void>("DELETE", `/booking/exceptions/${id}`),
+  removeException: (id: string, confirm = false) => api<Done>("DELETE", `/booking/exceptions/${id}${confirm ? "?confirm=true" : ""}`),
   settings: () => api<Settings>("GET", "/booking/settings"),
   saveSettings: (s: Settings) => api<void>("PUT", "/booking/settings", s),
   changes: () => api<Change[]>("GET", "/booking/changes"),
-  undo: () => api<void>("POST", "/booking/undo"),
+  undo: (confirm = false) => api<Done>("POST", "/booking/undo", { confirm }),
   appointments: (from: string, to: string) => api<Appointment[]>("GET", `/booking/appointments?from=${from}&to=${to}`),
   mark: (id: string, state: string) => api<void>("POST", `/booking/appointments/${id}/state`, { state }),
   cancel: (id: string) => api<Done>("POST", `/booking/appointments/${id}/cancel`),

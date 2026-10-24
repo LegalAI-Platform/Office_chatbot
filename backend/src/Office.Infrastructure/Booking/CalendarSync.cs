@@ -41,14 +41,34 @@ public sealed class CalendarSync(HazemDbContext db, GoogleCalendar google, ISett
         {
             var a = x.a;
             var summary = Summary(a, x.NameRaw, x.WaId);
-            var ok = a.CalendarState switch
+            // ok = Google did what was asked. The state moves only if nothing changed it meanwhile (Mark).
+            bool ok;
+            switch (a.CalendarState)
             {
-                "create" => await CreateAsync(settings, a, summary, ct),
-                "update" when a.CalendarEventId is { } ev => await google.UpdateEventAsync(settings, ev, summary, a.StartsAt, a.EndsAt, a.Id, ct)
-                    && await Mark(a.Id, "update", "synced", ct),
-                "remove" when a.CalendarEventId is { } ev => await google.DeleteEventAsync(settings, ev, ct) && await Mark(a.Id, "remove", "removed", ct),
-                _ => await Mark(a.Id, a.CalendarState, a.CalendarState == "remove" ? "removed" : "create", ct),
-            };
+                case "create":
+                    ok = await CreateAsync(settings, a, summary, ct);
+                    break;
+                case "update" when a.CalendarEventId is { } ev:
+                    ok = await google.UpdateEventAsync(settings, ev, summary, a.StartsAt, a.EndsAt, a.Id, ct);
+                    if (ok)
+                    {
+                        await Mark(a.Id, "update", "synced", ct);
+                    }
+
+                    break;
+                case "remove" when a.CalendarEventId is { } ev:
+                    ok = await google.DeleteEventAsync(settings, ev, ct);
+                    if (ok)
+                    {
+                        await Mark(a.Id, "remove", "removed", ct);
+                    }
+
+                    break;
+                default: // no event yet: nothing to change or remove in Google
+                    await Mark(a.Id, a.CalendarState, a.CalendarState == "remove" ? "removed" : "create", ct);
+                    ok = true;
+                    break;
+            }
 
             if (ok)
             {
@@ -73,7 +93,8 @@ public sealed class CalendarSync(HazemDbContext db, GoogleCalendar google, ISett
     {
         if (a.State != AppointmentInfo.Confirmed)
         {
-            return await Mark(a.Id, "create", "removed", ct);
+            await Mark(a.Id, "create", "removed", ct);
+            return true;
         }
 
         if (await google.CreateEventAsync(settings, summary, a.StartsAt, a.EndsAt, a.Id, ct) is not { } eventId)
@@ -92,10 +113,11 @@ public sealed class CalendarSync(HazemDbContext db, GoogleCalendar google, ISett
         return true;
     }
 
-    private async Task<bool> Mark(Guid id, string from, string to, CancellationToken ct) =>
-        await db.Database.ExecuteSqlInterpolatedAsync($"""
+    /// <summary>from → to, only if the state is still <paramref name="from"/> (a later cancel or move wins).</summary>
+    private Task Mark(Guid id, string from, string to, CancellationToken ct) =>
+        db.Database.ExecuteSqlInterpolatedAsync($"""
             UPDATE hazem.appointments SET calendar_state = {to}, calendar_attempts = 0 WHERE id = {id} AND calendar_state = {from}
-            """, ct) >= 0;
+            """, ct);
 
     /// <summary>P3: a busy event of the lawyer over a confirmed booking → one task for the office.</summary>
     public async Task<int> CheckConflictsAsync(CancellationToken ct)
@@ -157,7 +179,7 @@ public sealed class CalendarSync(HazemDbContext db, GoogleCalendar google, ISett
     };
 }
 
-/// <summary>Every 30 seconds the calendar events, every 5 minutes the conflicts. Off in tests (Booking:RunWorker=false).</summary>
+/// <summary>Every 10 seconds the office's cancellation notices and the calendar events, every 5 minutes the conflicts. Off in tests (Booking:RunWorker=false).</summary>
 public sealed class CalendarWorker(IServiceScopeFactory scopes, IConfiguration config, ILogger<CalendarWorker> log) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stop)
@@ -173,22 +195,23 @@ public sealed class CalendarWorker(IServiceScopeFactory scopes, IConfiguration c
             try
             {
                 using var scope = scopes.CreateScope();
+                var told = await scope.ServiceProvider.GetRequiredService<BookingNotices>().RunAsync(stop);
                 var sync = scope.ServiceProvider.GetRequiredService<CalendarSync>();
                 var synced = await sync.SyncAsync(stop);
-                var conflicts = round++ % 10 == 0 ? await sync.CheckConflictsAsync(stop) : 0;
-                if (synced + conflicts > 0)
+                var conflicts = round++ % 30 == 0 ? await sync.CheckConflictsAsync(stop) : 0;
+                if (told + synced + conflicts > 0)
                 {
-                    log.LogInformation("Calendar: {Synced} event(s) synced, {Conflicts} conflict(s) found", synced, conflicts);
+                    log.LogInformation("Booking: {Told} client(s) told, {Synced} event(s) synced, {Conflicts} conflict(s) found", told, synced, conflicts);
                 }
             }
             catch (Exception e) when (e is not OperationCanceledException)
             {
-                log.LogWarning("Calendar round failed: {Kind}: {Message}", e.GetType().Name, e.Message);
+                log.LogWarning("Booking round failed: {Kind}: {Message}", e.GetType().Name, e.Message);
             }
 
             try
             {
-                await Task.Delay(TimeSpan.FromSeconds(30), stop);
+                await Task.Delay(TimeSpan.FromSeconds(10), stop);
             }
             catch (OperationCanceledException)
             {

@@ -44,21 +44,22 @@ public sealed record PreviewView(string Calendar, IReadOnlyList<DateTimeOffset> 
 
 public sealed record OfficeView(string Instapay, string WalletNumber, string WalletProvider, string Address, string MapUrl);
 
-/// <summary>What a change would do: null = done; otherwise the error, or the appointments it would cancel.</summary>
-public sealed record ChangeResult(string? Error, IReadOnlyList<AppointmentView>? Affected = null, int Cancelled = 0, int NotTold = 0)
+/// <summary>
+/// What a change did: Error null = done (<see cref="Cancelled"/> appointments cancelled by the office;
+/// the worker tells their clients); otherwise the error, or the appointments it would cancel.
+/// </summary>
+public sealed record ChangeResult(string? Error, IReadOnlyList<AppointmentView>? Affected = null, int Cancelled = 0)
 {
-    public static ChangeResult Done(int cancelled = 0, int notTold = 0) => new(null, null, cancelled, notTold);
+    public static ChangeResult Done(int cancelled = 0) => new(null, null, cancelled);
 }
 
 public sealed class PanelBooking(
     HazemDbContext db,
     BookingStore store,
-    BookingDesk desk,
     IBusyCalendar calendar,
     GoogleCalendar google,
     ISettingsReader settingsReader,
     IApprovedTexts texts,
-    SendOutbound send,
     TimeProvider clock)
 {
     public const string ErrInvalid = "invalid";
@@ -91,37 +92,26 @@ public sealed class PanelBooking(
             return new ChangeResult(problem);
         }
 
-        var now = clock.GetUtcNow();
-        var today = BookingDesk.Today(now);
-        var settings = BookingSettings.From(await settingsReader.GetAsync(ct));
-        var current = await store.LoadScheduleAsync(today, today.AddDays(settings.Rules.HorizonDays + 1), ct);
-        var next = new Schedule(weekly, current.Exceptions);
-        var affected = await AffectedAsync(next, now, ct);
-        if (affected.Count > 0 && !confirm)
-        {
-            return new ChangeResult(ErrHasBookings, affected);
-        }
-
         var before = await WeekAsync(ct);
-        await using (var tx = await db.Database.BeginTransactionAsync(ct))
+        return await ChangeHoursAsync(by, confirm, async () =>
         {
-            await db.Database.ExecuteSqlRawAsync("DELETE FROM hazem.booking_weekly_hours", ct);
-            foreach (var d in days)
-            {
-                foreach (var r in d.Ranges ?? [])
-                {
-                    await db.Database.ExecuteSqlInterpolatedAsync(
-                        $"INSERT INTO hazem.booking_weekly_hours (weekday, start_minute, end_minute) VALUES ({(short)d.Weekday}, {r.Start}, {r.End})", ct);
-                }
-            }
-
+            await WriteWeekAsync(days, ct);
             await ChangeAsync(by, "weekly", before, days, ct);
             await PanelAudit.WriteAsync(db, clock, by, "booking.weekly", "booking", null, new Dictionary<string, string?>(), ct);
-            await tx.CommitAsync(ct);
-        }
+        }, ct);
+    }
 
-        var (cancelled, notTold) = await CancelForOfficeAsync(by, affected, ct);
-        return ChangeResult.Done(cancelled, notTold);
+    private async Task WriteWeekAsync(IEnumerable<WeekDayView> days, CancellationToken ct)
+    {
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM hazem.booking_weekly_hours", ct);
+        foreach (var d in days)
+        {
+            foreach (var r in d.Ranges ?? [])
+            {
+                await db.Database.ExecuteSqlInterpolatedAsync(
+                    $"INSERT INTO hazem.booking_weekly_hours (weekday, start_minute, end_minute) VALUES ({(short)d.Weekday}, {r.Start}, {r.End})", ct);
+            }
+        }
     }
 
     // ---------- the exceptions of a date ----------
@@ -156,17 +146,8 @@ public sealed class PanelBooking(
             return new ChangeResult(ErrInvalid);
         }
 
-        var exception = new DayException(day, BookingStore.ToException(new BookingExceptionRow { Kind = kind, Day = day }).Kind, range);
-        var current = await store.LoadScheduleAsync(day, day, ct);
-        var next = new Schedule(current.Weekly, [.. current.Exceptions, exception]);
-        var affected = await AffectedAsync(next, now, ct, day);
-        if (affected.Count > 0 && !confirm)
-        {
-            return new ChangeResult(ErrHasBookings, affected);
-        }
-
         var id = Guid.NewGuid();
-        await using (var tx = await db.Database.BeginTransactionAsync(ct))
+        return await ChangeHoursAsync(by, confirm, async () =>
         {
             await db.Database.ExecuteSqlInterpolatedAsync($"""
                 INSERT INTO hazem.booking_exceptions (id, day, kind, start_minute, end_minute, reason, created_by)
@@ -175,29 +156,26 @@ public sealed class PanelBooking(
             await ChangeAsync(by, "exception_add", null, new { id, day, kind, start = range?.Start, end = range?.End, reason }, ct);
             await PanelAudit.WriteAsync(db, clock, by, "booking.exception_add", "booking", id,
                 new Dictionary<string, string?> { ["day"] = day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), ["kind"] = kind }, ct);
-            await tx.CommitAsync(ct);
-        }
-
-        var (cancelled, notTold) = await CancelForOfficeAsync(by, affected, ct);
-        return ChangeResult.Done(cancelled, notTold);
+        }, ct);
     }
 
-    public async Task<bool> RemoveExceptionAsync(Guid by, Guid id, CancellationToken ct)
+    /// <summary>Removing «other hours that day» can leave bookings outside the week's hours: the same check.</summary>
+    public async Task<ChangeResult> RemoveExceptionAsync(Guid by, Guid id, bool confirm, CancellationToken ct)
     {
         var row = await db.BookingExceptions.AsNoTracking().FirstOrDefaultAsync(e => e.Id == id, ct);
         if (row is null)
         {
-            return false;
+            return new ChangeResult(ErrNotFound);
         }
 
-        await using var tx = await db.Database.BeginTransactionAsync(ct);
-        await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM hazem.booking_exceptions WHERE id = {id}", ct);
-        await ChangeAsync(by, "exception_remove",
-            new { id, day = row.Day, kind = row.Kind, start = row.StartMinute, end = row.EndMinute, reason = row.Reason }, null, ct);
-        await PanelAudit.WriteAsync(db, clock, by, "booking.exception_remove", "booking", id,
-            new Dictionary<string, string?> { ["day"] = row.Day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) }, ct);
-        await tx.CommitAsync(ct);
-        return true;
+        return await ChangeHoursAsync(by, confirm, async () =>
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM hazem.booking_exceptions WHERE id = {id}", ct);
+            await ChangeAsync(by, "exception_remove",
+                new { id, day = row.Day, kind = row.Kind, start = row.StartMinute, end = row.EndMinute, reason = row.Reason }, null, ct);
+            await PanelAudit.WriteAsync(db, clock, by, "booking.exception_remove", "booking", id,
+                new Dictionary<string, string?> { ["day"] = row.Day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) }, ct);
+        }, ct);
     }
 
     // ---------- the settings and the office's details ----------
@@ -292,29 +270,27 @@ public sealed class PanelBooking(
                orderby c.Id descending
                select new ChangeView(c.Id, c.At, c.What, u == null ? null : u.DisplayName, c.UndoneAt != null)).Take(30).ToListAsync(ct);
 
-    /// <summary>The last change not undone yet, put back as it was (appointments already cancelled stay cancelled).</summary>
-    public async Task<string?> UndoAsync(Guid by, string username, CancellationToken ct)
+    /// <summary>
+    /// The last change not undone yet, put back as it was. Hours that would leave confirmed bookings
+    /// outside are checked like any other change (asks first; appointments already cancelled stay cancelled).
+    /// </summary>
+    public async Task<ChangeResult> UndoAsync(Guid by, string username, bool confirm, CancellationToken ct)
     {
         var last = await db.BookingChanges.AsNoTracking().Where(c => c.UndoneAt == null).OrderByDescending(c => c.Id).FirstOrDefaultAsync(ct);
         if (last is null)
         {
-            return ErrNothingToUndo;
+            return new ChangeResult(ErrNothingToUndo);
         }
 
-        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        return await ChangeHoursAsync(by, confirm, () => UndoChangeAsync(by, username, last, ct), ct);
+    }
+
+    private async Task UndoChangeAsync(Guid by, string username, BookingChangeRow last, CancellationToken ct)
+    {
         switch (last.What)
         {
             case "weekly":
-                await db.Database.ExecuteSqlRawAsync("DELETE FROM hazem.booking_weekly_hours", ct);
-                foreach (var d in JsonSerializer.Deserialize<List<WeekDayView>>(last.Before ?? "[]", HazemJson.Options) ?? [])
-                {
-                    foreach (var r in d.Ranges)
-                    {
-                        await db.Database.ExecuteSqlInterpolatedAsync(
-                            $"INSERT INTO hazem.booking_weekly_hours (weekday, start_minute, end_minute) VALUES ({(short)d.Weekday}, {r.Start}, {r.End})", ct);
-                    }
-                }
-
+                await WriteWeekAsync(JsonSerializer.Deserialize<List<WeekDayView>>(last.Before ?? "[]", HazemJson.Options) ?? [], ct);
                 break;
             case "exception_add":
                 var added = JsonSerializer.Deserialize<ExceptionJson>(last.After ?? "{}", HazemJson.Options);
@@ -341,8 +317,6 @@ public sealed class PanelBooking(
         await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE hazem.booking_changes SET undone_at = now() WHERE id = {last.Id}", ct);
         await PanelAudit.WriteAsync(db, clock, by, "booking.undo", "booking", null,
             new Dictionary<string, string?> { ["what"] = last.What }, ct);
-        await tx.CommitAsync(ct);
-        return null;
     }
 
     private sealed record ExceptionJson(Guid Id, DateOnly Day, string Kind, int? Start, int? End, string? Reason);
@@ -430,8 +404,7 @@ public sealed class PanelBooking(
             return new ChangeResult("not_confirmed");
         }
 
-        var (cancelled, notTold) = await CancelForOfficeAsync(by, a, ct);
-        return ChangeResult.Done(cancelled, notTold);
+        return ChangeResult.Done(await CancelForOfficeAsync(by, a, ct));
     }
 
     public async Task<PreviewView> PreviewAsync(DateOnly day, string? serviceCode, CancellationToken ct)
@@ -454,19 +427,45 @@ public sealed class PanelBooking(
 
     // ---------- appointments outside the new hours ----------
 
-    /// <summary>Confirmed appointments from now on that <paramref name="next"/> would leave outside the hours.</summary>
-    private async Task<IReadOnlyList<AppointmentView>> AffectedAsync(Schedule next, DateTimeOffset now, CancellationToken ct, DateOnly? onlyDay = null)
+    /// <summary>
+    /// Every change of the hours (the week, an exception, undo): made in one transaction, then the
+    /// confirmed appointments it leaves outside the hours are found from the database as it now is
+    /// (the week and the exceptions of every day concerned). Any → rolled back and listed, unless the
+    /// person confirmed; then they are cancelled by the office in the same transaction.
+    /// </summary>
+    private async Task<ChangeResult> ChangeHoursAsync(Guid by, bool confirm, Func<Task> change, CancellationToken ct)
     {
-        var from = onlyDay is { } d ? BookingDesk.Instant(d) : now;
-        var to = onlyDay is { } e ? BookingDesk.Instant(e.AddDays(1)) : now.AddYears(1);
-        var confirmed = await store.ConfirmedBetweenAsync(from > now ? from : now, to, ct);
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        await change();
+        var affected = await OutsideHoursAsync(clock.GetUtcNow(), ct);
+        if (affected.Count > 0 && !confirm)
+        {
+            await tx.RollbackAsync(ct);
+            return new ChangeResult(ErrHasBookings, affected);
+        }
+
+        var cancelled = await CancelForOfficeAsync(by, affected, ct);
+        await tx.CommitAsync(ct);
+        return ChangeResult.Done(cancelled);
+    }
+
+    /// <summary>Confirmed appointments from now on outside the hours of their day.</summary>
+    private async Task<IReadOnlyList<AppointmentView>> OutsideHoursAsync(DateTimeOffset now, CancellationToken ct)
+    {
+        var confirmed = await store.ConfirmedBetweenAsync(now, now.AddYears(2), ct);
+        if (confirmed.Count == 0)
+        {
+            return [];
+        }
+
+        var days = confirmed.Select(a => BookingDesk.Today(a.Start)).ToList();
+        var schedule = await store.LoadScheduleAsync(days.Min(), days.Max(), ct);
         var outside = confirmed.Where(a =>
         {
             var local = TimeZoneInfo.ConvertTime(a.Start, Zone);
-            var day = DateOnly.FromDateTime(local.DateTime);
             var startMinute = local.Hour * 60 + local.Minute;
             var range = new MinuteRange(startMinute, startMinute + (int)(a.End - a.Start).TotalMinutes);
-            return !next.HoursOn(day).Any(h => h.Start <= range.Start && range.End <= h.End);
+            return !schedule.HoursOn(DateOnly.FromDateTime(local.DateTime)).Any(h => h.Start <= range.Start && range.End <= h.End);
         }).Select(a => a.Id).ToList();
         return await AppointmentsByIdAsync(outside, ct);
     }
@@ -481,53 +480,29 @@ public sealed class PanelBooking(
                      select new AppointmentView(a.Id, a.Service, a.StartsAt, a.EndsAt, a.State, p.NameRaw, p.WaId, a.MatterType, a.Reschedules,
                          a.CalendarState)).ToListAsync(ct);
 
-    /// <summary>cancelled_by_office, and each client told with the nearest free times and «استرداد كامل» (B-22).</summary>
-    private async Task<(int Cancelled, int NotTold)> CancelForOfficeAsync(Guid by, IReadOnlyList<AppointmentView> appointments, CancellationToken ct)
+    /// <summary>
+    /// cancelled_by_office; the client is told by <see cref="BookingNotices"/> (the worker, B-22), never
+    /// inside the panel's request: a slow WhatsApp can never leave half the clients cancelled and told.
+    /// </summary>
+    private async Task<int> CancelForOfficeAsync(Guid by, IReadOnlyList<AppointmentView> appointments, CancellationToken ct)
     {
-        int cancelled = 0, notTold = 0;
-        if (appointments.Count == 0)
-        {
-            return (0, 0);
-        }
-
-        var settings = await settingsReader.GetAsync(ct);
-        var b = BookingSettings.From(settings);
-        var active = await texts.GetActiveAsync(ct);
-        var now = clock.GetUtcNow();
+        var cancelled = 0;
         foreach (var a in appointments)
         {
-            if (!await store.CancelAsync(a.Id, AppointmentInfo.CancelledByOffice, ct))
+            var changed = await db.Database.ExecuteSqlInterpolatedAsync($"""
+                UPDATE hazem.appointments
+                   SET state = 'cancelled_by_office', client_notice = 'pending',
+                       calendar_state = CASE WHEN calendar_event_id IS NULL THEN 'removed' ELSE 'remove' END,
+                       calendar_attempts = 0, calendar_next_at = now()
+                 WHERE id = {a.Id} AND state = 'confirmed'
+                """, ct);
+            if (changed == 1)
             {
-                continue;
-            }
-
-            cancelled++;
-            await PanelAudit.WriteAsync(db, clock, by, "appointment.cancelled_by_office", "appointment", a.Id, new Dictionary<string, string?>(), ct);
-            var service = BookingService.ByCode(a.Service) ?? BookingService.PhoneVideo;
-            var found = await desk.FindAsync(b, settings, service, now, now, service.IsUrgent ? BookingDesk.Today(now) : null, b.Rules.OfferCount, null, ct);
-            var rows = found.Slots.Select(s => new ReplyChoice(BookingChoice.Pick(service, s.Start), Title: BookingWords.Row(s.Start, now))).ToList();
-            rows.Add(new ReplyChoice(BookingChoice.Refund(a.Id), TextKeys.BtnRefund));
-            var composed = ReplyComposer.Compose($"booking:{a.Id:N}:office", null,
-                [new ReplyStep(TextKeys.BookingCancelledByOffice, null, null, new ReplyChoices(InteractivePayload.List, rows, TextKeys.BtnSlotsList))],
-                active);
-            var told = composed.Actions.Count > 0;
-            foreach (var action in composed.Actions)
-            {
-                var r = await send.SendAsync(new OutboundMessage(action.Type, a.WaId, action.IdempotencyKey, "panel-booking", action.Text,
-                    Interactive: action.Interactive), ct);
-                told &= r.Ok;
-            }
-
-            if (!told)
-            {
-                notTold++;
-                var personId = await db.Appointments.Where(x => x.Id == a.Id).Select(x => x.PersonId).SingleAsync(ct);
-                await store.AddTaskAsync(personId, $"booking:{a.Id:N}:office", PendingTask.BookingMessageFailed, OfficeHours.DueAt(now), ct);
+                cancelled++;
+                await PanelAudit.WriteAsync(db, clock, by, "appointment.cancelled_by_office", "appointment", a.Id, new Dictionary<string, string?>(), ct);
             }
         }
 
-        return (cancelled, notTold);
+        return cancelled;
     }
-
-    public static string Masked(string waId) => LogMask.Phone(waId);
 }

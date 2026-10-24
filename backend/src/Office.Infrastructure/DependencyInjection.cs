@@ -120,6 +120,7 @@ public static class DependencyInjection
         services.AddScoped<Application.Booking.IBusyCalendar>(sp => sp.GetRequiredService<Booking.GoogleCalendar>());
         services.AddScoped<Application.Booking.BookingDesk>();
         services.AddScoped<Booking.CalendarSync>();
+        services.AddScoped<Booking.BookingNotices>();
         services.AddScoped<Booking.PanelBooking>();
 
         return services;

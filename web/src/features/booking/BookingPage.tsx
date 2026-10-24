@@ -70,18 +70,27 @@ function Status() {
   );
 }
 
+/** Puts back the last change; when that would leave bookings outside the hours it asks first, like any change. */
 function Undo() {
   const qc = useQueryClient();
   const changes = useQuery({ queryKey: ["booking", "changes"], queryFn: booking.changes });
-  const undo = useMutation({ mutationFn: booking.undo, onSuccess: () => void qc.invalidateQueries({ queryKey: ["booking"] }) });
+  const [affected, setAffected] = useState<Appointment[] | null>(null);
+  const undo = useMutation({
+    mutationFn: (confirm: boolean) => booking.undo(confirm),
+    onSuccess: () => { setAffected(null); void qc.invalidateQueries({ queryKey: ["booking"] }); },
+    onError: (e) => { if (e instanceof ApiError && e.code === "has_bookings") setAffected(e.data?.appointments as Appointment[]); },
+  });
   const last = changes.data?.find((c) => !c.undone);
   if (!last) return null;
   return (
-    <span className="flex items-center gap-2 text-sm text-ink-soft">
-      آخر تعديل: {last.by ?? "—"}، {cairoWhen(last.at)}
-      <Button variant="ghost" busy={undo.isPending} onClick={() => undo.mutate()}><Icon name="back" className="size-4" />تراجع</Button>
-      {undo.isError ? <span className="text-bad" role="alert">{errorMessage(undo.error)}</span> : null}
-    </span>
+    <div className="grid gap-2">
+      <span className="flex items-center gap-2 text-sm text-ink-soft">
+        آخر تعديل: {last.by ?? "—"}، {cairoWhen(last.at)}
+        <Button variant="ghost" busy={undo.isPending && !affected} onClick={() => undo.mutate(false)}><Icon name="back" className="size-4" />تراجع</Button>
+        {undo.isError && !affected ? <span className="text-bad" role="alert">{errorMessage(undo.error)}</span> : null}
+      </span>
+      {affected ? <Confirm list={affected} busy={undo.isPending} onYes={() => undo.mutate(true)} onNo={() => setAffected(null)} /> : null}
+    </div>
   );
 }
 
@@ -122,7 +131,8 @@ function Calendar() {
           {Object.values(STATUS).map((s) => <li key={s.word}><Chip tone={s.tone}>{s.word}</Chip></li>)}
         </ul>
       </Card>
-      {day ? <DaySheet day={day} /> : <Card><Empty title="اختار يوم" icon="calendar">تقفله، أو تقفل جزء منه، أو تديله ساعات مختلفة، وتشوف حازم هيعرض إيه.</Empty></Card>}
+      {/* keyed by the date: nothing typed or asked about one day carries over to another */}
+      {day ? <DaySheet key={day.day} day={day} /> : <Card><Empty title="اختار يوم" icon="calendar">تقفله، أو تقفل جزء منه، أو تديله ساعات مختلفة، وتشوف حازم هيعرض إيه.</Empty></Card>}
     </div>
   );
 }
@@ -134,15 +144,24 @@ function DaySheet({ day }: { day: Day }) {
   const [from, setFrom] = useState(600);
   const [to, setTo] = useState(840);
   const [reason, setReason] = useState("");
-  const [affected, setAffected] = useState<Appointment[] | null>(null);
+  // A change that would cancel bookings: the list, and the same change again with confirm.
+  const [ask, setAsk] = useState<{ list: Appointment[]; again: () => void } | null>(null);
   const [done, setDone] = useState<Done | null>(null);
+  const finished = (r: Done) => { setAsk(null); setDone(r); refresh(); };
+  const asked = (e: Error, again: () => void) => {
+    if (e instanceof ApiError && e.code === "has_bookings") setAsk({ list: e.data?.appointments as Appointment[], again });
+  };
   const refresh = () => void qc.invalidateQueries({ queryKey: ["booking"] });
   const add = useMutation({
     mutationFn: (confirm: boolean) => booking.addException({ day: day.day, kind, ...(kind === "closed_day" ? {} : { start: from, end: to }), reason, confirm }),
-    onSuccess: (r) => { setAffected(null); setDone(r); setReason(""); refresh(); },
-    onError: (e) => { if (e instanceof ApiError && e.code === "has_bookings") setAffected(e.data?.appointments as Appointment[]); },
+    onSuccess: (r) => { finished(r); setReason(""); },
+    onError: (e) => asked(e, () => add.mutate(true)),
   });
-  const remove = useMutation({ mutationFn: booking.removeException, onSuccess: refresh });
+  const remove = useMutation({
+    mutationFn: ({ id, confirm }: { id: string; confirm: boolean }) => booking.removeException(id, confirm),
+    onSuccess: finished,
+    onError: (e, v) => asked(e, () => remove.mutate({ id: v.id, confirm: true })),
+  });
 
   return (
     <Card>
@@ -158,7 +177,7 @@ function DaySheet({ day }: { day: Day }) {
                 {e.kind === "closed_day" ? "اليوم مقفول" : `${e.kind === "closed_hours" ? "مقفول" : "ساعات"} ${hhmm(e.start!)}–${hhmm(e.end!)}`}
                 {e.reason ? ` · ${e.reason}` : ""}{e.by ? ` · ${e.by}` : ""}
               </span>
-              <Button variant="ghost" busy={remove.isPending && remove.variables === e.id} onClick={() => remove.mutate(e.id)}><Icon name="x" className="size-4" />شيل</Button>
+              <Button variant="ghost" busy={remove.isPending && remove.variables?.id === e.id} onClick={() => remove.mutate({ id: e.id, confirm: false })}><Icon name="x" className="size-4" />شيل</Button>
             </li>
           ))}
         </ul>
@@ -175,16 +194,21 @@ function DaySheet({ day }: { day: Day }) {
           </div>
         ) : null}
         <Field label="السبب (للمكتب بس)" value={reason} maxLength={200} onChange={(e) => setReason(e.target.value)} />
-        <Button variant="primary" busy={add.isPending && !affected} onClick={() => add.mutate(false)}>احفظ</Button>
+        <Button variant="primary" busy={add.isPending && !ask} onClick={() => add.mutate(false)}>احفظ</Button>
       </fieldset>
-      {affected ? (
-        <Confirm list={affected} busy={add.isPending} onYes={() => add.mutate(true)} onNo={() => setAffected(null)} />
-      ) : add.isError ? <p className="text-sm text-bad" role="alert">{errorMessage(add.error)}</p> : null}
-      {done && done.cancelled > 0 ? <p className="text-sm" role="status">اتلغى {done.cancelled} حجز وحازم بلّغ العملاء{done.not_told ? `، و${done.not_told} ما وصلتهمش الرسالة (اتعملت مهمة)` : ""}.</p> : null}
+      {ask ? (
+        <Confirm list={ask.list} busy={add.isPending || remove.isPending} onYes={ask.again} onNo={() => setAsk(null)} />
+      ) : add.isError || remove.isError ? <p className="text-sm text-bad" role="alert">{errorMessage(add.error ?? remove.error)}</p> : null}
+      {done && done.cancelled > 0 ? <Told n={done.cancelled} /> : null}
       <PreviewOf day={day.day} />
     </Card>
   );
 }
+
+/** The clients are told by Hazem within seconds (the worker); one he cannot reach becomes a task. */
+const Told = ({ n }: { n: number }) => (
+  <p className="text-sm" role="status">اتلغى {n} حجز، وحازم هيبلّغ العملاء خلال ثواني (اللي ماتوصلوش الرسالة بتتعمله مهمة).</p>
+);
 
 /** «الحجوزات دي هتتلغي»: the office cancels and Hazem tells each client (B-22: another time or a full refund). */
 function Confirm({ list, busy, onYes, onNo }: { list: Appointment[]; busy: boolean; onYes: () => void; onNo: () => void }) {

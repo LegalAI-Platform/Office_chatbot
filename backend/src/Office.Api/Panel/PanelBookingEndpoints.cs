@@ -34,8 +34,8 @@ public static class PanelBookingEndpoints
                 ? Results.BadRequest(new { error = PanelBooking.ErrInvalid })
                 : Answer(await b.AddExceptionAsync(ctx.CurrentUser().Id, day, body.Kind, body.Start, body.End, body.Reason, body.Confirm, ct)));
 
-        booking.MapDelete("/exceptions/{id:guid}", async (Guid id, HttpContext ctx, PanelBooking b, CancellationToken ct) =>
-            await b.RemoveExceptionAsync(ctx.CurrentUser().Id, id, ct) ? Results.NoContent() : Results.NotFound(new { error = PanelBooking.ErrNotFound }));
+        booking.MapDelete("/exceptions/{id:guid}", async (Guid id, bool? confirm, HttpContext ctx, PanelBooking b, CancellationToken ct) =>
+            Answer(await b.RemoveExceptionAsync(ctx.CurrentUser().Id, id, confirm == true, ct)));
 
         booking.MapGet("/settings", async (PanelBooking b, CancellationToken ct) => Results.Ok(await b.SettingsAsync(ct)));
 
@@ -52,10 +52,10 @@ public static class PanelBookingEndpoints
 
         booking.MapGet("/changes", async (PanelBooking b, CancellationToken ct) => Results.Ok(await b.ChangesAsync(ct)));
 
-        booking.MapPost("/undo", async (HttpContext ctx, PanelBooking b, CancellationToken ct) =>
+        booking.MapPost("/undo", async (UndoRequest? body, HttpContext ctx, PanelBooking b, CancellationToken ct) =>
         {
             var me = ctx.CurrentUser();
-            return await b.UndoAsync(me.Id, me.Username, ct) is { } error ? Results.Conflict(new { error }) : Results.NoContent();
+            return Answer(await b.UndoAsync(me.Id, me.Username, body?.Confirm == true, ct));
         });
 
         booking.MapGet("/appointments", async (string? from, string? to, PanelBooking b, TimeProvider clock, CancellationToken ct) =>
@@ -80,7 +80,7 @@ public static class PanelBookingEndpoints
         booking.MapPost("/appointments/{id:guid}/cancel", async (Guid id, HttpContext ctx, PanelBooking b, CancellationToken ct) =>
             await b.CancelByOfficeAsync(ctx.CurrentUser().Id, id, ct) switch
             {
-                { Error: null } r => Results.Ok(new { cancelled = r.Cancelled, not_told = r.NotTold }),
+                { Error: null } r => Results.Ok(new { cancelled = r.Cancelled }),
                 { Error: PanelBooking.ErrNotFound } => Results.NotFound(new { error = PanelBooking.ErrNotFound }),
                 var r => Results.Conflict(new { error = r.Error }),
             });
@@ -105,11 +105,16 @@ public static class PanelBookingEndpoints
         });
     }
 
-    /// <summary>Done, or 409 with the appointments the change would cancel (the panel asks, then sends confirm).</summary>
+    /// <summary>
+    /// Done (the clients of cancelled appointments are told by the worker within seconds), or 409 with the
+    /// appointments the change would cancel (the panel asks, then sends confirm).
+    /// </summary>
     private static IResult Answer(ChangeResult r) => r switch
     {
-        { Error: null } => Results.Ok(new { cancelled = r.Cancelled, not_told = r.NotTold }),
+        { Error: null } => Results.Ok(new { cancelled = r.Cancelled }),
         { Error: PanelBooking.ErrHasBookings } => Results.Conflict(new { error = r.Error, appointments = r.Affected }),
+        { Error: PanelBooking.ErrNotFound } => Results.NotFound(new { error = r.Error }),
+        { Error: PanelBooking.ErrNothingToUndo } => Results.Conflict(new { error = r.Error }),
         _ => Results.BadRequest(new { error = r.Error }),
     };
 
@@ -135,4 +140,6 @@ public static class PanelBookingEndpoints
     public sealed record ExceptionRequest(string? Day, string? Kind, int? Start, int? End, string? Reason, bool Confirm);
 
     public sealed record StateRequest(string? State);
+
+    public sealed record UndoRequest(bool Confirm);
 }

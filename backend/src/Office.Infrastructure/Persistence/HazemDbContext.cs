@@ -401,6 +401,7 @@ public sealed class AppointmentRow
     public int CalendarAttempts { get; set; }
     public DateTimeOffset CalendarNextAt { get; set; }
     public DateTimeOffset? ConflictNotedAt { get; set; }
+    public string? ClientNotice { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }

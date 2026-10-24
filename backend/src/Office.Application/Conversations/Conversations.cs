@@ -61,6 +61,7 @@ public sealed record PendingTask(string Kind, DateTimeOffset DueAt, Guid? StaffI
     public const string BookingCancelled = "booking_cancelled";
     public const string BookingMessageFailed = "booking_message_failed";
     public const string CalendarConflict = "calendar_conflict";
+    public const string OfficeCancelled = "office_cancelled"; // the office cancelled while booking from WhatsApp is off: the staff arrange
 }
 
 /// <summary>hazem.classifications: no client text and no name, only what the AI decided and what it cost.</summary>

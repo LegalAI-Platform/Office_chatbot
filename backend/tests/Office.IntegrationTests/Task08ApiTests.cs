@@ -110,6 +110,13 @@ public sealed class Task08ApiTests(TestDatabase db) : IAsyncLifetime
         return await Say("محمد أحمد علي حسن");
     }
 
+    /// <summary>One round of the worker that tells the clients of appointments the office cancelled.</summary>
+    private async Task<int> Notices()
+    {
+        using var scope = _factory.Services.CreateScope();
+        return await scope.ServiceProvider.GetRequiredService<BookingNotices>().RunAsync(Ct);
+    }
+
     // ---------- the conversation ----------
 
     [Fact]
@@ -206,7 +213,11 @@ public sealed class Task08ApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, done.StatusCode);
         Assert.Equal(1, (int)(await done.Content.ReadFromJsonAsync<JsonNode>(Ct))!["cancelled"]!);
         // Its event was never made (the worker had not run yet): nothing to remove from the calendar.
-        Assert.Equal("cancelled_by_office|removed", await db.ScalarAsync<string>("SELECT state || '|' || calendar_state FROM hazem.appointments"));
+        Assert.Equal("cancelled_by_office|removed|pending", await db.ScalarAsync<string>(
+            "SELECT state || '|' || calendar_state || '|' || client_notice FROM hazem.appointments"));
+        Assert.Equal(sends, _factory.N8n.Requests.Count); // the panel's request sends nothing: the worker tells the client
+        Assert.Equal(1, await Notices());
+        Assert.Equal("sent", await db.ScalarAsync<string>("SELECT client_notice FROM hazem.appointments"));
         var message = JsonNode.Parse(_factory.N8n.Requests.Skip(sends).Single().Body)!;
         Assert.Equal(("send_interactive", "الأستاذ عنده ظرف في الميعاد ده، تحب ميعاد تاني ولا استرداد كامل؟"), ((string?)message["type"], (string?)message["text"]));
         var rows = message["interactive"]!["choices"]!.AsArray();
@@ -216,12 +227,54 @@ public sealed class Task08ApiTests(TestDatabase db) : IAsyncLifetime
         var preview = await staff.GetFromJsonAsync<JsonNode>("/api/panel/booking/preview?day=2026-11-20&service=pv", Ct);
         Assert.Equal(("ok", 0), ((string?)preview!["calendar"], preview["slots"]!.AsArray().Count));
 
-        Assert.Equal(HttpStatusCode.NoContent, (await staff.PostAsync("/api/panel/booking/undo", null, Ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await staff.PostAsJsonAsync("/api/panel/booking/undo", new { confirm = false }, Ct)).StatusCode);
         Assert.Equal(0L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.booking_exceptions"));
         preview = await staff.GetFromJsonAsync<JsonNode>("/api/panel/booking/preview?day=2026-11-20&service=pv", Ct);
         Assert.Equal(56, preview!["slots"]!.AsArray().Count); // 10:00–24:00 every 15 minutes, open again
         Assert.Equal("booking.exception_add|booking.undo", await db.ScalarAsync<string>(
             "SELECT string_agg(action, '|' ORDER BY id) FROM hazem.panel_audit WHERE action LIKE 'booking.%'"));
+    }
+
+    [Fact]
+    public async Task Undo_that_would_strand_a_booking_asks_first_like_any_change()
+    {
+        await BookingOn();
+        var staff = await SignIn("karim", Permissions.Staff, "كريم");
+        object[] Week(int end) => Enumerable.Range(0, 7).Select(d => (object)new { weekday = d, ranges = new object[] { new { start = 600, end } } }).ToArray();
+        // Mornings only, then the evenings opened too (the change undo would put back).
+        Assert.Equal(HttpStatusCode.OK, (await staff.PutAsJsonAsync("/api/panel/booking/week", new { days = Week(720) }, Ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await staff.PutAsJsonAsync("/api/panel/booking/week", new { days = Week(1440) }, Ct)).StatusCode);
+        await UpToTheOffer();
+        await Press("bk:s:pv:" + new DateTimeOffset(2026, 11, 21, 21, 0, 0, TimeSpan.FromHours(2)).ToUnixTimeSeconds()); // in the new evening hours
+        Assert.Equal("confirmed", await db.ScalarAsync<string>("SELECT state FROM hazem.appointments"));
+
+        var asked = await staff.PostAsJsonAsync("/api/panel/booking/undo", new { confirm = false }, Ct);
+        Assert.Equal(HttpStatusCode.Conflict, asked.StatusCode); // back to mornings would leave 21:00 outside
+        Assert.Single((await asked.Content.ReadFromJsonAsync<JsonNode>(Ct))!["appointments"]!.AsArray());
+        Assert.Equal("confirmed|0", await db.ScalarAsync<string>(
+            "SELECT (SELECT state FROM hazem.appointments) || '|' || (SELECT count(*) FROM hazem.booking_changes WHERE undone_at IS NOT NULL)"));
+
+        var done = await staff.PostAsJsonAsync("/api/panel/booking/undo", new { confirm = true }, Ct);
+        Assert.Equal(1, (int)(await done.Content.ReadFromJsonAsync<JsonNode>(Ct))!["cancelled"]!);
+        Assert.Equal("cancelled_by_office|pending|1", await db.ScalarAsync<string>(
+            "SELECT (SELECT state || '|' || client_notice FROM hazem.appointments) || '|' || (SELECT count(*) FROM hazem.booking_changes WHERE undone_at IS NOT NULL)"));
+    }
+
+    [Fact]
+    public async Task With_booking_off_the_office_s_cancellation_is_the_text_alone_and_a_task()
+    {
+        await BookingOn();
+        await UpToTheOffer();
+        await Press("bk:s:pv:" + new DateTimeOffset(2026, 11, 20, 12, 0, 0, TimeSpan.FromHours(2)).ToUnixTimeSeconds());
+        await db.ExecAsync("UPDATE hazem.settings SET value = 'false' WHERE key = 'booking.enabled'");
+        var staff = await SignIn("yasmin", Permissions.Staff, "ياسمين");
+        var id = await db.ScalarAsync<Guid>("SELECT id FROM hazem.appointments");
+        Assert.Equal(HttpStatusCode.OK, (await staff.PostAsync($"/api/panel/booking/appointments/{id}/cancel", null, Ct)).StatusCode);
+        var sends = _factory.N8n.Requests.Count;
+        Assert.Equal(1, await Notices());
+        var message = JsonNode.Parse(_factory.N8n.Requests.Skip(sends).Single().Body)!;
+        Assert.Equal("send_text", (string?)message["type"]); // no times to press while Hazem does not book
+        Assert.Equal("office_cancelled", await db.ScalarAsync<string>("SELECT type FROM hazem.staff_tasks WHERE type = 'office_cancelled'"));
     }
 
     [Fact]

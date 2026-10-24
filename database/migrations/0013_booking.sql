@@ -69,6 +69,8 @@ CREATE TABLE hazem.appointments (
   calendar_attempts int NOT NULL DEFAULT 0,
   calendar_next_at  timestamptz NOT NULL DEFAULT now(),
   conflict_noted_at timestamptz,
+  -- B-22: the office cancelled; the worker tells the client (never inside the panel's request).
+  client_notice     text CHECK (client_notice IN ('pending', 'sent', 'failed')),
   created_at        timestamptz NOT NULL DEFAULT now(),
   updated_at        timestamptz NOT NULL DEFAULT now(),
   CHECK (ends_at > starts_at),
@@ -77,6 +79,7 @@ CREATE TABLE hazem.appointments (
 CREATE INDEX appointments_starts_idx ON hazem.appointments (starts_at);
 CREATE INDEX appointments_person_idx ON hazem.appointments (person_id, state);
 CREATE INDEX appointments_calendar_idx ON hazem.appointments (calendar_next_at) WHERE calendar_state IN ('create', 'update', 'remove');
+CREATE INDEX appointments_notice_idx ON hazem.appointments (updated_at) WHERE client_notice = 'pending';
 CREATE TRIGGER trg_appointments_updated_at BEFORE UPDATE ON hazem.appointments
   FOR EACH ROW EXECUTE FUNCTION app.set_updated_at();
 
@@ -154,7 +157,7 @@ ALTER TABLE hazem.staff_tasks ADD CONSTRAINT staff_tasks_type_check CHECK (type 
   'complaint', 'human_requested', 'safety_alert',
   'lawyer_direct_message', 'external_contact', 'unclear_message', 'urgent_request',
   'service_request', 'reschedule_or_cancel',
-  'booking_unavailable', 'booking_cancelled', 'booking_message_failed', 'calendar_conflict'));
+  'booking_unavailable', 'booking_cancelled', 'booking_message_failed', 'calendar_conflict', 'office_cancelled'));
 
 ALTER TABLE hazem.panel_audit DROP CONSTRAINT panel_audit_target_type_check;
 ALTER TABLE hazem.panel_audit ADD CONSTRAINT panel_audit_target_type_check
@@ -238,7 +241,7 @@ ALTER TABLE hazem.panel_audit DROP CONSTRAINT panel_audit_target_type_check;
 ALTER TABLE hazem.panel_audit ADD CONSTRAINT panel_audit_target_type_check
   CHECK (target_type IN ('user', 'task', 'text', 'list', 'conversation'));
 
-DELETE FROM hazem.staff_tasks WHERE type IN ('booking_unavailable', 'booking_cancelled', 'booking_message_failed', 'calendar_conflict');
+DELETE FROM hazem.staff_tasks WHERE type IN ('booking_unavailable', 'booking_cancelled', 'booking_message_failed', 'calendar_conflict', 'office_cancelled');
 ALTER TABLE hazem.staff_tasks DROP CONSTRAINT staff_tasks_type_check;
 ALTER TABLE hazem.staff_tasks ADD CONSTRAINT staff_tasks_type_check CHECK (type IN (
   'existing_client_message', 'late_reschedule', 'refund', 'price_quote', 'discount_request',

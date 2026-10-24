@@ -196,9 +196,18 @@ public sealed class HazemResponder(
             && Intake.State is not (IntakeState.New or IntakeState.AwaitingName)
             && Intake.ClientType is not (ClientType.Colleague or ClientType.Press or ClientType.Vendor or ClientType.LawyerDirect);
 
-        /// <summary>The client pressed one of Hazem's buttons or list rows (no AI).</summary>
+        /// <summary>
+        /// The client pressed one of Hazem's buttons or list rows (no AI). Words typed or said in the same
+        /// turn are not lost: the office gets a task with them (the panel shows the turn's words).
+        /// </summary>
         public void RespondToChoice(BookingChoice choice)
         {
+            if (turn.Messages.Any(m => m.Type == MessageType.Text && !string.IsNullOrWhiteSpace(m.Text)
+                                       || m.Transcript is { Status: Transcript.Done, Text.Length: > 0 }))
+            {
+                plan.Task(PendingTask.UnclearMessage);
+            }
+
             work = choice.Kind switch
             {
                 'm' => new OfferTimes(choice.Service!, null, TextKeys.BookingChooseSlot, null),

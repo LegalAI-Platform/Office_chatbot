@@ -92,14 +92,22 @@ client (B-22) → `{ cancelled, not_told }`. Every change: `booking_changes` and
 | `GET /booking/week` · `PUT /booking/week` | schedule.manage | `[{ weekday (0 = Sunday), ranges: [{ start, end }] }]` · `{ days, confirm }`; `overlapping_ranges`, `invalid_range` |
 | `GET /booking/month?month=YYYY-MM` | schedule.manage | per day: `status` (open, weekly_off, closed, custom_hours, partly_closed), the hours, confirmed bookings, the exceptions |
 | `POST /booking/exceptions` | schedule.manage | `{ day, kind: closed_day\|closed_hours\|custom_hours, start?, end?, reason?, confirm? }`; `past_day` |
-| `DELETE /booking/exceptions/{id}` | schedule.manage | |
+| `DELETE /booking/exceptions/{id}?confirm=true` | schedule.manage | `404 not_found` |
 | `GET /booking/settings` · `PUT /booking/settings` | schedule.manage | `{ enabled, buffer_minutes, min_notice_hours, horizon_days, max_per_day, slot_step_minutes, offer_count, calendar_id }` (+ read only `calendar_key`, `texts_approved`); a value out of range → its name as the error |
-| `GET /booking/changes` · `POST /booking/undo` | schedule.manage | the last 30 changes · the last one put back (`409 nothing_to_undo`) |
+| `GET /booking/changes` · `POST /booking/undo` | schedule.manage | the last 30 changes · `{ confirm }`: the last one put back (`409 nothing_to_undo`) |
 | `GET /booking/appointments?from&to` | schedule.manage | up to 92 days: service, start, end, state (S-03), name, number, topic, changes, calendar state |
 | `POST /booking/appointments/{id}/state` | schedule.manage | `{ state: completed\|no_show }` |
-| `POST /booking/appointments/{id}/cancel` | schedule.manage | cancelled by the office, the client told (B-22) |
+| `POST /booking/appointments/{id}/cancel` | schedule.manage | cancelled by the office → `{ cancelled }`; the client is told by the worker (B-22) |
 | `GET /booking/preview?day&service=pv\|of\|ur` | schedule.manage | `{ calendar: ok\|unavailable\|not_configured, slots[] }`: what Hazem would offer that day now |
 | `GET /office` · `PUT /office` | office.manage | P1: `{ instapay, wallet_number, wallet_provider, address, map_url (https) }` |
+
+Every change to the hours (the week, an exception added or removed, undo) answers
+`409 { error: "has_bookings", appointments }` when it would leave confirmed appointments outside
+the hours; sent again with `confirm: true` (`?confirm=true` for DELETE) the change and the
+cancellations are one transaction → `200 { cancelled }`. No message is sent inside the request:
+the booking worker (every 10 s) tells each client (`client_notice` pending → sent | failed),
+with the free times and «استرداد كامل» when booking is on, or the text alone and a task
+`office_cancelled` when it is off.
 
 ## Chatwoot (TASK 07b, T-24)
 

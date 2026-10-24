@@ -19,11 +19,14 @@ member, and Hazem uses the change at once.
 
 - Every day shows **«حازم هيعرض إيه»**: the exact times Hazem would offer that day, now.
 - **«تراجع»** (top of the page) puts back the last change. Appointments already cancelled stay
-  cancelled.
+  cancelled. An undo (or removing an exception) that would leave a booking outside the hours asks
+  first, like any other change.
 - **A change that leaves confirmed appointments outside the hours asks first** and lists them. If
   you go on, they are cancelled by the office and Hazem writes to each client: «الأستاذ عنده ظرف
-  في الميعاد ده، تحب ميعاد تاني ولا استرداد كامل؟» with the nearest free times (B-22). A client
-  Hazem could not reach becomes a task (`booking_message_failed`).
+  في الميعاد ده، تحب ميعاد تاني ولا استرداد كامل؟» with the nearest free times (B-22), within
+  about 10 seconds. A client Hazem could not reach becomes a task (`booking_message_failed`). With
+  «حازم يحجز من واتساب» off, the client gets the text alone and the office a task
+  (`office_cancelled`) to offer another time or the refund.
 - **الحجوزات**: the next 30 days; mark «خلص» or «ماحضرش», or cancel by the office.
 
 ## Connecting the lawyer's Google Calendar (the owner, once)

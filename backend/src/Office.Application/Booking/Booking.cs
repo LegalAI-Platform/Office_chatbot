@@ -153,15 +153,18 @@ public sealed class BookingDesk(IBookingStore store, IBusyCalendar calendar)
     {
         var rules = booking.Rules;
         var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, Zone).DateTime);
-        var from = Instant(today);
-        var to = Instant(today.AddDays(rules.HorizonDays + 1));
+        // One day asked (re-checking a time, the urgent path): only that day, and the buffer around it.
+        var (first, last) = onlyDay is { } day ? (day, day) : (today, today.AddDays(rules.HorizonDays));
+        var margin = TimeSpan.FromMinutes(rules.BufferMinutes);
+        var from = Instant(first) - margin;
+        var to = Instant(last.AddDays(1)) + margin;
         var busy = await calendar.BusyAsync(from, to, settings, ct);
         if (!busy.Available)
         {
             return new FreeSlots(false, []);
         }
 
-        var schedule = await store.LoadScheduleAsync(today, today.AddDays(rules.HorizonDays), ct);
+        var schedule = await store.LoadScheduleAsync(first, last, ct);
         var booked = (await store.ConfirmedBetweenAsync(from, to, ct)).Where(a => a.Id != except).Select(a => a.Interval).ToList();
         var slots = Availability.Find(schedule, rules, new SlotQuery(service.Minutes, after, service.IsUrgent, onlyDay, limit),
             booked, busy.Busy, now, Zone);
@@ -270,6 +273,9 @@ public sealed record BookingChoice(char Kind, BookingService? Service, Guid? App
 public static class BookingWords
 {
     private static readonly string[] Days = ["الأحد", "الاتنين", "التلات", "الأربع", "الخميس", "الجمعة", "السبت"];
+
+    /// <summary>The weekday as Hazem and the office's e-mails write it.</summary>
+    public static string DayName(DayOfWeek day) => Days[(int)day];
 
     /// <summary>«النهارده»، «بكرة»، or «الخميس 29/10».</summary>
     public static string Day(DateTimeOffset at, DateTimeOffset now)
