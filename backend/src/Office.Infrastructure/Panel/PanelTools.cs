@@ -25,9 +25,14 @@ public sealed record ReportRow(string Key, int Count);
 
 public sealed record StaffReportRow(string Staff, int Assigned, int Done, int OnTime);
 
+/// <summary>
+/// TASK 09: <see cref="ByBooking"/> the month's appointments by state (S-03, the holds that ran out too);
+/// the money of those appointments as the office marked it: <see cref="Received"/> what came and was not given back,
+/// <see cref="Missing"/> what is still missing on «ناقص», and <see cref="Refunded"/> what was given back this month.
+/// </summary>
 public sealed record MonthReport(string Month, int Tasks, int Done, int DoneOnTime, int Late, IReadOnlyList<ReportRow> ByType,
     IReadOnlyList<StaffReportRow> ByStaff, int NewClients, IReadOnlyList<ReportRow> BySource, IReadOnlyList<ReportRow> ByMatter,
-    IReadOnlyList<ReportRow> ByClientType);
+    IReadOnlyList<ReportRow> ByClientType, IReadOnlyList<ReportRow> ByBooking, int Received, int Missing, int Refunded);
 
 public sealed partial class PanelTools(HazemDbContext db, ListImporter importer, TimeProvider clock)
 {
@@ -258,6 +263,19 @@ public sealed partial class PanelTools(HazemDbContext db, ListImporter importer,
         static IReadOnlyList<ReportRow> Count(IEnumerable<string?> keys) =>
             keys.GroupBy(k => k ?? "unknown").Select(g => new ReportRow(g.Key, g.Count())).OrderByDescending(r => r.Count).ToList();
 
+        var bookings = await (from a in db.Appointments.AsNoTracking()
+                              join p in db.Payments.AsNoTracking() on a.Id equals p.AppointmentId into pays
+                              from p in pays.DefaultIfEmpty()
+                              where a.StartsAt >= start && a.StartsAt < end
+                              select new
+                              {
+                                  a.State, Payment = p == null ? null : p.State, Due = p == null ? 0 : p.AmountDue,
+                                  Came = p == null ? null : p.AmountReceived, GaveBack = p != null && p.State == "refunded" ? p.RefundDue : null,
+                              })
+            .ToListAsync(ct);
+        var refunded = await db.Payments.AsNoTracking().Where(p => p.State == "refunded" && p.RefundedAt >= start && p.RefundedAt < end)
+            .SumAsync(p => p.RefundDue ?? 0, ct);
+
         return new MonthReport(
             $"{year:D4}-{month:D2}",
             tasks.Count,
@@ -271,7 +289,11 @@ public sealed partial class PanelTools(HazemDbContext db, ListImporter importer,
             people.Count,
             Count(people.Select(p => p.Source)),
             Count(people.Select(p => p.Intake?.MatterType)),
-            Count(people.Select(p => p.Intake?.ClientType)));
+            Count(people.Select(p => p.Intake?.ClientType)),
+            Count(bookings.Select(b => b.State)),
+            bookings.Sum(b => (b.Came ?? 0) - (b.GaveBack ?? 0)), // what came and stayed: a refund given back is not income
+            bookings.Where(b => b.Payment == "partial").Sum(b => b.Due - (b.Came ?? 0)),
+            refunded);
     }
 
     private Task Audit(Guid by, string action, string targetType, Guid? targetId, Dictionary<string, string?> detail, CancellationToken ct) =>

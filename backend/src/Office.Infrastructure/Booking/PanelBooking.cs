@@ -29,12 +29,13 @@ public sealed record RangeView(int Start, int End);
 public sealed record WeekDayView(int Weekday, IReadOnlyList<RangeView> Ranges);
 
 public sealed record BookingSettingsView(bool Enabled, int BufferMinutes, int MinNoticeHours, int HorizonDays, int? MaxPerDay, int SlotStepMinutes,
-    int OfferCount, string CalendarId, bool CalendarKey, bool TextsApproved);
+    int OfferCount, string CalendarId, bool CalendarKey, bool TextsApproved, int HoldMinutes = 120, int HoldShortMinutes = 60,
+    int HoldShortWithinHours = 6, int HoldGapMinutes = 15);
 
 public sealed record ExceptionView(Guid Id, DateOnly Day, string Kind, int? Start, int? End, string? Reason, string? By, DateTimeOffset At);
 
 public sealed record AppointmentView(Guid Id, string Service, DateTimeOffset Start, DateTimeOffset End, string State, string? Name, string WaId,
-    string? MatterType, int Reschedules, string Calendar);
+    string? MatterType, int Reschedules, string Calendar, DateTimeOffset? HoldUntil = null, string? Payment = null);
 
 public sealed record DayView(DateOnly Day, string Status, IReadOnlyList<RangeView> Hours, int Bookings, IReadOnlyList<ExceptionView> Exceptions);
 
@@ -187,14 +188,16 @@ public sealed class PanelBooking(
         var active = await texts.GetActiveAsync(ct);
         return new BookingSettingsView(b.Enabled, b.Rules.BufferMinutes, b.Rules.MinNoticeHours, b.Rules.HorizonDays, b.Rules.MaxPerDay,
             b.Rules.SlotStepMinutes, b.Rules.OfferCount, b.CalendarId, google.HasKey,
-            HazemResponder.BookingTextKeys.All(k => active.ContainsKey(k)));
+            HazemResponder.BookingTextKeys.All(k => active.ContainsKey(k)), b.Hold.Minutes, b.Hold.ShortMinutes, b.Hold.ShortWithinHours,
+            b.Hold.GapMinutes);
     }
 
     public async Task<string?> SaveSettingsAsync(Guid by, string username, BookingSettingsView body, CancellationToken ct)
     {
         var rules = new BookingRules(body.BufferMinutes, body.MinNoticeHours, body.HorizonDays, body.MaxPerDay, body.SlotStepMinutes, body.OfferCount);
         var calendarId = (body.CalendarId ?? "").Trim();
-        if (rules.Problem() is { } p)
+        var hold = new HoldRules(body.HoldMinutes, body.HoldShortMinutes, body.HoldShortWithinHours, body.HoldGapMinutes);
+        if ((rules.Problem() ?? hold.Problem()) is { } p)
         {
             return p;
         }
@@ -214,6 +217,10 @@ public sealed class PanelBooking(
             [BookingSettings.StepKey] = rules.SlotStepMinutes.ToString(CultureInfo.InvariantCulture),
             [BookingSettings.OfferCountKey] = rules.OfferCount.ToString(CultureInfo.InvariantCulture),
             [BookingSettings.CalendarIdKey] = calendarId,
+            [BookingSettings.HoldMinutesKey] = hold.Minutes.ToString(CultureInfo.InvariantCulture),
+            [BookingSettings.HoldShortMinutesKey] = hold.ShortMinutes.ToString(CultureInfo.InvariantCulture),
+            [BookingSettings.HoldShortWithinKey] = hold.ShortWithinHours.ToString(CultureInfo.InvariantCulture),
+            [BookingSettings.HoldGapKey] = hold.GapMinutes.ToString(CultureInfo.InvariantCulture),
         };
         await SetAsync(by, username, "settings", "booking.settings", values, ct);
         return null;
@@ -344,7 +351,7 @@ public sealed class PanelBooking(
         {
             var day = d;
             days.Add(new DayView(day, Status(schedule.StatusOn(day)), schedule.HoursOn(day).Select(r => new RangeView(r.Start, r.End)).ToList(),
-                appointments.Count(a => a.State == AppointmentInfo.Confirmed && BookingDesk.Today(a.Start) == day),
+                appointments.Count(a => a.State is (AppointmentInfo.Confirmed or AppointmentInfo.PendingPayment) && BookingDesk.Today(a.Start) == day),
                 exceptions.Where(e => e.Day == day).ToList()));
         }
 
@@ -365,10 +372,12 @@ public sealed class PanelBooking(
         var (f, t) = (BookingDesk.Instant(from).ToUniversalTime(), BookingDesk.Instant(to.AddDays(1)).ToUniversalTime());
         return await (from a in db.Appointments.AsNoTracking()
                       join p in db.Persons.AsNoTracking() on a.PersonId equals p.Id
+                      join pay in db.Payments.AsNoTracking() on a.Id equals pay.AppointmentId into pays
+                      from pay in pays.DefaultIfEmpty()
                       where a.StartsAt >= f && a.StartsAt < t
                       orderby a.StartsAt
                       select new AppointmentView(a.Id, a.Service, a.StartsAt, a.EndsAt, a.State, p.NameRaw, p.WaId, a.MatterType, a.Reschedules,
-                          a.CalendarState)).Take(500).ToListAsync(ct);
+                          a.CalendarState, a.HoldUntil, pay == null ? null : pay.State)).Take(500).ToListAsync(ct);
     }
 
     /// <summary>S-03 from the panel: completed or no_show (the lawyer or the staff).</summary>
@@ -399,7 +408,7 @@ public sealed class PanelBooking(
             return new ChangeResult(ErrNotFound);
         }
 
-        if (a[0].State != AppointmentInfo.Confirmed)
+        if (a[0].State is not (AppointmentInfo.Confirmed or AppointmentInfo.PendingPayment))
         {
             return new ChangeResult("not_confirmed");
         }
@@ -417,7 +426,7 @@ public sealed class PanelBooking(
         var to = BookingDesk.Instant(day.AddDays(1));
         var busy = await calendar.BusyAsync(from, to, settings, ct);
         var schedule = await store.LoadScheduleAsync(day, day, ct);
-        var booked = (await store.ConfirmedBetweenAsync(from, to, ct)).Select(x => x.Interval).ToList();
+        var booked = (await store.TakenBetweenAsync(from, to, ct)).Select(x => x.Interval).ToList();
         // Without the calendar Hazem offers nothing (B-24); the preview still shows the panel's hours alone, and says so.
         var slots = Availability.Find(schedule, b.Rules, new SlotQuery(service.Minutes, now, service.IsUrgent, day, 96), booked,
             busy.Available ? busy.Busy : [], now, Zone);
@@ -452,7 +461,7 @@ public sealed class PanelBooking(
     /// <summary>Confirmed appointments from now on outside the hours of their day.</summary>
     private async Task<IReadOnlyList<AppointmentView>> OutsideHoursAsync(DateTimeOffset now, CancellationToken ct)
     {
-        var confirmed = await store.ConfirmedBetweenAsync(now, now.AddYears(2), ct);
+        var confirmed = await store.TakenBetweenAsync(now, now.AddYears(2), ct);
         if (confirmed.Count == 0)
         {
             return [];
@@ -475,10 +484,12 @@ public sealed class PanelBooking(
             ? []
             : await (from a in db.Appointments.AsNoTracking()
                      join p in db.Persons.AsNoTracking() on a.PersonId equals p.Id
+                     join pay in db.Payments.AsNoTracking() on a.Id equals pay.AppointmentId into pays
+                     from pay in pays.DefaultIfEmpty()
                      where ids.Contains(a.Id)
                      orderby a.StartsAt
                      select new AppointmentView(a.Id, a.Service, a.StartsAt, a.EndsAt, a.State, p.NameRaw, p.WaId, a.MatterType, a.Reschedules,
-                         a.CalendarState)).ToListAsync(ct);
+                         a.CalendarState, a.HoldUntil, pay == null ? null : pay.State)).ToListAsync(ct);
 
     /// <summary>
     /// cancelled_by_office; the client is told by <see cref="BookingNotices"/> (the worker, B-22), never
@@ -491,10 +502,10 @@ public sealed class PanelBooking(
         {
             var changed = await db.Database.ExecuteSqlInterpolatedAsync($"""
                 UPDATE hazem.appointments
-                   SET state = 'cancelled_by_office', client_notice = 'pending',
+                   SET state = 'cancelled_by_office', client_notice = 'pending', notice_kind = 'office_cancelled',
                        calendar_state = CASE WHEN calendar_event_id IS NULL THEN 'removed' ELSE 'remove' END,
                        calendar_attempts = 0, calendar_next_at = now()
-                 WHERE id = {a.Id} AND state = 'confirmed'
+                 WHERE id = {a.Id} AND state IN ('confirmed', 'pending_payment')
                 """, ct);
             if (changed == 1)
             {

@@ -23,8 +23,13 @@ public sealed record BookingService(string Code, string Short, int Minutes, int 
 }
 
 /// <summary>The booking.* and office.* settings, read in every turn (the panel's changes count at once).</summary>
-public sealed record BookingSettings(bool Enabled, BookingRules Rules, string CalendarId, OfficeInfo Office)
+public sealed record BookingSettings(bool Enabled, BookingRules Rules, string CalendarId, OfficeInfo Office, HoldRules Hold)
 {
+    public const string HoldMinutesKey = "booking.hold_minutes";
+    public const string HoldShortMinutesKey = "booking.hold_short_minutes";
+    public const string HoldShortWithinKey = "booking.hold_short_within_hours";
+    public const string HoldGapKey = "booking.hold_gap_minutes";
+
     public const string EnabledKey = "booking.enabled";
     public const string BufferKey = "booking.buffer_minutes";
     public const string MinNoticeKey = "booking.min_notice_hours";
@@ -49,8 +54,48 @@ public sealed record BookingSettings(bool Enabled, BookingRules Rules, string Ca
             int.TryParse(s.Get(MaxPerDayKey), out var max) && max > 0 ? max : null,
             Int(StepKey, d.SlotStepMinutes),
             Int(OfferCountKey, d.OfferCount));
-        return new(s.Flag(EnabledKey), rules.Problem() is null ? rules : d, s.Get(CalendarIdKey), OfficeInfo.From(s));
+        var h = HoldRules.Default;
+        var hold = new HoldRules(Int(HoldMinutesKey, h.Minutes), Int(HoldShortMinutesKey, h.ShortMinutes), Int(HoldShortWithinKey, h.ShortWithinHours),
+            Int(HoldGapKey, h.GapMinutes));
+        return new(s.Flag(EnabledKey), rules.Problem() is null ? rules : d, s.Get(CalendarIdKey), OfficeInfo.From(s),
+            hold.Problem() is null ? hold : h);
     }
+}
+
+/// <summary>
+/// B-08 (1.13): how long a picked time waits for the receipt image. <see cref="Minutes"/>, or
+/// <see cref="ShortMinutes"/> when the appointment starts within <see cref="ShortWithinHours"/>, and always
+/// <see cref="GapMinutes"/> before it starts. A time whose hold would be shorter than
+/// <see cref="ShortestHold"/> is not offered: the client could not pay in time.
+/// </summary>
+public sealed record HoldRules(int Minutes, int ShortMinutes, int ShortWithinHours, int GapMinutes)
+{
+    public static HoldRules Default { get; } = new(120, 60, 6, 15);
+
+    public static TimeSpan ShortestHold { get; } = TimeSpan.FromMinutes(15);
+
+    /// <summary>The worker reminds this long before the hold ends, when the hold is at least <see cref="RemindedHold"/> long.</summary>
+    public const int ReminderBeforeMinutes = 30;
+
+    public const int RemindedHold = 45;
+
+    public DateTimeOffset Until(DateTimeOffset now, DateTimeOffset start)
+    {
+        var length = start - now < TimeSpan.FromHours(ShortWithinHours) ? ShortMinutes : Minutes;
+        var until = now.AddMinutes(length);
+        var latest = start.AddMinutes(-GapMinutes);
+        return until < latest ? until : latest;
+    }
+
+    public bool Offerable(DateTimeOffset now, DateTimeOffset start) => Until(now, start) - now >= ShortestHold;
+
+    /// <summary>The limits the panel accepts.</summary>
+    public string? Problem() =>
+        Minutes is < 15 or > 1440 ? "hold_minutes"
+        : ShortMinutes < 15 || ShortMinutes > Minutes ? "hold_short_minutes"
+        : ShortWithinHours is < 0 or > 72 ? "hold_short_within_hours"
+        : GapMinutes is < 0 or > 240 ? "hold_gap_minutes"
+        : null;
 }
 
 /// <summary>P1: the office's payment and address details, written from the panel.</summary>
@@ -76,8 +121,10 @@ public sealed record OfficeInfo(string InstaPay, string WalletNumber, string Wal
 /// <summary>A row of hazem.appointments, as the flow and the panel need it.</summary>
 public sealed record AppointmentInfo(
     Guid Id, Guid PersonId, string Service, DateTimeOffset Start, DateTimeOffset End, string State, int Reschedules, int Amount,
-    string? MatterType)
+    string? MatterType, DateTimeOffset? HoldUntil = null)
 {
+    public const string PendingPayment = "pending_payment"; // 1.13: held until the receipt
+    public const string Expired = "expired";                // 1.13: the hold's time ran out
     public const string Confirmed = "confirmed";
     public const string Completed = "completed";
     public const string NoShow = "no_show";
@@ -85,17 +132,50 @@ public sealed record AppointmentInfo(
     public const string CancelledByOffice = "cancelled_by_office";
 
     public BusyInterval Interval => new(Start, End);
+
+    /// <summary>Held or confirmed: the client's booking that is still to come.</summary>
+    public bool IsOpen => State is PendingPayment or Confirmed;
 }
 
 public enum BookStatus
 {
-    Booked,
+    Held,       // 1.13: held until the receipt
+    BookedPaid, // 1.13: confirmed at once, a receipt he already sent pays for it
     Exists,
     AlreadyBooked,
+    HasHold,    // P3: one hold at a time
     Taken,
 }
 
 public sealed record BookOutcome(BookStatus Status, Guid? AppointmentId);
+
+/// <summary>S-04 as the flow needs it. <see cref="ProofAt"/>: the first receipt («وقت الدفع», B-22).</summary>
+public sealed record PaymentInfo(string State, int AmountDue, int? AmountReceived, DateTimeOffset? ProofAt)
+{
+    public const string Requested = "requested";
+    public const string ProofReceived = "proof_received";
+    public const string DuplicateSuspected = "duplicate_suspected";
+    public const string Verified = "verified";
+    public const string Partial = "partial";
+    public const string NotReceived = "not_received";
+    public const string RefundRequested = "refund_requested";
+    public const string Refunded = "refunded";
+}
+
+/// <summary>A receipt image from the client (T-09: its place in storage only, never its content).</summary>
+public sealed record ReceiptRequest(Guid PersonId, string Wamid, string Bucket, string Key, string Sha256, string? MimeType);
+
+public enum ReceiptStatus
+{
+    None,          // nothing waits for a receipt
+    Confirmed,     // the hold is confirmed
+    ConfirmedLate, // the hold had run out, the time was still free: confirmed
+    LateTaken,     // the hold had run out and the time was taken: kept for the next time he picks
+    Received,      // a confirmed booking's (new) receipt
+    Exists,        // the same message again
+}
+
+public sealed record ReceiptOutcome(ReceiptStatus Status, Guid? AppointmentId);
 
 public enum MoveStatus
 {
@@ -107,17 +187,17 @@ public enum MoveStatus
 }
 
 public sealed record BookRequest(Guid Id, Guid PersonId, Guid? IntakeId, BookingService Service, DateTimeOffset Start, string TurnId,
-    int BufferMinutes, string? MatterType);
+    int BufferMinutes, string? MatterType, DateTimeOffset HoldUntil);
 
 public interface IBookingStore
 {
     /// <summary>The week and the exceptions of the dates in [from, to].</summary>
     Task<Schedule> LoadScheduleAsync(DateOnly from, DateOnly to, CancellationToken ct);
 
-    /// <summary>Confirmed appointments that overlap [from, to).</summary>
-    Task<IReadOnlyList<AppointmentInfo>> ConfirmedBetweenAsync(DateTimeOffset from, DateTimeOffset to, CancellationToken ct);
+    /// <summary>Appointments that close their time (confirmed, or held until the receipt) and overlap [from, to).</summary>
+    Task<IReadOnlyList<AppointmentInfo>> TakenBetweenAsync(DateTimeOffset from, DateTimeOffset to, CancellationToken ct);
 
-    /// <summary>The client's next confirmed appointment, if any.</summary>
+    /// <summary>The client's next open appointment (held or confirmed), if any.</summary>
     Task<AppointmentInfo?> UpcomingForAsync(Guid personId, DateTimeOffset now, CancellationToken ct);
 
     Task<AppointmentInfo?> FindAsync(Guid id, CancellationToken ct);
@@ -126,8 +206,21 @@ public interface IBookingStore
 
     Task<MoveStatus> MoveAsync(Guid id, DateTimeOffset start, DateTimeOffset end, string turnId, int bufferMinutes, CancellationToken ct);
 
-    /// <summary>confirmed → <paramref name="state"/>; the calendar event goes. False when it was not confirmed.</summary>
+    /// <summary>held or confirmed → <paramref name="state"/>; the calendar event goes. False when it was neither.</summary>
     Task<bool> CancelAsync(Guid id, string state, CancellationToken ct);
+
+    /// <summary>
+    /// B-05 (1.13): what a receipt image from this client would be for. A hold whose time ran out comes
+    /// back as such (<see cref="AppointmentInfo.Expired"/>): the desk checks its time before attaching.
+    /// </summary>
+    Task<AppointmentInfo?> ReceiptTargetAsync(Guid personId, DateTimeOffset now, CancellationToken ct);
+
+    Task<ReceiptOutcome> AttachReceiptAsync(ReceiptRequest receipt, bool lateFree, int bufferMinutes, CancellationToken ct);
+
+    Task<PaymentInfo?> PaymentAsync(Guid appointmentId, CancellationToken ct);
+
+    /// <summary>B-22: a refund is due; the amount, or null when no money came for it.</summary>
+    Task<int?> RequestRefundAsync(Guid appointmentId, string reason, CancellationToken ct);
 }
 
 /// <summary>The lawyer's calendar (T-14). Never throws: «unavailable» means Hazem offers nothing.</summary>
@@ -149,7 +242,7 @@ public sealed class BookingDesk(IBookingStore store, IBusyCalendar calendar)
     public static TimeZoneInfo Zone => OfficeHours.Cairo;
 
     public async Task<FreeSlots> FindAsync(BookingSettings booking, HazemSettings settings, BookingService service, DateTimeOffset now,
-        DateTimeOffset after, DateOnly? onlyDay, int limit, Guid? except, CancellationToken ct)
+        DateTimeOffset after, DateOnly? onlyDay, int limit, Guid? except, CancellationToken ct, bool holdCheck = true)
     {
         var rules = booking.Rules;
         var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, Zone).DateTime);
@@ -165,9 +258,24 @@ public sealed class BookingDesk(IBookingStore store, IBusyCalendar calendar)
         }
 
         var schedule = await store.LoadScheduleAsync(first, last, ct);
-        var booked = (await store.ConfirmedBetweenAsync(from, to, ct)).Where(a => a.Id != except).Select(a => a.Interval).ToList();
-        var slots = Availability.Find(schedule, rules, new SlotQuery(service.Minutes, after, service.IsUrgent, onlyDay, limit),
-            booked, busy.Busy, now, Zone);
+        var booked = (await store.TakenBetweenAsync(from, to, ct)).Where(a => a.Id != except).Select(a => a.Interval).ToList();
+        // 1.13: a time too close to pay for in time is not offered (its hold would be under 15 minutes).
+        // Only the first times of the day can be that close, so a second page is enough.
+        var slots = new List<Slot>();
+        var next = after;
+        for (var page = 0; page < 2 && slots.Count < limit; page++)
+        {
+            var found = Availability.Find(schedule, rules, new SlotQuery(service.Minutes, next, service.IsUrgent, onlyDay, limit), booked, busy.Busy,
+                now, Zone);
+            slots.AddRange(found.Where(s => !holdCheck || booking.Hold.Offerable(now, s.Start)).Take(limit - slots.Count));
+            if (found.Count < limit)
+            {
+                break;
+            }
+
+            next = found[^1].Start;
+        }
+
         return new FreeSlots(true, slots);
     }
 
@@ -187,7 +295,7 @@ public sealed class BookingDesk(IBookingStore store, IBusyCalendar calendar)
         string turnId, DateTimeOffset now, CancellationToken ct)
     {
         var service = BookingService.ByCode(appointment.Service) ?? BookingService.PhoneVideo;
-        if (!await StillFreeAsync(booking, settings, service, start, now, appointment.Id, ct))
+        if (!await StillFreeAsync(booking, settings, service, start, now, appointment.Id, ct, holdCheck: false))
         {
             return MoveStatus.Taken;
         }
@@ -196,12 +304,40 @@ public sealed class BookingDesk(IBookingStore store, IBusyCalendar calendar)
     }
 
     private async Task<bool> StillFreeAsync(BookingSettings booking, HazemSettings settings, BookingService service, DateTimeOffset start,
-        DateTimeOffset now, Guid? except, CancellationToken ct)
+        DateTimeOffset now, Guid? except, CancellationToken ct, bool holdCheck = true)
     {
         var day = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(start, Zone).DateTime);
-        var found = await FindAsync(booking, settings, service, now, start.AddTicks(-1), day, 1, except, ct);
+        var found = await FindAsync(booking, settings, service, now, start.AddTicks(-1), day, 1, except, ct, holdCheck);
         return found.CalendarAvailable && found.Slots.Count == 1 && found.Slots[0].Start == start;
     }
+
+    /// <summary>
+    /// B-05 (1.13): a receipt image. A hold whose time ran out is confirmed again only if its time is
+    /// still free now (the calendar and the panel's hours, then the database inside the SQL function).
+    /// Null: nothing of this client waits for a receipt.
+    /// </summary>
+    public async Task<ReceiptOutcome?> ReceiptAsync(BookingSettings booking, HazemSettings settings, ReceiptRequest receipt, DateTimeOffset now,
+        CancellationToken ct)
+    {
+        if (await store.ReceiptTargetAsync(receipt.PersonId, now, ct) is not { } target)
+        {
+            return null;
+        }
+
+        var lateFree = target.State == AppointmentInfo.Expired
+                       && await StillFreeAsync(booking, settings, BookingService.ByCode(target.Service) ?? BookingService.PhoneVideo, target.Start, now,
+                           target.Id, ct, holdCheck: false);
+        var outcome = await store.AttachReceiptAsync(receipt, lateFree, booking.Rules.BufferMinutes, ct);
+        return outcome.Status == ReceiptStatus.None ? null : outcome;
+    }
+
+    /// <summary>P7: does anything of this client wait for a receipt (a PDF is then answered «ابعت صورة»).</summary>
+    public async Task<bool> WaitsForReceiptAsync(Guid personId, DateTimeOffset now, CancellationToken ct) =>
+        await store.ReceiptTargetAsync(personId, now, ct) is not null;
+
+    public Task<PaymentInfo?> PaymentAsync(Guid appointmentId, CancellationToken ct) => store.PaymentAsync(appointmentId, ct);
+
+    public Task<int?> RequestRefundAsync(Guid appointmentId, string reason, CancellationToken ct) => store.RequestRefundAsync(appointmentId, reason, ct);
 
     public Task<AppointmentInfo?> UpcomingForAsync(Guid personId, DateTimeOffset now, CancellationToken ct) =>
         store.UpcomingForAsync(personId, now, ct);
@@ -285,6 +421,12 @@ public static class BookingWords
         var today = BookingDesk.Today(now);
         return day == today ? "النهارده" : day == today.AddDays(1) ? "بكرة" : $"{Days[(int)local.DayOfWeek]} {local.Day}/{local.Month}";
     }
+
+    /// <summary>An amount as Hazem writes it: «1,000».</summary>
+    public static string Money(int pounds) => pounds.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>A hold's end as the client reads it after «قبل الساعة»: «4:30 م النهارده», «10:15 ص بكرة».</summary>
+    public static string Deadline(DateTimeOffset at, DateTimeOffset now) => $"{Time(at)} {Day(at, now)}";
 
     /// <summary>«6:15 م».</summary>
     public static string Time(DateTimeOffset at)

@@ -146,6 +146,17 @@ step check-hazem08-times || failed=1
 step hazem08-pick
 forward
 step check-hazem08-booked || failed=1
+echo "==== 12. TASK 09: the receipt confirms the hold, the staff review, the office cancels, the refund"
+step hazem09-receipt
+forward
+step check-hazem09-paid || failed=1
+panel_step hazem09-review || failed=1
+step check-hazem09-partial || failed=1
 panel_step hazem08-office-closes || failed=1
 panel_step check-hazem08-office-closed || failed=1
+step hazem09-refund-press
+forward
+step check-hazem09-refund-requested || failed=1
+panel_step hazem09-refunded || failed=1
+step check-hazem09-refunded || failed=1
 unset E2E_PANEL_PASSWORD

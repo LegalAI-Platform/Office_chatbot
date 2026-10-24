@@ -25,12 +25,18 @@ public sealed class HazemResponder(
     BookingDesk? booking = null) : ITurnResponder
 {
     /// <summary>The booking runs only when every one of its texts is approved: never half a conversation.</summary>
+    /// TASK 09 (1.13): the hold, the receipt and the refund texts too; booking_confirmed (1.4) is no longer used.
     public static IReadOnlyList<string> BookingTextKeys { get; } =
     [
-        TextKeys.BookingConfirmed, TextKeys.BtnBookPhoneVideo, TextKeys.BtnBookOffice, TextKeys.BookingChooseSlot,
+        TextKeys.BtnBookPhoneVideo, TextKeys.BtnBookOffice, TextKeys.BookingChooseSlot,
         TextKeys.BtnSlotsList, TextKeys.BtnMoreSlots, TextKeys.BookingSlotTaken, TextKeys.BookingNoSlots, TextKeys.BookingUnavailable,
         TextKeys.BookingUrgentNoneToday, TextKeys.BookingExisting, TextKeys.BtnReschedule, TextKeys.BtnCancelBooking,
         TextKeys.BookingRescheduled, TextKeys.BookingCancelled, TextKeys.BtnRefund, TextKeys.BookingRefundRequested,
+        TextKeys.BookingCancelledByOffice,
+        TextKeys.BookingHold, TextKeys.BookingHoldReminder, TextKeys.BookingPaid, TextKeys.BookingHoldExpired, TextKeys.BookingHoldLate,
+        TextKeys.BookingHoldOne, TextKeys.BookingHoldCancelled, TextKeys.BookingOfficeUnpaid, TextKeys.ReceiptSendImage,
+        TextKeys.ProofReceivedAgain, TextKeys.PaymentPartial, TextKeys.PaymentNotReceived, TextKeys.RefundFull, TextKeys.RefundNone,
+        TextKeys.RefundCompleted,
     ];
 
     public const string ResponderName = "hazem";
@@ -94,9 +100,29 @@ public sealed class HazemResponder(
             var flow = new Flow(turn, state, list, null, plan, settings.Flag(HandoffEnabledKey), bookingOn ? bookingSettings : null);
             // TASK 08: a button or a list row Hazem sent is read without the AI.
             var choice = bookingOn && flow.MayBook ? ChoiceIn(turn) : null;
+            // TASK 09 (B-05, T-09): a receipt image never reaches the AI, nor any word sent with it.
+            ReceiptOutcome? receipt = null;
+            var askImage = false;
+            if (choice is null && bookingOn && flow.MayBook && ReceiptIn(turn) is { } m)
+            {
+                if (m.Type == MessageType.Image)
+                {
+                    receipt = await booking!.ReceiptAsync(bookingSettings, settings,
+                        new ReceiptRequest(state.Person.Id, m.Wamid, m.Media!.Bucket!, m.Media.Key!, m.Media.Sha256!, m.Media.MimeType), now, ct);
+                }
+                else
+                {
+                    askImage = await booking!.WaitsForReceiptAsync(state.Person.Id, now, ct); // P7: a PDF is no receipt
+                }
+            }
+
             if (choice is not null)
             {
                 flow.RespondToChoice(choice);
+            }
+            else if (receipt is not null || askImage)
+            {
+                flow.RespondToReceipt(receipt);
             }
             else
             {
@@ -165,6 +191,15 @@ public sealed class HazemResponder(
         return BookingChoice.Parse(last?.Interactive?.Id ?? last?.Button?.Payload);
     }
 
+    /// <summary>
+    /// B-05 (P7): the last stored image with its place in storage, or a stored PDF (which is not taken
+    /// as a receipt: Hazem asks for an image).
+    /// </summary>
+    private static IncomingMessage? ReceiptIn(Turn turn) => turn.Messages.LastOrDefault(m =>
+        m.Media is { Status: MediaStatus.Stored } media
+        && (m.Type == MessageType.Image && media.Bucket is not null && media.Key is not null && media.Sha256 is not null
+            || m.Type == MessageType.Document && media.MimeType == "application/pdf"));
+
     /// <summary>A refused transition here is a bug in the flow, not a client's mistake.</summary>
     private static void Check(Result r)
     {
@@ -202,12 +237,7 @@ public sealed class HazemResponder(
         /// </summary>
         public void RespondToChoice(BookingChoice choice)
         {
-            if (turn.Messages.Any(m => m.Type == MessageType.Text && !string.IsNullOrWhiteSpace(m.Text)
-                                       || m.Transcript is { Status: Transcript.Done, Text.Length: > 0 }))
-            {
-                plan.Task(PendingTask.UnclearMessage);
-            }
-
+            WordsToOffice();
             work = choice.Kind switch
             {
                 'm' => new OfferTimes(choice.Service!, null, TextKeys.BookingChooseSlot, null),
@@ -219,6 +249,33 @@ public sealed class HazemResponder(
                 'c' => new CancelIt(choice.AppointmentId!.Value),
                 _ => new RefundIt(choice.AppointmentId!.Value),
             };
+        }
+
+        /// <summary>
+        /// TASK 09 (B-05): a receipt image was attached (<paramref name="outcome"/>), or a PDF came while a
+        /// booking waits for a receipt (null: Hazem asks for an image, P7). Like a press, the words go to the office.
+        /// </summary>
+        public void RespondToReceipt(ReceiptOutcome? outcome)
+        {
+            WordsToOffice();
+            if (outcome is null)
+            {
+                plan.Say(TextKeys.ReceiptSendImage);
+                return;
+            }
+
+            work = new Receipted(outcome);
+        }
+
+        /// <summary>Words typed or said with a press or a receipt are not lost: a task, and the panel shows the turn's words.</summary>
+        private void WordsToOffice()
+        {
+            if (turn.Messages.Any(m => m.Type == MessageType.Text && !string.IsNullOrWhiteSpace(m.Text)
+                                       || !string.IsNullOrWhiteSpace(m.Caption)
+                                       || m.Transcript is { Status: Transcript.Done, Text.Length: > 0 }))
+            {
+                plan.Task(PendingTask.UnclearMessage);
+            }
         }
 
         public void Respond(bool firstContact)
@@ -698,12 +755,51 @@ public sealed class HazemResponder(
                 case CancelIt x:
                     await CancelAsync(desk, x.Id, ct);
                     break;
-                case RefundIt r when await OwnAsync(desk, r.Id, ct) is not null:
+                case RefundIt r when await OwnAsync(desk, r.Id, ct) is { State: AppointmentInfo.CancelledByOffice } a
+                                     && await desk.RequestRefundAsync(a.Id, "office_cancelled", ct) is not null:
+                    // B-22: the office cancelled and the client chose the refund. The amount is what came
+                    // (or what was due, before the review); the office transfers it (P2).
                     plan.Say(TextKeys.BookingRefundRequested);
                     plan.Task(PendingTask.Refund);
                     break;
+                case RefundIt r when await OwnAsync(desk, r.Id, ct) is { State: AppointmentInfo.CancelledByOffice } a
+                                     && await desk.PaymentAsync(a.Id, ct) is { State: PaymentInfo.RefundRequested or PaymentInfo.Refunded }:
+                    plan.Say(TextKeys.BookingRefundRequested); // pressed twice: already with the office
+                    break;
                 case RefundIt:
                     await ShowExistingAsync(desk, null, ct);
+                    break;
+                case Receipted r:
+                    await ReceiptedAsync(desk, b, settings, r.Outcome, ct);
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// B-05 (1.13): what the receipt did. Confirmed → the confirmation (the payment is never said to be
+        /// confirmed). A new receipt for a confirmed booking → «استلمنا». The hold had run out and its time is
+        /// taken → the nearest times, and the receipt pays for the one he picks.
+        /// </summary>
+        private async Task ReceiptedAsync(BookingDesk desk, BookingSettings b, HazemSettings settings, ReceiptOutcome outcome, CancellationToken ct)
+        {
+            var a = outcome.AppointmentId is { } id ? await OwnAsync(desk, id, ct) : null;
+            if (a is null)
+            {
+                plan.Say(TextKeys.ProofReceivedAgain);
+                return;
+            }
+
+            switch (outcome.Status)
+            {
+                case ReceiptStatus.Confirmed or ReceiptStatus.ConfirmedLate:
+                case ReceiptStatus.Exists when a.State == AppointmentInfo.Confirmed:
+                    plan.Say(TextKeys.BookingPaid, Fill: Describe(a));
+                    break;
+                case ReceiptStatus.LateTaken:
+                    await OfferTimesAsync(desk, b, settings, ServiceOf(a), plan.Now, TextKeys.BookingHoldLate, null, ct, Describe(a));
+                    break;
+                default:
+                    plan.Say(TextKeys.ProofReceivedAgain);
                     break;
             }
         }
@@ -713,7 +809,7 @@ public sealed class HazemResponder(
         /// offered (B-24) and the office gets a task. Urgent with nothing today → tomorrow (B-09.4).
         /// </summary>
         private async Task OfferTimesAsync(BookingDesk desk, BookingSettings b, HazemSettings settings, BookingService service,
-            DateTimeOffset after, string introKey, Guid? moving, CancellationToken ct)
+            DateTimeOffset after, string introKey, Guid? moving, CancellationToken ct, IReadOnlyDictionary<string, string>? fill = null)
         {
             var now = plan.Now;
             var count = b.Rules.OfferCount;
@@ -749,42 +845,36 @@ public sealed class HazemResponder(
                 rows.Add(new ReplyChoice(moving is { } m ? BookingChoice.MoreMoves(m, last) : BookingChoice.More(service, last), TextKeys.BtnMoreSlots));
             }
 
-            plan.Ask(introKey, new ReplyChoices(InteractivePayload.List, rows, TextKeys.BtnSlotsList));
+            plan.Ask(introKey, new ReplyChoices(InteractivePayload.List, rows, TextKeys.BtnSlotsList), Fill: fill);
         }
 
-        /// <summary>B-08.3: booked at once, or why not.</summary>
+        /// <summary>
+        /// B-08.3 (1.13): the time is held until the receipt (or confirmed at once when a receipt he already
+        /// sent pays for it), or why not.
+        /// </summary>
         private async Task PickAsync(BookingDesk desk, BookingSettings b, HazemSettings settings, BookingService service, DateTimeOffset at,
             CancellationToken ct)
         {
             var request = new BookRequest(Guid.NewGuid(), State.Person.Id, Intake.Id, service, at, turn.TurnId, b.Rules.BufferMinutes,
-                Intake.MatterType);
+                Intake.MatterType, b.Hold.Until(plan.Now, at));
             var outcome = await desk.BookAsync(b, settings, request, plan.Now, ct);
+            var a = outcome?.AppointmentId is { } id ? await OwnAsync(desk, id, ct) : null;
             switch (outcome?.Status)
             {
-                case BookStatus.Booked or BookStatus.Exists:
-                    var fill = new Dictionary<string, string>
-                    {
-                        ["service"] = service.Name,
-                        ["day"] = BookingWords.Day(at, plan.Now),
-                        ["time"] = BookingWords.Time(at),
-                        ["amount"] = service.Amount.ToString("N0", System.Globalization.CultureInfo.InvariantCulture),
-                    };
-                    if (b.Office.HasPayment)
-                    {
-                        fill["instapay"] = b.Office.InstaPay;
-                        fill["wallet"] = b.Office.Wallet;
-                    }
-                    else
-                    {
-                        // P1: the payment details are not written yet. The text keeps its open slots and is
-                        // not sent (never «InstaPay: » with nothing after it); the booking stands.
-                        plan.Task(PendingTask.BookingMessageFailed);
-                    }
-
-                    plan.Say(TextKeys.BookingConfirmed, Fill: fill);
-
+                case BookStatus.Held or BookStatus.Exists when a is { State: AppointmentInfo.PendingPayment }:
+                    SayHold(a, b);
                     break;
-                case BookStatus.AlreadyBooked:
+                case BookStatus.BookedPaid or BookStatus.Exists when a is { State: AppointmentInfo.Confirmed }:
+                    plan.Say(TextKeys.BookingPaid, Fill: Describe(a));
+                    break;
+                case BookStatus.HasHold when a is { HoldUntil: { } until }:
+                    // P3: one hold at a time, so every receipt is for a booking we know.
+                    plan.Say(TextKeys.BookingHoldOne, Fill: new Dictionary<string, string>(Describe(a))
+                    {
+                        ["deadline"] = BookingWords.Deadline(until, plan.Now),
+                    });
+                    break;
+                case BookStatus.AlreadyBooked or BookStatus.Exists:
                     await ShowExistingAsync(desk, outcome.AppointmentId, ct);
                     break;
                 default:
@@ -793,11 +883,34 @@ public sealed class HazemResponder(
             }
         }
 
+        /// <summary>B-08.4 (1.13): the hold with its steps, the amount, where to pay and the exact time the receipt is due.</summary>
+        private void SayHold(AppointmentInfo a, BookingSettings b)
+        {
+            var fill = new Dictionary<string, string>(Describe(a))
+            {
+                ["amount"] = BookingWords.Money(a.Amount),
+                ["deadline"] = BookingWords.Deadline(a.HoldUntil ?? a.Start, plan.Now),
+            };
+            if (b.Office.HasPayment)
+            {
+                fill["instapay"] = b.Office.InstaPay;
+                fill["wallet"] = b.Office.Wallet;
+            }
+            else
+            {
+                // P1: the payment details are not written yet. The text keeps its open slots and is
+                // not sent (never «InstaPay: » with nothing after it); the office gets a task.
+                plan.Task(PendingTask.BookingMessageFailed);
+            }
+
+            plan.Say(TextKeys.BookingHold, Fill: fill);
+        }
+
         /// <summary>The client's booking with «change» and «cancel»; none → the office, as before TASK 08.</summary>
         private async Task ShowExistingAsync(BookingDesk desk, Guid? id, CancellationToken ct)
         {
             var a = id is { } known ? await OwnAsync(desk, known, ct) : await desk.UpcomingForAsync(State.Person.Id, plan.Now, ct);
-            if (a is not { State: AppointmentInfo.Confirmed } || a.Start <= plan.Now)
+            if (a is not { IsOpen: true } || a.Start <= plan.Now)
             {
                 HandToOffice(TextKeys.RescheduleOrCancel, PendingTask.RescheduleOrCancel);
                 return;
@@ -813,9 +926,16 @@ public sealed class HazemResponder(
         /// <summary>B-15 (P6): the one free change, 12 hours before or more; otherwise the lawyer decides.</summary>
         private async Task StartChangeAsync(BookingDesk desk, BookingSettings b, HazemSettings settings, Guid id, CancellationToken ct)
         {
-            if (await OwnAsync(desk, id, ct) is not { State: AppointmentInfo.Confirmed } a || a.Start <= plan.Now)
+            if (await OwnAsync(desk, id, ct) is not { IsOpen: true } a || a.Start <= plan.Now)
             {
                 await ShowExistingAsync(desk, null, ct);
+                return;
+            }
+
+            if (a.State == AppointmentInfo.PendingPayment)
+            {
+                // B-15 (1.13): a hold is not moved, it is replaced by the time he picks; not counted as the free change.
+                await OfferTimesAsync(desk, b, settings, ServiceOf(a), plan.Now, TextKeys.BookingChooseSlot, null, ct);
                 return;
             }
 
@@ -832,7 +952,7 @@ public sealed class HazemResponder(
         private async Task ChangeToAsync(BookingDesk desk, BookingSettings b, HazemSettings settings, Guid id, DateTimeOffset at,
             CancellationToken ct)
         {
-            if (await OwnAsync(desk, id, ct) is not { } a)
+            if (await OwnAsync(desk, id, ct) is not { State: AppointmentInfo.Confirmed } a)
             {
                 await ShowExistingAsync(desk, null, ct);
                 return;
@@ -867,7 +987,10 @@ public sealed class HazemResponder(
             }
         }
 
-        /// <summary>The client cancels (the refund follows B-22 in TASK 09: a task for the office now).</summary>
+        /// <summary>
+        /// The client cancels. A hold: nothing was paid. A confirmed booking, B-22: within 24 hours of his
+        /// receipt (and before it starts) a full refund, which the office transfers; later none.
+        /// </summary>
         private async Task CancelAsync(BookingDesk desk, Guid id, CancellationToken ct)
         {
             var a = await OwnAsync(desk, id, ct);
@@ -877,13 +1000,42 @@ public sealed class HazemResponder(
                 return;
             }
 
-            if (a is not { State: AppointmentInfo.Confirmed } || !await desk.CancelAsync(a.Id, AppointmentInfo.CancelledByClient, ct))
+            if (a is not { IsOpen: true } || !await desk.CancelAsync(a.Id, AppointmentInfo.CancelledByClient, ct))
             {
                 await ShowExistingAsync(desk, null, ct);
                 return;
             }
 
-            plan.Say(TextKeys.BookingCancelled);
+            if (a.State == AppointmentInfo.PendingPayment)
+            {
+                plan.Say(TextKeys.BookingHoldCancelled);
+                return;
+            }
+
+            if (await desk.PaymentAsync(a.Id, ct) is not { ProofAt: { } paidAt })
+            {
+                plan.Say(TextKeys.BookingCancelled); // booked before TASK 09 and never paid: the office checks
+                plan.Task(PendingTask.BookingCancelled);
+                return;
+            }
+
+            if (plan.Now - paidAt <= TimeSpan.FromHours(24) && plan.Now < a.Start)
+            {
+                if (await desk.RequestRefundAsync(a.Id, "client_within_24h", ct) is not null)
+                {
+                    plan.Say(TextKeys.RefundFull);
+                    plan.Task(PendingTask.Refund);
+                }
+                else
+                {
+                    plan.Say(TextKeys.BookingCancelled); // marked «ما وصلش»: nothing to give back, the office checks
+                    plan.Task(PendingTask.BookingCancelled);
+                }
+
+                return;
+            }
+
+            plan.Say(TextKeys.RefundNone);
             plan.Task(PendingTask.BookingCancelled);
         }
 
@@ -1004,6 +1156,8 @@ public sealed class HazemResponder(
     private sealed record CancelIt(Guid Id) : BookingWork;
 
     private sealed record RefundIt(Guid Id) : BookingWork;
+
+    private sealed record Receipted(ReceiptOutcome Outcome) : BookingWork;
 
     private sealed class Plan(DateTimeOffset now)
     {

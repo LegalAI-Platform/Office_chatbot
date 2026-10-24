@@ -101,6 +101,10 @@ client (B-22) → `{ cancelled, not_told }`. Every change: `booking_changes` and
 | `GET /booking/preview?day&service=pv\|of\|ur` | schedule.manage | `{ calendar: ok\|unavailable\|not_configured, slots[] }`: what Hazem would offer that day now |
 | `GET /office` · `PUT /office` | office.manage | P1: `{ instapay, wallet_number, wallet_provider, address, map_url (https) }` |
 
+TASK 09 (v1.13): `/booking/settings` also carries the hold: `hold_minutes` (15–1440), `hold_short_minutes`
+(15–hold_minutes), `hold_short_within_hours` (0–72), `hold_gap_minutes` (0–240); an appointment carries
+`hold_until` and `payment` (S-04). States: `pending_payment` (held until the receipt), `expired` (the hold ran out).
+
 Every change to the hours (the week, an exception added or removed, undo) answers
 `409 { error: "has_bookings", appointments }` when it would leave confirmed appointments outside
 the hours; sent again with `confirm: true` (`?confirm=true` for DELETE) the change and the
@@ -108,6 +112,21 @@ cancellations are one transaction → `200 { cancelled }`. No message is sent in
 the booking worker (every 10 s) tells each client (`client_notice` pending → sent | failed),
 with the free times and «استرداد كامل» when booking is on, or the text alone and a task
 `office_cancelled` when it is off.
+
+## Payments (TASK 09, B-05 / B-22 / S-04)
+
+The system never confirms a payment and never says a refund was made: a person does both.
+
+| Endpoint | Permission | What |
+|---|---|---|
+| `GET /payments?show=review\|refunds\|all` | schedule.manage | `review` (default): receipts waiting for a person, the oldest first; `refunds`: refunds to transfer; `all`: the last 60 days. Each: the appointment, `state`, `amount_due`, `amount_received`, `proof_at`, `receipts`, `duplicate`, who reviewed / refunded and when, `refund_due`, `refund_reason` |
+| `GET /payments/{appointment}/receipts/{n}` | schedule.manage | the n-th receipt image (0 = the first), like a client's file in 07c: `no-store`, CSP sandbox, every opening in the audit (`payment.receipt_open`) |
+| `POST /payments/{appointment}/review` | payments.verify (all roles, P1) | `{ state: verified\|partial\|not_received, received }`: `verified` needs `received` ≥ due (more → `refund_requested` for the difference, P4, and a `refund` task); `partial` 0 < received < due. The three marks may correct each other until a refund starts. `400 invalid_amount`, `409 not_allowed` |
+| `POST /payments/{appointment}/refunded` | payments.refund (all roles, P2) | `{ method, note? }`: only from `refund_requested`, once (`409`) |
+
+Partial, not received and refunded are told to the client by the booking worker (every 10 s), never
+inside the request; a send that fails (outside the 24-hour window too, P5) becomes a `booking_message_failed` task.
+`GET /reports` (07c) also has `by_booking` (the month's appointments by state), `received`, `missing` and `refunded` (pounds).
 
 ## Chatwoot (TASK 07b, T-24)
 
@@ -136,6 +155,8 @@ The code checks permissions, never role names. A role is a set of permissions, d
 | `conversations.unmute` (TASK 07c) | ✅ | | |
 | `schedule.manage` (TASK 08: the booking hours, the appointments) | ✅ | ✅ | ✅ |
 | `office.manage` (TASK 08: InstaPay, the wallet, the address) | ✅ | ✅ | |
+| `payments.verify` (TASK 09, P1: a transfer is fine / partial / not received) | ✅ | ✅ | ✅ |
+| `payments.refund` (TASK 09, P2: «اتحوّل», a refund made) | ✅ | ✅ | ✅ |
 
 No permission → `403`. Not signed in → `401`. A task the user may not see → `404`.
 

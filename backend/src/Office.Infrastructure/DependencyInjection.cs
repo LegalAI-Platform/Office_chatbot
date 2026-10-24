@@ -122,6 +122,7 @@ public static class DependencyInjection
         services.AddScoped<Booking.CalendarSync>();
         services.AddScoped<Booking.BookingNotices>();
         services.AddScoped<Booking.PanelBooking>();
+        services.AddScoped<Booking.PanelPayments>();
 
         return services;
     }

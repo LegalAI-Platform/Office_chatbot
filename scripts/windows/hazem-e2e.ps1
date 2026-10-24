@@ -146,8 +146,19 @@ try {
     Step @('hazem08-pick') | Out-Null
     Forward
     Check 'check-hazem08-booked'
+    Write-Host "==== 12. TASK 09: the receipt confirms the hold, the staff review, the office cancels, the refund"
+    Step @('hazem09-receipt') | Out-Null
+    Forward
+    Check 'check-hazem09-paid'
+    PanelStep 'hazem09-review'
+    Check 'check-hazem09-partial'
     PanelStep 'hazem08-office-closes'
     PanelStep 'check-hazem08-office-closed'
+    Step @('hazem09-refund-press') | Out-Null
+    Forward
+    Check 'check-hazem09-refund-requested'
+    PanelStep 'hazem09-refunded'
+    Check 'check-hazem09-refunded'
     Remove-Item env:E2E_PANEL_PASSWORD -ErrorAction SilentlyContinue
 } catch {
     Write-Host "FAIL  $_"; $script:failed = $true

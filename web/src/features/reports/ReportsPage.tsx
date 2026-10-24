@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api, errorMessage } from "../../shared/api/client";
 import type { MonthReport, ReportRow } from "../../shared/api/types";
-import { label, SOURCES, TASK_TYPES, CLIENT_TYPES, matterLabel } from "../../shared/lib/labels";
+import { APPOINTMENT_STATES, label, SOURCES, TASK_TYPES, CLIENT_TYPES, matterLabel } from "../../shared/lib/labels";
 import { Card, ErrorState, Loading } from "../../shared/ui/ui";
 
 /** «This month» in Cairo, as YYYY-MM. */
@@ -14,7 +14,7 @@ function thisMonth(): string {
 /**
  * The month's report (TASK 07c, the manager and the lawyer): the tasks (by type and by staff
  * member, and how many were done before their due time) and the new clients (by source, topic and
- * kind). Appointments and payments come with booking (TASK 08) and payment (TASK 09).
+ * kind). TASK 09: the month's bookings by state and their money as the office marked it.
  */
 export function ReportsPage() {
   const [month, setMonth] = useState(thisMonth);
@@ -58,8 +58,14 @@ export function ReportsPage() {
             <Table title="العملاء الجداد حسب المصدر" rows={r.by_source} name={(k) => (k === "unknown" ? "مش معروف" : label(SOURCES, k))} />
             <Table title="العملاء الجداد حسب الموضوع" rows={r.by_matter} name={(k) => (k === "unknown" ? "لسه ما اتحددش" : matterLabel(k))} />
             <Table title="حسب نوع العميل" rows={r.by_client_type} name={(k) => (k === "unknown" ? "لسه ما اتحددش" : label(CLIENT_TYPES, k))} />
+            <Table title="الحجوزات حسب الحالة" rows={r.by_booking} name={(k) => label(APPOINTMENT_STATES, k)} />
           </div>
-          <p className="text-xs text-ink-soft">«في وقتها» = خلصت قبل الميعاد المطلوب. المواعيد والإيصالات هتتضاف مع الحجز والدفع.</p>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Number title="وصل (جنيه)" value={r.received} />
+            <Number title="ناقص (جنيه)" value={r.missing} />
+            <Number title="اترد (جنيه)" value={r.refunded} />
+          </div>
+          <p className="text-xs text-ink-soft">«في وقتها» = خلصت قبل الميعاد المطلوب. الفلوس = اللي المكتب علّم إنه وصل فعلًا لحجوزات الشهر.</p>
         </>
       ) : null}
     </div>

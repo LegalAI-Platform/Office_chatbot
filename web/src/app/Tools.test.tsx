@@ -68,7 +68,7 @@ describe("TASK 07c tools", () => {
     vi.restoreAllMocks();
     serve({
       "GET /auth/me": { body: lawyer },
-      "GET /reports": { body: { month: "2026-10", tasks: 4, done: 2, done_on_time: 1, late: 1, by_type: [{ key: "urgent_request", count: 2 }], by_staff: [], new_clients: 3, by_source: [{ key: "ad", count: 3 }], by_matter: [], by_client_type: [] } },
+      "GET /reports": { body: { month: "2026-10", tasks: 4, done: 2, done_on_time: 1, late: 1, by_type: [{ key: "urgent_request", count: 2 }], by_staff: [], new_clients: 3, by_source: [{ key: "ad", count: 3 }], by_matter: [], by_client_type: [], by_booking: [], received: 0, missing: 0, refunded: 0 } },
     });
     renderAt("/reports");
     expect(await screen.findByRole("heading", { name: "التقارير" })).toBeTruthy();

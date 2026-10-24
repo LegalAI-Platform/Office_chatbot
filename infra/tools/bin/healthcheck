@@ -246,7 +246,24 @@ if [[ -z "${GOOGLE_SERVICE_ACCOUNT_JSON:-}" ]]; then
   warn "GOOGLE_SERVICE_ACCOUNT_JSON is empty: Hazem offers no booking times until the lawyer's calendar is connected (docs/runbooks/booking.md, owner only)"
 fi
 
+echo "== The payments (TASK 09, DECISIONS v1.13 B-05 / B-22)"
+check "tables payments and payment_receipts exist" \
+  sql_equals office "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'hazem' AND table_name IN ('payments', 'payment_receipts')" "2"
+check "a client holds one time at a time (index appointments_one_hold)" \
+  sql_equals office "SELECT count(*) FROM pg_indexes WHERE schemaname = 'hazem' AND indexname = 'appointments_one_hold'" "1"
+check "the hold's settings are there (booking.hold_*)" \
+  sql_equals office "SELECT count(*) FROM hazem.settings WHERE key IN ('booking.hold_minutes', 'booking.hold_short_minutes', 'booking.hold_short_within_hours', 'booking.hold_gap_minutes') AND value ~ '^[0-9]+$'" "4"
+check "office_app (n8n) cannot read the payments or the receipts" \
+  expect_fail psql_as office_app "$OFFICE_APP_PASSWORD" office -c 'SELECT 1 FROM hazem.payments UNION ALL SELECT 1 FROM hazem.payment_receipts LIMIT 1'
+check "no hold forgotten by the worker (a hold more than 10 minutes past its time)" \
+  sql_equals office "SELECT count(*) FROM hazem.appointments WHERE state = 'pending_payment' AND hold_until < now() - interval '10 minutes'" "0"
+if [[ "$(psql_super office -c "SELECT count(*) FROM hazem.approved_texts WHERE source = 'proposal TASK 09' AND active")" == "0" ]]; then
+  warn "TASK 09's texts are not approved yet: booking from WhatsApp stays off until the owner approves them (docs/approved-texts-proposal.md)"
+fi
+
 echo "== Migrations"
+check "migration 0014 (the payments, the hold until the receipt) is applied" \
+  sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0014'" "1"
 check "migration 0013 (the booking) is applied" \
   sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0013'" "1"
 check "migration 0009 (panel accounts) is applied"   sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0009'" "1"

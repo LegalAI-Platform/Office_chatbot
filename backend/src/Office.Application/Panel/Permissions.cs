@@ -24,9 +24,14 @@ public static class Permissions
     public const string ScheduleManage = "schedule.manage";
     public const string OfficeManage = "office.manage";
 
+    // TASK 09 (DECISIONS v1.13): every role reviews a transfer (P1: the lawyer, the manager and the staff)
+    // and records a refund it made (P2: a person, never the system).
+    public const string PaymentsVerify = "payments.verify";
+    public const string PaymentsRefund = "payments.refund";
+
     public static IReadOnlyList<string> All { get; } =
         [TasksViewOwn, TasksViewAll, TasksUpdate, TasksAssign, UsersManage, AccountSelf, ListsManage, TextsManage, ReportsView, ConversationsUnmute,
-            ScheduleManage, OfficeManage];
+            ScheduleManage, OfficeManage, PaymentsVerify, PaymentsRefund];
 
     public const string Manager = "manager";
     public const string Lawyer = "lawyer";
@@ -37,10 +42,10 @@ public static class Permissions
     private static readonly Dictionary<string, string[]> ByRole = new(StringComparer.Ordinal)
     {
         [Manager] = [TasksViewOwn, TasksViewAll, TasksUpdate, TasksAssign, UsersManage, AccountSelf, ListsManage, TextsManage, ReportsView,
-            ConversationsUnmute, ScheduleManage, OfficeManage],
+            ConversationsUnmute, ScheduleManage, OfficeManage, PaymentsVerify, PaymentsRefund],
         [Lawyer] = [TasksViewOwn, TasksViewAll, TasksUpdate, TasksAssign, AccountSelf, ListsManage, TextsManage, ReportsView, ScheduleManage,
-            OfficeManage],
-        [Staff] = [TasksViewOwn, TasksUpdate, AccountSelf, ScheduleManage],
+            OfficeManage, PaymentsVerify, PaymentsRefund],
+        [Staff] = [TasksViewOwn, TasksUpdate, AccountSelf, ScheduleManage, PaymentsVerify, PaymentsRefund],
     };
 
     public static IReadOnlyList<string> Of(string role) =>

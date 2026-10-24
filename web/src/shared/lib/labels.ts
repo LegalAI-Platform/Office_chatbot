@@ -30,11 +30,31 @@ export const BOOKING_SERVICES: Record<string, string> = {
 };
 
 export const APPOINTMENT_STATES: Record<string, string> = {
+  pending_payment: "مستني الإيصال",
+  expired: "اتفك (الإيصال ما وصلش)",
   confirmed: "مؤكد",
   completed: "خلص",
   no_show: "ماحضرش",
   cancelled_by_client: "العميل لغى",
   cancelled_by_office: "المكتب لغى",
+};
+
+/** TASK 09: S-04. The system never says a payment is confirmed: «وصل إيصال» is the image only. */
+export const PAYMENT_STATES: Record<string, string> = {
+  requested: "لسه ما دفعش",
+  proof_received: "وصل إيصال، مستني المراجعة",
+  duplicate_suspected: "وصل إيصال، مستني المراجعة",
+  verified: "اتأكد",
+  partial: "ناقص",
+  not_received: "ما وصلش",
+  refund_requested: "استرداد مطلوب",
+  refunded: "اترد",
+};
+
+export const REFUND_REASONS: Record<string, string> = {
+  client_within_24h: "العميل لغى خلال 24 ساعة من الدفع",
+  office_cancelled: "المكتب لغى والعميل اختار الاسترداد",
+  overpaid: "دفع زيادة",
 };
 
 export const TASK_STATES: Record<string, string> = {

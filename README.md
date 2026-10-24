@@ -117,7 +117,7 @@ Every script below exists in two versions: `scripts\windows\<name>.ps1` and
 | `n8n-import` | Credentials from `.env` + workflows into n8n; restarts n8n when a schedule or webhook was published |
 | `wa-tests` | WhatsApp database rules + n8n harness (no Meta) |
 | `backend-test [-Docker]` | .NET tests; uses a throwaway database (needs `up`) |
-| `web-test` | The panel's tests (type-check, Vitest, build and bundle budget) in a Node container |
+| `web-test` | The panel's tests (type-check, Vitest, build; prints the bundle size, no limit) in a Node container |
 | `hazem-e2e` | Whole loop n8n ↔ API without Meta or OpenAI (stub, dry run), including Hazem's TASK 04 answers, then restores every setting and removes its temporary credentials |
 | `backup` | Dump `office`, `n8n` and `chatwoot` to `office-backups` |
 | `chatwoot-setup` | Chatwoot's account, inbox, «حازم (النظام)» and Platform App from the `CHATWOOT_*` tokens; safe to run again (TASK 07b) |

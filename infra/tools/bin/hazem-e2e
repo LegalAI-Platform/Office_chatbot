@@ -89,6 +89,7 @@ panel_login() {
     -d "$(jq -nc --arg p "$E2E_PANEL_PASSWORD" '{username: "e2e-panel", password: $p}')" "$PANEL/auth/login" >/dev/null
 }
 panel_csrf() { curl -s -b "$JAR" -c "$JAR" "$PANEL/auth/csrf" | jq -r .token; }
+panel_get() { curl -s -b "$JAR" -c "$JAR" "$PANEL$1"; }  # panel_get PATH: prints the body
 panel_post() {  # panel_post PATH JSON: prints «status body»
   curl -s -b "$JAR" -c "$JAR" -X POST -H "X-CSRF-TOKEN: $(panel_csrf)" -H 'Content-Type: application/json' -w ' %{http_code}' -d "${2:-}" "$PANEL$1"
 }
@@ -106,12 +107,19 @@ case "${1:-}" in
                  WHERE m.wa_id IN ($ALL) AND w.object_key IS NOT NULL")
     curl -s -X POST "$STUB/_google/reset" >/dev/null 2>&1
     q "
+      DELETE FROM hazem.panel_audit WHERE target_type = 'payment'
+         AND target_id IN (SELECT id FROM hazem.appointments WHERE person_id IN (SELECT id FROM hazem.persons WHERE wa_id IN ($ALL)));
+      DELETE FROM hazem.payment_receipts WHERE payment_id IN (
+        SELECT p.id FROM hazem.payments p JOIN hazem.appointments a ON a.id = p.appointment_id
+         WHERE a.person_id IN (SELECT id FROM hazem.persons WHERE wa_id IN ($ALL)));
+      DELETE FROM hazem.payments WHERE appointment_id IN (
+        SELECT id FROM hazem.appointments WHERE person_id IN (SELECT id FROM hazem.persons WHERE wa_id IN ($ALL)));
       DELETE FROM hazem.appointments WHERE person_id IN (SELECT id FROM hazem.persons WHERE wa_id IN ($ALL));
       DELETE FROM hazem.booking_changes WHERE user_id IN (SELECT id FROM hazem.panel_users WHERE username LIKE 'e2e-%');
       DELETE FROM hazem.booking_exceptions WHERE reason = 'e2e'
                                             OR created_by IN (SELECT id FROM hazem.panel_users WHERE username LIKE 'e2e-%');
       UPDATE hazem.approved_texts SET active = false
-       WHERE source = 'proposal TASK 08'
+       WHERE source IN ('proposal TASK 08', 'proposal TASK 09')
          AND key = ANY (string_to_array(COALESCE((SELECT value FROM hazem.settings WHERE key = 'e2e.texts08'), ''), ','));
       DELETE FROM hazem.settings WHERE key = 'e2e.texts08';
       DELETE FROM hazem.panel_audit WHERE user_id IN (SELECT id FROM hazem.panel_users WHERE username LIKE 'e2e-%')
@@ -506,13 +514,13 @@ SQL
     hazem_backup_set office.instapay e2e@instapay
     hazem_backup_set office.wallet_number 01000000000
     q "INSERT INTO hazem.settings (key, value, description)
-         SELECT 'e2e.texts08', COALESCE(string_agg(t.key, ','), ''), 'hazem-e2e: TASK 08 texts switched on for the test, off again by cleanup'
+         SELECT 'e2e.texts08', COALESCE(string_agg(t.key, ','), ''), 'hazem-e2e: TASK 08 and 09 texts switched on for the test, off again by cleanup'
            FROM hazem.approved_texts t
-          WHERE t.source = 'proposal TASK 08' AND NOT t.active
+          WHERE t.source IN ('proposal TASK 08', 'proposal TASK 09') AND NOT t.active
             AND NOT EXISTS (SELECT 1 FROM hazem.approved_texts a WHERE a.key = t.key AND a.active)
        ON CONFLICT (key) DO NOTHING;
        UPDATE hazem.approved_texts SET active = true
-        WHERE source = 'proposal TASK 08'
+        WHERE source IN ('proposal TASK 08', 'proposal TASK 09')
           AND key = ANY (string_to_array((SELECT value FROM hazem.settings WHERE key = 'e2e.texts08'), ','));" >/dev/null
     curl -s -X POST "$STUB/_google/reset" >/dev/null || die "meta-stub is not running"
     inject "$L" wamid.E2E-L1 text "$(text "السلام عليكم")" 10
@@ -567,9 +575,30 @@ SQL
     ;;
 
   check-hazem08-booked)
-    wait_eq "B-08: booked at once (confirmed), the confirmation carries the office's InstaPay" \
+    wait_eq "B-08 (1.13): held until the receipt, the message carries the office's InstaPay and the deadline" \
       "SELECT (SELECT state FROM hazem.appointments a JOIN hazem.persons p ON p.id = a.person_id WHERE p.wa_id = '$L') || '/' ||
-              (SELECT count(*) FROM app.wa_outbound_messages WHERE wa_id = '$L' AND request_payload->'text'->>'body' LIKE '✅ تم حجز%e2e@instapay%')" "confirmed/1"
+              (SELECT count(*) FROM app.wa_outbound_messages WHERE wa_id = '$L'
+                  AND request_payload->'text'->>'body' LIKE '⏳ ميعاد حضرتك متسجّل مبدئيًا%e2e@instapay%قبل الساعة%')" "pending_payment/1"
+    sleep 12  # one round of the booking worker: a hold never reaches the calendar
+    assert_eq "no calendar event for a hold" \
+      "$(curl -s "$STUB/_google/events" | jq -r --arg wa "+$L" '[.[] | select(.summary | contains($wa))] | length')" "0"
+    finish
+    ;;
+
+  # ---------------------------------------------------------------- TASK 09
+  hazem09-receipt)
+    inject "$L" wamid.E2E-L5 image '{"id":"STUB-IMG","mime_type":"image/jpeg"}' 10
+    echo "$L sends the receipt image"
+    ;;
+
+  check-hazem09-paid)
+    wait_eq "B-05 (1.13): the receipt image confirms the booking; the payment is never said to be confirmed" \
+      "SELECT (SELECT a.state || '/' || p.state FROM hazem.appointments a JOIN hazem.payments p ON p.appointment_id = a.id
+                JOIN hazem.persons x ON x.id = a.person_id WHERE x.wa_id = '$L') || '/' ||
+              (SELECT count(*) FROM app.wa_outbound_messages WHERE wa_id = '$L' AND request_payload->'text'->>'body' LIKE '✅ وصلت صورة التحويل%')" \
+      "confirmed/proof_received/1"
+    assert_eq "T-09: the receipt turn never reached the AI (no classification)" \
+      "$(q "SELECT count(*) FROM hazem.classifications WHERE turn_id = $(turn_of wamid.E2E-L5)")" "0"
     got=""
     for _ in $(seq 1 45); do  # the booking worker runs every 10 seconds
       got="$(curl -s "$STUB/_google/events" | jq -r --arg wa "+$L" '[.[] | select(.summary | contains($wa))] | length')"
@@ -579,7 +608,23 @@ SQL
     assert_eq "the appointment reached the lawyer's calendar (the stub) once" "$got" "1"
     assert_eq "the event holds the service, the name, the number and the kind only, never the client's words" \
       "$(curl -s "$STUB/_google/events" | jq -r --arg wa "+$L" '.[] | select(.summary | contains($wa)) | .summary')" \
-      "استشارة بالتليفون أو الفيديو – محمد أحمد علي حسن – +$L – غير معروف – إيصال: لسه ❌"
+      "استشارة بالتليفون أو الفيديو – محمد أحمد علي حسن – +$L – غير معروف – الدفع: مستني مراجعتك"
+    finish
+    ;;
+
+  hazem09-review)
+    panel_login
+    id="$(q "SELECT a.id FROM hazem.appointments a JOIN hazem.persons p ON p.id = a.person_id WHERE p.wa_id = '$L'")"
+    r="$(panel_get /payments)"
+    assert_eq "P1: a staff account sees the receipt waiting for the review" "$(jq -r 'length' <<<"$r")/$(jq -r '.[0].receipts' <<<"$r")" "1/1"
+    r="$(panel_post "/payments/$id/review" '{"state":"partial","received":300}')"
+    assert_eq "the staff mark «ناقص» with the amount that came" "${r##* }" "204"
+    finish
+    ;;
+
+  check-hazem09-partial)
+    wait_eq "B-05: the worker tells the client the rest (300 of 500, 200 left)" \
+      "SELECT count(*) FROM app.wa_outbound_messages WHERE wa_id = '$L' AND request_payload->'text'->>'body' LIKE '⚠️ وصلنا 300 جنيه من 500 جنيه%باقي المبلغ 200 جنيه%'" "1"
     finish
     ;;
 
@@ -609,6 +654,35 @@ SQL
     panel_login
     u1="$(panel_post /booking/undo '{"confirm":false}')"; u2="$(panel_post /booking/undo '{"confirm":false}')"
     assert_eq "«تراجع» twice reopens both days" "${u1##* }/${u2##* }/$(q "SELECT count(*) FROM hazem.booking_exceptions WHERE reason = 'e2e'")" "200/200/0"
+    finish
+    ;;
+
+  hazem09-refund-press)
+    id="$(q "SELECT a.id FROM hazem.appointments a JOIN hazem.persons p ON p.id = a.person_id WHERE p.wa_id = '$L'")"
+    inject "$L" wamid.E2E-L6 interactive "$(interactive list_reply "bk:f:${id//-/}")" 10
+    echo "$L chooses «استرداد كامل»"
+    ;;
+
+  check-hazem09-refund-requested)
+    wait_eq "B-22: a refund of what came (300, marked partial) is due, and the office has a task" \
+      "SELECT (SELECT p.state || '/' || p.refund_due || '/' || p.refund_reason FROM hazem.payments p JOIN hazem.appointments a ON a.id = p.appointment_id
+                JOIN hazem.persons x ON x.id = a.person_id WHERE x.wa_id = '$L') || '/' ||
+              (SELECT count(*) FROM hazem.staff_tasks t JOIN hazem.persons x ON x.id = t.person_id WHERE x.wa_id = '$L' AND t.type = 'refund')" \
+      "refund_requested/300/office_cancelled/1"
+    finish
+    ;;
+
+  hazem09-refunded)
+    panel_login
+    id="$(q "SELECT a.id FROM hazem.appointments a JOIN hazem.persons p ON p.id = a.person_id WHERE p.wa_id = '$L'")"
+    r="$(panel_post "/payments/$id/refunded" '{"method":"فودافون كاش"}')"
+    assert_eq "P2: the person who transferred it records the refund" "${r##* }" "204"
+    finish
+    ;;
+
+  check-hazem09-refunded)
+    wait_eq "B-22: only then the client hears it (the worker)" \
+      "SELECT count(*) FROM app.wa_outbound_messages WHERE wa_id = '$L' AND request_payload->'text'->>'body' = '✅ تم رد 300 جنيه لحضرتك على فودافون كاش.'" "1"
     finish
     ;;
 

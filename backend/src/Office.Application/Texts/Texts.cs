@@ -61,7 +61,7 @@ public static class TextKeys
     public const string LocationReceived = "location_received";
 
     // TASK 08 (booking). From DECISIONS, word for word (active).
-    public const string BookingConfirmed = "booking_confirmed";              // B-08
+    public const string BookingConfirmed = "booking_confirmed";              // B-08 (1.4; replaced by booking_hold in 1.13)
     public const string BookingCancelledByOffice = "booking_cancelled_by_office"; // B-22
 
     // Proposed in TASK 08 (inactive until approved). Titles of buttons and list rows too.
@@ -81,6 +81,23 @@ public static class TextKeys
     public const string BookingCancelled = "booking_cancelled";
     public const string BtnRefund = "btn_refund";
     public const string BookingRefundRequested = "booking_refund_requested";
+
+    // Proposed in TASK 09 (DECISIONS v1.13: the hold until the receipt; inactive until approved).
+    public const string BookingHold = "booking_hold";                       // B-08.4
+    public const string BookingHoldReminder = "booking_hold_reminder";      // B-08.6, the worker
+    public const string BookingPaid = "booking_paid";                       // B-08.5: the receipt confirmed it
+    public const string BookingHoldExpired = "booking_hold_expired";        // B-08.6, the worker
+    public const string BookingHoldLate = "booking_hold_late";              // B-05: receipt after the time, taken
+    public const string BookingHoldOne = "booking_hold_one";                // P3
+    public const string BookingHoldCancelled = "booking_hold_cancelled";
+    public const string BookingOfficeUnpaid = "booking_office_unpaid";      // B-22, a hold the office cancelled (the worker)
+    public const string ReceiptSendImage = "receipt_send_image";            // P7
+    public const string ProofReceivedAgain = "proof_received_again";        // B-05
+    public const string PaymentPartial = "payment_partial";                 // B-05, the worker
+    public const string PaymentNotReceived = "payment_not_received";        // B-05, the worker
+    public const string RefundFull = "refund_full";                         // B-22
+    public const string RefundNone = "refund_none";                         // B-22
+    public const string RefundCompleted = "refund_completed";               // B-22, the worker
 }
 
 /// <summary>

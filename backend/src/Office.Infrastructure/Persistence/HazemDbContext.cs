@@ -150,12 +150,24 @@ public sealed class HazemDbContext(DbContextOptions<HazemDbContext> options) : D
             e.ToTable("appointments");
             e.HasKey(x => x.Id);
         });
+        b.Entity<PaymentRow>(e =>
+        {
+            e.ToTable("payments");
+            e.HasKey(x => x.Id);
+        });
+        b.Entity<PaymentReceiptRow>(e =>
+        {
+            e.ToTable("payment_receipts");
+            e.HasKey(x => x.Id);
+        });
     }
 
     public DbSet<BookingWeeklyHourRow> BookingWeeklyHours => Set<BookingWeeklyHourRow>();
     public DbSet<BookingExceptionRow> BookingExceptions => Set<BookingExceptionRow>();
     public DbSet<BookingChangeRow> BookingChanges => Set<BookingChangeRow>();
     public DbSet<AppointmentRow> Appointments => Set<AppointmentRow>();
+    public DbSet<PaymentRow> Payments => Set<PaymentRow>();
+    public DbSet<PaymentReceiptRow> PaymentReceipts => Set<PaymentReceiptRow>();
 
     public DbSet<StaffRow> Staff => Set<StaffRow>();
     public DbSet<StaffTaskRow> StaffTasks => Set<StaffTaskRow>();
@@ -402,8 +414,48 @@ public sealed class AppointmentRow
     public DateTimeOffset CalendarNextAt { get; set; }
     public DateTimeOffset? ConflictNotedAt { get; set; }
     public string? ClientNotice { get; set; }
+    public DateTimeOffset? HoldUntil { get; set; }
+    public DateTimeOffset? HoldRemindedAt { get; set; }
+    public string? NoticeKind { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
+}
+
+/// <summary>hazem.payments (0014, S-04).</summary>
+public sealed class PaymentRow
+{
+    public Guid Id { get; set; }
+    public Guid AppointmentId { get; set; }
+    public required string State { get; set; }
+    public int AmountDue { get; set; }
+    public int? AmountReceived { get; set; }
+    public DateTimeOffset? ProofAt { get; set; }
+    public Guid? ReviewedBy { get; set; }
+    public DateTimeOffset? ReviewedAt { get; set; }
+    public int? RefundDue { get; set; }
+    public string? RefundReason { get; set; }
+    public Guid? RefundedBy { get; set; }
+    public DateTimeOffset? RefundedAt { get; set; }
+    public string? RefundMethod { get; set; }
+    public string? RefundNote { get; set; }
+    public string? ClientNotice { get; set; }
+    public string? NoticeKind { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
+/// <summary>hazem.payment_receipts (0014): where a receipt image is; never its content.</summary>
+public sealed class PaymentReceiptRow
+{
+    public Guid Id { get; set; }
+    public Guid PaymentId { get; set; }
+    public required string Wamid { get; set; }
+    public required string Bucket { get; set; }
+    public required string Key { get; set; }
+    public required string Sha256 { get; set; }
+    public string? Mime { get; set; }
+    public Guid? DuplicateOf { get; set; }
+    public DateTimeOffset ReceivedAt { get; set; }
 }
 
 public sealed class SettingRow

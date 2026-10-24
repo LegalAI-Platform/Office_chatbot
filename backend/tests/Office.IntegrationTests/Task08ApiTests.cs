@@ -25,16 +25,18 @@ public sealed class Task08ApiTests(TestDatabase db) : IAsyncLifetime
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     private const string Clean = """
-        DELETE FROM hazem.appointments; DELETE FROM hazem.booking_exceptions; DELETE FROM hazem.booking_changes;
+        DELETE FROM hazem.payment_receipts; DELETE FROM hazem.payments; DELETE FROM hazem.appointments; DELETE FROM hazem.booking_exceptions; DELETE FROM hazem.booking_changes;
         DELETE FROM hazem.booking_weekly_hours;
         INSERT INTO hazem.booking_weekly_hours (weekday, start_minute, end_minute) SELECT d, 600, 1440 FROM generate_series(0, 6) d;
         UPDATE hazem.settings SET value = CASE key
           WHEN 'booking.enabled' THEN 'false' WHEN 'booking.buffer_minutes' THEN '10' WHEN 'booking.min_notice_hours' THEN '2'
           WHEN 'booking.horizon_days' THEN '14' WHEN 'booking.slot_step_minutes' THEN '15' WHEN 'booking.offer_count' THEN '4'
+          WHEN 'booking.hold_minutes' THEN '120' WHEN 'booking.hold_short_minutes' THEN '60'
+          WHEN 'booking.hold_short_within_hours' THEN '6' WHEN 'booking.hold_gap_minutes' THEN '15'
           ELSE '' END
          WHERE key LIKE 'booking.%' OR key LIKE 'office.%';
         UPDATE hazem.settings SET value = 'false' WHERE key = 'booking.conflict_auto_message';
-        UPDATE hazem.approved_texts SET active = true WHERE source = 'proposal TASK 08';
+        UPDATE hazem.approved_texts SET active = true WHERE source IN ('proposal TASK 08', 'proposal TASK 09');
         TRUNCATE hazem.panel_audit; DELETE FROM hazem.panel_users;
         TRUNCATE hazem.turns, hazem.send_results, hazem.turn_replies, hazem.classifications, hazem.panel_alerts, hazem.panel_alert_reads, hazem.staff_tasks, hazem.list_entries;
         DELETE FROM hazem.staff; DELETE FROM hazem.intakes; DELETE FROM hazem.conversations; DELETE FROM hazem.persons;
@@ -57,8 +59,12 @@ public sealed class Task08ApiTests(TestDatabase db) : IAsyncLifetime
         await db.SetAsync("hazem.recipients", "");
     }
 
-    /// <summary>Booking on (its texts are approved since 0013), the office's details and the calendar id.</summary>
+    /// <summary>
+    /// Booking on: TASK 08's and TASK 09's texts (approved since 0013 and 0014; the booking needs them all),
+    /// the office's details and the calendar id.
+    /// </summary>
     private Task BookingOn() => db.ExecAsync("""
+        UPDATE hazem.approved_texts SET active = true WHERE source = 'proposal TASK 09';
         UPDATE hazem.settings SET value = 'true' WHERE key = 'booking.enabled';
         UPDATE hazem.settings SET value = 'lawyer@example.test' WHERE key = 'booking.calendar_id';
         UPDATE hazem.settings SET value = 'office@instapay' WHERE key = 'office.instapay';
@@ -80,6 +86,17 @@ public sealed class Task08ApiTests(TestDatabase db) : IAsyncLifetime
 
     private Task<JsonArray> Press(string id) =>
         Turn(new JsonObject { ["type"] = "interactive", ["interactive"] = new JsonObject { ["kind"] = "list_reply", ["id"] = id, ["title"] = "x" } });
+
+    /// <summary>TASK 09: a receipt image n8n stored (its place and hash only).</summary>
+    private Task<JsonArray> Receipt(string sha = "r1") => Turn(new JsonObject
+    {
+        ["type"] = "image",
+        ["media"] = new JsonObject
+        {
+            ["status"] = "stored", ["bucket"] = "office-sensitive", ["key"] = $"wa/2026/11/receipt-{_n}.jpg", ["mime_type"] = "image/jpeg",
+            ["size_bytes"] = 1234, ["sha256"] = sha,
+        },
+    });
 
     private async Task<HttpClient> SignIn(string name, string role, string? staff = null)
     {
@@ -133,10 +150,19 @@ public sealed class Task08ApiTests(TestDatabase db) : IAsyncLifetime
         var first = times["interactive"]!["choices"]![0]!;
         Assert.Equal("النهارده 2:00 م", (string?)first["title"]); // 12:00 + the 2 hours' notice
 
-        var confirmed = (await Press((string)first["id"]!)).Single()!;
-        Assert.Contains("office@instapay", (string?)confirmed["text"]);
-        Assert.Equal("confirmed|consultation_phone_video|500|create", await db.ScalarAsync<string>(
+        var held = (await Press((string)first["id"]!)).Single()!;
+        Assert.Contains("office@instapay", (string?)held["text"]);
+        Assert.Contains("قبل الساعة 1:00 م النهارده", (string?)held["text"]); // v1.13: held until the receipt
+        Assert.Equal("pending_payment|consultation_phone_video|500|wait", await db.ScalarAsync<string>(
             "SELECT state || '|' || service || '|' || amount || '|' || calendar_state FROM hazem.appointments"));
+        using (var scope = _factory.Services.CreateScope())
+        {
+            Assert.Equal(0, await scope.ServiceProvider.GetRequiredService<CalendarSync>().SyncAsync(Ct)); // no event for a hold
+        }
+
+        Assert.StartsWith("✅ وصلت صورة التحويل", (string?)(await Receipt()).Single()!["text"]);
+        Assert.Equal("confirmed|create|proof_received", await db.ScalarAsync<string>(
+            "SELECT a.state || '|' || a.calendar_state || '|' || p.state FROM hazem.appointments a JOIN hazem.payments p ON p.appointment_id = a.id"));
 
         using (var scope = _factory.Services.CreateScope())
         {
@@ -144,7 +170,7 @@ public sealed class Task08ApiTests(TestDatabase db) : IAsyncLifetime
         }
 
         var ev = Assert.Single(_factory.Google.Events.Values);
-        Assert.Equal("استشارة بالتليفون أو الفيديو – محمد أحمد علي حسن – +201000000091 – غير معروف – إيصال: لسه ❌", ev.Summary);
+        Assert.Equal("استشارة بالتليفون أو الفيديو – محمد أحمد علي حسن – +201000000091 – غير معروف – الدفع: مستني مراجعتك", ev.Summary);
         Assert.Equal("synced", await db.ScalarAsync<string>("SELECT calendar_state FROM hazem.appointments"));
     }
 
@@ -175,14 +201,15 @@ public sealed class Task08ApiTests(TestDatabase db) : IAsyncLifetime
             await using var c = new NpgsqlConnection(db.ApiConnectionString);
             await c.OpenAsync(Ct);
             await using var cmd = new NpgsqlCommand(
-                $"SELECT hazem.book_appointment(gen_random_uuid(), '{person}', NULL, 'consultation_phone_video', '2026-12-01 14:00+02', '2026-12-01 14:15+02', 500, '{turn}', 10, NULL)->>'status'", c);
+                $"SELECT hazem.book_appointment(gen_random_uuid(), '{person}', NULL, 'consultation_phone_video', '2026-12-01 14:00+02', '2026-12-01 14:15+02', 500, '{turn}', 10, NULL, '2026-12-01 13:00+02')->>'status'", c);
             return (string)(await cmd.ExecuteScalarAsync(Ct))!;
         }
 
+        // v1.13: the winner holds the time (until the receipt); the hold closes it like a confirmed booking.
         var results = await Task.WhenAll(Book("00000000-0000-0000-0000-0000000008a1", "t1"), Book("00000000-0000-0000-0000-0000000008a2", "t2"));
-        Assert.Equal(["booked", "taken"], results.Order());
-        Assert.Equal("exists", await Book(results[0] == "booked" ? "00000000-0000-0000-0000-0000000008a1" : "00000000-0000-0000-0000-0000000008a2",
-            results[0] == "booked" ? "t1" : "t2")); // the same turn again books nothing new
+        Assert.Equal(["held", "taken"], results.Order());
+        Assert.Equal("exists", await Book(results[0] == "held" ? "00000000-0000-0000-0000-0000000008a1" : "00000000-0000-0000-0000-0000000008a2",
+            results[0] == "held" ? "t1" : "t2")); // the same turn again books nothing new
 
         // The constraint alone refuses it too, even without the function.
         var e = await Assert.ThrowsAsync<PostgresException>(() => db.ExecAsync("""
@@ -200,6 +227,7 @@ public sealed class Task08ApiTests(TestDatabase db) : IAsyncLifetime
         await BookingOn();
         await UpToTheOffer();
         await Press("bk:s:pv:" + new DateTimeOffset(2026, 11, 20, 12, 0, 0, TimeSpan.FromHours(2)).ToUnixTimeSeconds());
+        await Receipt(); // paid: the office's cancellation offers the refund (B-22)
         var staff = await SignIn("yasmin", Permissions.Staff, "ياسمين");
 
         var refused = await staff.PostAsJsonAsync("/api/panel/booking/exceptions", new { day = "2026-11-20", kind = "closed_day", reason = "جلسة" }, Ct);
@@ -246,12 +274,12 @@ public sealed class Task08ApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, (await staff.PutAsJsonAsync("/api/panel/booking/week", new { days = Week(1440) }, Ct)).StatusCode);
         await UpToTheOffer();
         await Press("bk:s:pv:" + new DateTimeOffset(2026, 11, 21, 21, 0, 0, TimeSpan.FromHours(2)).ToUnixTimeSeconds()); // in the new evening hours
-        Assert.Equal("confirmed", await db.ScalarAsync<string>("SELECT state FROM hazem.appointments"));
+        Assert.Equal("pending_payment", await db.ScalarAsync<string>("SELECT state FROM hazem.appointments")); // a hold counts too
 
         var asked = await staff.PostAsJsonAsync("/api/panel/booking/undo", new { confirm = false }, Ct);
         Assert.Equal(HttpStatusCode.Conflict, asked.StatusCode); // back to mornings would leave 21:00 outside
         Assert.Single((await asked.Content.ReadFromJsonAsync<JsonNode>(Ct))!["appointments"]!.AsArray());
-        Assert.Equal("confirmed|0", await db.ScalarAsync<string>(
+        Assert.Equal("pending_payment|0", await db.ScalarAsync<string>(
             "SELECT (SELECT state FROM hazem.appointments) || '|' || (SELECT count(*) FROM hazem.booking_changes WHERE undone_at IS NOT NULL)"));
 
         var done = await staff.PostAsJsonAsync("/api/panel/booking/undo", new { confirm = true }, Ct);

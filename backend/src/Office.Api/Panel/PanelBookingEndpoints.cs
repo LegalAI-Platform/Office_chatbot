@@ -103,7 +103,51 @@ public static class PanelBookingEndpoints
             var me = ctx.CurrentUser();
             return await b.SaveOfficeAsync(me.Id, me.Username, body, ct) is { } error ? Results.BadRequest(new { error }) : Results.NoContent();
         });
+
+        // TASK 09 (B-05, B-22, S-04): the payments. Everyone sees them, reviews a transfer (P1) and records a refund (P2).
+        var payments = panel.MapGroup("/payments").RequireAuthorization(PanelAuth.Policy(Permissions.ScheduleManage));
+
+        payments.MapGet("", async (string? show, PanelPayments p, CancellationToken ct) =>
+            await p.ListAsync(show, ct) is { } list ? Results.Ok(list) : Results.BadRequest(new { error = PanelPayments.ErrInvalid }));
+
+        // A receipt image (0 = the first), like a client's file in 07c: never cached, shown only as a picture, recorded.
+        payments.MapGet("/{id:guid}/receipts/{index:int}", async (Guid id, int index, HttpContext ctx, PanelPayments p,
+            Office.Application.Panel.IClientFiles files, CancellationToken ct) =>
+        {
+            if (!files.Configured)
+            {
+                return Results.Json(new { error = "not_configured" }, statusCode: StatusCodes.Status503ServiceUnavailable);
+            }
+
+            if (await p.ReceiptAsync(id, index, ct) is not { } receipt || await files.OpenAsync(receipt, ct) is not { } file)
+            {
+                return Results.NotFound(new { error = PanelPayments.ErrNotFound });
+            }
+
+            await p.RecordOpenedAsync(ctx.CurrentUser().Id, id, index, ct);
+            var type = ClientFileTypes.Safe(file.ContentType);
+            ctx.Response.Headers.ContentSecurityPolicy = "sandbox; default-src 'none'; img-src 'self'";
+            return type.StartsWith("image/", StringComparison.Ordinal)
+                ? Results.Stream(file.Content, type)
+                : Results.Stream(file.Content, "application/octet-stream", $"receipt-{index + 1}");
+        });
+
+        payments.MapPost("/{id:guid}/review", async (Guid id, ReviewRequest? body, HttpContext ctx, PanelPayments p, CancellationToken ct) =>
+            PaymentAnswer(await p.ReviewAsync(ctx.CurrentUser().Id, id, body?.State, body?.Received, ct)))
+            .RequireAuthorization(PanelAuth.Policy(Permissions.PaymentsVerify));
+
+        payments.MapPost("/{id:guid}/refunded", async (Guid id, RefundedRequest? body, HttpContext ctx, PanelPayments p, CancellationToken ct) =>
+            PaymentAnswer(await p.RefundedAsync(ctx.CurrentUser().Id, id, body?.Method, body?.Note, ct)))
+            .RequireAuthorization(PanelAuth.Policy(Permissions.PaymentsRefund));
     }
+
+    private static IResult PaymentAnswer(string? error) => error switch
+    {
+        null => Results.NoContent(),
+        PanelPayments.ErrNotFound => Results.NotFound(new { error }),
+        PanelPayments.ErrNotAllowed => Results.Conflict(new { error }),
+        _ => Results.BadRequest(new { error }),
+    };
 
     /// <summary>
     /// Done (the clients of cancelled appointments are told by the worker within seconds), or 409 with the
@@ -142,4 +186,8 @@ public static class PanelBookingEndpoints
     public sealed record StateRequest(string? State);
 
     public sealed record UndoRequest(bool Confirm);
+
+    public sealed record ReviewRequest(string? State, int? Received);
+
+    public sealed record RefundedRequest(string? Method, string? Note);
 }

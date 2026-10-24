@@ -218,7 +218,11 @@ public sealed class BookingChoiceAndComposerTests
     }
 }
 
-/// <summary>The booking in the conversation (B-08, B-09, B-15, B-22) with an in-memory store and calendar.</summary>
+
+/// <summary>
+/// The booking in the conversation (B-08, B-09, B-15, B-22; v1.13: the hold until the receipt image) with an
+/// in-memory store and calendar.
+/// </summary>
 public sealed class BookingFlowTests
 {
     private const string Number = "201000000088";
@@ -226,7 +230,7 @@ public sealed class BookingFlowTests
 
     private readonly Dictionary<string, ClientState> _rows = [];
     private readonly Dictionary<string, ApprovedText> _texts = [];
-    private readonly MemoryBooking _booking = new();
+    private readonly MemoryBooking _booking;
     private readonly FakeCalendar _calendar = new();
     private readonly Dictionary<string, RawClassification> _script = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _settings = new()
@@ -242,6 +246,7 @@ public sealed class BookingFlowTests
 
     public BookingFlowTests()
     {
+        _booking = new MemoryBooking(() => _now);
         foreach (var (k, v) in HazemFlowTests.Approved)
         {
             _texts[k] = new ApprovedText(k, 1, v, 300, true);
@@ -252,12 +257,20 @@ public sealed class BookingFlowTests
             _texts[k] = new ApprovedText(k, 1, "T:" + k, 300, true);
         }
 
-        _texts[TextKeys.BookingConfirmed] = new ApprovedText(TextKeys.BookingConfirmed, 1,
-            "✅ تم حجز {{service}} يوم {{day}} الساعة {{time}}. المبلغ {{amount}} جنيه، مقدمًا على InstaPay: {{instapay}}، أو محفظة كاش: {{wallet}}.", 600, true);
-        foreach (var k in HazemResponder.BookingTextKeys.Where(k => k != TextKeys.BookingConfirmed))
+        _texts[TextKeys.MediaReceived] = new ApprovedText(TextKeys.MediaReceived, 1, "وصلت {{media}}", 300, true);
+        var withSlots = new Dictionary<string, string>
         {
-            var max = k.StartsWith("btn_", StringComparison.Ordinal) ? 20 : 300;
-            _texts[k] = new ApprovedText(k, 1, k == TextKeys.BookingExisting ? "عندك {{service}} {{day}} {{time}}" : k == TextKeys.BookingRescheduled ? "اتغير {{day}} {{time}}" : "T:" + k[..Math.Min(k.Length, 16)], max, true);
+            [TextKeys.BookingExisting] = "عندك {{service}} {{day}} {{time}}",
+            [TextKeys.BookingRescheduled] = "اتغير {{day}} {{time}}",
+            [TextKeys.BookingHold] = "⏳ {{service}} يوم {{day}} الساعة {{time}}. حوّل {{amount}} جنيه على InstaPay: {{instapay}}، أو محفظة كاش: {{wallet}}. قبل الساعة {{deadline}}.",
+            [TextKeys.BookingPaid] = "✅ اتأكد {{service}} يوم {{day}} الساعة {{time}}",
+            [TextKeys.BookingHoldOne] = "عندك مبدئي {{day}} {{time}} لحد {{deadline}}",
+            [TextKeys.BookingHoldLate] = "اتحجز {{day}} {{time}}",
+        };
+        foreach (var k in HazemResponder.BookingTextKeys)
+        {
+            var max = k.StartsWith("btn_", StringComparison.Ordinal) ? 20 : k == TextKeys.BookingHold ? 600 : 300;
+            _texts[k] = new ApprovedText(k, 1, withSlots.TryGetValue(k, out var t) ? t : "T:" + k[..Math.Min(k.Length, 16)], max, true);
         }
     }
 
@@ -282,6 +295,11 @@ public sealed class BookingFlowTests
     private Task<TurnDecision> Press(string id) =>
         Send(new IncomingMessage($"wamid.{++_turn}", MessageType.Interactive, null, null, null, Interactive: new Interactive("list_reply", id, "x")));
 
+    /// <summary>A receipt: an image n8n stored (its place and hash only).</summary>
+    private Task<TurnDecision> Receipt(string sha = "aa", string? caption = null) =>
+        Send(new IncomingMessage($"wamid.{++_turn}", MessageType.Image, null, null, null, caption,
+            new MediaRef(MediaStatus.Stored, "office-sensitive", $"k{_turn}", "image/jpeg", 1000, sha)));
+
     private static List<string> Keys(TurnDecision d) => d.Effects!.Replies.Select(r => r.Key).ToList();
 
     private static List<string> TaskKinds(TurnDecision d) => d.Effects!.Tasks.Select(t => t.Kind).ToList();
@@ -295,6 +313,14 @@ public sealed class BookingFlowTests
         await Say("السلام عليكم");
         await Say("محمد أحمد علي حسن");
         return await Say("عايز أحجز");
+    }
+
+    /// <summary>Held, then confirmed by a receipt (v1.13).</summary>
+    private async Task<Guid> BookAndPay(BookingService service, DateTimeOffset at)
+    {
+        await Press(BookingChoice.Pick(service, at));
+        await Receipt(sha: at.ToUnixTimeSeconds().ToString(System.Globalization.CultureInfo.InvariantCulture));
+        return _booking.Appointments.Single(a => a.State == AppointmentInfo.Confirmed && a.Start == at).Id;
     }
 
     [Fact]
@@ -314,22 +340,124 @@ public sealed class BookingFlowTests
     }
 
     [Fact]
-    public async Task A_time_is_booked_at_once_with_the_payment_details()
+    public async Task A_picked_time_is_held_with_where_to_pay_and_the_exact_deadline()
     {
         await ToTheOffer();
         var d = await Press(BookingChoice.Pick(BookingService.Office, AvailabilityTests.At(19, 15)));
-        Assert.Equal([TextKeys.BookingConfirmed], Keys(d));
+        Assert.Equal([TextKeys.BookingHold], Keys(d));
         var text = Assert.Single(d.Actions).Text!;
         Assert.Contains("مقابلة في المكتب يوم النهارده الساعة 3:00 م", text);
         Assert.Contains("1,000 جنيه", text);
         Assert.Contains("office@instapay", text);
         Assert.Contains("01000000000 (فودافون كاش)", text);
-        var booked = Assert.Single(_booking.Appointments);
-        Assert.Equal((AvailabilityTests.At(19, 15), AvailabilityTests.At(19, 15, 30), "inheritance"), (booked.Start, booked.End, booked.MatterType));
+        Assert.Contains("قبل الساعة 1:00 م النهارده", text); // within 6 hours: the short hold (1 hour), as a time of day
+        var held = Assert.Single(_booking.Appointments);
+        Assert.Equal((AppointmentInfo.PendingPayment, AvailabilityTests.At(19, 13), "inheritance"), (held.State, held.HoldUntil, held.MatterType));
     }
 
     [Fact]
-    public async Task Without_the_payment_details_the_booking_stands_and_the_office_gets_a_task()
+    public void The_hold_is_two_hours_one_when_soon_and_always_ends_before_the_appointment()
+    {
+        var h = HoldRules.Default;
+        Assert.Equal(Now.AddHours(2), h.Until(Now, Now.AddDays(1)));
+        Assert.Equal(Now.AddHours(1), h.Until(Now, Now.AddHours(5)));
+        Assert.Equal(Now.AddMinutes(30), h.Until(Now, Now.AddMinutes(45)));
+        Assert.False(h.Offerable(Now, Now.AddMinutes(25))); // a quarter of an hour to pay is too little
+        Assert.Equal("hold_short_minutes", (h with { ShortMinutes = 200 }).Problem());
+    }
+
+    [Fact]
+    public async Task The_receipt_image_confirms_the_hold_without_the_ai()
+    {
+        await ToTheOffer();
+        await Press(BookingChoice.Pick(BookingService.PhoneVideo, AvailabilityTests.At(20, 12)));
+        var d = await Receipt();
+        Assert.Null(d.Effects!.Classification); // T-09: never to the AI
+        Assert.Equal([TextKeys.BookingPaid], Keys(d));
+        Assert.Contains("بكرة الساعة 12:00 م", Assert.Single(d.Actions).Text);
+        var a = Assert.Single(_booking.Appointments);
+        Assert.Equal(AppointmentInfo.Confirmed, a.State);
+        Assert.Equal((PaymentInfo.ProofReceived, (DateTimeOffset?)_now), (_booking.Payments[a.Id].State, _booking.Payments[a.Id].ProofAt));
+    }
+
+    [Fact]
+    public async Task Words_with_the_receipt_go_to_the_office_not_the_ai()
+    {
+        await ToTheOffer();
+        await Press(BookingChoice.Pick(BookingService.PhoneVideo, AvailabilityTests.At(20, 12)));
+        var d = await Receipt(caption: "حولت من رقم أخويا");
+        Assert.Null(d.Effects!.Classification);
+        Assert.Equal([TextKeys.BookingPaid], Keys(d));
+        Assert.Contains(PendingTask.UnclearMessage, TaskKinds(d));
+    }
+
+    [Fact]
+    public async Task A_pdf_is_not_a_receipt_hazem_asks_for_an_image()
+    {
+        await ToTheOffer();
+        await Press(BookingChoice.Pick(BookingService.PhoneVideo, AvailabilityTests.At(20, 12)));
+        var d = await Send(new IncomingMessage($"wamid.{++_turn}", MessageType.Document, null, null, null, null,
+            new MediaRef(MediaStatus.Stored, "office-sensitive", "doc", "application/pdf", 1000, "bb", "receipt.pdf")));
+        Assert.Equal([TextKeys.ReceiptSendImage], Keys(d));
+        Assert.Equal(AppointmentInfo.PendingPayment, Assert.Single(_booking.Appointments).State);
+    }
+
+    [Fact]
+    public async Task An_image_with_nothing_waiting_is_just_a_file()
+    {
+        await ToTheOffer();
+        var d = await Receipt();
+        Assert.Equal([TextKeys.MediaReceived], Keys(d));
+        Assert.Empty(_booking.Appointments);
+    }
+
+    [Fact]
+    public async Task One_hold_at_a_time_the_second_waits_for_the_first_receipt()
+    {
+        await ToTheOffer();
+        await Press(BookingChoice.Pick(BookingService.PhoneVideo, AvailabilityTests.At(20, 12)));
+        var d = await Press(BookingChoice.Pick(BookingService.Office, AvailabilityTests.At(21, 12)));
+        Assert.Equal([TextKeys.BookingHoldOne], Keys(d));
+        Assert.Contains("لحد 2:00 م النهارده", Assert.Single(d.Actions).Text);
+        Assert.Single(_booking.Appointments);
+    }
+
+    [Fact]
+    public async Task Another_time_for_the_same_service_replaces_the_hold()
+    {
+        await ToTheOffer();
+        await Press(BookingChoice.Pick(BookingService.PhoneVideo, AvailabilityTests.At(20, 12)));
+        var d = await Press(BookingChoice.Pick(BookingService.PhoneVideo, AvailabilityTests.At(21, 12)));
+        Assert.Equal([TextKeys.BookingHold], Keys(d));
+        Assert.Equal([AppointmentInfo.CancelledByClient, AppointmentInfo.PendingPayment], _booking.Appointments.Select(a => a.State));
+    }
+
+    [Fact]
+    public async Task A_late_receipt_confirms_a_time_still_free_or_pays_for_the_next_one()
+    {
+        await ToTheOffer();
+        await Press(BookingChoice.Pick(BookingService.PhoneVideo, AvailabilityTests.At(20, 12)));
+        _booking.Expire();
+        Assert.Equal([TextKeys.BookingPaid], Keys(await Receipt(sha: "s1"))); // still free: confirmed
+        Assert.Equal(AppointmentInfo.Confirmed, Assert.Single(_booking.Appointments).State);
+
+        _booking.Appointments.Clear();
+        _rows.Clear();
+        await ToTheOffer();
+        await Press(BookingChoice.Pick(BookingService.PhoneVideo, AvailabilityTests.At(20, 12)));
+        _booking.Expire();
+        _calendar.Busy.Add(new BusyInterval(AvailabilityTests.At(20, 12), AvailabilityTests.At(20, 13))); // taken meanwhile
+        var late = await Receipt(sha: "s2");
+        Assert.Equal([TextKeys.BookingHoldLate], Keys(late));
+        Assert.Contains("بكرة 12:00 م", late.Actions[0].Text);
+
+        var picked = await Press(BookingChoice.Pick(BookingService.PhoneVideo, AvailabilityTests.At(20, 14)));
+        Assert.Equal([TextKeys.BookingPaid], Keys(picked)); // no second payment
+        Assert.Equal(PaymentInfo.ProofReceived, _booking.Payments[_booking.Appointments.Single(a => a.State == AppointmentInfo.Confirmed).Id].State);
+    }
+
+    [Fact]
+    public async Task Without_the_payment_details_the_hold_stands_and_the_office_gets_a_task()
     {
         _settings.Remove(OfficeInfo.InstaPayKey);
         await ToTheOffer();
@@ -370,23 +498,23 @@ public sealed class BookingFlowTests
     }
 
     [Fact]
-    public async Task Urgent_shows_today_s_times_without_the_notice()
+    public async Task Urgent_shows_today_s_times_without_the_notice_but_with_time_to_pay()
     {
         await ToTheOffer();
         _now = AvailabilityTests.At(19, 12, 3);
         _script["مستعجل جدا"] = new("urgent", null, "unknown", null, 0.95);
         var d = await Say("مستعجل جدا");
         Assert.Equal([TextKeys.UrgentPrice, TextKeys.BookingChooseSlot], Keys(d));
-        Assert.Equal("النهارده 12:15 م", d.Actions[1].Interactive!.Choices[0].Title);
+        // 12:15 and 12:30 would leave under a quarter of an hour to pay (1.13): 12:45 is the first.
+        Assert.Equal("النهارده 12:45 م", d.Actions[1].Interactive!.Choices[0].Title);
         Assert.Contains(PendingTask.UrgentRequest, TaskKinds(d));
     }
 
     [Fact]
-    public async Task Change_once_then_the_lawyer_decides_and_cancel()
+    public async Task Change_once_then_the_lawyer_decides_and_cancel_within_24_hours_is_a_full_refund()
     {
         await ToTheOffer();
-        await Press(BookingChoice.Pick(BookingService.PhoneVideo, AvailabilityTests.At(20, 12)));
-        var id = Assert.Single(_booking.Appointments).Id;
+        var id = await BookAndPay(BookingService.PhoneVideo, AvailabilityTests.At(20, 12));
 
         _script["عايز ألغي أو أغير"] = new("reschedule_or_cancel", null, "unknown", null, 0.9);
         var shown = await Say("عايز ألغي أو أغير");
@@ -404,17 +532,58 @@ public sealed class BookingFlowTests
         Assert.Equal([PendingTask.LateReschedule], TaskKinds(again));
 
         var cancelled = await Press(BookingChoice.Cancel(id));
-        Assert.Equal([TextKeys.BookingCancelled], Keys(cancelled));
-        Assert.Equal([PendingTask.BookingCancelled], TaskKinds(cancelled));
+        Assert.Equal([TextKeys.RefundFull], Keys(cancelled)); // B-22: within 24 hours of the receipt
+        Assert.Equal([PendingTask.Refund], TaskKinds(cancelled));
         Assert.Equal(AppointmentInfo.CancelledByClient, _booking.Appointments[0].State);
+        Assert.Equal((PaymentInfo.RefundRequested, (int?)500), (_booking.Payments[id].State, _booking.Refunds[id]));
+    }
+
+    [Fact]
+    public async Task Cancel_after_24_hours_of_the_receipt_is_no_refund_and_a_hold_is_nothing_to_refund()
+    {
+        await ToTheOffer();
+        var id = await BookAndPay(BookingService.PhoneVideo, AvailabilityTests.At(23, 12));
+        _now = Now.AddHours(25);
+        var d = await Press(BookingChoice.Cancel(id));
+        Assert.Equal([TextKeys.RefundNone], Keys(d));
+        Assert.Equal([PendingTask.BookingCancelled], TaskKinds(d));
+
+        await Press(BookingChoice.Pick(BookingService.PhoneVideo, AvailabilityTests.At(24, 12)));
+        var hold = _booking.Appointments.Single(a => a.State == AppointmentInfo.PendingPayment).Id;
+        var cancelledHold = await Press(BookingChoice.Cancel(hold));
+        Assert.Equal([TextKeys.BookingHoldCancelled], Keys(cancelledHold));
+        Assert.Empty(TaskKinds(cancelledHold));
+    }
+
+    [Fact]
+    public async Task A_refund_press_with_nothing_to_give_back_is_never_promised()
+    {
+        await ToTheOffer();
+        // The office cancelled it, but its money already pays another booking (or never came): nothing to refund.
+        var cancelled = new AppointmentInfo(Guid.NewGuid(), _rows[Number].Person.Id, BookingService.PhoneVideo.Code, AvailabilityTests.At(21, 12),
+            AvailabilityTests.At(21, 12, 15), AppointmentInfo.CancelledByOffice, 0, 500, null);
+        _booking.Appointments.Add(cancelled);
+        var d = await Press(BookingChoice.Refund(cancelled.Id));
+        Assert.DoesNotContain(TextKeys.BookingRefundRequested, Keys(d));
+        Assert.DoesNotContain(PendingTask.Refund, TaskKinds(d));
+    }
+
+    [Fact]
+    public async Task A_hold_is_changed_by_picking_another_time_not_counted_as_the_free_change()
+    {
+        await ToTheOffer();
+        await Press(BookingChoice.Pick(BookingService.PhoneVideo, AvailabilityTests.At(19, 20)));
+        var id = _booking.Appointments[0].Id;
+        var d = await Press(BookingChoice.Change(id));
+        Assert.StartsWith("bk:s:pv:", Assert.Single(d.Actions).Interactive!.Choices[0].Id); // a new pick, not a move
+        Assert.Empty(TaskKinds(d));
     }
 
     [Fact]
     public async Task Less_than_12_hours_before_the_lawyer_decides()
     {
         await ToTheOffer();
-        await Press(BookingChoice.Pick(BookingService.PhoneVideo, AvailabilityTests.At(19, 20)));
-        var id = _booking.Appointments[0].Id;
+        var id = await BookAndPay(BookingService.PhoneVideo, AvailabilityTests.At(19, 20));
         var d = await Press(BookingChoice.Change(id));
         Assert.Equal([PendingTask.LateReschedule], TaskKinds(d));
         Assert.Equal(AvailabilityTests.At(19, 20), _booking.Appointments[0].Start);
@@ -434,11 +603,11 @@ public sealed class BookingFlowTests
     [Fact]
     public async Task Without_the_approved_texts_or_the_switch_hazem_answers_as_before()
     {
-        _texts.Remove(TextKeys.BtnMoreSlots);
+        _texts.Remove(TextKeys.BookingHold); // one TASK 09 text missing is enough
         var d = await ToTheOffer();
         Assert.DoesNotContain(d.Actions, a => a.Type == ActionType.SendInteractive);
 
-        _texts[TextKeys.BtnMoreSlots] = new ApprovedText(TextKeys.BtnMoreSlots, 1, "مواعيد تانية", 24, true);
+        _texts[TextKeys.BookingHold] = new ApprovedText(TextKeys.BookingHold, 1, "x", 600, true);
         _settings[BookingSettings.EnabledKey] = "false";
         _rows.Clear();
         d = await ToTheOffer();
@@ -447,10 +616,10 @@ public sealed class BookingFlowTests
     }
 
     [Fact]
-    public async Task A_second_booking_of_the_same_service_shows_the_first()
+    public async Task A_second_booking_of_the_same_service_shows_the_first_once_confirmed()
     {
         await ToTheOffer();
-        await Press(BookingChoice.Pick(BookingService.PhoneVideo, AvailabilityTests.At(20, 12)));
+        await BookAndPay(BookingService.PhoneVideo, AvailabilityTests.At(20, 12));
         var d = await Press(BookingChoice.Pick(BookingService.PhoneVideo, AvailabilityTests.At(21, 12)));
         Assert.Equal([TextKeys.BookingExisting], Keys(d));
         Assert.Single(_booking.Appointments);
@@ -524,22 +693,30 @@ public sealed class BookingFlowTests
             Task.FromResult(Down ? CalendarBusy.Unavailable("down") : new CalendarBusy(true, Busy.ToList()));
     }
 
-    /// <summary>The same rules as the SQL functions of migration 0013, in memory.</summary>
-    private sealed class MemoryBooking : IBookingStore
+    /// <summary>The same rules as the SQL functions of migrations 0013 and 0014, in memory.</summary>
+    private sealed class MemoryBooking(Func<DateTimeOffset> now) : IBookingStore
     {
         private readonly Dictionary<string, Guid> _byTurn = [];
+        private readonly HashSet<string> _receipts = [];
 
         public Schedule Schedule { get; set; } = new(AvailabilityTests.Every(600, 1440), []);
 
         public List<AppointmentInfo> Appointments { get; } = [];
 
+        public Dictionary<Guid, PaymentInfo> Payments { get; } = [];
+
+        public Dictionary<Guid, int> Refunds { get; } = [];
+
+        /// <summary>The worker's hazem.booking_due: every hold runs out now.</summary>
+        public void Expire() => Set(a => a.State == AppointmentInfo.PendingPayment, AppointmentInfo.Expired);
+
         public Task<Schedule> LoadScheduleAsync(DateOnly from, DateOnly to, CancellationToken ct) => Task.FromResult(Schedule);
 
-        public Task<IReadOnlyList<AppointmentInfo>> ConfirmedBetweenAsync(DateTimeOffset from, DateTimeOffset to, CancellationToken ct) =>
-            Task.FromResult<IReadOnlyList<AppointmentInfo>>(Appointments.Where(a => a.State == AppointmentInfo.Confirmed && a.Start < to && a.End > from).ToList());
+        public Task<IReadOnlyList<AppointmentInfo>> TakenBetweenAsync(DateTimeOffset from, DateTimeOffset to, CancellationToken ct) =>
+            Task.FromResult<IReadOnlyList<AppointmentInfo>>(Appointments.Where(a => a.IsOpen && a.Start < to && a.End > from).ToList());
 
-        public Task<AppointmentInfo?> UpcomingForAsync(Guid personId, DateTimeOffset now, CancellationToken ct) =>
-            Task.FromResult(Appointments.Where(a => a.PersonId == personId && a.State == AppointmentInfo.Confirmed && a.End > now).OrderBy(a => a.Start).FirstOrDefault());
+        public Task<AppointmentInfo?> UpcomingForAsync(Guid personId, DateTimeOffset at, CancellationToken ct) =>
+            Task.FromResult(Appointments.Where(a => a.PersonId == personId && a.IsOpen && a.End > at).OrderBy(a => a.Start).FirstOrDefault());
 
         public Task<AppointmentInfo?> FindAsync(Guid id, CancellationToken ct) => Task.FromResult(Appointments.FirstOrDefault(a => a.Id == id));
 
@@ -547,25 +724,52 @@ public sealed class BookingFlowTests
         {
             if (_byTurn.TryGetValue(r.TurnId, out var existing))
             {
-                return Task.FromResult(new BookOutcome(BookStatus.Exists, existing));
+                return Done(BookStatus.Exists, existing);
             }
 
             if (Appointments.FirstOrDefault(a => a.PersonId == r.PersonId && a.Service == r.Service.Code && a.State == AppointmentInfo.Confirmed) is { } same)
             {
-                return Task.FromResult(new BookOutcome(BookStatus.AlreadyBooked, same.Id));
+                return Done(BookStatus.AlreadyBooked, same.Id);
             }
 
-            var a = new AppointmentInfo(r.Id, r.PersonId, r.Service.Code, r.Start, r.Start.AddMinutes(r.Service.Minutes), AppointmentInfo.Confirmed, 0,
-                r.Service.Amount, r.MatterType);
-            Appointments.Add(a);
+            var until = r.HoldUntil;
+            if (Appointments.FirstOrDefault(a => a.PersonId == r.PersonId && a.State == AppointmentInfo.PendingPayment) is { } hold)
+            {
+                if (hold.Service != r.Service.Code && hold.HoldUntil > now())
+                {
+                    return Done(BookStatus.HasHold, hold.Id);
+                }
+
+                until = hold.HoldUntil > now() && hold.HoldUntil < until ? hold.HoldUntil.Value : until;
+                Set(a => a.Id == hold.Id, AppointmentInfo.CancelledByClient); // given up, never an expired hold that could take a late receipt
+            }
+
+            var credit = Appointments.Where(a => a.PersonId == r.PersonId && a.Service == r.Service.Code
+                                                  && a.State is AppointmentInfo.Expired or AppointmentInfo.CancelledByOffice
+                                                  && Payments.TryGetValue(a.Id, out var p) && p.ProofAt is not null
+                                                  && p.State is not (PaymentInfo.NotReceived or PaymentInfo.RefundRequested or PaymentInfo.Refunded))
+                .Select(a => a.Id).FirstOrDefault();
+            var paid = credit != Guid.Empty;
+            Appointments.Add(new AppointmentInfo(r.Id, r.PersonId, r.Service.Code, r.Start, r.Start.AddMinutes(r.Service.Minutes),
+                paid ? AppointmentInfo.Confirmed : AppointmentInfo.PendingPayment, 0, r.Service.Amount, r.MatterType, paid ? null : until));
+            if (paid)
+            {
+                Payments[r.Id] = Payments[credit];
+                Payments.Remove(credit);
+            }
+            else
+            {
+                Payments[r.Id] = new PaymentInfo(PaymentInfo.Requested, r.Service.Amount, null, null);
+            }
+
             _byTurn[r.TurnId] = r.Id;
-            return Task.FromResult(new BookOutcome(BookStatus.Booked, r.Id));
+            return Done(paid ? BookStatus.BookedPaid : BookStatus.Held, r.Id);
         }
 
         public Task<MoveStatus> MoveAsync(Guid id, DateTimeOffset start, DateTimeOffset end, string turnId, int bufferMinutes, CancellationToken ct)
         {
             var i = Appointments.FindIndex(a => a.Id == id);
-            if (i < 0 || Appointments[i].Reschedules >= 1)
+            if (i < 0 || Appointments[i].Reschedules >= 1 || Appointments[i].State != AppointmentInfo.Confirmed)
             {
                 return Task.FromResult(i < 0 ? MoveStatus.NotFound : MoveStatus.NotAllowed);
             }
@@ -574,15 +778,79 @@ public sealed class BookingFlowTests
             return Task.FromResult(MoveStatus.Moved);
         }
 
-        public Task<bool> CancelAsync(Guid id, string state, CancellationToken ct)
+        public Task<bool> CancelAsync(Guid id, string state, CancellationToken ct) =>
+            Task.FromResult(Set(a => a.Id == id && a.IsOpen, state) == 1);
+
+        public Task<AppointmentInfo?> ReceiptTargetAsync(Guid personId, DateTimeOffset at, CancellationToken ct)
         {
-            var i = Appointments.FindIndex(a => a.Id == id && a.State == AppointmentInfo.Confirmed);
-            if (i >= 0)
+            var mine = Appointments.Where(a => a.PersonId == personId).ToList();
+            bool Waits(AppointmentInfo a, params string[] states) => Payments.TryGetValue(a.Id, out var p) && states.Contains(p.State);
+            return Task.FromResult(
+                mine.FirstOrDefault(a => a.State == AppointmentInfo.PendingPayment)
+                ?? mine.Where(a => a.State == AppointmentInfo.Confirmed && a.End > at
+                                   && Waits(a, PaymentInfo.Requested, PaymentInfo.Partial, PaymentInfo.NotReceived)).OrderBy(a => a.Start).FirstOrDefault()
+                ?? mine.LastOrDefault(a => a.State == AppointmentInfo.Expired && a.Start > at && Waits(a, PaymentInfo.Requested)));
+        }
+
+        public async Task<ReceiptOutcome> AttachReceiptAsync(ReceiptRequest r, bool lateFree, int bufferMinutes, CancellationToken ct)
+        {
+            if (!_receipts.Add(r.Wamid))
             {
-                Appointments[i] = Appointments[i] with { State = state };
+                return new ReceiptOutcome(ReceiptStatus.Exists, null);
             }
 
-            return Task.FromResult(i >= 0);
+            if (await ReceiptTargetAsync(r.PersonId, now(), ct) is not { } a)
+            {
+                return new ReceiptOutcome(ReceiptStatus.None, null);
+            }
+
+            var status = a.State switch
+            {
+                AppointmentInfo.PendingPayment => ReceiptStatus.Confirmed,
+                AppointmentInfo.Confirmed => ReceiptStatus.Received,
+                _ => lateFree ? ReceiptStatus.ConfirmedLate : ReceiptStatus.LateTaken,
+            };
+            if (status is ReceiptStatus.Confirmed or ReceiptStatus.ConfirmedLate)
+            {
+                Set(x => x.Id == a.Id, AppointmentInfo.Confirmed);
+            }
+
+            var p = Payments[a.Id];
+            Payments[a.Id] = p with { State = PaymentInfo.ProofReceived, ProofAt = p.ProofAt ?? now() };
+            return new ReceiptOutcome(status, a.Id);
         }
+
+        public Task<PaymentInfo?> PaymentAsync(Guid appointmentId, CancellationToken ct) =>
+            Task.FromResult(Payments.TryGetValue(appointmentId, out var p) ? p : null);
+
+        public Task<int?> RequestRefundAsync(Guid appointmentId, string reason, CancellationToken ct)
+        {
+            if (!Payments.TryGetValue(appointmentId, out var p)
+                || p.State is not (PaymentInfo.ProofReceived or PaymentInfo.DuplicateSuspected or PaymentInfo.Verified or PaymentInfo.Partial))
+            {
+                return Task.FromResult<int?>(null);
+            }
+
+            Payments[appointmentId] = p with { State = PaymentInfo.RefundRequested };
+            Refunds[appointmentId] = p.AmountReceived ?? p.AmountDue;
+            return Task.FromResult<int?>(Refunds[appointmentId]);
+        }
+
+        private int Set(Func<AppointmentInfo, bool> which, string state)
+        {
+            var changed = 0;
+            for (var i = 0; i < Appointments.Count; i++)
+            {
+                if (which(Appointments[i]))
+                {
+                    Appointments[i] = Appointments[i] with { State = state };
+                    changed++;
+                }
+            }
+
+            return changed;
+        }
+
+        private static Task<BookOutcome> Done(BookStatus status, Guid id) => Task.FromResult(new BookOutcome(status, id));
     }
 }
