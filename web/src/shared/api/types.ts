@@ -14,7 +14,9 @@ export type Permission =
   | "reports.view"
   | "conversations.unmute"
   | "schedule.manage"
-  | "office.manage";
+  | "office.manage"
+  | "payments.verify"
+  | "payments.refund";
 
 export interface Me {
   id: string;
@@ -220,4 +222,8 @@ export interface MonthReport {
   by_source: ReportRow[];
   by_matter: ReportRow[];
   by_client_type: ReportRow[];
+  by_booking: ReportRow[];
+  received: number;
+  missing: number;
+  refunded: number;
 }

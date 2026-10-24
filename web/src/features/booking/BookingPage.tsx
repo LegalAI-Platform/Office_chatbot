@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, errorMessage } from "../../shared/api/client";
 import { can, useMe } from "../../shared/api/session";
-import { APPOINTMENT_STATES, BOOKING_SERVICES, label, matterLabel } from "../../shared/lib/labels";
+import { APPOINTMENT_STATES, BOOKING_SERVICES, label, matterLabel, PAYMENT_STATES } from "../../shared/lib/labels";
 import { cairoTime, cairoWhen } from "../../shared/lib/time";
 import { Icon } from "../../shared/ui/Icon";
 import { Button, Card, Chip, Empty, ErrorState, Field, Loading } from "../../shared/ui/ui";
@@ -23,7 +23,9 @@ const STATUS: Record<Day["status"], { word: string; tone: string }> = {
 const DOT: Record<string, string> = { green: "bg-green-ink", grey: "bg-grey-ink", red: "bg-red-ink", blue: "bg-blue-ink", orange: "bg-orange-ink" };
 const longDay = (day: string) =>
   new Intl.DateTimeFormat("ar-EG-u-nu-latn", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(new Date(`${day}T12:00:00Z`));
-const STATE_TONE: Record<string, string> = { confirmed: "blue", completed: "green", no_show: "orange", cancelled_by_client: "grey", cancelled_by_office: "grey" };
+const STATE_TONE: Record<string, string> = {
+  pending_payment: "orange", expired: "grey", confirmed: "blue", completed: "green", no_show: "orange", cancelled_by_client: "grey", cancelled_by_office: "grey",
+};
 
 /**
  * «المواعيد» (TASK 08, DECISIONS v1.12 B-24): the booking hours Hazem offers, changed from here and
@@ -214,7 +216,7 @@ const Told = ({ n }: { n: number }) => (
 function Confirm({ list, busy, onYes, onNo }: { list: Appointment[]; busy: boolean; onYes: () => void; onNo: () => void }) {
   return (
     <div className="grid gap-2 rounded-lg border border-orange-ink/40 bg-orange-bg p-3 text-sm" role="alertdialog" aria-label="فيه حجوزات">
-      <p className="font-semibold text-orange-ink">التعديل ده فيه {list.length} حجز مؤكد. لو كمّلت، الحجوزات دي هتتلغي وحازم هيبعت لكل عميل يختار ميعاد تاني أو استرداد كامل.</p>
+      <p className="font-semibold text-orange-ink">التعديل ده فيه {list.length} حجز (مؤكد أو مستني الإيصال). لو كمّلت، الحجوزات دي هتتلغي وحازم هيبعت لكل عميل يختار ميعاد تاني، أو استرداد كامل لو كان دفع.</p>
       <ul>{list.map((a) => <li key={a.id}>{cairoWhen(a.start)} · {a.name ?? "من غير اسم"} · {label(BOOKING_SERVICES, a.service)}</li>)}</ul>
       <div className="flex gap-2">
         <Button variant="danger" busy={busy} onClick={onYes}>كمّل وبلّغ العملاء</Button>
@@ -281,15 +283,22 @@ function Bookings() {
               <span className="font-semibold">{cairoWhen(a.start)} · {a.name ?? "من غير اسم"}</span>
               <span className="text-xs text-ink-soft">
                 {label(BOOKING_SERVICES, a.service)} · {matterLabel(a.matter_type ?? undefined)} · <span dir="ltr">+{a.wa_id}</span>{a.reschedules ? " · اتغيّر مرة" : ""}
+                {a.payment && a.state !== "pending_payment" ? ` · الدفع: ${label(PAYMENT_STATES, a.payment)}` : ""}
               </span>
             </span>
-            <Chip tone={STATE_TONE[a.state] ?? "grey"}>{label(APPOINTMENT_STATES, a.state)}</Chip>
-            {a.state === "confirmed" ? (
+            <Chip tone={STATE_TONE[a.state] ?? "grey"}>
+              {label(APPOINTMENT_STATES, a.state)}{a.state === "pending_payment" && a.hold_until ? ` لحد ${cairoTime(new Date(a.hold_until))}` : ""}
+            </Chip>
+            {a.state === "confirmed" || a.state === "pending_payment" ? (
               <span className="flex flex-wrap gap-1">
-                <Button variant="ghost" onClick={() => mark.mutate({ id: a.id, state: "completed" })}>خلص</Button>
-                <Button variant="ghost" onClick={() => mark.mutate({ id: a.id, state: "no_show" })}>ماحضرش</Button>
+                {a.state === "confirmed" ? (
+                  <>
+                    <Button variant="ghost" onClick={() => mark.mutate({ id: a.id, state: "completed" })}>خلص</Button>
+                    <Button variant="ghost" onClick={() => mark.mutate({ id: a.id, state: "no_show" })}>ماحضرش</Button>
+                  </>
+                ) : null}
                 <Button variant="danger" busy={cancel.isPending && cancel.variables === a.id}
-                  onClick={() => { if (window.confirm("إلغاء الحجز ده؟ حازم هيبعت للعميل يختار ميعاد تاني أو استرداد كامل.")) cancel.mutate(a.id); }}>
+                  onClick={() => { if (window.confirm("إلغاء الحجز ده؟ حازم هيبعت للعميل يختار ميعاد تاني، أو استرداد كامل لو كان دفع.")) cancel.mutate(a.id); }}>
                   إلغاء
                 </Button>
               </span>
@@ -387,6 +396,16 @@ function SettingsForm() {
         <Field label="إيميل كالندر الأستاذ (Google)" dir="ltr" value={v.calendar_id} onChange={(e) => setDraft({ ...v, calendar_id: e.target.value })}
           hint={v.calendar_key ? "مفتاح Google موجود." : "مفتاح Google لسه مش متحط (صاحب المشروع)."} />
       </div>
+      <fieldset className="grid gap-3 border-t border-line pt-3">
+        <legend className="text-sm font-semibold">الحجز المؤقت لحد صورة التحويل</legend>
+        <p className="text-xs text-ink-soft">العميل يختار ميعاد ← الميعاد يتمسك له لحد ساعة محددة. صورة التحويل توصل ← الحجز يتأكد. ما وصلتش ← الميعاد يتفك ويرجع فاضي.</p>
+        <div className="grid gap-3 md:grid-cols-2">
+          <Field label="مدة الحجز المؤقت (دقيقة)" type="number" min={15} max={1440} value={v.hold_minutes} onChange={num("hold_minutes")} />
+          <Field label="المدة لو الميعاد قريب (دقيقة)" type="number" min={15} max={1440} value={v.hold_short_minutes} onChange={num("hold_short_minutes")} />
+          <Field label="«قريب» يعني بعد أقل من (ساعة)" type="number" min={0} max={72} value={v.hold_short_within_hours} onChange={num("hold_short_within_hours")} />
+          <Field label="الحجز المؤقت يخلص قبل الميعاد بـ (دقيقة)" type="number" min={0} max={240} value={v.hold_gap_minutes} onChange={num("hold_gap_minutes")} />
+        </div>
+      </fieldset>
       {save.isError ? <p className="text-sm text-bad" role="alert">{errorMessage(save.error)}</p> : null}
       <div><Button variant="primary" busy={save.isPending} disabled={!draft} onClick={() => save.mutate(v)}>احفظ</Button></div>
     </Card>
@@ -405,7 +424,7 @@ function OfficeForm() {
 
   return (
     <Card>
-      <p className="text-sm text-ink-soft">حازم بيكتب البيانات دي في رسالة تأكيد الحجز. لو InstaPay أو المحفظة فاضيين، الحجز بيتأكد بس الرسالة مش بتتبعت وبتتعمل مهمة.</p>
+      <p className="text-sm text-ink-soft">حازم بيكتب البيانات دي في رسالة الحجز المؤقت (فين يحوّل). لو InstaPay أو المحفظة فاضيين، الميعاد بيتمسك للعميل بس الرسالة مش بتتبعت وبتتعمل مهمة.</p>
       <div className="grid gap-3 md:grid-cols-2">
         <Field label="عنوان InstaPay" dir="ltr" value={v.instapay} onChange={set("instapay")} />
         <Field label="رقم المحفظة" dir="ltr" inputMode="tel" value={v.wallet_number} onChange={set("wallet_number")} />

@@ -1,0 +1,312 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json.Nodes;
+using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
+using Office.Application.Panel;
+using Office.Infrastructure.Booking;
+
+namespace Office.IntegrationTests;
+
+/// <summary>
+/// TASK 09 (DECISIONS v1.13) through the real API and database: the hold until the receipt image, the worker's
+/// reminder and expiry, the office's review and refunds (every role, never the system), and B-22.
+/// The app's clock stands at Thursday 19 November 2026, 12:00 Cairo; the database's own now() is the real one,
+/// so a test that needs a hold to run out or a receipt's time moves it in SQL.
+/// </summary>
+[Collection(nameof(HazemApiTests))]
+public sealed class Task09ApiTests(TestDatabase db) : IAsyncLifetime
+{
+    private const string Client = "201000000092";
+    private const string Password = "a long test password 1";
+    private static readonly DateTimeOffset Now = new(2026, 11, 19, 12, 0, 0, TimeSpan.FromHours(2));
+    private static readonly string Tomorrow12 = "bk:s:pv:" + new DateTimeOffset(2026, 11, 20, 12, 0, 0, TimeSpan.FromHours(2)).ToUnixTimeSeconds();
+    private ApiFactory _factory = null!;
+    private HttpClient _n8n = null!;
+    private int _n;
+    private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    private const string Clean = """
+        DELETE FROM hazem.payment_receipts; DELETE FROM hazem.payments; DELETE FROM hazem.appointments;
+        DELETE FROM hazem.booking_exceptions; DELETE FROM hazem.booking_changes;
+        UPDATE hazem.settings SET value = 'false' WHERE key = 'booking.enabled';
+        UPDATE hazem.settings SET value = '' WHERE key IN ('booking.calendar_id', 'office.instapay', 'office.wallet_number', 'office.wallet_provider');
+        UPDATE hazem.approved_texts SET active = true WHERE source IN ('proposal TASK 08', 'proposal TASK 09');
+        TRUNCATE hazem.panel_audit; DELETE FROM hazem.panel_users;
+        TRUNCATE hazem.turns, hazem.send_results, hazem.turn_replies, hazem.classifications, hazem.panel_alerts, hazem.panel_alert_reads, hazem.staff_tasks, hazem.list_entries;
+        DELETE FROM hazem.staff; DELETE FROM hazem.intakes; DELETE FROM hazem.conversations; DELETE FROM hazem.persons;
+        """;
+
+    public async ValueTask InitializeAsync()
+    {
+        await db.ExecAsync(Clean);
+        await db.SetAsync("responder", "hazem");
+        await db.SetAsync("hazem.recipients", Client);
+        _factory = new ApiFactory(db, new FixedClock(Now));
+        _n8n = _factory.CreateN8nClient();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _n8n.Dispose();
+        await _factory.DisposeAsync();
+        await db.ExecAsync(Clean);
+        await db.SetAsync("hazem.recipients", "");
+    }
+
+    /// <summary>Booking on: the texts (approved since 0013 and 0014), the office's details, the calendar id.</summary>
+    private Task BookingOn() => db.ExecAsync("""
+        UPDATE hazem.approved_texts SET active = true WHERE source = 'proposal TASK 09';
+        UPDATE hazem.settings SET value = 'true' WHERE key = 'booking.enabled';
+        UPDATE hazem.settings SET value = 'lawyer@example.test' WHERE key = 'booking.calendar_id';
+        UPDATE hazem.settings SET value = 'office@instapay' WHERE key = 'office.instapay';
+        UPDATE hazem.settings SET value = '01000000000' WHERE key = 'office.wallet_number';
+        UPDATE hazem.settings SET value = 'فودافون كاش' WHERE key = 'office.wallet_provider';
+        """);
+
+    private async Task<JsonArray> Turn(JsonObject message)
+    {
+        message["wamid"] = $"wamid.T09-{++_n}";
+        var r = await _n8n.PostAsJsonAsync("/api/hazem/turns", new JsonObject
+        {
+            ["turn_id"] = $"wt:00000000-0000-0000-0009-{++_n:D12}", ["wa_id"] = Client, ["messages"] = new JsonArray(message),
+        }, Ct);
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        return (await r.Content.ReadFromJsonAsync<JsonNode>(Ct))!["actions"]!.AsArray();
+    }
+
+    private Task<JsonArray> Say(string text) => Turn(new JsonObject { ["type"] = "text", ["text"] = text });
+
+    private Task<JsonArray> Press(string id) =>
+        Turn(new JsonObject { ["type"] = "interactive", ["interactive"] = new JsonObject { ["kind"] = "list_reply", ["id"] = id, ["title"] = "x" } });
+
+    /// <summary>A receipt image n8n stored, and its bytes in the (fake) storage the panel reads.</summary>
+    private Task<JsonArray> Receipt(string sha = "r1")
+    {
+        var key = $"wa/2026/11/receipt-{_n}.jpg";
+        _factory.Files.Objects[$"office-sensitive/{key}"] = ([0xFF, 0xD8, 0xFF], "image/jpeg");
+        return Turn(new JsonObject
+        {
+            ["type"] = "image",
+            ["media"] = new JsonObject
+            {
+                ["status"] = "stored", ["bucket"] = "office-sensitive", ["key"] = key, ["mime_type"] = "image/jpeg", ["size_bytes"] = 3, ["sha256"] = sha,
+            },
+        });
+    }
+
+    private async Task<Guid> HeldTomorrow()
+    {
+        await Say("السلام عليكم");
+        await Say("محمد أحمد علي حسن");
+        await Press(Tomorrow12);
+        return await db.ScalarAsync<Guid>("SELECT id FROM hazem.appointments WHERE state = 'pending_payment'");
+    }
+
+    private async Task<int> Notices()
+    {
+        using var scope = _factory.Services.CreateScope();
+        return await scope.ServiceProvider.GetRequiredService<BookingNotices>().RunAsync(Ct);
+    }
+
+    /// <summary>The texts of what the worker sent since <paramref name="from"/>.</summary>
+    private List<string> SentSince(int from) =>
+        _factory.N8n.Requests.Skip(from).Select(r => (string)JsonNode.Parse(r.Body)!["text"]!).ToList();
+
+    private async Task<HttpClient> SignIn(string name, string role, string? staff = null)
+    {
+        using (var scope = _factory.Services.CreateScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<PanelAccounts>().CreateAsync(null,
+                new PanelAccounts.NewAccount(name, name, $"{name}@example.test", role, staff), Password, Ct);
+        }
+
+        var c = _factory.CreateClient();
+        await Csrf(c);
+        Assert.Equal(HttpStatusCode.OK, (await c.PostAsJsonAsync("/api/panel/auth/login", new { username = name, password = Password }, Ct)).StatusCode);
+        await Csrf(c);
+        return c;
+    }
+
+    private static async Task Csrf(HttpClient c)
+    {
+        var body = await c.GetFromJsonAsync<JsonNode>("/api/panel/auth/csrf", Ct);
+        c.DefaultRequestHeaders.Remove("X-CSRF-TOKEN");
+        c.DefaultRequestHeaders.Add("X-CSRF-TOKEN", (string)body!["token"]!);
+    }
+
+    // ---------- the texts ----------
+
+    [Fact]
+    public async Task Migration_0014_activated_the_15_texts_the_owner_approved_and_the_booking_needs_them_all()
+    {
+        Assert.Equal("15|15", await db.ScalarAsync<string>("""
+            SELECT count(*) FILTER (WHERE active) || '|' || count(*) FROM hazem.approved_texts
+             WHERE source = 'proposal TASK 09' AND updated_by = 'owner approval 2026-10-24'
+            """));
+        Assert.Equal(0L, await db.ScalarAsync<long>(
+            "SELECT count(*) FROM hazem.approved_texts WHERE source = 'proposal TASK 09' AND char_length(text) > max_chars"));
+
+        await BookingOn();
+        await db.ExecAsync("UPDATE hazem.approved_texts SET active = false WHERE source = 'proposal TASK 09'");
+        await Say("السلام عليكم");
+        var offer = await Say("محمد أحمد علي حسن");
+        Assert.DoesNotContain(offer, a => (string?)a!["type"] == "send_interactive"); // the old text offer, nothing held
+        var staff = await SignIn("yasmin", Permissions.Staff, "ياسمين");
+        Assert.False((bool)(await staff.GetFromJsonAsync<JsonNode>("/api/panel/booking/settings", Ct))!["texts_approved"]!);
+    }
+
+    // ---------- the hold ----------
+
+    [Fact]
+    public async Task The_worker_reminds_once_then_frees_the_time_and_tells_the_client()
+    {
+        await BookingOn();
+        var id = await HeldTomorrow();
+        await db.ExecAsync($"UPDATE hazem.appointments SET created_at = now() - interval '2 hours', hold_until = now() + interval '20 minutes' WHERE id = '{id}'");
+
+        var sends = _factory.N8n.Requests.Count;
+        Assert.Equal(1, await Notices());
+        Assert.Equal(0, await Notices()); // once
+        var reminder = Assert.Single(SentSince(sends));
+        Assert.StartsWith("⏰ فاضل نص ساعة: ميعاد حضرتك بكرة الساعة 12:00 م", reminder);
+        Assert.Contains("01000000000 (فودافون كاش)", reminder);
+
+        await db.ExecAsync($"UPDATE hazem.appointments SET hold_until = now() - interval '1 minute' WHERE id = '{id}'");
+        sends = _factory.N8n.Requests.Count;
+        Assert.Equal(1, await Notices());
+        Assert.Equal("expired|sent", await db.ScalarAsync<string>($"SELECT state || '|' || client_notice FROM hazem.appointments WHERE id = '{id}'"));
+        Assert.StartsWith("❌ ميعاد بكرة الساعة 12:00 م اتلغى", Assert.Single(SentSince(sends)));
+
+        // The time is free again: somebody else may hold it.
+        await db.ExecAsync("INSERT INTO hazem.persons (id, wa_id) VALUES ('00000000-0000-0000-0000-0000000009b1', '201000000901')");
+        Assert.Equal("held", await db.ScalarAsync<string>("""
+            SELECT hazem.book_appointment(gen_random_uuid(), '00000000-0000-0000-0000-0000000009b1', NULL, 'consultation_phone_video',
+              '2026-11-20 12:00+02', '2026-11-20 12:15+02', 500, 't-other', 10, NULL, now() + interval '2 hours')->>'status'
+            """));
+    }
+
+    [Fact]
+    public async Task One_hold_per_client_even_without_the_function()
+    {
+        await BookingOn();
+        var id = await HeldTomorrow();
+        var e = await Assert.ThrowsAsync<PostgresException>(() => db.ExecAsync($"""
+            INSERT INTO hazem.appointments (id, person_id, service, starts_at, ends_at, amount, booked_turn_id, state, calendar_state, hold_until)
+            SELECT gen_random_uuid(), person_id, 'consultation_office', '2026-11-25 12:00+02', '2026-11-25 12:30+02', 1000, 't-second',
+                   'pending_payment', 'wait', now() + interval '1 hour' FROM hazem.appointments WHERE id = '{id}'
+            """));
+        Assert.Equal(PostgresErrorCodes.UniqueViolation, e.SqlState);
+    }
+
+    [Fact]
+    public async Task The_same_image_on_another_booking_is_flagged_and_still_confirms()
+    {
+        await BookingOn();
+        await HeldTomorrow();
+        await Receipt(sha: "same");
+        await Press("bk:s:of:" + new DateTimeOffset(2026, 11, 21, 12, 0, 0, TimeSpan.FromHours(2)).ToUnixTimeSeconds());
+        await Receipt(sha: "same");
+        Assert.Equal("consultation_office|confirmed|duplicate_suspected", await db.ScalarAsync<string>("""
+            SELECT a.service || '|' || a.state || '|' || p.state FROM hazem.appointments a JOIN hazem.payments p ON p.appointment_id = a.id
+             WHERE p.state = 'duplicate_suspected'
+            """));
+    }
+
+    // ---------- the review and the refund (P1, P2, P4) ----------
+
+    [Fact]
+    public async Task The_staff_review_partial_then_more_than_due_and_record_the_refund()
+    {
+        await BookingOn();
+        var id = await HeldTomorrow();
+        await Receipt();
+        var staff = await SignIn("yasmin", Permissions.Staff, "ياسمين");
+
+        var waiting = (await staff.GetFromJsonAsync<JsonArray>("/api/panel/payments", Ct))!;
+        Assert.Equal(("proof_received", 1, 500), ((string?)waiting.Single()!["state"], (int)waiting[0]!["receipts"]!, (int)waiting[0]!["amount_due"]!));
+        var image = await staff.GetAsync($"/api/panel/payments/{id}/receipts/0", Ct);
+        Assert.Equal(("image/jpeg", "no-store"), (image.Content.Headers.ContentType?.MediaType, image.Headers.CacheControl?.ToString()));
+        Assert.Equal(HttpStatusCode.NotFound, (await staff.GetAsync($"/api/panel/payments/{id}/receipts/1", Ct)).StatusCode);
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await staff.PostAsJsonAsync($"/api/panel/payments/{id}/review",
+            new { state = "verified", received = 400 }, Ct)).StatusCode); // verified is the full amount at least
+        Assert.Equal(HttpStatusCode.NoContent, (await staff.PostAsJsonAsync($"/api/panel/payments/{id}/review",
+            new { state = "partial", received = 300 }, Ct)).StatusCode);
+        var sends = _factory.N8n.Requests.Count;
+        Assert.Equal(1, await Notices());
+        var partial = Assert.Single(SentSince(sends));
+        Assert.Contains("وصلنا 300 جنيه من 500 جنيه", partial);
+        Assert.Contains("باقي المبلغ 200 جنيه", partial);
+
+        Assert.StartsWith("استلمنا صورة التحويل ✅", (string?)(await Receipt(sha: "r2")).Single()!["text"]); // the rest
+        Assert.Equal("proof_received", await db.ScalarAsync<string>("SELECT state FROM hazem.payments"));
+
+        Assert.Equal(HttpStatusCode.NoContent, (await staff.PostAsJsonAsync($"/api/panel/payments/{id}/review",
+            new { state = "verified", received = 600 }, Ct)).StatusCode);
+        Assert.Equal("refund_requested|100|overpaid", await db.ScalarAsync<string>(
+            "SELECT state || '|' || refund_due || '|' || refund_reason FROM hazem.payments"));
+        Assert.Equal("refund", await db.ScalarAsync<string>("SELECT type FROM hazem.staff_tasks WHERE type = 'refund'"));
+        Assert.Single((await staff.GetFromJsonAsync<JsonArray>("/api/panel/payments?show=refunds", Ct))!);
+
+        Assert.Equal(HttpStatusCode.NoContent, (await staff.PostAsJsonAsync($"/api/panel/payments/{id}/refunded",
+            new { method = "فودافون كاش", note = "من رقم المكتب" }, Ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await staff.PostAsJsonAsync($"/api/panel/payments/{id}/refunded",
+            new { method = "فودافون كاش" }, Ct)).StatusCode); // once
+        sends = _factory.N8n.Requests.Count;
+        Assert.Equal(1, await Notices());
+        Assert.Equal("✅ تم رد 100 جنيه لحضرتك على فودافون كاش.", Assert.Single(SentSince(sends)));
+
+        Assert.Equal("payment.receipt_open|payment.partial|payment.verified|payment.refunded", await db.ScalarAsync<string>(
+            "SELECT string_agg(action, '|' ORDER BY id) FROM hazem.panel_audit WHERE target_type = 'payment'"));
+        using var anonymous = _factory.CreateClient();
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync("/api/panel/payments", Ct)).StatusCode);
+    }
+
+    // ---------- B-22 ----------
+
+    [Fact]
+    public async Task Cancelling_within_24_hours_of_the_receipt_opens_a_full_refund()
+    {
+        await BookingOn();
+        var id = await HeldTomorrow();
+        await Receipt();
+        await db.ExecAsync("UPDATE hazem.payments SET proof_at = '2026-11-19 11:30+02'"); // the app's clock; the database's now() is real
+        var reply = (await Press($"bk:c:{id:N}")).Single()!;
+        Assert.StartsWith("تم إلغاء الحجز. وبما إن الإلغاء خلال 24 ساعة", (string?)reply["text"]);
+        Assert.Equal("cancelled_by_client|refund_requested|500|client_within_24h", await db.ScalarAsync<string>("""
+            SELECT a.state || '|' || p.state || '|' || p.refund_due || '|' || p.refund_reason
+              FROM hazem.appointments a JOIN hazem.payments p ON p.appointment_id = a.id
+            """));
+        Assert.Equal("refund", await db.ScalarAsync<string>("SELECT type FROM hazem.staff_tasks WHERE type = 'refund'"));
+    }
+
+    [Fact]
+    public async Task The_office_cancels_a_hold_another_time_only_and_a_paid_booking_moves_without_paying_again()
+    {
+        await BookingOn();
+        var hold = await HeldTomorrow();
+        var staff = await SignIn("yasmin", Permissions.Staff, "ياسمين");
+        Assert.Equal(HttpStatusCode.OK, (await staff.PostAsync($"/api/panel/booking/appointments/{hold}/cancel", null, Ct)).StatusCode);
+        var sends = _factory.N8n.Requests.Count;
+        Assert.Equal(1, await Notices());
+        var unpaid = JsonNode.Parse(_factory.N8n.Requests.Skip(sends).Single().Body)!;
+        Assert.StartsWith("نعتذر لحضرتك، الأستاذ عنده ظرف في ميعاد بكرة الساعة 12:00 م", (string?)unpaid["text"]);
+        Assert.DoesNotContain(unpaid["interactive"]!["choices"]!.AsArray(), r => ((string?)r!["id"])!.StartsWith("bk:f:", StringComparison.Ordinal));
+
+        var second = "bk:s:pv:" + new DateTimeOffset(2026, 11, 22, 12, 0, 0, TimeSpan.FromHours(2)).ToUnixTimeSeconds();
+        await Press(second);
+        await Receipt();
+        var paid = await db.ScalarAsync<Guid>("SELECT id FROM hazem.appointments WHERE state = 'confirmed'");
+        Assert.Equal(HttpStatusCode.OK, (await staff.PostAsync($"/api/panel/booking/appointments/{paid}/cancel", null, Ct)).StatusCode);
+        await Notices();
+
+        var third = "bk:s:pv:" + new DateTimeOffset(2026, 11, 23, 12, 0, 0, TimeSpan.FromHours(2)).ToUnixTimeSeconds();
+        Assert.StartsWith("✅ وصلت صورة التحويل", (string?)(await Press(third)).Single()!["text"]); // the receipt he sent pays for it
+        Assert.Equal("confirmed|proof_received|1", await db.ScalarAsync<string>("""
+            SELECT a.state || '|' || p.state || '|' || (SELECT count(*) FROM hazem.payment_receipts)
+              FROM hazem.appointments a JOIN hazem.payments p ON p.appointment_id = a.id
+             WHERE a.starts_at = '2026-11-23 12:00+02'
+            """));
+    }
+}

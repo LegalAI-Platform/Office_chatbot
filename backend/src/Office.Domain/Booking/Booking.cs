@@ -2,12 +2,15 @@ using Office.Domain.Common;
 
 namespace Office.Domain.Booking;
 
-// S-03 and S-04 as DECISIONS v1.4 has them: booking is confirmed at once (no hold, no staff),
-// the receipt is stored but never reviewed by the system, and only the lawyer marks a transfer.
-// Code and tests only in TASK 04; their tables come with the booking tasks (08/09).
+// S-03 and S-04 (DECISIONS v1.13): a picked time is held until the receipt image (pending_payment), the
+// receipt confirms it, and a hold that runs out frees its time; the receipt is stored but never reviewed
+// by the system, and only a person of the office marks a transfer or a refund. The database (0013, 0014)
+// keeps the same rules for the real bookings; these classes are the rules in code, with their tests.
 
 public enum AppointmentState
 {
+    PendingPayment, // 1.13: held for the client until the receipt image
+    Expired,        // 1.13: the hold ran out, the time is free again
     Confirmed,
     Rescheduled,
     Completed,
@@ -26,6 +29,11 @@ public sealed class Appointment
 {
     public static readonly StateMachine<AppointmentState> Machine = new("S-03 appointment",
     [
+        new(AppointmentState.PendingPayment, AppointmentState.Confirmed, Actor.System),
+        new(AppointmentState.PendingPayment, AppointmentState.Expired, Actor.System),
+        new(AppointmentState.PendingPayment, AppointmentState.CancelledByClient, Actor.System),
+        new(AppointmentState.PendingPayment, AppointmentState.CancelledByOffice, Actor.Lawyer, Actor.System),
+        new(AppointmentState.Expired, AppointmentState.Confirmed, Actor.System), // B-05 (1.13): the receipt came late and the time is still free
         new(AppointmentState.Confirmed, AppointmentState.Completed, Actor.Lawyer, Actor.Staff),
         new(AppointmentState.Confirmed, AppointmentState.Rescheduled, Actor.System),
         new(AppointmentState.Rescheduled, AppointmentState.Confirmed, Actor.System),
@@ -74,7 +82,7 @@ public sealed class Appointment
             return Result.Fail("invalid_slot", "an appointment ends after it starts");
         }
 
-        if (lawyerAppointments.Any(a => a.Id != except && a.State == AppointmentState.Confirmed && a.Start < end && start < a.End))
+        if (lawyerAppointments.Any(a => a.Id != except && a.State is (AppointmentState.Confirmed or AppointmentState.PendingPayment) && a.Start < end && start < a.End))
         {
             return Result.Fail("slot_taken", "two confirmed appointments at the same time");
         }
@@ -104,6 +112,25 @@ public sealed class Appointment
         State = AppointmentState.Confirmed; // rescheduled is momentary: it goes back to confirmed
         return Result.Ok;
     }
+
+    /// <summary>B-08.3 (1.13): the picked time, held until the receipt image (the database keeps it free of others).</summary>
+    public static (Appointment? Appointment, Result Result) Hold(string service, DateTimeOffset start, DateTimeOffset end,
+        IEnumerable<Appointment> lawyerAppointments, IEnumerable<BusyInterval> calendar)
+    {
+        var (a, r) = Book(service, start, end, lawyerAppointments, calendar);
+        if (a is not null)
+        {
+            a.State = AppointmentState.PendingPayment;
+        }
+
+        return (a, r);
+    }
+
+    /// <summary>B-08.5 (1.13): the receipt image arrived; never a confirmation of the payment itself.</summary>
+    public Result ReceiptArrived() => Move(AppointmentState.Confirmed, Actor.System);
+
+    /// <summary>B-08.6 (1.13): the hold's time ran out without a receipt.</summary>
+    public Result Expire() => Move(AppointmentState.Expired, Actor.System);
 
     public Result Complete(Actor by) => Move(AppointmentState.Completed, by);
 
@@ -143,21 +170,35 @@ public sealed class Payment
     // From the S-04 diagram. Two arrows are read from B-05 (and written in the TASK 04 report):
     // after a receipt the lawyer may still find nothing (proof_received → not_received), and a
     // duplicate is an alert only, so the lawyer still marks it (duplicate_suspected → his marks).
+    // TASK 09 (v1.13, written in its report): every office person reviews (P1) and records a refund (P2),
+    // never the system; a new receipt after «ما وصلش» is a receipt again; the three marks correct each
+    // other; a refund may be due before the review (the client cancels within 24 hours of his receipt).
+    private static readonly Actor[] People = [Actor.Lawyer, Actor.Manager, Actor.Staff];
+
     public static readonly StateMachine<PaymentState> Machine = new("S-04 payment",
     [
         new(PaymentState.Requested, PaymentState.ProofReceived, Actor.System),
-        new(PaymentState.Requested, PaymentState.NotReceived, Actor.Lawyer),
-        new(PaymentState.ProofReceived, PaymentState.Verified, Actor.Lawyer),
-        new(PaymentState.ProofReceived, PaymentState.Partial, Actor.Lawyer),
-        new(PaymentState.ProofReceived, PaymentState.NotReceived, Actor.Lawyer),
+        new(PaymentState.Requested, PaymentState.NotReceived, People),
+        new(PaymentState.ProofReceived, PaymentState.Verified, People),
+        new(PaymentState.ProofReceived, PaymentState.Partial, People),
+        new(PaymentState.ProofReceived, PaymentState.NotReceived, People),
         new(PaymentState.ProofReceived, PaymentState.DuplicateSuspected, Actor.System),
-        new(PaymentState.DuplicateSuspected, PaymentState.Verified, Actor.Lawyer),
-        new(PaymentState.DuplicateSuspected, PaymentState.Partial, Actor.Lawyer),
-        new(PaymentState.DuplicateSuspected, PaymentState.NotReceived, Actor.Lawyer),
+        new(PaymentState.DuplicateSuspected, PaymentState.Verified, People),
+        new(PaymentState.DuplicateSuspected, PaymentState.Partial, People),
+        new(PaymentState.DuplicateSuspected, PaymentState.NotReceived, People),
         new(PaymentState.Partial, PaymentState.ProofReceived, Actor.System),
+        new(PaymentState.NotReceived, PaymentState.ProofReceived, Actor.System),
+        new(PaymentState.Verified, PaymentState.Partial, People),
+        new(PaymentState.Verified, PaymentState.NotReceived, People),
+        new(PaymentState.Partial, PaymentState.Verified, People),
+        new(PaymentState.Partial, PaymentState.NotReceived, People),
+        new(PaymentState.NotReceived, PaymentState.Verified, People),
+        new(PaymentState.NotReceived, PaymentState.Partial, People),
         new(PaymentState.Verified, PaymentState.RefundRequested, Actor.System),
         new(PaymentState.Partial, PaymentState.RefundRequested, Actor.System),
-        new(PaymentState.RefundRequested, PaymentState.Refunded, Actor.Staff), // the staff member ONLY (B-22)
+        new(PaymentState.ProofReceived, PaymentState.RefundRequested, Actor.System),
+        new(PaymentState.DuplicateSuspected, PaymentState.RefundRequested, Actor.System),
+        new(PaymentState.RefundRequested, PaymentState.Refunded, People), // a person who transferred it, never the system (B-22, P2)
     ]);
 
     private Payment(Guid id, Money due) => (Id, Due) = (id, due);

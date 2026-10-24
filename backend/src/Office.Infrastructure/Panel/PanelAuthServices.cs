@@ -260,10 +260,10 @@ public sealed class SmtpPanelMailer(IConfiguration config, ILogger<SmtpPanelMail
 /// <summary>hazem.panel_codes and hazem.panel_recovery_codes (migration 0010).</summary>
 public sealed class PanelCodeStore(HazemDbContext db) : IPanelCodeStore
 {
-    public Task AddAsync(Guid userId, string purpose, string codeHash, DateTimeOffset expiresAt, CancellationToken ct) =>
+    public Task AddAsync(Guid userId, string purpose, string codeHash, DateTimeOffset createdAt, DateTimeOffset expiresAt, CancellationToken ct) =>
         db.Database.ExecuteSqlInterpolatedAsync($"""
-            INSERT INTO hazem.panel_codes (user_id, purpose, code_hash, expires_at)
-            VALUES ({userId}, {purpose}, {codeHash}, {expiresAt.ToUniversalTime()})
+            INSERT INTO hazem.panel_codes (user_id, purpose, code_hash, created_at, expires_at)
+            VALUES ({userId}, {purpose}, {codeHash}, {createdAt.ToUniversalTime()}, {expiresAt.ToUniversalTime()})
             """, ct);
 
     public async Task<PanelCode?> LatestAsync(Guid userId, string purpose, CancellationToken ct)

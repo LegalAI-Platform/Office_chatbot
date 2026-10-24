@@ -34,11 +34,11 @@ public sealed class BookingStore(HazemDbContext db) : IBookingStore
         },
         e.StartMinute is { } s && e.EndMinute is { } end ? new MinuteRange(s, end) : null);
 
-    public async Task<IReadOnlyList<AppointmentInfo>> ConfirmedBetweenAsync(DateTimeOffset from, DateTimeOffset to, CancellationToken ct)
+    public async Task<IReadOnlyList<AppointmentInfo>> TakenBetweenAsync(DateTimeOffset from, DateTimeOffset to, CancellationToken ct)
     {
         var (f, t) = (from.ToUniversalTime(), to.ToUniversalTime());
         return (await db.Appointments.AsNoTracking()
-            .Where(a => a.State == AppointmentInfo.Confirmed && a.StartsAt < t && a.EndsAt > f)
+            .Where(a => (a.State == AppointmentInfo.Confirmed || a.State == AppointmentInfo.PendingPayment) && a.StartsAt < t && a.EndsAt > f)
             .OrderBy(a => a.StartsAt).ToListAsync(ct)).Select(ToInfo).ToList();
     }
 
@@ -46,10 +46,54 @@ public sealed class BookingStore(HazemDbContext db) : IBookingStore
     {
         var n = now.ToUniversalTime();
         var row = await db.Appointments.AsNoTracking()
-            .Where(a => a.PersonId == personId && a.State == AppointmentInfo.Confirmed && a.EndsAt > n)
+            .Where(a => a.PersonId == personId && (a.State == AppointmentInfo.Confirmed || a.State == AppointmentInfo.PendingPayment) && a.EndsAt > n)
             .OrderBy(a => a.StartsAt).FirstOrDefaultAsync(ct);
         return row is null ? null : ToInfo(row);
     }
+
+    /// <summary>The same order as hazem.attach_receipt: the hold, a confirmed booking still waiting, a hold that ran out.</summary>
+    public async Task<AppointmentInfo?> ReceiptTargetAsync(Guid personId, DateTimeOffset now, CancellationToken ct)
+    {
+        var n = now.ToUniversalTime();
+        var rows = await (from a in db.Appointments.AsNoTracking()
+                          join p in db.Payments.AsNoTracking() on a.Id equals p.AppointmentId
+                          where a.PersonId == personId
+                                && (a.State == AppointmentInfo.PendingPayment
+                                    || a.State == AppointmentInfo.Confirmed && a.EndsAt > n
+                                       && (p.State == PaymentInfo.Requested || p.State == PaymentInfo.Partial || p.State == PaymentInfo.NotReceived)
+                                    || a.State == AppointmentInfo.Expired && a.StartsAt > n && p.State == PaymentInfo.Requested)
+                          select a).ToListAsync(ct);
+        var target = rows.FirstOrDefault(a => a.State == AppointmentInfo.PendingPayment)
+                     ?? rows.Where(a => a.State == AppointmentInfo.Confirmed).OrderBy(a => a.StartsAt).FirstOrDefault()
+                     ?? rows.OrderByDescending(a => a.UpdatedAt).FirstOrDefault();
+        return target is null ? null : ToInfo(target);
+    }
+
+    public async Task<ReceiptOutcome> AttachReceiptAsync(ReceiptRequest r, bool lateFree, int bufferMinutes, CancellationToken ct)
+    {
+        var json = await db.Database.SqlQuery<string>($"""
+            SELECT hazem.attach_receipt({r.PersonId}, {r.Wamid}, {r.Bucket}, {r.Key}, {r.Sha256}, {r.MimeType}, {lateFree}, {bufferMinutes})::text AS "Value"
+            """).SingleAsync(ct);
+        using var doc = JsonDocument.Parse(json);
+        Guid? id = doc.RootElement.TryGetProperty("id", out var i) ? i.GetGuid() : null;
+        return new ReceiptOutcome(doc.RootElement.GetProperty("status").GetString() switch
+        {
+            "confirmed" => ReceiptStatus.Confirmed,
+            "confirmed_late" => ReceiptStatus.ConfirmedLate,
+            "late_taken" => ReceiptStatus.LateTaken,
+            "received" => ReceiptStatus.Received,
+            "exists" => ReceiptStatus.Exists,
+            _ => ReceiptStatus.None,
+        }, id);
+    }
+
+    public async Task<PaymentInfo?> PaymentAsync(Guid appointmentId, CancellationToken ct) =>
+        await db.Payments.AsNoTracking().FirstOrDefaultAsync(p => p.AppointmentId == appointmentId, ct) is { } p
+            ? new PaymentInfo(p.State, p.AmountDue, p.AmountReceived, p.ProofAt)
+            : null;
+
+    public async Task<int?> RequestRefundAsync(Guid appointmentId, string reason, CancellationToken ct) =>
+        await db.Database.SqlQuery<int?>($"""SELECT hazem.request_refund({appointmentId}, {reason}) AS "Value" """).SingleAsync(ct);
 
     public async Task<AppointmentInfo?> FindAsync(Guid id, CancellationToken ct) =>
         await db.Appointments.AsNoTracking().FirstOrDefaultAsync(a => a.Id == id, ct) is { } row ? ToInfo(row) : null;
@@ -59,16 +103,18 @@ public sealed class BookingStore(HazemDbContext db) : IBookingStore
         var start = r.Start.ToUniversalTime();
         var json = await db.Database.SqlQuery<string>($"""
             SELECT hazem.book_appointment({r.Id}, {r.PersonId}, {r.IntakeId}, {r.Service.Code}, {start}, {start.AddMinutes(r.Service.Minutes)},
-                                          {r.Service.Amount}, {r.TurnId}, {r.BufferMinutes}, {r.MatterType})::text AS "Value"
+                                          {r.Service.Amount}, {r.TurnId}, {r.BufferMinutes}, {r.MatterType}, {r.HoldUntil.ToUniversalTime()})::text AS "Value"
             """).SingleAsync(ct);
         using var doc = JsonDocument.Parse(json);
         var status = doc.RootElement.GetProperty("status").GetString();
         Guid? id = doc.RootElement.TryGetProperty("id", out var i) ? i.GetGuid() : null;
         return new BookOutcome(status switch
         {
-            "booked" => BookStatus.Booked,
+            "held" => BookStatus.Held,
+            "booked_paid" => BookStatus.BookedPaid,
             "exists" => BookStatus.Exists,
             "already_booked" => BookStatus.AlreadyBooked,
+            "has_hold" => BookStatus.HasHold,
             _ => BookStatus.Taken,
         }, id);
     }
@@ -94,8 +140,9 @@ public sealed class BookingStore(HazemDbContext db) : IBookingStore
             UPDATE hazem.appointments
                SET state = {state},
                    calendar_state = CASE WHEN calendar_event_id IS NULL THEN 'removed' ELSE 'remove' END,
-                   calendar_attempts = 0, calendar_next_at = now()
-             WHERE id = {id} AND state = 'confirmed'
+                   calendar_attempts = 0, calendar_next_at = now(),
+                   client_notice = CASE WHEN notice_kind = 'hold_reminder' THEN NULL ELSE client_notice END
+             WHERE id = {id} AND state IN ('confirmed', 'pending_payment')
             """, ct) == 1;
 
     /// <summary>A task the booking opens outside a turn (the panel, the calendar worker). Once per key.</summary>
@@ -107,5 +154,5 @@ public sealed class BookingStore(HazemDbContext db) : IBookingStore
             """, ct);
 
     internal static AppointmentInfo ToInfo(AppointmentRow a) =>
-        new(a.Id, a.PersonId, a.Service, a.StartsAt, a.EndsAt, a.State, a.Reschedules, a.Amount, a.MatterType);
+        new(a.Id, a.PersonId, a.Service, a.StartsAt, a.EndsAt, a.State, a.Reschedules, a.Amount, a.MatterType, a.HoldUntil);
 }

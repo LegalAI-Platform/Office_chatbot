@@ -224,15 +224,51 @@ public sealed class StateMachineTests
     // ---------- S-04 (v1.4) ----------
 
     [Fact]
-    public void Only_the_staff_member_marks_refunded()
+    public void Only_a_person_of_the_office_marks_refunded_never_the_system()
+    {
+        // v1.13 (P2): whoever transferred the money back records it; the system never says «اترد».
+        foreach (var person in new[] { Actor.Staff, Actor.Lawyer, Actor.Manager })
+        {
+            var p = Payment.Request(Money.Of(500));
+            p.ReceiptArrived();
+            p.Verify(Actor.Lawyer);
+            p.RequestRefund();
+            Assert.Equal(DomainError.ActorNotAllowed, p.MarkRefunded(Actor.System).Error?.Code);
+            Assert.True(p.MarkRefunded(person).IsOk);
+        }
+    }
+
+    [Fact]
+    public void Every_office_person_reviews_a_transfer_and_a_new_receipt_after_not_received_counts()
     {
         var p = Payment.Request(Money.Of(500));
         p.ReceiptArrived();
-        p.Verify(Actor.Lawyer);
-        p.RequestRefund();
-        Assert.Equal(DomainError.ActorNotAllowed, p.MarkRefunded(Actor.System).Error?.Code);
-        Assert.Equal(DomainError.ActorNotAllowed, p.MarkRefunded(Actor.Lawyer).Error?.Code);
-        Assert.True(p.MarkRefunded(Actor.Staff).IsOk);
+        Assert.True(p.MarkNotReceived(Actor.Staff).IsOk); // P1: the staff too
+        Assert.True(p.ReceiptArrived().IsOk);
+        Assert.True(p.Verify(Actor.Manager).IsOk);
+    }
+
+    // ---------- S-03 (v1.13: the hold until the receipt) ----------
+
+    [Fact]
+    public void A_hold_is_confirmed_by_the_receipt_or_expires_and_a_late_receipt_may_still_confirm()
+    {
+        var (held, _) = Appointment.Hold("x", T10, T10.AddMinutes(15), [], []);
+        Assert.Equal(AppointmentState.PendingPayment, held!.State);
+        Assert.Equal(DomainError.TransitionNotAllowed, held.Complete(Actor.Lawyer).Error?.Code); // not before it is confirmed
+        Assert.True(held.ReceiptArrived().IsOk);
+        Assert.Equal(AppointmentState.Confirmed, held.State);
+
+        var (late, _) = Appointment.Hold("x", T10.AddHours(1), T10.AddHours(1).AddMinutes(15), [], []);
+        Assert.True(late!.Expire().IsOk);
+        Assert.True(late.ReceiptArrived().IsOk);
+    }
+
+    [Fact]
+    public void A_hold_closes_its_time_like_a_confirmed_booking()
+    {
+        var (held, _) = Appointment.Hold("x", T10, T10.AddMinutes(15), [], []);
+        Assert.Equal("slot_taken", Appointment.Book("y", T10, T10.AddMinutes(15), [held!], []).Result.Error?.Code);
     }
 
     [Fact]

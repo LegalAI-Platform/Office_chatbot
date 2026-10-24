@@ -1,6 +1,7 @@
 import { useId, type ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router";
-import { errorMessage } from "../../shared/api/client";
+import { api, errorMessage } from "../../shared/api/client";
 import { useDashboard } from "../../shared/api/dashboard";
 import { useMe } from "../../shared/api/session";
 import type { DashboardTask } from "../../shared/api/types";
@@ -15,11 +16,13 @@ const who = (t: DashboardTask) => t.client_name ?? "رقم من غير اسم";
 
 /**
  * «الرئيسية» exactly as the owner's mockups lay it out. Tasks are real (TASK 07a); appointments and
- * receipts keep their places, empty, until booking and payments exist (TASK 08 and after).
+ * the receipts waiting for a review come from the payments (TASK 09); today's appointments keep their place, empty.
  */
 export function HomePage() {
   const { data: me } = useMe();
   const dash = useDashboard();
+  // TASK 09: the receipts waiting for a person's review (the system never confirms a payment).
+  const receipts = useQuery({ queryKey: ["payments", "review"], queryFn: () => api<unknown[]>("GET", "/payments?show=review") });
   const now = new Date();
   const greeting = cairoHour(now) < 12 ? "صباح الخير" : "مساء الخير";
   const name = me?.role === "lawyer" ? "أستاذ سعد" : me?.display_name.split(/\s+/)[0] ?? "";
@@ -42,7 +45,7 @@ export function HomePage() {
         {/* the four numbers */}
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <Kpi tone="blue" icon="stat_calendar_blue" title="مواعيد اليوم" value={null} to="/appointments" more="عرض المواعيد" />
-          <Kpi tone="green" icon="stat_card_green" title="إيصالات تحتاج تأكيد" value={null} to="/receipts" more="من الإيصالات" />
+          <Kpi tone="green" icon="stat_card_green" title="إيصالات تحتاج تأكيد" value={receipts.isError ? null : receipts.data?.length} to="/receipts" more="من الإيصالات" />
           <Kpi tone="orange" icon="stat_alert_yellow" title="أمور عاجلة" value={dash.data?.urgent} series={dash.data?.urgent_by_day} to="/tasks" more="عرض التفاصيل" />
           <Kpi tone="red" icon="stat_clock_red" title="مهام متأخرة" value={dash.data?.overdue} series={dash.data?.overdue_by_day} to="/tasks?state=overdue" more="عرض المهام" />
         </div>

@@ -33,14 +33,16 @@ public sealed class CalendarSync(HazemDbContext db, GoogleCalendar google, ISett
         var now = clock.GetUtcNow();
         var due = await (from a in db.Appointments.AsNoTracking()
                          join p in db.Persons.AsNoTracking() on a.PersonId equals p.Id
+                         join pay in db.Payments.AsNoTracking() on a.Id equals pay.AppointmentId into pays
+                         from pay in pays.DefaultIfEmpty()
                          where (a.CalendarState == "create" || a.CalendarState == "update" || a.CalendarState == "remove") && a.CalendarNextAt <= now
                          orderby a.CalendarNextAt
-                         select new { a, p.NameRaw, p.WaId }).Take(Batch).ToListAsync(ct);
+                         select new { a, p.NameRaw, p.WaId, Payment = pay == null ? null : pay.State }).Take(Batch).ToListAsync(ct);
         var done = 0;
         foreach (var x in due)
         {
             var a = x.a;
-            var summary = Summary(a, x.NameRaw, x.WaId);
+            var summary = Summary(a, x.NameRaw, x.WaId, x.Payment);
             // ok = Google did what was asked. The state moves only if nothing changed it meanwhile (Mark).
             bool ok;
             switch (a.CalendarState)
@@ -158,9 +160,23 @@ public sealed class CalendarSync(HazemDbContext db, GoogleCalendar google, ISett
         return found;
     }
 
-    /// <summary>B-24: «[الخدمة] – [الاسم] – [الرقم] – [نوع الموضوع] – إيصال: لسه ❌» (the receipt comes with TASK 09).</summary>
-    public static string Summary(AppointmentRow a, string? name, string waId) =>
-        $"{BookingService.ByCode(a.Service)?.Name ?? a.Service} – {name ?? "من غير اسم"} – +{waId} – {MatterName(a.MatterType)} – إيصال: لسه ❌";
+    /// <summary>
+    /// B-24: «[الخدمة] – [الاسم] – [الرقم] – [نوع الموضوع] – الدفع: …». P6 (TASK 09): a confirmed booking always
+    /// has its receipt (1.13), so the event shows the office's review instead, and is updated with it.
+    /// </summary>
+    public static string Summary(AppointmentRow a, string? name, string waId, string? payment) =>
+        $"{BookingService.ByCode(a.Service)?.Name ?? a.Service} – {name ?? "من غير اسم"} – +{waId} – {MatterName(a.MatterType)} – {PaymentWords(payment)}";
+
+    public static string PaymentWords(string? state) => state switch
+    {
+        PaymentInfo.ProofReceived => "الدفع: مستني مراجعتك",
+        PaymentInfo.DuplicateSuspected => "الدفع: مستني مراجعتك (صورة مكررة ⚠️)",
+        PaymentInfo.Verified => "الدفع: ✅ اتأكد",
+        PaymentInfo.Partial => "الدفع: ⚠️ ناقص",
+        PaymentInfo.NotReceived => "الدفع: ❌ ما وصلش",
+        PaymentInfo.RefundRequested or PaymentInfo.Refunded => "الدفع: استرداد",
+        _ => "الدفع: لسه ❌",
+    };
 
     /// <summary>B-25: the kind only, never the client's words.</summary>
     public static string MatterName(string? code) => code switch

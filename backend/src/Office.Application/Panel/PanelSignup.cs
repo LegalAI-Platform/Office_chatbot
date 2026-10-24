@@ -5,7 +5,11 @@ public sealed record PanelCode(Guid Id, string CodeHash, DateTimeOffset ExpiresA
 
 public interface IPanelCodeStore
 {
-    Task AddAsync(Guid userId, string purpose, string codeHash, DateTimeOffset expiresAt, CancellationToken ct);
+    /// <summary>
+    /// <paramref name="createdAt"/> is the API's clock, the one the «one a minute, five an hour» rule reads it
+    /// against (not the database's: a test clock or a slow start would make the two disagree).
+    /// </summary>
+    Task AddAsync(Guid userId, string purpose, string codeHash, DateTimeOffset createdAt, DateTimeOffset expiresAt, CancellationToken ct);
 
     /// <summary>The newest code not used yet for this purpose; an older one stops counting when a new one is sent.</summary>
     Task<PanelCode?> LatestAsync(Guid userId, string purpose, CancellationToken ct);
@@ -325,7 +329,7 @@ public sealed class PanelSignup(
         }
 
         var code = crypto.NewEmailCode();
-        await codes.AddAsync(user.Id, purpose, crypto.HashCode(user.Id, purpose, code), now + CodeLifetime, ct);
+        await codes.AddAsync(user.Id, purpose, crypto.HashCode(user.Id, purpose, code), now, now + CodeLifetime, ct);
         var mail = purpose == PurposeVerify ? PanelMails.VerifyCode(user, code) : PanelMails.ResetCode(user, code);
         return await mailer.SendAsync(mail, ct);
     }

@@ -9,11 +9,11 @@ It talks to the .NET API's `/api/panel` only ([docs/panel-api.md](../docs/panel-
 | What | How |
 |---|---|
 | In Docker (normal) | `up` starts `web` on http://127.0.0.1:8080 (nginx serves the build and forwards `/api/panel` to the API) |
-| Tests without Node on the machine | `scripts/windows/web-test.ps1` / `scripts/linux/web-test.sh`: type-check, Vitest, build and bundle budget in a Node container |
+| Tests without Node on the machine | `scripts/windows/web-test.ps1` / `scripts/linux/web-test.sh`: type-check, Vitest, build (prints the bundle size, no limit) in a Node container |
 | With Node 24 on the machine | `npm ci`, then `npm test`, `npm run build`, or `npm run dev` (Vite on :5173, forwarding `/api/panel` to the running `web` container) |
 
-`npm run build` fails when the gzipped JS passes 150 KB or the CSS passes 15 KB
-(`tools/check-bundle.mjs`). Fonts are bundled from `@fontsource` (no request leaves the machine).
+`npm run build` prints the gzipped size of the JS and the CSS (`tools/check-bundle.mjs`); there is no
+limit since 2026-10-24 (the owner removed the 150 KB budget in TASK 09). Fonts are bundled from `@fontsource` (no request leaves the machine).
 
 ## Structure (frontend-architecture)
 
