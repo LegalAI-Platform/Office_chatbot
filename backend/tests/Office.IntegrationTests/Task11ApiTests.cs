@@ -186,12 +186,19 @@ public sealed class Task11ApiTests(TestDatabase db) : IAsyncLifetime
         var id = await BookedWithDocuments();
         var manager = await SignIn("boss", Permissions.Manager);
         Assert.Equal(HttpStatusCode.NoContent, (await manager.PostAsJsonAsync($"/api/panel/urf/{id}/review", new { decision = "rejected" }, Ct)).StatusCode);
-        // The calendar worker did not run in this test, so there is no event to remove: «removed» at once.
-        Assert.Equal("lawyer_rejected|cancelled_by_office|removed|refund_requested|5000|office_cancelled|refund", await db.ScalarAsync<string>("""
-            SELECT c.state || '|' || a.state || '|' || a.calendar_state || '|' || p.state || '|' || p.refund_due || '|' || p.refund_reason
-                   || '|' || (SELECT type FROM hazem.staff_tasks WHERE type = 'refund')
+        // The calendar worker did not run in this test, so there is no event to remove: «removed» at once. Nobody checked
+        // the receipt yet: no refund is promised until a person finds the money.
+        Assert.Equal("lawyer_rejected|cancelled_by_office|removed|proof_received|0", await db.ScalarAsync<string>("""
+            SELECT c.state || '|' || a.state || '|' || a.calendar_state || '|' || p.state
+                   || '|' || (SELECT count(*) FROM hazem.staff_tasks WHERE type = 'refund')
               FROM hazem.urf_cases c JOIN hazem.appointments a ON a.id = c.appointment_id JOIN hazem.payments p ON p.appointment_id = a.id
             """));
+        Assert.Equal(HttpStatusCode.NoContent, (await manager.PostAsJsonAsync($"/api/panel/payments/{await db.ScalarAsync<Guid>("SELECT appointment_id FROM hazem.urf_cases")}/review",
+            new { state = "verified", received = 5000 }, Ct)).StatusCode);
+        Assert.Equal("refund_requested|5000|office_cancelled|1", await db.ScalarAsync<string>("""
+            SELECT p.state || '|' || p.refund_due || '|' || p.refund_reason || '|' || (SELECT count(*) FROM hazem.staff_tasks WHERE type = 'refund')
+              FROM hazem.payments p
+            """)); // the money came for a refused case: it all goes back
         var sends = _factory.N8n.Requests.Count;
         await Notices();
         Assert.StartsWith("نعتذر لحضرتك، الأستاذ راجع الورق", (string?)JsonNode.Parse(_factory.N8n.Requests.Skip(sends).First().Body)!["text"]);
@@ -210,10 +217,20 @@ public sealed class Task11ApiTests(TestDatabase db) : IAsyncLifetime
         await Press(UrfAnswer.Id(UrfStep.Guardian, "brother"));
         await Press(UrfAnswer.Id(UrfStep.Witnesses, "own"));
         await Press("bk:s:mw:" + new DateTimeOffset(2026, 11, 20, 12, 0, 0, TimeSpan.FromHours(2)).ToUnixTimeSeconds());
+        var lawyer = await SignIn("saad", Permissions.Lawyer);
+        var id = await db.ScalarAsync<Guid>("SELECT id FROM hazem.urf_cases");
+        Assert.Equal(HttpStatusCode.Conflict, (await lawyer.PostAsJsonAsync($"/api/panel/urf/{id}/review", new { decision = "approved" }, Ct)).StatusCode);
+        // ↑ only a confirmed appointment: the hold may still run out
         await db.ExecAsync("UPDATE hazem.appointments SET starts_at = now() + interval '20 hours', ends_at = now() + interval '21 hours'");
         await Notices();
         await Notices();
         Assert.Equal(1L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.staff_tasks WHERE type = 'urf_documents_missing'"));
+
+        // The hold runs out: the case goes back to picking a time, and no longer takes files.
+        await db.ExecAsync("UPDATE hazem.appointments SET state = 'expired'");
+        await Notices();
+        Assert.Equal("documents_pending|true", await db.ScalarAsync<string>("SELECT state || '|' || (appointment_id IS NULL) FROM hazem.urf_cases"));
+        Assert.Equal(0L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.urf_cases c, hazem.file_target(c.person_id, false) t WHERE t.kind = 'urf_documents'"));
     }
 
     [Fact]

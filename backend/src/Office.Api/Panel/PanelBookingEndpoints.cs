@@ -160,22 +160,7 @@ public static class PanelBookingEndpoints
         // A document the client sent for the order, like a client's file in 07c: never cached, recorded once read.
         services.MapGet("/{id:guid}/files/{index:int}", async (Guid id, int index, HttpContext ctx, Office.Infrastructure.Services.PanelServices s,
             Office.Application.Panel.IClientFiles files, CancellationToken ct) =>
-        {
-            if (!files.Configured)
-            {
-                return Results.Json(new { error = "not_configured" }, statusCode: StatusCodes.Status503ServiceUnavailable);
-            }
-
-            if (await s.FileAsync(id, index, ct) is not { } f || await files.OpenAsync(f, ct) is not { } file)
-            {
-                return Results.NotFound(new { error = PanelPayments.ErrNotFound });
-            }
-
-            await s.RecordFileOpenedAsync(ctx.CurrentUser().Id, id, index, ct);
-            var type = ClientFileTypes.Safe(file.ContentType);
-            ctx.Response.Headers.ContentSecurityPolicy = "sandbox; default-src 'none'; img-src 'self'";
-            return Results.Stream(file.Content, type, ClientFileTypes.Inline(type) ? null : ClientFileTypes.Name(index, file.Filename, type));
-        });
+            await ClientDocumentAsync(ctx, files, index, () => s.FileAsync(id, index, ct), () => s.RecordFileOpenedAsync(ctx.CurrentUser().Id, id, index, ct), ct));
 
         services.MapPost("/{id:guid}/price", async (Guid id, PriceRequest? body, HttpContext ctx, Office.Infrastructure.Services.PanelServices s,
             CancellationToken ct) =>
@@ -220,22 +205,7 @@ public static class PanelBookingEndpoints
         // A document the client sent for the case (ID cards): never cached, recorded once read.
         urf.MapGet("/{id:guid}/files/{index:int}", async (Guid id, int index, HttpContext ctx, Office.Infrastructure.Urf.PanelUrf u,
             Office.Application.Panel.IClientFiles files, CancellationToken ct) =>
-        {
-            if (!files.Configured)
-            {
-                return Results.Json(new { error = "not_configured" }, statusCode: StatusCodes.Status503ServiceUnavailable);
-            }
-
-            if (await u.FileAsync(id, index, ct) is not { } f || await files.OpenAsync(f, ct) is not { } file)
-            {
-                return Results.NotFound(new { error = PanelPayments.ErrNotFound });
-            }
-
-            await u.RecordFileOpenedAsync(ctx.CurrentUser().Id, id, index, ct);
-            var type = ClientFileTypes.Safe(file.ContentType);
-            ctx.Response.Headers.ContentSecurityPolicy = "sandbox; default-src 'none'; img-src 'self'";
-            return Results.Stream(file.Content, type, ClientFileTypes.Inline(type) ? null : ClientFileTypes.Name(index, file.Filename, type));
-        });
+            await ClientDocumentAsync(ctx, files, index, () => u.FileAsync(id, index, ct), () => u.RecordFileOpenedAsync(ctx.CurrentUser().Id, id, index, ct), ct));
 
         urf.MapPost("/{id:guid}/review", async (Guid id, UrfReviewRequest? body, HttpContext ctx, Office.Infrastructure.Urf.PanelUrf u,
             CancellationToken ct) => ServiceAnswer(await u.ReviewAsync(ctx.CurrentUser().Id, id, body?.Decision, ct)))
@@ -243,6 +213,29 @@ public static class PanelBookingEndpoints
     }
 
     public sealed record UrfReviewRequest(string? Decision);
+
+    /// <summary>
+    /// A document a client sent (a service order's, an Urfi case's), like a client's file in 07c: never cached, sandboxed,
+    /// a picture or a PDF inline and anything else as a download, and every opening recorded after it was read.
+    /// </summary>
+    private static async Task<IResult> ClientDocumentAsync(HttpContext ctx, Office.Application.Panel.IClientFiles files, int index,
+        Func<Task<Office.Application.Panel.ClientFileRef?>> find, Func<Task> opened, CancellationToken ct)
+    {
+        if (!files.Configured)
+        {
+            return Results.Json(new { error = "not_configured" }, statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+
+        if (await find() is not { } f || await files.OpenAsync(f, ct) is not { } file)
+        {
+            return Results.NotFound(new { error = PanelPayments.ErrNotFound });
+        }
+
+        await opened();
+        var type = ClientFileTypes.Safe(file.ContentType);
+        ctx.Response.Headers.ContentSecurityPolicy = "sandbox; default-src 'none'; img-src 'self'";
+        return Results.Stream(file.Content, type, ClientFileTypes.Inline(type) ? null : ClientFileTypes.Name(index, file.Filename, type));
+    }
 
     private static IResult ServiceAnswer(string? error) => error switch
     {

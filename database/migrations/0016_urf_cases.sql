@@ -92,9 +92,8 @@ BEGIN
   SELECT o.id INTO v_docs FROM hazem.service_orders o
    WHERE o.person_id = p_person AND o.state IN ('collecting', 'awaiting_price') ORDER BY o.created_at DESC LIMIT 1;
   SELECT c.id INTO v_urf FROM hazem.urf_cases c
-   WHERE c.person_id = p_person AND c.state IN ('documents_pending', 'booked', 'approved')
-     AND (c.appointment_id IS NULL
-          OR EXISTS (SELECT 1 FROM hazem.appointments a WHERE a.id = c.appointment_id AND a.state IN ('pending_payment', 'confirmed') AND a.ends_at > now()))
+   WHERE c.person_id = p_person AND c.state IN ('booked', 'approved') -- a case with a live time only: never a stale one
+     AND EXISTS (SELECT 1 FROM hazem.appointments a WHERE a.id = c.appointment_id AND a.state IN ('pending_payment', 'confirmed') AND a.ends_at > now())
    ORDER BY c.created_at DESC LIMIT 1;
 
   SELECT 'hold', a.id INTO v_kind, v_id FROM hazem.appointments a WHERE a.person_id = p_person AND a.state = 'pending_payment' LIMIT 1;
@@ -154,14 +153,66 @@ BEGIN
   RETURN jsonb_build_object('status', CASE WHEN v_first THEN 'first' ELSE 'more' END, 'id', v.id);
 END $$;
 
+-- B-05 / S-04 (1.15): as in 0015, and a receipt reviewed after the lawyer refused the Urfi case opens its refund.
+CREATE OR REPLACE FUNCTION hazem.mark_payment(p_appointment uuid, p_state text, p_received int, p_by uuid)
+RETURNS jsonb LANGUAGE plpgsql SET search_path = hazem, pg_temp AS $$
+DECLARE
+  v hazem.payments;
+  v_over boolean;
+  v_closed boolean;
+  v_tell boolean;
+BEGIN
+  -- p_appointment is the payment's owner: a booking, or a service order.
+  SELECT * INTO v FROM hazem.payments WHERE appointment_id = p_appointment OR service_order_id = p_appointment FOR UPDATE;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('status', 'not_found');
+  END IF;
+  IF p_state NOT IN ('verified', 'partial', 'not_received') THEN
+    RETURN jsonb_build_object('status', 'invalid');
+  END IF;
+  IF NOT (v.state IN ('proof_received', 'duplicate_suspected', 'verified', 'partial', 'not_received')
+          OR (v.state = 'requested' AND p_state = 'not_received')) THEN
+    RETURN jsonb_build_object('status', 'not_allowed');
+  END IF;
+  IF (p_state = 'verified' AND (p_received IS NULL OR p_received < v.amount_due))
+     OR (p_state = 'partial' AND (p_received IS NULL OR p_received <= 0 OR p_received >= v.amount_due)) THEN
+    RETURN jsonb_build_object('status', 'invalid_amount');
+  END IF;
+
+  -- An order the office closed, or an Urfi appointment the lawyer refused (1.15), before anyone checked its receipt:
+  -- whatever came is due back (B-22).
+  v_closed := p_state IN ('verified', 'partial')
+              AND (EXISTS (SELECT 1 FROM hazem.service_orders WHERE id = v.service_order_id AND state = 'closed')
+                   OR EXISTS (SELECT 1 FROM hazem.urf_cases WHERE appointment_id = v.appointment_id AND state = 'lawyer_rejected'));
+  v_over := p_state = 'verified' AND p_received > v.amount_due;
+  v_tell := p_state IN ('partial', 'not_received')
+            AND (EXISTS (SELECT 1 FROM hazem.appointments WHERE id = v.appointment_id AND state = 'confirmed' AND ends_at > now())
+                 OR EXISTS (SELECT 1 FROM hazem.service_orders WHERE id = v.service_order_id AND state = 'awaiting_payment'));
+  UPDATE hazem.payments
+     SET state = CASE WHEN v_over OR v_closed THEN 'refund_requested' ELSE p_state END,
+         amount_received = CASE WHEN p_state = 'not_received' THEN NULL ELSE p_received END,
+         refund_due = CASE WHEN v_closed THEN p_received WHEN v_over THEN p_received - v.amount_due END,
+         refund_reason = CASE WHEN v_closed THEN 'office_cancelled' WHEN v_over THEN 'overpaid' END,
+         reviewed_by = p_by, reviewed_at = now(),
+         client_notice = CASE WHEN v_tell THEN 'pending' ELSE client_notice END,
+         notice_kind = CASE WHEN v_tell THEN 'payment_' || p_state ELSE notice_kind END
+   WHERE id = v.id;
+  UPDATE hazem.appointments SET calendar_state = 'update', calendar_attempts = 0, calendar_next_at = now()
+   WHERE id = v.appointment_id AND state = 'confirmed' AND calendar_state = 'synced';
+  -- B-16: the work starts once a person found the money.
+  UPDATE hazem.service_orders SET state = 'in_progress', client_notice = 'pending', notice_kind = 'started'
+   WHERE id = v.service_order_id AND state = 'awaiting_payment' AND p_state = 'verified';
+  RETURN jsonb_build_object('status', 'marked', 'refund', v_over OR v_closed);
+END $$;
+
 -- B-11.6 / B-22 (1.15): the lawyer's review before the appointment. approved → the confirmation (step 7) for the
--- worker; rejected → the appointment cancelled by the office without B-22's «another time» list, its event removed,
--- and what was paid due back in full (request_refund). Returns the refund, for the office's task.
+-- worker (a confirmed appointment only); rejected → the appointment cancelled by the office without B-22's «another time»
+-- list, its event removed, and the money a person found due back in full. Returns the refund, for the office's task.
 CREATE FUNCTION hazem.review_urf_case(p_case uuid, p_decision text, p_by uuid, p_policy text)
 RETURNS jsonb LANGUAGE plpgsql SET search_path = hazem, pg_temp AS $$
 DECLARE
   v hazem.urf_cases;
-  v_live boolean;
+  v_state text;
   v_refund int;
 BEGIN
   SELECT * INTO v FROM hazem.urf_cases WHERE id = p_case FOR UPDATE;
@@ -171,8 +222,9 @@ BEGIN
   IF p_decision NOT IN ('approved', 'rejected') THEN
     RETURN jsonb_build_object('status', 'invalid');
   END IF;
-  v_live := EXISTS (SELECT 1 FROM hazem.appointments WHERE id = v.appointment_id AND state IN ('pending_payment', 'confirmed') AND ends_at > now());
-  IF p_decision = 'approved' AND NOT (v.state = 'booked' AND v_live)
+  SELECT state INTO v_state FROM hazem.appointments WHERE id = v.appointment_id AND ends_at > now() FOR UPDATE;
+  -- Approved: only a confirmed appointment (the receipt came), never a hold that may still run out.
+  IF p_decision = 'approved' AND NOT (v.state = 'booked' AND v_state IS NOT DISTINCT FROM 'confirmed')
      OR p_decision = 'rejected' AND v.state NOT IN ('documents_pending', 'booked') THEN
     RETURN jsonb_build_object('status', 'not_allowed');
   END IF;
@@ -182,24 +234,35 @@ BEGIN
          decided_by = p_by, decided_at = now(), policy_version = p_policy,
          client_notice = 'pending', notice_kind = p_decision
    WHERE id = v.id;
-  IF p_decision = 'rejected' AND v_live THEN
+  IF p_decision = 'rejected' AND v_state IN ('pending_payment', 'confirmed') THEN
     UPDATE hazem.appointments
        SET state = 'cancelled_by_office', client_notice = NULL, hold_until = NULL,
            calendar_state = CASE WHEN calendar_event_id IS NULL THEN 'removed' ELSE 'remove' END,
            calendar_attempts = 0, calendar_next_at = now()
      WHERE id = v.appointment_id;
-    v_refund := hazem.request_refund(v.appointment_id, 'office_cancelled');
+    -- Only money a person found is due back now; a receipt nobody checked yet stays for the review, and
+    -- mark_payment opens the refund if the money did come (as for a closed service order, 0015).
+    UPDATE hazem.payments
+       SET state = 'refund_requested', refund_due = amount_received, refund_reason = 'office_cancelled'
+     WHERE appointment_id = v.appointment_id AND state IN ('verified', 'partial') AND amount_received > 0
+    RETURNING refund_due INTO v_refund;
   END IF;
   RETURN jsonb_build_object('status', p_decision, 'refund', v_refund, 'person', v.person_id, 'appointment', v.appointment_id);
 END $$;
 
--- B-11 (1.15), run by the worker: a booked case whose appointment is within 24 hours and still has no document
+-- B-11 (1.15), run by the worker: a booked case whose time is gone goes back to picking one; a booked case whose
+-- appointment is within 24 hours and still has no document
 -- gives the office a task, once. Returns those cases.
 CREATE FUNCTION hazem.urf_due()
 RETURNS jsonb LANGUAGE plpgsql SET search_path = hazem, pg_temp AS $$
 DECLARE
   v jsonb;
 BEGIN
+  -- A booked case whose time is gone (the hold ran out, the client cancelled, the office cancelled a day) goes back to
+  -- picking a time: it no longer takes files, and «عايز جواز عرفي» again offers the times.
+  UPDATE hazem.urf_cases c SET state = 'documents_pending', appointment_id = NULL
+   WHERE c.state = 'booked'
+     AND NOT EXISTS (SELECT 1 FROM hazem.appointments a WHERE a.id = c.appointment_id AND a.state IN ('pending_payment', 'confirmed'));
   WITH due AS (
     UPDATE hazem.urf_cases c SET docs_task_at = now()
       FROM hazem.appointments a
@@ -258,6 +321,56 @@ REVOKE ALL ON FUNCTION hazem.add_urf_file(uuid, text, text, text, text, text), h
 DROP FUNCTION IF EXISTS hazem.urf_due();
 DROP FUNCTION IF EXISTS hazem.review_urf_case(uuid, text, uuid, text);
 DROP FUNCTION IF EXISTS hazem.add_urf_file(uuid, text, text, text, text, text);
+
+-- 0015's mark_payment, as it was.
+CREATE OR REPLACE FUNCTION hazem.mark_payment(p_appointment uuid, p_state text, p_received int, p_by uuid)
+RETURNS jsonb LANGUAGE plpgsql SET search_path = hazem, pg_temp AS $$
+DECLARE
+  v hazem.payments;
+  v_over boolean;
+  v_closed boolean;
+  v_tell boolean;
+BEGIN
+  -- p_appointment is the payment's owner: a booking, or a service order.
+  SELECT * INTO v FROM hazem.payments WHERE appointment_id = p_appointment OR service_order_id = p_appointment FOR UPDATE;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('status', 'not_found');
+  END IF;
+  IF p_state NOT IN ('verified', 'partial', 'not_received') THEN
+    RETURN jsonb_build_object('status', 'invalid');
+  END IF;
+  IF NOT (v.state IN ('proof_received', 'duplicate_suspected', 'verified', 'partial', 'not_received')
+          OR (v.state = 'requested' AND p_state = 'not_received')) THEN
+    RETURN jsonb_build_object('status', 'not_allowed');
+  END IF;
+  IF (p_state = 'verified' AND (p_received IS NULL OR p_received < v.amount_due))
+     OR (p_state = 'partial' AND (p_received IS NULL OR p_received <= 0 OR p_received >= v.amount_due)) THEN
+    RETURN jsonb_build_object('status', 'invalid_amount');
+  END IF;
+
+  -- An order the office closed before anyone checked its receipt: whatever came is due back (B-22).
+  v_closed := p_state IN ('verified', 'partial')
+              AND EXISTS (SELECT 1 FROM hazem.service_orders WHERE id = v.service_order_id AND state = 'closed');
+  v_over := p_state = 'verified' AND p_received > v.amount_due;
+  v_tell := p_state IN ('partial', 'not_received')
+            AND (EXISTS (SELECT 1 FROM hazem.appointments WHERE id = v.appointment_id AND state = 'confirmed' AND ends_at > now())
+                 OR EXISTS (SELECT 1 FROM hazem.service_orders WHERE id = v.service_order_id AND state = 'awaiting_payment'));
+  UPDATE hazem.payments
+     SET state = CASE WHEN v_over OR v_closed THEN 'refund_requested' ELSE p_state END,
+         amount_received = CASE WHEN p_state = 'not_received' THEN NULL ELSE p_received END,
+         refund_due = CASE WHEN v_closed THEN p_received WHEN v_over THEN p_received - v.amount_due END,
+         refund_reason = CASE WHEN v_closed THEN 'office_cancelled' WHEN v_over THEN 'overpaid' END,
+         reviewed_by = p_by, reviewed_at = now(),
+         client_notice = CASE WHEN v_tell THEN 'pending' ELSE client_notice END,
+         notice_kind = CASE WHEN v_tell THEN 'payment_' || p_state ELSE notice_kind END
+   WHERE id = v.id;
+  UPDATE hazem.appointments SET calendar_state = 'update', calendar_attempts = 0, calendar_next_at = now()
+   WHERE id = v.appointment_id AND state = 'confirmed' AND calendar_state = 'synced';
+  -- B-16: the work starts once a person found the money.
+  UPDATE hazem.service_orders SET state = 'in_progress', client_notice = 'pending', notice_kind = 'started'
+   WHERE id = v.service_order_id AND state = 'awaiting_payment' AND p_state = 'verified';
+  RETURN jsonb_build_object('status', 'marked', 'refund', v_over OR v_closed);
+END $$;
 
 -- 0015's file_target, as it was.
 CREATE OR REPLACE FUNCTION hazem.file_target(p_person uuid, p_image boolean)

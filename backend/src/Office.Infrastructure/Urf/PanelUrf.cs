@@ -68,7 +68,7 @@ public sealed class PanelUrf(HazemDbContext db, BookingStore store, TimeProvider
 
         var f = await db.UrfFiles.AsNoTracking().Where(x => x.CaseId == caseId).OrderBy(x => x.ReceivedAt).ThenBy(x => x.Id)
             .Skip(index).FirstOrDefaultAsync(ct);
-        return f is null ? null : new ClientFileRef(f.Mime?.StartsWith("image/", StringComparison.Ordinal) == true ? "image" : "document", f.Bucket, f.Key, f.Mime, f.Filename);
+        return f is null ? null : ClientFileRef.Of(f.Bucket, f.Key, f.Mime, f.Filename);
     }
 
     public Task RecordFileOpenedAsync(Guid by, Guid caseId, int index, CancellationToken ct) =>

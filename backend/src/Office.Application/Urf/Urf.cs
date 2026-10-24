@@ -212,8 +212,8 @@ public static class UrfAges
 
 public interface IUrfStore
 {
-    /// <summary>The client's newest Urfi case still running (collecting, documents_pending, booked), if any.</summary>
-    Task<UrfCase?> OpenAsync(Guid personId, CancellationToken ct);
+    /// <summary>The client's Urfi cases still running (collecting, documents_pending, booked), the newest first (one per kind).</summary>
+    Task<IReadOnlyList<UrfCase>> OpenAsync(Guid personId, CancellationToken ct);
 
     Task SaveAsync(UrfCase c, Guid? intakeId, CancellationToken ct);
 
@@ -224,7 +224,7 @@ public interface IUrfStore
 /// <summary>Where the flow keeps the Urfi case and hands it the client's documents.</summary>
 public sealed class UrfDesk(IUrfStore store)
 {
-    public Task<UrfCase?> OpenAsync(Guid personId, CancellationToken ct) => store.OpenAsync(personId, ct);
+    public Task<IReadOnlyList<UrfCase>> OpenAsync(Guid personId, CancellationToken ct) => store.OpenAsync(personId, ct);
 
     public Task SaveAsync(UrfCase c, Guid? intakeId, CancellationToken ct) => store.SaveAsync(c, intakeId, ct);
 

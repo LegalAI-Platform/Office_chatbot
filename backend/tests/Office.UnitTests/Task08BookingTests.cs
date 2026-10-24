@@ -875,9 +875,8 @@ public sealed class BookingFlowTests
         UrfOn();
         await ToTheOffer();
         await Say("عايز أعمل جواز عرفي");
-        _script["مش عارف"] = new("other", null, "unknown", null, 0.9);
-        Assert.Equal([TextKeys.UrfAgesAgain], Keys(await Say("مش عارف")));
-        var d = await Say("مش عارف");
+        Assert.Equal([TextKeys.UrfAgesAgain], Keys(await Say("الزوج 30"))); // one number: not both ages
+        var d = await Say("حوالي 30");
         Assert.Contains(PendingTask.UrfHelp, TaskKinds(d));
         Assert.Equal(Office.Application.Urf.UrfCase.Collecting, TheCase.State);
     }
@@ -896,6 +895,44 @@ public sealed class BookingFlowTests
     }
 
     [Fact]
+    public async Task Urf_the_case_of_the_kind_asked_picks_up_where_it_was_never_a_second_one()
+    {
+        UrfOn();
+        await ToTheOffer();
+        await Say("عايز أعمل جواز عرفي");
+        await Say("30 و 25"); // the marriage case waits at the wife's past
+        Assert.Equal([TextKeys.UrfAskCopy], Keys(await Say("عايز طلاق عرفي")));
+        Assert.Equal([TextKeys.UrfAskWifePast], Keys(await Say("عايز أعمل جواز عرفي"))); // the same marriage case again
+        Assert.Equal(2, _booking.UrfCases.Count);
+    }
+
+    [Fact]
+    public async Task Urf_words_without_a_number_at_the_ages_go_to_the_ai_and_a_human_request_is_heard()
+    {
+        UrfOn();
+        await ToTheOffer();
+        await Say("عايز أعمل جواز عرفي");
+        _script["عايز أكلم موظف"] = new("human_request", null, "unknown", null, 0.9);
+        var human = await Say("عايز أكلم موظف");
+        Assert.NotNull(human.Effects!.Classification);
+        Assert.Contains(PendingTask.HumanRequested, TaskKinds(human));
+
+        _script["مش فاهم"] = new("other", null, "unknown", null, 0.9);
+        Assert.Equal([TextKeys.UrfAskAges], Keys(await Say("مش فاهم"))); // unclear: the question still waiting, again
+        Assert.Equal(0, TheCase.AgeTries);
+    }
+
+    [Fact]
+    public async Task Urf_an_old_button_after_the_case_closed_never_reaches_the_ai()
+    {
+        await ToTheGuardian();
+        await Answer(Office.Application.Urf.UrfStep.Guardian, "none"); // closed: no guardian
+        var old = await Answer(Office.Application.Urf.UrfStep.WifePast, "first");
+        Assert.Null(old.Effects!.Classification);
+        Assert.Equal([TextKeys.UrfUnclear], Keys(old));
+    }
+
+    [Fact]
     public async Task Without_the_urf_texts_a_urf_request_is_answered_as_before()
     {
         await ToTheOffer();
@@ -911,14 +948,30 @@ public sealed class BookingFlowTests
     /// <summary>hazem.urf_cases and add_urf_file, in memory (the cases live in <see cref="MemoryBooking"/> for file_target).</summary>
     private sealed class MemoryUrf(MemoryBooking booking) : Office.Application.Urf.IUrfStore
     {
-        public Task<Office.Application.Urf.UrfCase?> OpenAsync(Guid personId, CancellationToken ct) =>
-            Task.FromResult(booking.UrfCases.LastOrDefault(c => c.PersonId == personId
-                && c.State is Office.Application.Urf.UrfCase.Collecting or Office.Application.Urf.UrfCase.DocumentsPending or Office.Application.Urf.UrfCase.Booked));
+        public Task<IReadOnlyList<Office.Application.Urf.UrfCase>> OpenAsync(Guid personId, CancellationToken ct) =>
+            Task.FromResult<IReadOnlyList<Office.Application.Urf.UrfCase>>(booking.UrfCases.Where(c => c.PersonId == personId
+                && c.State is Office.Application.Urf.UrfCase.Collecting or Office.Application.Urf.UrfCase.DocumentsPending or Office.Application.Urf.UrfCase.Booked)
+                .Reverse().ToList());
 
         public Task SaveAsync(Office.Application.Urf.UrfCase c, Guid? intakeId, CancellationToken ct)
         {
-            booking.UrfCases.RemoveAll(x => x.Id == c.Id);
-            booking.UrfCases.Add(c);
+            // In place (the store keeps a case's creation order); a new case is the newest.
+            var i = booking.UrfCases.FindIndex(x => x.Id == c.Id);
+            if (i >= 0)
+            {
+                booking.UrfCases[i] = c;
+            }
+            else
+            {
+                booking.UrfCases.Add(c);
+            }
+
+            if (booking.UrfCases.Count(x => x.PersonId == c.PersonId && x.Kind == c.Kind
+                    && x.State is Office.Application.Urf.UrfCase.Collecting or Office.Application.Urf.UrfCase.DocumentsPending or Office.Application.Urf.UrfCase.Booked) > 1)
+            {
+                throw new InvalidOperationException("urf_cases_one_open"); // as the database's unique index
+            }
+
             return Task.CompletedTask;
         }
 
@@ -1162,7 +1215,8 @@ public sealed class BookingFlowTests
         {
             var docs = Orders.LastOrDefault(o => o.Person == personId && o.State is "collecting" or "awaiting_price");
             var urf = UrfCases.LastOrDefault(c => c.PersonId == personId
-                && c.State is Office.Application.Urf.UrfCase.DocumentsPending or Office.Application.Urf.UrfCase.Booked or Office.Application.Urf.UrfCase.Approved);
+                && c.State is Office.Application.Urf.UrfCase.Booked or Office.Application.Urf.UrfCase.Approved
+                && Appointments.Any(a => a.Id == c.AppointmentId && a.State is AppointmentInfo.PendingPayment or AppointmentInfo.Confirmed));
             var receipt = await ReceiptTargetAsync(personId, now(), ct);
             var kind = receipt?.State switch
             {

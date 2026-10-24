@@ -133,22 +133,25 @@ public sealed class HazemResponder(
         else if (state.Conversation.HazemMayAnswer)
         {
             var urfOn = urf is not null && bookingOn && UrfTextKeys.All(k => texts.TryGetValue(k, out var t) && t.Active);
-            var urfCase = urfOn ? await urf!.OpenAsync(state.Person.Id, ct) : null;
+            IReadOnlyList<UrfCase> urfOpen = urfOn ? await urf!.OpenAsync(state.Person.Id, ct) : [];
+            var urfCase = urfOpen.FirstOrDefault();
             var flow = new Flow(turn, state, list, null, plan, settings.Flag(HandoffEnabledKey), bookingOn ? bookingSettings : null, servicesOn,
-                urfOn, urfCase);
+                urfOn, urfOpen);
             // TASK 08: a button or a list row Hazem sent is read without the AI.
             var choice = bookingOn && flow.MayBook ? ChoiceIn(turn) : null;
-            // TASK 11 (B-11): the answer to the Urfi question waiting: its button, or the typed ages (never the AI).
-            var urfAnswer = choice is null && urfCase is { State: UrfCase.Collecting } && flow.MayBook ? UrfAnswerIn(turn) : null;
-            var urfAges = choice is null && urfAnswer is null && urfCase is { State: UrfCase.Collecting, Step: UrfStep.Ages } && flow.MayBook
-                          && FileIn(turn) is null && AiInput.Build(turn) is not null;
+            // TASK 11 (B-11): the answer to the Urfi question waiting: its button, or the typed ages (never the AI). Only words
+            // with a number are read as the ages: «عايز أكلم موظف» or «بكام؟» go to the AI as any message.
+            var urfButton = choice is null ? UrfAnswerIn(turn) : null;
+            var urfAnswer = urfButton is not null && urfCase is { State: UrfCase.Collecting } && flow.MayBook ? urfButton : null;
+            var urfAges = choice is null && urfButton is null && urfCase is { State: UrfCase.Collecting, Step: UrfStep.Ages } && flow.MayBook
+                          && FileIn(turn) is null && AiInput.Build(turn) is { } typed && typed.Any(char.IsDigit);
             // TASK 09 / 10 (B-05, B-16, T-09): a file from the client never reaches the AI, nor any word sent with it:
             // a receipt (an image) for what waits for one, the documents of a service order, or «send an image».
             ReceiptOutcome? receipt = null;
             AddFileOutcome? documents = null;
             AddFileOutcome? urfDocuments = null;
             var askImage = false;
-            if (choice is null && urfAnswer is null && !urfAges && (bookingOn || servicesOn) && flow.MayOrder && services is not null
+            if (choice is null && urfButton is null && !urfAges && (bookingOn || servicesOn) && flow.MayOrder && services is not null
                 && FileIn(turn) is { } m)
             {
                 var image = m.Type == MessageType.Image;
@@ -180,6 +183,10 @@ public sealed class HazemResponder(
             {
                 flow.RespondToUrf(urfAnswer);
             }
+            else if (urfButton is not null)
+            {
+                flow.RespondToOldUrfButton(); // a button from a question no longer waiting: never to the AI
+            }
             else if (urfDocuments is { Status: not AddFileStatus.None })
             {
                 flow.RespondToUrfDocuments(urfDocuments);
@@ -201,7 +208,7 @@ public sealed class HazemResponder(
                 }
 
                 flow = new Flow(turn, state, list, classification, plan, settings.Flag(HandoffEnabledKey), bookingOn ? bookingSettings : null,
-                    servicesOn, urfOn, urfCase);
+                    servicesOn, urfOn, urfOpen);
                 flow.Respond(firstContact);
             }
 
@@ -307,10 +314,10 @@ public sealed class HazemResponder(
 
     /// <summary>The decisions for one turn. Changes the state in memory; the store saves it with the turn.</summary>
     private sealed class Flow(Turn turn, ClientState state, ListMatch list, Classification? c, Plan plan, bool handoffEnabled,
-        BookingSettings? booking, bool servicesOn, bool urfOn = false, UrfCase? urfCase = null)
+        BookingSettings? booking, bool servicesOn, bool urfOn = false, IReadOnlyList<UrfCase>? urfOpen = null)
     {
-        /// <summary>TASK 11: the client's Urfi case (B-11), as this turn leaves it.</summary>
-        public UrfCase? Urf { get; private set; } = urfCase;
+        /// <summary>TASK 11: the client's Urfi case (B-11) this turn is about (the newest running one), as the turn leaves it.</summary>
+        public UrfCase? Urf { get; private set; } = urfOpen?.FirstOrDefault();
 
         /// <summary>The case changed in this turn and must be saved.</summary>
         public bool UrfChanged { get; private set; }
@@ -422,12 +429,22 @@ public sealed class HazemResponder(
             AfterUrf(how);
         }
 
+        /// <summary>
+        /// An Urfi button from a question that no longer waits (the case moved on or closed): «تحت أمرك، قولّي المطلوب».
+        /// </summary>
+        public void RespondToOldUrfButton()
+        {
+            WordsToOffice();
+            plan.Say(TextKeys.UrfUnclear);
+        }
+
         /// <summary>B-11: «عايز جواز / طلاق عرفي»: a new case, or the one already running picks up where it was.</summary>
         private void StartUrf(string kind)
         {
             Check(Intake.MoveTo(IntakeState.InServiceFlow));
-            if (Urf is { } open && open.Kind == kind)
+            if (urfOpen?.FirstOrDefault(c => c.Kind == kind) is { } open) // one running case per kind (urf_cases_one_open)
             {
+                Urf = open;
                 AfterUrf(open.State == UrfCase.Collecting ? UrfNext.Ask : UrfNext.Book);
                 return;
             }
@@ -849,6 +866,9 @@ public sealed class HazemResponder(
                     break;
                 case Intent.ThanksOrClosing:
                     plan.Say(TextKeys.Thanks);
+                    break;
+                case var _ when urfOn && Urf is { State: UrfCase.Collecting }:
+                    AfterUrf(UrfNext.Ask); // B-11: the question still waiting, again (words without its answer)
                     break;
                 default:
                     if (Intake.UnclearInARow <= 1)

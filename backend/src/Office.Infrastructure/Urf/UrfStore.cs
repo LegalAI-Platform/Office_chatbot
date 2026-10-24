@@ -9,13 +9,10 @@ namespace Office.Infrastructure.Urf;
 /// <summary>hazem.urf_cases and hazem.urf_files (migration 0016).</summary>
 public sealed class UrfStore(HazemDbContext db) : IUrfStore
 {
-    public async Task<UrfCase?> OpenAsync(Guid personId, CancellationToken ct)
-    {
-        var r = await db.UrfCases.AsNoTracking()
+    public async Task<IReadOnlyList<UrfCase>> OpenAsync(Guid personId, CancellationToken ct) =>
+        (await db.UrfCases.AsNoTracking()
             .Where(c => c.PersonId == personId && (c.State == UrfCase.Collecting || c.State == UrfCase.DocumentsPending || c.State == UrfCase.Booked))
-            .OrderByDescending(c => c.CreatedAt).FirstOrDefaultAsync(ct);
-        return r is null ? null : ToCase(r);
-    }
+            .OrderByDescending(c => c.CreatedAt).ToListAsync(ct)).Select(ToCase).ToList();
 
     public Task SaveAsync(UrfCase c, Guid? intakeId, CancellationToken ct) =>
         db.Database.ExecuteSqlInterpolatedAsync($"""
@@ -28,6 +25,8 @@ public sealed class UrfStore(HazemDbContext db) : IUrfStore
               wife_past = EXCLUDED.wife_past, guardian = EXCLUDED.guardian, witnesses = EXCLUDED.witnesses, has_copy = EXCLUDED.has_copy,
               agreed = EXCLUDED.agreed, children = EXCLUDED.children, age_tries = EXCLUDED.age_tries,
               appointment_id = EXCLUDED.appointment_id, policy_version = EXCLUDED.policy_version
+             -- a decision of the panel (approved, refused) or of the worker in between is never written over
+             WHERE hazem.urf_cases.state IN ('collecting', 'documents_pending', 'booked')
             """, ct);
 
     public async Task<AddFileOutcome> AddFileAsync(Guid personId, StoredFile f, CancellationToken ct)
