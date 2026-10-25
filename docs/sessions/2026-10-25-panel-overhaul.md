@@ -2,7 +2,7 @@
 
 Asked in the chat by Nehad (team member, the panel's UI is his task): a new look for the whole panel, the
 session ending after an hour without use (it ended every few seconds), a clearer «المواعيد», then the panel
-hardened and made faster. Branch `panel-overhaul` (from `main` = `8de9167`). Architecture v1.3 unchanged: no
+hardened and made faster. Branch `panel-overhaul` (from `main` = `8de9167`, then merged with `main` = `4cd75e3`, TASK 12). Architecture v1.3 unchanged: no
 new service, no stack change, no migration.
 
 ## 1. What was done
@@ -31,8 +31,13 @@ new service, no stack change, no migration.
 - A security review (read-only) of the backend, compose and nginx found nothing critical. What it found that
   needs the owner, not code: **the tunnel exposes all of n8n (its login page too), not only the webhooks** —
   limit the named tunnel to `/webhook/` or put Cloudflare Access in front, and turn on 2FA for the n8n owner;
-  `PANEL_SECRET_KEY` empty switches off the managers' 2FA rule; if the panel is ever exposed, nginx must take
-  the real client address from the edge and the cookie must be Secure.
+  if the panel is ever exposed, nginx must take the real client address from the edge and the cookie must be
+  Secure. (The managers' 2FA rule is off by the owner's choice since TASK 12, DECISIONS v1.16.)
+- Merged with TASK 12 (`main` = `4cd75e3`): its reminders and «هحضر ✅» are kept in the new «الحجوزات»
+  (tomorrow's unconfirmed line, «أكّد حضوره ✅», each reminder's state on the booking and in its details); the
+  home screen already counted today's held and confirmed appointments, as TASK 12 asked. Its booking test is
+  kept, with one change: the first client's row is found inside the list, since the page also shows that client
+  as «الميعاد الجاي».
 - Left for later (low): logout ending the session on the server, atomic attempt counters, the timing
   difference on «نسيت كلمة السر».
 - Local demo rows for the screenshots (dummy numbers 20100000008x, not in the repo) make `hazem-e2e` count one
@@ -40,4 +45,4 @@ new service, no stack change, no migration.
 
 ## 4. What the next task needs
 
-The owner's review of this branch; the three owner items above; TASK 12 still waits for the owner's answers.
+The owner's review of this branch; the owner items above.

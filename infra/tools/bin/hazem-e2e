@@ -18,7 +18,7 @@ I=201000000069   # TASK 05a: a blocked number
 K=201000000070   # TASK 05a: a client who tells the topic first (B-25)
 L=201000000071   # TASK 08: books from the buttons; the panel closes days
 M=201000000072   # TASK 10: a document review from the request to the delivered file
-N=201000000073   # TASK 11: an Urfi marriage contract from the questions to the lawyer's approval
+N=201000000073   # TASK 11: an Urfi marriage contract from the questions to the lawyer's approval; TASK 12: its reminders
 ALL="'$A','$B','$C','$D','$E','$F','$G','$H','$I','$K','$L','$M','$N'"
 STUB=http://meta-stub:8080
 
@@ -942,6 +942,64 @@ SQL
     wait_eq "B-11.7: the confirmation with who must come (the worker)" \
       "SELECT count(*) FROM app.wa_outbound_messages WHERE wa_id = '$N'
           AND request_payload->'text'->>'body' LIKE 'تم تأكيد الميعاد يوم % في المكتب ✅. الحضور: الزوج والزوجة والولي، ومعاكم أصول البطاقات.'" "1"
+    finish
+    ;;
+
+  # ---------- TASK 12 (B-18): the reminders, on step 14's Urfi appointment ----------
+  hazem12-setup)
+    # The worker makes the reminders for the appointment's time; tomorrow 12:00 Cairo keeps «بكرة» true all day.
+    hazem_backup_set office.address "e2e: 12 شارع التجربة"
+    hazem_backup_set office.map_url "https://maps.example/e2e"
+    start="$(TZ=Africa/Cairo date -d 'tomorrow 12:00' --iso-8601=seconds)"
+    q "UPDATE hazem.appointments a SET starts_at = '$start', ends_at = '$start'::timestamptz + (a.ends_at - a.starts_at)
+         FROM hazem.urf_cases c JOIN hazem.persons p ON p.id = c.person_id
+        WHERE c.appointment_id = a.id AND p.wa_id = '$N'" >/dev/null
+    echo "$N's Urfi appointment moves to tomorrow 12:00, the office's address and map are written"
+    ;;
+
+  check-hazem12-made)
+    wait_eq "B-18: the worker made both reminders for the new time (the two hours one is due tomorrow at 10:00)" \
+      "SELECT count(*) || '/' || count(*) FILTER (WHERE r.kind = 'two_hours' AND r.state = 'scheduled')
+         FROM hazem.appointment_reminders r JOIN hazem.appointments a ON a.id = r.appointment_id AND r.starts_at = a.starts_at
+         JOIN hazem.urf_cases c ON c.appointment_id = a.id JOIN hazem.persons p ON p.id = c.person_id WHERE p.wa_id = '$N'" "2/1"
+    finish
+    ;;
+
+  hazem12-due)
+    # Its time comes now (made before the test's own clock could reach it).
+    q "UPDATE hazem.appointment_reminders r SET state = 'scheduled', skip_reason = NULL, due_at = now()
+         FROM hazem.appointments a JOIN hazem.urf_cases c ON c.appointment_id = a.id JOIN hazem.persons p ON p.id = c.person_id
+        WHERE r.appointment_id = a.id AND r.starts_at = a.starts_at AND r.kind = 'day_before' AND p.wa_id = '$N'" >/dev/null
+    echo "the day-before reminder is due"
+    ;;
+
+  check-hazem12-sent)
+    wait_eq "B-18 / M-03: the day-before reminder went out once through n8n, with who comes, the address, the map and two buttons" \
+      "SELECT count(*) || '/' || COALESCE(max(jsonb_array_length(request_payload->'interactive'->'action'->'buttons')), 0)
+         FROM app.wa_outbound_messages WHERE wa_id = '$N'
+          AND request_payload->'interactive'->'body'->>'text' LIKE 'تذكير بميعاد حضرتك مع الأستاذ سعد بكرة % الساعة 12:00 م. نوع الاستشارة: عقد جواز عرفي (الشهود من المكتب). التفاصيل: لازم يحضر الزوج والزوجة والولي ومعاهم البطايق الأصل، والمكتب في e2e: 12 شارع التجربة، واللوكيشن: https://maps.example/e2e. من فضلك أكّد حضورك بالزرار تحت.'" "1/2"
+    wait_eq "the reminder is marked sent by message (the client wrote within 24 hours)" \
+      "SELECT r.state || '/' || r.channel FROM hazem.appointment_reminders r JOIN hazem.appointments a ON a.id = r.appointment_id
+         JOIN hazem.urf_cases c ON c.appointment_id = a.id JOIN hazem.persons p ON p.id = c.person_id
+        WHERE p.wa_id = '$N' AND r.kind = 'day_before' AND r.starts_at = a.starts_at" "sent/message"
+    finish
+    ;;
+
+  hazem12-attend)
+    id="$(q "SELECT request_payload->'interactive'->'action'->'buttons'->0->'reply'->>'id' FROM app.wa_outbound_messages
+              WHERE wa_id = '$N' AND request_payload->'interactive'->'body'->>'text' LIKE 'تذكير بميعاد حضرتك%' ORDER BY created_at DESC LIMIT 1")"
+    [[ "$id" == bk:a:* ]] || die "no «هحضر» button to press (got '$id')"
+    inject "$N" wamid.E2E-N12 interactive "$(interactive button_reply "$id")" 10
+    echo "$N presses «هحضر ✅»"
+    ;;
+
+  check-hazem12-attend)
+    wait_eq "«هحضر ✅»: recorded for the appointment's time, and Hazem says it is waiting for him" \
+      "SELECT (SELECT count(*) FROM hazem.appointments a JOIN hazem.urf_cases c ON c.appointment_id = a.id JOIN hazem.persons p ON p.id = c.person_id
+                WHERE p.wa_id = '$N' AND a.attendance_for = a.starts_at) || '/' ||
+              (SELECT count(*) FROM app.wa_outbound_messages WHERE wa_id = '$N' AND request_payload->'text'->>'body' = 'تمام ✅ في انتظار حضرتك بكرة الساعة 12:00 م.')" "1/1"
+    assert_eq "the button never reached the AI (no classification)" \
+      "$(q "SELECT count(*) FROM hazem.classifications WHERE turn_id = $(turn_of wamid.E2E-N12)")" "0"
     finish
     ;;
 

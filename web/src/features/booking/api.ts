@@ -1,8 +1,8 @@
 // TASK 08 (DECISIONS v1.12, B-24): /api/panel/booking and /api/panel/office. docs/panel-api.md.
 import { api } from "../../shared/api/client";
-import { fetchAppointments, type Appointment } from "../../shared/api/appointments";
+import { fetchAppointments, type Appointment, type Reminder } from "../../shared/api/appointments";
 
-export type { Appointment };
+export type { Appointment, Reminder };
 
 export interface Range { start: number; end: number }
 export interface WeekDay { weekday: number; ranges: Range[] }

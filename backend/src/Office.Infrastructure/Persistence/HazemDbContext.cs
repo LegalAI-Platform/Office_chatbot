@@ -150,6 +150,11 @@ public sealed class HazemDbContext(DbContextOptions<HazemDbContext> options) : D
             e.ToTable("appointments");
             e.HasKey(x => x.Id);
         });
+        b.Entity<AppointmentReminderRow>(e =>
+        {
+            e.ToTable("appointment_reminders");
+            e.HasKey(x => x.Id);
+        });
         b.Entity<PaymentRow>(e =>
         {
             e.ToTable("payments");
@@ -186,6 +191,7 @@ public sealed class HazemDbContext(DbContextOptions<HazemDbContext> options) : D
     public DbSet<BookingExceptionRow> BookingExceptions => Set<BookingExceptionRow>();
     public DbSet<BookingChangeRow> BookingChanges => Set<BookingChangeRow>();
     public DbSet<AppointmentRow> Appointments => Set<AppointmentRow>();
+    public DbSet<AppointmentReminderRow> AppointmentReminders => Set<AppointmentReminderRow>();
     public DbSet<PaymentRow> Payments => Set<PaymentRow>();
     public DbSet<PaymentReceiptRow> PaymentReceipts => Set<PaymentReceiptRow>();
     public DbSet<ServiceOrderRow> ServiceOrders => Set<ServiceOrderRow>();
@@ -441,6 +447,25 @@ public sealed class AppointmentRow
     public DateTimeOffset? HoldUntil { get; set; }
     public DateTimeOffset? HoldRemindedAt { get; set; }
     public string? NoticeKind { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+    public DateTimeOffset? AttendanceAt { get; set; }   // TASK 12: «هحضر ✅»
+    public DateTimeOffset? AttendanceFor { get; set; }  // for this time (a moved appointment is not confirmed again)
+}
+
+/// <summary>hazem.appointment_reminders (0017, TASK 12, B-18).</summary>
+public sealed class AppointmentReminderRow
+{
+    public long Id { get; set; }
+    public Guid AppointmentId { get; set; }
+    public required string Kind { get; set; }
+    public DateTimeOffset StartsAt { get; set; }
+    public DateTimeOffset? DueAt { get; set; }
+    public required string State { get; set; }
+    public string? SkipReason { get; set; }
+    public string? Channel { get; set; }
+    public string? ErrorCode { get; set; }
+    public DateTimeOffset? SentAt { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }

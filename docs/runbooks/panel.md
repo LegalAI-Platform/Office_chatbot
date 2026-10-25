@@ -42,8 +42,9 @@ Needs, in `.env`: `PANEL_SECRET_KEY` (`gen-secrets`) and the mail server (`SMTP_
 
 ## Two-step sign-in (the authenticator app, v1.9)
 
-**A manager must** (once `PANEL_SECRET_KEY` is set): at the next sign-in the panel opens
-«شغّل التحقق بخطوتين» and nothing else works until it is on. Everyone else may. Each person turns it on from **حسابي → التحقق بخطوتين**: scan the QR code with Google or
+**Optional for everyone, the manager too** (v1.16, the owner's decision; it needs `PANEL_SECRET_KEY`). With
+`PANEL_MANAGERS_NEED_2FA=true` in `.env` a manager must again (v1.9): at the next sign-in the panel opens
+«شغّل التحقق بخطوتين» and nothing else works until it is on. Each person turns it on from **حسابي → التحقق بخطوتين**: scan the QR code with Google or
 Microsoft Authenticator, type a code, and keep the ten recovery codes (shown once). From then on,
 sign-in asks for the code after the password. A lost phone: sign in with a recovery code, or the
 manager uses **اقفل التحقق بخطوتين (موبايل ضاع)** on that account. If `PANEL_SECRET_KEY`

@@ -152,15 +152,15 @@ public static class PanelAuth
             new AuthenticationProperties { IsPersistent = false, AllowRefresh = true });
 
     /// <summary>
-    /// v1.9 (T-23): an account that manages accounts (the manager) must have the authenticator on.
-    /// Only once PANEL_SECRET_KEY is set (it cannot be set up without it); Panel:ManagersNeedTwoFactor
-    /// (default true) turns the rule off for tests that are not about it.
+    /// v1.9 (T-23): an account that manages accounts (the manager) must have the authenticator on, only when
+    /// Panel:ManagersNeedTwoFactor is true (PANEL_MANAGERS_NEED_2FA). v1.16: the owner made it optional for everyone,
+    /// so it is off by default. Only once PANEL_SECRET_KEY is set (it cannot be set up without it).
     /// </summary>
     public static bool NeedsTwoFactor(HttpContext ctx, PanelUser user) =>
         !user.TotpEnabled
         && Permissions.Has(user.Role, Permissions.UsersManage)
         && ctx.RequestServices.GetRequiredService<IPanelCrypto>().Configured
-        && ctx.RequestServices.GetRequiredService<IConfiguration>().GetValue("Panel:ManagersNeedTwoFactor", true);
+        && ctx.RequestServices.GetRequiredService<IConfiguration>().GetValue("Panel:ManagersNeedTwoFactor", false);
 
     /// <summary>The account checked by the cookie handler for this request.</summary>
     public static PanelUser CurrentUser(this HttpContext ctx) =>

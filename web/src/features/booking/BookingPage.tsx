@@ -2,14 +2,14 @@ import { useState, type ReactNode } from "react";
 import { queryOptions, useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { ApiError, errorMessage } from "../../shared/api/client";
 import { can, useMe } from "../../shared/api/session";
-import { APPOINTMENT_STATES, BOOKING_SERVICES, label, matterLabel, PAYMENT_STATES } from "../../shared/lib/labels";
+import { APPOINTMENT_STATES, BOOKING_SERVICES, label, matterLabel, PAYMENT_STATES, REMINDER_KINDS, REMINDER_SKIPS } from "../../shared/lib/labels";
 import { cairoDayWord, cairoTime, cairoWhen } from "../../shared/lib/time";
 import { Link } from "react-router";
 import { Icon, type IconName } from "../../shared/ui/Icon";
 import { Button, Card, Chip, Empty, ErrorState, Field, inputClass, Loading, PageHeader, Segmented, Tabs } from "../../shared/ui/ui";
 import { confirmAction, toast } from "../../shared/ui/feedback";
 import { useUrlState } from "../../shared/lib/url";
-import { booking, cairoDate, hhmm, monthOf, shiftMonth, TIMES, type Appointment, type Day, type Done, type Office, type Settings, type WeekDay } from "./api";
+import { booking, cairoDate, hhmm, monthOf, shiftMonth, TIMES, type Appointment, type Day, type Done, type Office, type Reminder, type Settings, type WeekDay } from "./api";
 
 type Tab = "bookings" | "calendar" | "week" | "settings" | "office";
 // The office week starts on Saturday; the API's weekday is 0 = Sunday … 6 = Saturday.
@@ -203,6 +203,9 @@ function Bookings() {
   const todayKey = cairoDate(now);
   const weekEnd = cairoDate(new Date(now.getTime() + 6 * DAY));
   const next = when === "ahead" ? all.find((a) => isLive(a) && new Date(a.end) > now) : undefined;
+  const tomorrowKey = cairoDate(new Date(now.getTime() + DAY));
+  const tomorrows = when === "ahead" ? all.filter((a) => a.state === "confirmed" && cairoDate(new Date(a.start)) === tomorrowKey) : [];
+  const unconfirmed = tomorrows.filter((a) => !a.attending).length;
   const count = (f: (a: Appointment) => boolean) => (list.data ? all.filter(f).length : undefined);
   const tiles: TileSpec[] = when === "ahead" ? [
     { label: "النهارده", value: count((a) => isLive(a) && cairoDate(new Date(a.start)) === todayKey), tone: "blue" },
@@ -241,6 +244,17 @@ function Bookings() {
       </section>
 
       {next ? <NextUp a={next} now={now}>{actions(next)}</NextUp> : null}
+
+      {/* TASK 12 (B-18): tomorrow's confirmed appointments whose client has not pressed «هحضر ✅» yet (nothing is cancelled for it) */}
+      {tomorrows.length > 0 ? (
+        <p role="status" className="flex items-center gap-2 text-[14px] text-ink-soft">
+          <Icon name="bell" className="size-4 shrink-0 text-cobalt-ink" />
+          <span>
+            بكرة {tomorrows.length} {tomorrows.length === 1 ? "ميعاد" : "مواعيد"}
+            {unconfirmed > 0 ? <>، <span className="font-semibold text-gold-ink">{unconfirmed} ما أكدوش حضورهم</span></> : "، وكلهم أكدوا حضورهم ✅"}
+          </span>
+        </p>
+      ) : null}
 
       <Segmented label="نوع الميعاد" value={kind} onChange={setKind}
         options={[["all", `الكل ${all.length}`], ["office", "في المكتب"], ["phone", "تليفون أو فيديو"], ["urgent", "عاجلة"], ["urf", "عرفي"]] as const} />
@@ -350,7 +364,9 @@ function BookingRow({ a, now, next, children }: { a: Appointment; now: Date; nex
             {a.matter_type ? <span>{matterLabel(a.matter_type)}</span> : null}
             <span dir="ltr" className="text-ink-faint">+{a.wa_id}</span>
           </span>
+          {a.state === "confirmed" && a.reminders.length > 0 ? <Reminders items={a.reminders} /> : null}
         </span>
+        {a.state === "confirmed" && a.attending ? <Chip tone="green">أكّد حضوره ✅</Chip> : null}
         <Chip tone={STATE_TONE[a.state] ?? "grey"}>
           {label(APPOINTMENT_STATES, a.state)}{a.state === "pending_payment" && a.hold_until ? ` لحد ${cairoTime(new Date(a.hold_until))}` : ""}
         </Chip>
@@ -383,6 +399,7 @@ function BookingRow({ a, now, next, children }: { a: Appointment; now: Date; nex
             </span>
           </Detail>
           <Detail term="الحالة">{label(APPOINTMENT_STATES, a.state)}</Detail>
+          {a.state === "confirmed" ? <Detail term="الحضور">{a.attending ? "أكّد إنه هيحضر (ضغط «هحضر ✅»)" : "لسه ما أكدش"}</Detail> : null}
           <Detail term="الدفع">{a.payment ? label(PAYMENT_STATES, a.payment) : "مفيش دفع على الميعاد ده"}</Detail>
           {a.hold_until ? <Detail term="الحجز المؤقت لحد">{cairoWhen(a.hold_until)}</Detail> : null}
           <Detail term="كالندر الأستاذ">{cal?.text ?? "—"}</Detail>
@@ -645,6 +662,28 @@ function TimeSelect({ value, onChange, label: aria, min = 0 }: { value: number; 
     <select aria-label={aria} className={`${inputClass} tabular !w-auto px-2`} value={value} onChange={(e) => onChange(Number(e.target.value))}>
       {TIMES.filter((t) => t >= min).map((t) => <option key={t} value={t}>{t === 1440 ? "12 بالليل" : hhmm(t)}</option>)}
     </select>
+  );
+}
+
+/** TASK 12 (B-18): what happened to each reminder of the appointment's current time. */
+function Reminders({ items }: { items: Reminder[] }) {
+  const word = (r: Reminder) =>
+    r.state === "scheduled" && r.due_at ? `هيتبعت ${cairoWhen(r.due_at)}`
+    : r.state === "sending" ? "بيتبعت دلوقتي"
+    : r.state === "sent" ? `اتبعت ✓${r.channel === "template" ? " (قالب واتساب)" : ""}`
+    : r.state === "failed" ? "ما وصلش ✗ (فيه مهمة تكلّمه)"
+    : r.state === "skipped" ? `ما اتبعتش: ${label(REMINDER_SKIPS, r.skip_reason ?? "")}`
+    : null;
+  const shown = items.filter((r) => word(r) !== null);
+  if (shown.length === 0) return null;
+  return (
+    <ul className="flex flex-wrap gap-x-4 gap-y-0.5 text-[12.5px] text-ink-soft" aria-label="التذكيرات">
+      {shown.map((r) => (
+        <li key={r.kind} className={`flex items-center gap-1.5 ${r.state === "failed" ? "font-medium text-red-ink" : ""}`}>
+          <Icon name="bell" className="size-3.5 shrink-0" />{label(REMINDER_KINDS, r.kind)}: {word(r)}
+        </li>
+      ))}
+    </ul>
   );
 }
 

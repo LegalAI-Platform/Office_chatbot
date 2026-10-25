@@ -210,4 +210,12 @@ forward
 step check-hazem11-documents || failed=1
 panel_step hazem11-approve || failed=1
 step check-hazem11-confirmed || failed=1
+echo "==== 15. TASK 12: the reminders of that appointment, and «هحضر ✅»"
+step hazem12-setup
+step check-hazem12-made || failed=1
+step hazem12-due
+step check-hazem12-sent || failed=1
+step hazem12-attend
+forward
+step check-hazem12-attend || failed=1
 unset E2E_PANEL_PASSWORD

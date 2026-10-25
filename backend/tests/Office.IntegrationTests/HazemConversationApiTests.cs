@@ -213,9 +213,9 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
     [Fact]
     public async Task Every_active_text_is_word_for_word_in_decisions()
     {
-        // v1.12 for the texts of 1.4 (booking_confirmed is still active, not sent), v1.15 for B-11 (TASK 11).
+        // v1.12 for the texts of 1.4 (booking_confirmed is still active, not sent), v1.16 for B-11 (TASK 11) and B-18 (TASK 12).
         var decisions = await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.12.md"), Ct)
-                        + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.15.md"), Ct);
+                        + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.16.md"), Ct);
         await using var c = new NpgsqlConnection(db.ApiConnectionString);
         await c.OpenAsync(Ct);
         await using var cmd = new NpgsqlCommand("SELECT key, text FROM hazem.approved_texts WHERE active AND source LIKE 'DECISIONS%'", c);
@@ -226,6 +226,7 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
             ["{{service}}"] = "[الخدمة]", ["{{day}}"] = "[اليوم]", ["{{time}}"] = "[الساعة]", ["{{amount}}"] = "[المبلغ]",
             ["{{instapay}}"] = "[العنوان]", ["{{wallet}}"] = "[الرقم]",
             ["{{attendees}}"] = "الزوج والزوجة والولي [والشاهدين]", // TASK 11: B-11.7, filled from the answers (a divorce: «الطرفين»)
+            ["{{details}}"] = "[التفاصيل]", // TASK 12: B-18's details line (the office, the call, or who comes)
         };
         var count = 0;
         while (await r.ReadAsync(Ct))
@@ -235,7 +236,7 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
             Assert.True(decisions.Contains(text, StringComparison.Ordinal), $"{r.GetString(0)} is not word for word in DECISIONS");
         }
 
-        Assert.Equal(23, count); // 8 (TASK 04) + B-04 question + the two B-25 texts (TASK 05a) + B-08 and B-22 (TASK 08) + B-11 (TASK 11)
+        Assert.Equal(25, count); // 8 (TASK 04) + B-04 question + the two B-25 texts (TASK 05a) + B-08 and B-22 (TASK 08) + B-11 (TASK 11) + B-18 (TASK 12)
     }
 
     [Fact]

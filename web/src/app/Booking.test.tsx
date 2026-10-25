@@ -14,7 +14,7 @@ const staff: Me = {
 const settings = { enabled: true, buffer_minutes: 10, min_notice_hours: 2, horizon_days: 14, max_per_day: null, slot_step_minutes: 15, offer_count: 4, calendar_id: "lawyer@example.test", calendar_key: true, texts_approved: true, hold_minutes: 120, hold_short_minutes: 60, hold_short_within_hours: 6, hold_gap_minutes: 15 };
 const day = (d: string, over: object = {}) => ({ day: d, status: "open", hours: [{ start: 600, end: 1440 }], bookings: 0, exceptions: [], ...over });
 const month = Array.from({ length: 30 }, (_, i) => day(`2026-11-${String(i + 1).padStart(2, "0")}`, i === 19 ? { bookings: 1 } : {}));
-const appointment = { id: "a1", service: "consultation_phone_video", start: "2026-11-20T10:00:00Z", end: "2026-11-20T10:15:00Z", state: "confirmed", name: "محمد أحمد علي حسن", wa_id: "201000000091", matter_type: null, reschedules: 0, calendar: "synced", hold_until: null, payment: "proof_received" };
+const appointment = { id: "a1", service: "consultation_phone_video", start: "2026-11-20T10:00:00Z", end: "2026-11-20T10:15:00Z", state: "confirmed", name: "محمد أحمد علي حسن", wa_id: "201000000091", matter_type: null, reschedules: 0, calendar: "synced", hold_until: null, payment: "proof_received", attending: false, reminders: [] };
 
 type Answer = { status?: number; body?: unknown };
 
@@ -98,6 +98,31 @@ describe("TASK 08 booking", () => {
     fireEvent.click(within(row).getByRole("button", { name: "التفاصيل" }));
     expect(within(row).getByText("وصل إيصال، مستني المراجعة")).toBeTruthy();
     expect(within(row).getByText("متسجل في كالندر الأستاذ")).toBeTruthy();
+  });
+
+  // TASK 12 (B-18): each appointment's reminders and «هحضر ✅», and tomorrow's that are not confirmed yet.
+  it("the bookings show the reminders, who will come, and tomorrow's unconfirmed", async () => {
+    const tomorrow = new Date(Date.now() + 86_400_000).toISOString();
+    const sent = { kind: "day_before", state: "sent", due_at: tomorrow, sent_at: tomorrow, channel: "template", skip_reason: null, error_code: null };
+    const later = { kind: "two_hours", state: "skipped", due_at: null, sent_at: null, channel: null, skip_reason: "too_close", error_code: null };
+    serve({
+      "GET /auth/me": { body: staff },
+      "GET /booking/appointments": { body: [
+        { ...appointment, id: "a1", start: tomorrow, attending: true, reminders: [sent, later] },
+        { ...appointment, id: "a2", name: "سارة محمد علي حسن", start: tomorrow, attending: false, reminders: [{ ...sent, state: "failed", channel: null }] },
+      ] },
+    });
+    renderAt("/appointments");
+    fireEvent.click(await screen.findByRole("tab", { name: "الحجوزات" }));
+    expect((await screen.findByText(/ما أكدوش حضورهم/)).closest("p")!.textContent).toMatch(/بكرة 2 مواعيد، 1 ما أكدوش حضورهم/);
+    // the first one is also «الميعاد الجاي» above the list: its row is the one inside the list
+    const first = screen.getAllByText(/محمد أحمد علي حسن/).map((e) => e.closest("li")).find(Boolean)!;
+    expect(within(first).getByText("أكّد حضوره ✅")).toBeTruthy();
+    expect(within(first).getByText(/تذكير اليوم اللي قبله: اتبعت ✓ \(قالب واتساب\)/)).toBeTruthy();
+    expect(within(first).getByText(/تذكير قبلها بساعتين: ما اتبعتش: الوقت قريب من الميعاد/)).toBeTruthy();
+    const second = screen.getByText(/سارة محمد علي حسن/).closest("li")!;
+    expect(within(second).queryByText("أكّد حضوره ✅")).toBeNull();
+    expect(within(second).getByText(/ما وصلش ✗/)).toBeTruthy();
   });
 
   it("the office's payment details are not shown to a staff member", async () => {
