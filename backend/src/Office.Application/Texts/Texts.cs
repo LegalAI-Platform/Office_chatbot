@@ -139,6 +139,18 @@ public static class TextKeys
     public const string BtnUrfWitnessOwn = "btn_urf_witness_own";
     public const string BtnYes = "btn_yes";
     public const string BtnNo = "btn_no";
+
+    // TASK 12 (v1.16, B-18): the reminders. The two M-03 bodies (active, word for word as submitted to Meta) and the
+    // texts proposed in TASK 12 (approved by the owner as proposed).
+    public const string ReminderDayBefore = "reminder_day_before";          // the worker, the day before (with two buttons)
+    public const string Reminder2hBefore = "reminder_2h_before";            // the worker, two hours before
+    public const string BtnReminderAttend = "btn_reminder_attend";
+    public const string BtnReminderChange = "btn_reminder_change";
+    public const string ReminderAttendOk = "reminder_attend_ok";            // «هحضر ✅» pressed
+    public const string ReminderDetailsOffice = "reminder_details_office";  // the details line: the office's address and map
+    public const string ReminderDetailsPhone = "reminder_details_phone";    // the details line: the lawyer calls
+    public const string ReminderDetailsUrf = "reminder_details_urf";        // the details line: who comes to an Urfi appointment
+    public const string ReminderOldButton = "reminder_old_button";          // «هحضر» from the reminder of a time that moved
 }
 
 /// <summary>

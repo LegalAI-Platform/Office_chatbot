@@ -70,8 +70,32 @@ If the calendar does not answer, Hazem offers no time (it could be busy) and the
 (`booking_unavailable`). An event the lawyer adds over a booking makes a task (`calendar_conflict`);
 the client is not written to by itself (`booking.conflict_auto_message` = false, P3).
 
+## The reminders (TASK 12, DECISIONS v1.16 B-18)
+
+The API's worker (every 10 seconds, with the booking's notices) gives every **confirmed** appointment two reminders:
+the day before at the same hour, with «هحضر ✅» and «تغيير أو إلغاء», and two hours before. A time between midnight and
+10:00 waits for 10:00; one that would then be under an hour before, or that had passed when the booking was confirmed,
+is skipped. A hold (`pending_payment`) gets none until its receipt confirms it. A moved appointment gets new ones; a
+cancelled one loses its own.
+
+- **Inside the 24-hour window** (the client wrote in the last day) the reminder is a normal message. **Outside it** the
+  M-03 template goes (`reminder_day_before` / `reminder_2h_before`, the same words and buttons): it needs **Meta's
+  approval** first (`META-WA-TEMPLATES-SUBMIT`, after the Meta setup, `docs/meta-setup.md`).
+- A reminder that cannot go (the template not approved yet, or an office appointment while بيانات المكتب has no address
+  or map) is **never sent half-written**: the office gets a task «تذكير ما وصلش: فكّر العميل بالتليفون» (`reminder_failed`).
+- «هحضر ✅» is recorded for the appointment's time («أكّد حضوره ✅» in «المواعيد», «الحضور: ✅ أكّد» in the calendar
+  event). «تغيير أو إلغاء» asks «تحب تغيّر الميعاد ولا تلغيه؟» (B-15 and B-22 as they are); with the booking from WhatsApp
+  off it becomes a task. Nobody is cancelled for not answering.
+- «المواعيد» → «الحجوزات» shows each reminder (هيتبعت إمتى / اتبعت / ما وصلش / ما اتبعتش وليه) and, at the top, how many
+  of tomorrow's appointments are not confirmed yet.
+- The reminders run while their 9 texts are active («نصوص حازم»); with one switched off, no reminder goes («ما اتبعتش:
+  نصوص التذكير مش متفعّلة»).
+
 ## Checks
 
 `healthcheck` («The booking» section): the tables, the no-overlap constraint, n8n locked out, no
 test stub or test day left, no calendar event stuck; WARN while `GOOGLE_SERVICE_ACCOUNT_JSON` is
 empty. `hazem-e2e` step 11 books through the Google Calendar stub and closes days from the panel.
+«The reminders» section: the table, n8n locked out, no reminder more than 10 minutes past its time (the worker
+stopped), the 9 texts active; WARN while a `reminder_failed` task is open. `hazem-e2e` step 15 sends a day-before
+reminder through n8n and presses «هحضر ✅».

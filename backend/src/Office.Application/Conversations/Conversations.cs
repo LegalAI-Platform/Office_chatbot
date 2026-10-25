@@ -67,6 +67,7 @@ public sealed record PendingTask(string Kind, DateTimeOffset DueAt, Guid? StaffI
     public const string UrfReview = "urf_review";             // TASK 11: an Urfi case's documents came, the lawyer reviews them
     public const string UrfDocumentsMissing = "urf_documents_missing"; // TASK 11: 24 hours left, no document yet
     public const string UrfHelp = "urf_help";                 // TASK 11: the ages could not be read twice
+    public const string ReminderFailed = "reminder_failed";   // TASK 12: a reminder could not be sent, the office reminds by phone
 }
 
 /// <summary>hazem.classifications: no client text and no name, only what the AI decided and what it cost.</summary>

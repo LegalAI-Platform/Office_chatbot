@@ -1,5 +1,6 @@
 using Office.Application.Booking;
 using Office.Application.Conversations;
+using Office.Application.Reminders;
 using Office.Application.Services;
 using Office.Application.Texts;
 using Office.Application.Turns;
@@ -115,6 +116,8 @@ public sealed class HazemResponder(
         var texts = await approvedTexts.GetActiveAsync(ct);
         var bookingSettings = BookingSettings.From(settings);
         var bookingOn = booking is not null && bookingSettings.Enabled && BookingTextKeys.All(k => texts.TryGetValue(k, out var t) && t.Active);
+        // TASK 12 (B-18): the reminders run whenever their texts are approved, the booking from WhatsApp on or off.
+        var remindersOn = booking is not null && ReminderTexts.Keys.All(k => texts.TryGetValue(k, out var t) && t.Active);
         var servicesOn = services is not null && ServiceTextKeys.All(k => texts.TryGetValue(k, out var t) && t.Active);
         if (servicesOn && !list.Blocked)
         {
@@ -137,8 +140,12 @@ public sealed class HazemResponder(
             var urfCase = urfOpen.FirstOrDefault();
             var flow = new Flow(turn, state, list, null, plan, settings.Flag(HandoffEnabledKey), bookingOn ? bookingSettings : null, servicesOn,
                 urfOn, urfOpen);
-            // TASK 08: a button or a list row Hazem sent is read without the AI.
-            var choice = bookingOn && flow.MayBook ? ChoiceIn(turn) : null;
+            // TASK 08: a button or a list row Hazem sent is read without the AI. TASK 12: a reminder's two buttons
+            // whenever the reminders run (an appointment booked before the booking was switched off still gets them).
+            var pressed = ChoiceIn(turn);
+            var choice = pressed is { Kind: 'a' or 'e' }
+                ? (remindersOn && flow.MayOrder ? pressed : null)
+                : (bookingOn && flow.MayBook ? pressed : null);
             // TASK 11 (B-11): the answer to the Urfi question waiting: its button, or the typed ages (never the AI). Only words
             // with a number are read as the ages: «عايز أكلم موظف» or «بكام؟» go to the AI as any message.
             var urfButton = choice is null ? UrfAnswerIn(turn) : null;
@@ -364,6 +371,8 @@ public sealed class HazemResponder(
                 't' => new ChangeTo(choice.AppointmentId!.Value, choice.At!.Value),
                 'u' => new MoreChanges(choice.AppointmentId!.Value, choice.At!.Value),
                 'c' => new CancelIt(choice.AppointmentId!.Value),
+                'a' => new AttendIt(choice.AppointmentId!.Value, choice.At!.Value),
+                'e' => new ReminderChange(choice.AppointmentId!.Value),
                 _ => new RefundIt(choice.AppointmentId!.Value),
             };
         }
@@ -1022,7 +1031,22 @@ public sealed class HazemResponder(
 
         public async Task RunBookingAsync(BookingDesk desk, HazemSettings settings, CancellationToken ct)
         {
+            // Null only for a reminder's button with the booking from WhatsApp off (TASK 12): those two need no booking settings.
             var b = booking!;
+            switch (work)
+            {
+                case AttendIt x:
+                    await AttendAsync(desk, x.Id, x.At, ct);
+                    return;
+                case ReminderChange when booking is null:
+                    // Hazem cannot move or cancel without the booking: the office does it (as before TASK 08).
+                    HandToOffice(TextKeys.RescheduleOrCancel, PendingTask.RescheduleOrCancel);
+                    return;
+                case ReminderChange x:
+                    await ShowExistingAsync(desk, x.Id, ct); // «تحب تغيّر الميعاد ولا تلغيه؟»: B-15 and B-22 as they are
+                    return;
+            }
+
             switch (work)
             {
                 case OfferTimes o:
@@ -1346,6 +1370,36 @@ public sealed class HazemResponder(
             plan.Task(PendingTask.BookingCancelled);
         }
 
+        /// <summary>
+        /// TASK 12 (B-18): «هحضر ✅» from a reminder, for the appointment's current time only. A reminder of a time that
+        /// moved tells the new one (nothing recorded); a booking that ended or was cancelled → his current one, or the office.
+        /// </summary>
+        private async Task AttendAsync(BookingDesk desk, Guid id, DateTimeOffset at, CancellationToken ct)
+        {
+            if (await OwnAsync(desk, id, ct) is not { State: AppointmentInfo.Confirmed } a || a.Start <= plan.Now)
+            {
+                if (booking is null)
+                {
+                    HandToOffice(TextKeys.RescheduleOrCancel, PendingTask.RescheduleOrCancel);
+                }
+                else
+                {
+                    await ShowExistingAsync(desk, null, ct);
+                }
+
+                return;
+            }
+
+            if (a.Start != at)
+            {
+                plan.Say(TextKeys.ReminderOldButton, Fill: Describe(a));
+                return;
+            }
+
+            await desk.ConfirmAttendanceAsync(a.Id, a.Start, ct);
+            plan.Say(TextKeys.ReminderAttendOk, Fill: Describe(a));
+        }
+
         /// <summary>The appointment, only if it is this client's (an id in a button is never trusted alone).</summary>
         private async Task<AppointmentInfo?> OwnAsync(BookingDesk desk, Guid id, CancellationToken ct) =>
             await desk.FindAppointmentAsync(id, ct) is { } a && a.PersonId == State.Person.Id ? a : null;
@@ -1494,6 +1548,12 @@ public sealed class HazemResponder(
     private sealed record RefundIt(Guid Id) : BookingWork;
 
     private sealed record Receipted(ReceiptOutcome Outcome) : BookingWork;
+
+    /// <summary>TASK 12: «هحضر ✅» under the reminder of the appointment's time <paramref name="At"/>.</summary>
+    private sealed record AttendIt(Guid Id, DateTimeOffset At) : BookingWork;
+
+    /// <summary>TASK 12: «تغيير أو إلغاء» under a reminder.</summary>
+    private sealed record ReminderChange(Guid Id) : BookingWork;
 
     private sealed class Plan(DateTimeOffset now)
     {

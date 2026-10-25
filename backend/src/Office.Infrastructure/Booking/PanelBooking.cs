@@ -5,6 +5,7 @@ using Office.Application.Booking;
 using Office.Application.Common;
 using Office.Application.Conversations;
 using Office.Application.Ports;
+using Office.Application.Reminders;
 using Office.Application.Responders;
 using Office.Application.Texts;
 using Office.Application.Turns;
@@ -35,7 +36,12 @@ public sealed record BookingSettingsView(bool Enabled, int BufferMinutes, int Mi
 public sealed record ExceptionView(Guid Id, DateOnly Day, string Kind, int? Start, int? End, string? Reason, string? By, DateTimeOffset At);
 
 public sealed record AppointmentView(Guid Id, string Service, DateTimeOffset Start, DateTimeOffset End, string State, string? Name, string WaId,
-    string? MatterType, int Reschedules, string Calendar, DateTimeOffset? HoldUntil = null, string? Payment = null);
+    string? MatterType, int Reschedules, string Calendar, DateTimeOffset? HoldUntil = null, string? Payment = null,
+    bool Attending = false, IReadOnlyList<ReminderView>? Reminders = null);
+
+/// <summary>TASK 12 (B-18): one reminder of the appointment's current time, as «المواعيد» shows it.</summary>
+public sealed record ReminderView(string Kind, string State, DateTimeOffset? DueAt, DateTimeOffset? SentAt, string? Channel, string? SkipReason,
+    string? ErrorCode);
 
 public sealed record DayView(DateOnly Day, string Status, IReadOnlyList<RangeView> Hours, int Bookings, IReadOnlyList<ExceptionView> Exceptions);
 
@@ -371,14 +377,26 @@ public sealed class PanelBooking(
     public async Task<IReadOnlyList<AppointmentView>> AppointmentsAsync(DateOnly from, DateOnly to, CancellationToken ct)
     {
         var (f, t) = (BookingDesk.Instant(from).ToUniversalTime(), BookingDesk.Instant(to.AddDays(1)).ToUniversalTime());
-        return await (from a in db.Appointments.AsNoTracking()
-                      join p in db.Persons.AsNoTracking() on a.PersonId equals p.Id
-                      join pay in db.Payments.AsNoTracking() on (Guid?)a.Id equals pay.AppointmentId into pays
-                      from pay in pays.DefaultIfEmpty()
-                      where a.StartsAt >= f && a.StartsAt < t
-                      orderby a.StartsAt
-                      select new AppointmentView(a.Id, a.Service, a.StartsAt, a.EndsAt, a.State, p.NameRaw, p.WaId, a.MatterType, a.Reschedules,
-                          a.CalendarState, a.HoldUntil, pay == null ? null : pay.State)).Take(500).ToListAsync(ct);
+        var list = await (from a in db.Appointments.AsNoTracking()
+                          join p in db.Persons.AsNoTracking() on a.PersonId equals p.Id
+                          join pay in db.Payments.AsNoTracking() on (Guid?)a.Id equals pay.AppointmentId into pays
+                          from pay in pays.DefaultIfEmpty()
+                          where a.StartsAt >= f && a.StartsAt < t
+                          orderby a.StartsAt
+                          select new AppointmentView(a.Id, a.Service, a.StartsAt, a.EndsAt, a.State, p.NameRaw, p.WaId, a.MatterType, a.Reschedules,
+                              a.CalendarState, a.HoldUntil, pay == null ? null : pay.State, a.AttendanceFor == a.StartsAt)).Take(500).ToListAsync(ct);
+
+        // TASK 12: the reminders of each appointment's current time (a moved appointment's old ones are cancelled).
+        var ids = list.Select(a => a.Id).ToList();
+        var reminders = (await db.AppointmentReminders.AsNoTracking()
+                .Where(r => ids.Contains(r.AppointmentId))
+                .Select(r => new { r.AppointmentId, r.StartsAt, View = new ReminderView(r.Kind, r.State, r.DueAt, r.SentAt, r.Channel, r.SkipReason, r.ErrorCode) })
+                .ToListAsync(ct))
+            .ToLookup(r => (r.AppointmentId, r.StartsAt));
+        return list.Select(a => a with
+        {
+            Reminders = reminders[(a.Id, a.Start)].Select(r => r.View).OrderBy(r => r.Kind == ReminderKinds.DayBefore ? 0 : 1).ToList(),
+        }).ToList();
     }
 
     /// <summary>S-03 from the panel: completed or no_show (the lawyer or the staff).</summary>

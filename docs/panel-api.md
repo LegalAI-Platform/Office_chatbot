@@ -27,8 +27,8 @@ endpoints (`/api/hazem/*`, `X-Hazem-Token`) are never reachable from the panel.
 - `must_change_password` (a temporary password): every endpoint except `me`, `change-password`,
   `logout` and `csrf` answers `403 { error: "must_change_password" }`.
 
-- `two_factor_required` (v1.9): a manager (`users.manage`) without the authenticator, once
-  `PANEL_SECRET_KEY` is set. Every endpoint except `me`, `logout`, `csrf`, `change-password`
+- `two_factor_required` (v1.9; **off since v1.16** unless `PANEL_MANAGERS_NEED_2FA=true`): a manager
+  (`users.manage`) without the authenticator, once `PANEL_SECRET_KEY` is set. Every endpoint except `me`, `logout`, `csrf`, `change-password`
   and `/auth/2fa/*` answers `403 { error: "two_factor_required" }` until it is on. The panel
   sends the person to `/setup-2fa`.
 
@@ -95,7 +95,7 @@ client (B-22) → `{ cancelled, not_told }`. Every change: `booking_changes` and
 | `DELETE /booking/exceptions/{id}?confirm=true` | schedule.manage | `404 not_found` |
 | `GET /booking/settings` · `PUT /booking/settings` | schedule.manage | `{ enabled, buffer_minutes, min_notice_hours, horizon_days, max_per_day, slot_step_minutes, offer_count, calendar_id }` (+ read only `calendar_key`, `texts_approved`); a value out of range → its name as the error |
 | `GET /booking/changes` · `POST /booking/undo` | schedule.manage | the last 30 changes · `{ confirm }`: the last one put back (`409 nothing_to_undo`) |
-| `GET /booking/appointments?from&to` | schedule.manage | up to 92 days: service, start, end, state (S-03), name, number, topic, changes, calendar state |
+| `GET /booking/appointments?from&to` | schedule.manage | up to 92 days: service, start, end, state (S-03), name, number, topic, changes, calendar state. **TASK 12:** `attending` («هحضر ✅» for this time) and `reminders` of this time: `[{ kind: day_before\|two_hours, state: scheduled\|sent\|failed\|skipped\|cancelled, due_at, sent_at, channel: message\|template, skip_reason: too_close\|passed\|late\|off, error_code }]` |
 | `POST /booking/appointments/{id}/state` | schedule.manage | `{ state: completed\|no_show }` |
 | `POST /booking/appointments/{id}/cancel` | schedule.manage | cancelled by the office → `{ cancelled }`; the client is told by the worker (B-22) |
 | `GET /booking/preview?day&service=pv\|of\|ur` | schedule.manage | `{ calendar: ok\|unavailable\|not_configured, slots[] }`: what Hazem would offer that day now |

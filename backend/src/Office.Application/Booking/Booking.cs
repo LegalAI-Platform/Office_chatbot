@@ -248,6 +248,12 @@ public interface IBookingStore
 
     /// <summary>B-22: a refund is due; the amount, or null when no money came for it.</summary>
     Task<int?> RequestRefundAsync(Guid appointmentId, string reason, CancellationToken ct);
+
+    /// <summary>
+    /// TASK 12 (B-18): «هحضر ✅» for the confirmed appointment at <paramref name="start"/> (the calendar event shows it).
+    /// False when it is no longer confirmed at that time.
+    /// </summary>
+    Task<bool> ConfirmAttendanceAsync(Guid appointmentId, DateTimeOffset start, CancellationToken ct);
 }
 
 /// <summary>The lawyer's calendar (T-14). Never throws: «unavailable» means Hazem offers nothing.</summary>
@@ -368,6 +374,8 @@ public sealed class BookingDesk(IBookingStore store, IBusyCalendar calendar)
 
     public Task<bool> CancelAsync(Guid id, string state, CancellationToken ct) => store.CancelAsync(id, state, ct);
 
+    public Task<bool> ConfirmAttendanceAsync(Guid id, DateTimeOffset start, CancellationToken ct) => store.ConfirmAttendanceAsync(id, start, ct);
+
     /// <summary>The instant a Cairo date starts.</summary>
     public static DateTimeOffset Instant(DateOnly day) => Availability.At(day, 0, Zone) ?? Availability.At(day, 60, Zone)!.Value;
 
@@ -378,7 +386,7 @@ public sealed class BookingDesk(IBookingStore store, IBusyCalendar calendar)
 /// The ids carried by the WhatsApp buttons and list rows (≤ 200 characters). Hazem reads them without
 /// the AI: «bk:m:pv» the kind of consultation, «bk:s:pv:1793000000» a time, «bk:n:…» more times,
 /// «bk:r:id» change, «bk:t:id:…» the new time, «bk:u:id:…» more new times, «bk:c:id» cancel,
-/// «bk:f:id» refund.
+/// «bk:f:id» refund. TASK 12 (B-18), the reminder's: «bk:a:id:start» I will come, «bk:e:id» change or cancel.
 /// </summary>
 public sealed record BookingChoice(char Kind, BookingService? Service, Guid? AppointmentId, DateTimeOffset? At)
 {
@@ -420,8 +428,8 @@ public sealed record BookingChoice(char Kind, BookingService? Service, Guid? App
         {
             'm' when p.Length == 3 && BookingService.ByCode(p[2]) is { } s => new(kind, s, null, null),
             's' or 'n' when p.Length == 4 && BookingService.ByCode(p[2]) is { } s && At(p[3]) is { } at => new(kind, s, null, at),
-            'r' or 'c' or 'f' when p.Length == 3 && Id(p[2]) is { } g => new(kind, null, g, null),
-            't' or 'u' when p.Length == 4 && Id(p[2]) is { } g && At(p[3]) is { } at => new(kind, null, g, at),
+            'r' or 'c' or 'f' or 'e' when p.Length == 3 && Id(p[2]) is { } g => new(kind, null, g, null),
+            't' or 'u' or 'a' when p.Length == 4 && Id(p[2]) is { } g && At(p[3]) is { } at => new(kind, null, g, at),
             _ => null,
         };
     }
@@ -442,6 +450,13 @@ public static class BookingWords
         var day = DateOnly.FromDateTime(local.DateTime);
         var today = BookingDesk.Today(now);
         return day == today ? "النهارده" : day == today.AddDays(1) ? "بكرة" : $"{Days[(int)local.DayOfWeek]} {local.Day}/{local.Month}";
+    }
+
+    /// <summary>TASK 12: a date as a reminder writes it after «بكرة»: always «الخميس 29/10», never a relative word.</summary>
+    public static string Date(DateTimeOffset at)
+    {
+        var local = TimeZoneInfo.ConvertTime(at, BookingDesk.Zone);
+        return $"{Days[(int)local.DayOfWeek]} {local.Day}/{local.Month}";
     }
 
     /// <summary>An amount as Hazem writes it: «1,000».</summary>

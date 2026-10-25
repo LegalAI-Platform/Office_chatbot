@@ -54,7 +54,11 @@ public sealed class CalendarSync(HazemDbContext db, GoogleCalendar google, ISett
                     ok = await google.UpdateEventAsync(settings, ev, summary, a.StartsAt, a.EndsAt, a.Id, ct);
                     if (ok)
                     {
-                        await Mark(a.Id, "update", "synced", ct);
+                        // Only if the row did not change meanwhile (TASK 12: «هحضر» pressed during the update): else once more.
+                        await db.Database.ExecuteSqlInterpolatedAsync($"""
+                            UPDATE hazem.appointments SET calendar_state = 'synced', calendar_attempts = 0
+                             WHERE id = {a.Id} AND calendar_state = 'update' AND updated_at = {a.UpdatedAt.ToUniversalTime()}
+                            """, ct);
                     }
 
                     break;
@@ -165,7 +169,8 @@ public sealed class CalendarSync(HazemDbContext db, GoogleCalendar google, ISett
     /// has its receipt (1.13), so the event shows the office's review instead, and is updated with it.
     /// </summary>
     public static string Summary(AppointmentRow a, string? name, string waId, string? payment) =>
-        $"{BookingService.ByCode(a.Service)?.Name ?? a.Service} – {name ?? "من غير اسم"} – +{waId} – {MatterName(a.MatterType)} – {PaymentWords(payment)}";
+        $"{BookingService.ByCode(a.Service)?.Name ?? a.Service} – {name ?? "من غير اسم"} – +{waId} – {MatterName(a.MatterType)} – {PaymentWords(payment)}"
+        + (a.AttendanceFor is { } at && at == a.StartsAt ? " – الحضور: ✅ أكّد" : ""); // TASK 12 (B-18): «هحضر ✅»
 
     public static string PaymentWords(string? state) => state switch
     {
@@ -213,7 +218,8 @@ public sealed class CalendarWorker(IServiceScopeFactory scopes, IConfiguration c
                 using var scope = scopes.CreateScope();
                 var told = await scope.ServiceProvider.GetRequiredService<BookingNotices>().RunAsync(stop)
                            + await scope.ServiceProvider.GetRequiredService<Services.ServiceNotices>().RunAsync(stop) // TASK 10
-                           + await scope.ServiceProvider.GetRequiredService<Urf.UrfNotices>().RunAsync(stop); // TASK 11
+                           + await scope.ServiceProvider.GetRequiredService<Urf.UrfNotices>().RunAsync(stop) // TASK 11
+                           + await scope.ServiceProvider.GetRequiredService<ReminderNotices>().RunAsync(stop); // TASK 12
                 var sync = scope.ServiceProvider.GetRequiredService<CalendarSync>();
                 var synced = await sync.SyncAsync(stop);
                 var conflicts = round++ % 30 == 0 ? await sync.CheckConflictsAsync(stop) : 0;

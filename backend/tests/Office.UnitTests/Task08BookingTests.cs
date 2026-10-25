@@ -1,5 +1,6 @@
 using Office.Application.Booking;
 using Office.Application.Conversations;
+using Office.Application.Reminders;
 using Office.Application.Responders;
 using Office.Application.Texts;
 using Office.Application.Turns;
@@ -946,6 +947,89 @@ public sealed class BookingFlowTests
     // ---------- fakes ----------
 
     /// <summary>hazem.urf_cases and add_urf_file, in memory (the cases live in <see cref="MemoryBooking"/> for file_target).</summary>
+    // ---------- TASK 12 (B-18): the reminder's two buttons ----------
+
+    /// <summary>The reminder texts approved (they run with the booking from WhatsApp on or off).</summary>
+    private void RemindersOn()
+    {
+        foreach (var k in ReminderTexts.Keys)
+        {
+            _texts[k] = new ApprovedText(k, 1, k.StartsWith("btn_", StringComparison.Ordinal) ? "T:" + k[..Math.Min(k.Length, 16)] : "T:" + k, 300, true);
+        }
+
+        _texts[TextKeys.ReminderAttendOk] = new ApprovedText(TextKeys.ReminderAttendOk, 1, "تمام في انتظارك {{day}} الساعة {{time}}", 300, true);
+        _texts[TextKeys.ReminderOldButton] = new ApprovedText(TextKeys.ReminderOldButton, 1, "اتغيّر، دلوقتي {{day}} الساعة {{time}}", 300, true);
+    }
+
+    [Fact]
+    public async Task I_will_come_is_recorded_for_the_reminder_s_time_only()
+    {
+        RemindersOn();
+        await ToTheOffer();
+        var id = await BookAndPay(BookingService.PhoneVideo, AvailabilityTests.At(20, 12));
+
+        var d = await Press(ReminderButtons.Attend(id, AvailabilityTests.At(20, 12)));
+        Assert.Null(d.Effects!.Classification); // read without the AI
+        Assert.Equal([TextKeys.ReminderAttendOk], Keys(d));
+        Assert.Equal("تمام في انتظارك بكرة الساعة 12:00 م", Assert.Single(d.Actions).Text);
+        Assert.Contains((id, AvailabilityTests.At(20, 12)), _booking.Attending);
+        Assert.Empty(TaskKinds(d));
+
+        // The appointment moved: the old reminder's button tells the new time and records nothing.
+        await Press(BookingChoice.Change(id));
+        await Press(BookingChoice.MoveTo(id, AvailabilityTests.At(20, 13)));
+        var old = await Press(ReminderButtons.Attend(id, AvailabilityTests.At(20, 12)));
+        Assert.Equal([TextKeys.ReminderOldButton], Keys(old));
+        Assert.Equal("اتغيّر، دلوقتي بكرة الساعة 1:00 م", Assert.Single(old.Actions).Text);
+        Assert.DoesNotContain((id, AvailabilityTests.At(20, 13)), _booking.Attending);
+    }
+
+    [Fact]
+    public async Task Change_or_cancel_from_the_reminder_is_the_existing_step_with_its_rules()
+    {
+        RemindersOn();
+        await ToTheOffer();
+        var id = await BookAndPay(BookingService.PhoneVideo, AvailabilityTests.At(20, 12));
+
+        var d = await Press(ReminderButtons.Change(id));
+        Assert.Equal([TextKeys.BookingExisting], Keys(d));
+        Assert.Equal([BookingChoice.Change(id), BookingChoice.Cancel(id)], Assert.Single(d.Actions).Interactive!.Choices.Select(c => c.Id));
+        var cancelled = await Press(BookingChoice.Cancel(id)); // B-22 as it was: within 24 hours of the receipt
+        Assert.Equal([TextKeys.RefundFull], Keys(cancelled));
+
+        // A cancelled appointment's «هحضر»: never recorded, the client's current booking or the office.
+        var late = await Press(ReminderButtons.Attend(id, AvailabilityTests.At(20, 12)));
+        Assert.Equal([TextKeys.RescheduleOrCancel], Keys(late));
+        Assert.Empty(_booking.Attending);
+    }
+
+    [Fact]
+    public async Task With_the_booking_off_the_reminder_still_works_and_a_change_goes_to_the_office()
+    {
+        RemindersOn();
+        await ToTheOffer();
+        var id = await BookAndPay(BookingService.Office, AvailabilityTests.At(20, 12));
+        _settings[BookingSettings.EnabledKey] = "false";
+
+        Assert.Equal([TextKeys.ReminderAttendOk], Keys(await Press(ReminderButtons.Attend(id, AvailabilityTests.At(20, 12)))));
+        var change = await Press(ReminderButtons.Change(id));
+        Assert.Equal([TextKeys.RescheduleOrCancel], Keys(change));
+        Assert.Equal([PendingTask.RescheduleOrCancel], TaskKinds(change));
+    }
+
+    [Fact]
+    public async Task Another_client_s_appointment_id_in_a_button_is_never_trusted()
+    {
+        RemindersOn();
+        await ToTheOffer();
+        var other = new AppointmentInfo(Guid.NewGuid(), Guid.NewGuid(), BookingService.PhoneVideo.Code, AvailabilityTests.At(21, 12),
+            AvailabilityTests.At(21, 12, 15), AppointmentInfo.Confirmed, 0, 500, null);
+        _booking.Appointments.Add(other);
+        var d = await Press(ReminderButtons.Attend(other.Id, other.Start));
+        Assert.DoesNotContain(TextKeys.ReminderAttendOk, Keys(d));
+        Assert.Empty(_booking.Attending);
+    }
+
     private sealed class MemoryUrf(MemoryBooking booking) : Office.Application.Urf.IUrfStore
     {
         public Task<IReadOnlyList<Office.Application.Urf.UrfCase>> OpenAsync(Guid personId, CancellationToken ct) =>
@@ -1117,6 +1201,20 @@ public sealed class BookingFlowTests
 
         public Task<bool> CancelAsync(Guid id, string state, CancellationToken ct) =>
             Task.FromResult(Set(a => a.Id == id && a.IsOpen, state) == 1);
+
+        /// <summary>TASK 12: «هحضر ✅», by appointment and its time (as the SQL in BookingStore).</summary>
+        public HashSet<(Guid, DateTimeOffset)> Attending { get; } = [];
+
+        public Task<bool> ConfirmAttendanceAsync(Guid id, DateTimeOffset start, CancellationToken ct)
+        {
+            var ok = Appointments.Any(a => a.Id == id && a.State == AppointmentInfo.Confirmed && a.Start == start);
+            if (ok)
+            {
+                Attending.Add((id, start));
+            }
+
+            return Task.FromResult(ok);
+        }
 
         public Task<AppointmentInfo?> ReceiptTargetAsync(Guid personId, DateTimeOffset at, CancellationToken ct)
         {
