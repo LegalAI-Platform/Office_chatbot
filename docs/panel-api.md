@@ -22,7 +22,10 @@ endpoints (`/api/hazem/*`, `X-Hazem-Token`) are never reachable from the panel.
 | `POST /auth/change-password` | signed in | `{ current_password, new_password }`. At least 12 characters (no symbol rules, NIST). Signs every other session out; this one gets a new cookie |
 
 - Cookie `hazem_panel`: HttpOnly, SameSite=Strict, Secure (except plain http in `ENVIRONMENT=test`),
-  12 hours without use. Each request re-reads the account: a disabled account, a new password
+  1 hour without a request; the panel itself also signs out after 1 hour without use (no mouse or
+  key), because its 60-second refreshes would keep the cookie alive. The keys behind the cookie
+  live on the `api_keys` volume (`Panel:KeysPath`), so a rebuild keeps everyone signed in.
+  Each request re-reads the account: a disabled account, a new password
   or a new role (the security stamp changes) ends every session at once.
 - `must_change_password` (a temporary password): every endpoint except `me`, `change-password`,
   `logout` and `csrf` answers `403 { error: "must_change_password" }`.

@@ -40,7 +40,7 @@ export function RegisterPage() {
     return (
       <AuthLayout title="حساب جديد">
         <Notice>عمل الحسابات من هنا لسه مش متاح. كلّم مدير المكتب يعملك حساب.</Notice>
-        <Link to="/login" className="text-center text-sm font-semibold text-gold-ink hover:underline">ارجع لتسجيل الدخول</Link>
+        <Link to="/login" className="text-center text-sm font-semibold text-accent-ink hover:underline">ارجع لتسجيل الدخول</Link>
       </AuthLayout>
     );
   }
@@ -64,7 +64,7 @@ export function RegisterPage() {
           اعمل الحساب
         </Button>
         <p className="text-center text-sm text-ink-soft">
-          عندك حساب؟ <Link to="/login" className="font-semibold text-gold-ink hover:underline">سجّل دخول</Link>
+          عندك حساب؟ <Link to="/login" className="font-semibold text-accent-ink hover:underline">سجّل دخول</Link>
         </p>
       </form>
     </AuthLayout>

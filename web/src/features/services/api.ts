@@ -1,4 +1,5 @@
 // TASK 10 (DECISIONS v1.14, B-16 / B-17 / S-07): /api/panel/services. docs/panel-api.md.
+import { queryOptions } from "@tanstack/react-query";
 import { api, putToStorage } from "../../shared/api/client";
 
 export type Show = "open" | "done";
@@ -59,3 +60,6 @@ export function inRange(kind: string, price: number): boolean {
 }
 
 export const ACCEPT = ".pdf,.doc,.docx";
+
+/** One list, the same key wherever it is read or fetched ahead (a hover on the page's link). */
+export const listQuery = (show: Show) => queryOptions({ queryKey: ["services", show], queryFn: () => services.list(show) });

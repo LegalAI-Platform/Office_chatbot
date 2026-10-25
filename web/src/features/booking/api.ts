@@ -1,11 +1,13 @@
 // TASK 08 (DECISIONS v1.12, B-24): /api/panel/booking and /api/panel/office. docs/panel-api.md.
 import { api } from "../../shared/api/client";
+import { fetchAppointments, type Appointment } from "../../shared/api/appointments";
+
+export type { Appointment };
 
 export interface Range { start: number; end: number }
 export interface WeekDay { weekday: number; ranges: Range[] }
 export interface DayException { id: string; day: string; kind: "closed_day" | "closed_hours" | "custom_hours"; start: number | null; end: number | null; reason: string | null; by: string | null }
 export interface Day { day: string; status: "open" | "weekly_off" | "closed" | "custom_hours" | "partly_closed"; hours: Range[]; bookings: number; exceptions: DayException[] }
-export interface Appointment { id: string; service: string; start: string; end: string; state: string; name: string | null; wa_id: string; matter_type: string | null; reschedules: number; calendar: string; hold_until: string | null; payment: string | null }
 export interface Settings {
   enabled: boolean; buffer_minutes: number; min_notice_hours: number; horizon_days: number; max_per_day: number | null; slot_step_minutes: number; offer_count: number;
   calendar_id: string; calendar_key: boolean; texts_approved: boolean;
@@ -27,7 +29,7 @@ export const booking = {
   saveSettings: (s: Settings) => api<void>("PUT", "/booking/settings", s),
   changes: () => api<Change[]>("GET", "/booking/changes"),
   undo: (confirm = false) => api<Done>("POST", "/booking/undo", { confirm }),
-  appointments: (from: string, to: string) => api<Appointment[]>("GET", `/booking/appointments?from=${from}&to=${to}`),
+  appointments: fetchAppointments,
   mark: (id: string, state: string) => api<void>("POST", `/booking/appointments/${id}/state`, { state }),
   cancel: (id: string) => api<Done>("POST", `/booking/appointments/${id}/cancel`),
   /** TASK 10 (B-17): a written opinion after a consultation that took place: an order waiting for its 2,000. */

@@ -56,11 +56,11 @@ describe("TASK 11 Urfi cases", () => {
   });
 
   it("the lawyer refuses after confirming: the appointment is cancelled and paid back", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     const calls = serve({ "GET /auth/me": me("lawyer"), "GET /urf?show=open": [urfCase()] });
     renderAt("/urf");
     const card = (await screen.findByText(/محمد أحمد علي حسن/)).closest("li")!;
     fireEvent.click(within(card).getByRole("button", { name: /رفض/ }));
+    fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "ارفض" }));
     await vi.waitFor(() => expect(calls.some((c) => c.method === "POST")).toBe(true));
     expect(calls.find((c) => c.method === "POST")).toMatchObject({ path: "/urf/c1/review", body: { decision: "rejected" } });
   });

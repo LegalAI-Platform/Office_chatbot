@@ -6,7 +6,8 @@ import type { NewUserResult, PanelUser, Role } from "../../shared/api/types";
 import { label, ROLES } from "../../shared/lib/labels";
 import { cairoWhen } from "../../shared/lib/time";
 import { Icon } from "../../shared/ui/Icon";
-import { Button, Card, Chip, Empty, ErrorState, Field, Loading } from "../../shared/ui/ui";
+import { Button, Card, Chip, Empty, ErrorState, Field, inputClass, Loading, PageHeader } from "../../shared/ui/ui";
+import { confirmAction, toast } from "../../shared/ui/feedback";
 
 const usersKey = ["users"];
 
@@ -17,16 +18,14 @@ export function UsersPage() {
   const [secret, setSecret] = useState<{ name: string; password: string } | null>(null);
 
   return (
-    <div className="grid gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-2xl">الحسابات</h1>
-        {!adding ? (
+    <div className="grid gap-5">
+      <PageHeader title="الحسابات" description="مين يدخل اللوحة ودوره إيه. الموظف بياخد كلمة سر مؤقتة ويغيّرها أول ما يدخل."
+        actions={!adding ? (
           <Button variant="primary" onClick={() => { setAdding(true); setSecret(null); }}>
             <Icon name="user-plus" className="size-4" />
             ضيف حساب
           </Button>
-        ) : null}
-      </div>
+        ) : null} />
 
       {secret ? <TemporaryPassword {...secret} onDone={() => setSecret(null)} /> : null}
       {adding ? (
@@ -44,9 +43,9 @@ export function UsersPage() {
         <>
           {users.data.some((u) => u.pending) ? (
             <section className="grid gap-3" aria-labelledby="pending-title">
-              <h2 id="pending-title" className="flex items-center gap-2 text-lg">
+              <h2 id="pending-title" className="flex items-center gap-2 text-[16px] font-semibold">
                 مستنيين التفعيل
-                <span className="tabular grid size-6 place-items-center rounded-full bg-red text-xs font-bold text-white">
+                <span className="tabular grid size-6 place-items-center rounded-full bg-red text-xs font-semibold text-white">
                   {users.data.filter((u) => u.pending).length}
                 </span>
               </h2>
@@ -75,7 +74,7 @@ function TemporaryPassword({ name, password, onDone }: { name: string; password:
   const [copied, setCopied] = useState(false);
   return (
     <Card className="border-warn">
-      <h2 className="text-lg">كلمة السر المؤقتة لـ {name}</h2>
+      <h2 className="text-[16px] font-semibold">كلمة السر المؤقتة لـ {name}</h2>
       <p className="text-sm text-ink-soft">
         بتظهر المرة دي بس. ادّيها لصاحب الحساب بنفسك، وهو هيغيّرها أول ما يدخل.
       </p>
@@ -97,7 +96,7 @@ function AddUser({ onCancel, onCreated }: { onCancel: () => void; onCreated: (r:
   const [form, setForm] = useState({ username: "", display_name: "", email: "", role: "staff" as Role, staff_name: "" });
   const create = useMutation({
     mutationFn: () => api<NewUserResult>("POST", "/users", { ...form, staff_name: form.role === "staff" ? form.staff_name || form.display_name : null }),
-    onSuccess: (r) => { void qc.invalidateQueries({ queryKey: usersKey }); onCreated(r); },
+    onSuccess: (r) => { void qc.invalidateQueries({ queryKey: usersKey }); onCreated(r); toast(`حساب ${r.user.display_name} اتعمل`); },
   });
   const fieldError = (name: string) =>
     create.error instanceof ApiError ? create.error.fields?.[name]?.[0] : undefined;
@@ -110,7 +109,7 @@ function AddUser({ onCancel, onCreated }: { onCancel: () => void; onCreated: (r:
 
   return (
     <Card>
-      <h2 className="text-lg">حساب جديد</h2>
+      <h2 className="text-[16px] font-semibold">حساب جديد</h2>
       <form onSubmit={submit} className="grid gap-4 md:grid-cols-2" noValidate>
         <Field label="الاسم اللي هيظهر" required value={form.display_name} onChange={set("display_name")} error={fieldError("display_name")} />
         <Field label="اسم المستخدم (للدخول)" required dir="ltr" autoComplete="off" value={form.username}
@@ -119,7 +118,7 @@ function AddUser({ onCancel, onCreated }: { onCancel: () => void; onCreated: (r:
           hint="هيتستخدم كمان لحساب Chatwoot." onChange={set("email")} error={fieldError("email")} />
         <label className="grid gap-1.5">
           <span className="text-sm font-medium">الدور <span className="text-bad">*</span></span>
-          <select className="surface min-h-11 rounded-[var(--radius-control)] px-3 text-ink" value={form.role}
+          <select className={inputClass} value={form.role}
             onChange={(e) => setForm({ ...form, role: e.target.value as Role })}>
             <option value="staff">موظف: مهامه والمهام اللي مش متعيّنة</option>
             <option value="lawyer">الأستاذ: كل المهام، ويوزّعها</option>
@@ -152,29 +151,28 @@ function PendingCard({ user }: { user: PanelUser }) {
   const qc = useQueryClient();
   const [role, setRole] = useState<Role>("staff");
   const [staffName, setStaffName] = useState(user.display_name);
-  const [refusing, setRefusing] = useState(false);
   const act = useMutation({
     mutationFn: (path: "approve" | "reject") => api<unknown>("POST", `/users/${user.id}/${path}`,
       path === "approve" ? { role, staff_name: role === "staff" ? staffName.trim() || user.display_name : null } : undefined),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: usersKey }),
+    onSuccess: (_, path) => { void qc.invalidateQueries({ queryKey: usersKey }); toast(path === "approve" ? `حساب ${user.display_name} اتفعّل` : "الطلب اترفض واتمسح"); },
   });
 
   return (
-    <Card className="border-gold-line">
+    <Card className="border-accent-line">
       <div className="flex items-start justify-between gap-2">
         <div className="grid min-w-0 gap-0.5">
           <span className="font-semibold">{user.display_name}</span>
           <span className="text-xs text-ink-soft break-all" dir="ltr" style={{ textAlign: "right" }}>{user.username} · {user.email}</span>
           <span className="tabular text-xs text-ink-soft">سجّل {cairoWhen(user.created_at)}</span>
         </div>
-        {user.email_verified ? <Chip tone="gold">مستني التفعيل</Chip> : <Chip tone="grey">ما أكدش الإيميل</Chip>}
+        {user.email_verified ? <Chip tone="accent">مستني التفعيل</Chip> : <Chip tone="grey">ما أكدش الإيميل</Chip>}
       </div>
 
       {user.email_verified ? (
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="grid gap-1.5">
             <span className="text-sm font-semibold">الدور</span>
-            <select className="surface min-h-11 rounded-[var(--radius-control)] px-3 text-ink" value={role}
+            <select className={inputClass} value={role}
               onChange={(e) => setRole(e.target.value as Role)}>
               <option value="staff">موظف</option>
               <option value="lawyer">الأستاذ</option>
@@ -189,22 +187,17 @@ function PendingCard({ user }: { user: PanelUser }) {
         <p className="text-sm text-ink-soft">مش هيقدر تفعّله غير لما يأكد إيميله. لو ما أكدش خلال يوم، الطلب بيتمسح لوحده.</p>
       )}
 
-      {refusing ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm">متأكد؟ الطلب هيتمسح.</span>
-          <Button variant="danger" busy={act.isPending} onClick={() => act.mutate("reject")}>أيوه، ارفض</Button>
-          <Button variant="ghost" onClick={() => setRefusing(false)}>لأ</Button>
-        </div>
-      ) : (
-        <div className="flex flex-wrap gap-2">
-          {user.email_verified ? (
-            <Button variant="primary" busy={act.isPending} onClick={() => act.mutate("approve")}>
-              <Icon name="check" className="size-4" />فعّل الحساب
-            </Button>
-          ) : null}
-          <Button variant="ghost" onClick={() => setRefusing(true)}>ارفض</Button>
-        </div>
-      )}
+      <div className="flex flex-wrap gap-2">
+        {user.email_verified ? (
+          <Button variant="primary" busy={act.isPending && act.variables === "approve"} onClick={() => act.mutate("approve")}>
+            <Icon name="check" className="size-4" />فعّل الحساب
+          </Button>
+        ) : null}
+        <Button variant="ghost" busy={act.isPending && act.variables === "reject"}
+          onClick={async () => { if (await confirmAction({ title: "ترفض الطلب ده؟", yes: "ارفض", danger: true, body: "الطلب هيتمسح، وصاحبه هيوصله إيميل." })) act.mutate("reject"); }}>
+          ارفض
+        </Button>
+      </div>
       {act.isError ? <p className="text-sm text-bad" role="alert">{errorMessage(act.error)}</p> : null}
     </Card>
   );
@@ -214,15 +207,22 @@ function UserCard({ user, onSecret }: { user: PanelUser; onSecret: (s: { name: s
   const { data: me } = useMe();
   const qc = useQueryClient();
   const self = me?.id === user.id;
-  const [confirm, setConfirm] = useState<null | "disable" | "reset" | "reset-2fa">(null);
   const change = useMutation({
     mutationFn: (body: { path: string; payload?: unknown }) => api<PanelUser | { temporary_password: string }>("POST", `/users/${user.id}/${body.path}`, body.payload),
-    onSuccess: (r) => {
-      setConfirm(null);
+    onSuccess: (r, body) => {
       void qc.invalidateQueries({ queryKey: usersKey });
       if ("temporary_password" in r) onSecret({ name: user.display_name, password: r.temporary_password });
+      toast(body.path === "disable" ? "الحساب اتعطّل" : body.path === "enable" ? "الحساب اتفعّل" : body.path === "role" ? "الدور اتغيّر" : body.path === "reset-2fa" ? "التحقق بخطوتين اتقفل للحساب ده" : "كلمة سر مؤقتة جديدة اتعملت");
     },
   });
+  const ask = async (path: "disable" | "reset-password" | "reset-2fa") => {
+    const q = {
+      disable: { title: `تعطّل حساب ${user.display_name}؟`, yes: "عطّل", body: "هيخرج من كل الأجهزة، ومش هيقدر يدخل لحد ما تفعّله تاني." },
+      "reset-password": { title: "تعمل كلمة سر جديدة؟", yes: "اعمل كلمة سر", body: "كلمة السر الحالية هتبطل، وهتظهرلك كلمة سر مؤقتة مرة واحدة تدّيها له." },
+      "reset-2fa": { title: "تقفل التحقق بخطوتين؟", yes: "اقفله", body: "هيدخل بكلمة السر بس لحد ما يشغّله تاني (لو موبايله ضاع)." },
+    }[path];
+    if (await confirmAction({ ...q, danger: path === "disable" })) change.mutate({ path });
+  };
 
   return (
     <Card className={user.active ? "" : "opacity-70"}>
@@ -240,7 +240,7 @@ function UserCard({ user, onSecret }: { user: PanelUser; onSecret: (s: { name: s
         <dt className="text-ink-soft">الدور</dt>
         <dd>
           {self ? label(ROLES, user.role ?? "") : (
-            <select aria-label={`دور ${user.display_name}`} className="surface min-h-9 rounded-[var(--radius-control)] px-2 text-ink"
+            <select aria-label={`دور ${user.display_name}`} className={`${inputClass} !min-h-9 !w-auto`}
               value={user.role ?? "staff"} disabled={change.isPending}
               onChange={(e) => change.mutate({ path: "role", payload: { role: e.target.value } })}>
               {(["staff", "lawyer", "manager"] as Role[]).map((r) => <option key={r} value={r}>{label(ROLES, r)}</option>)}
@@ -253,28 +253,17 @@ function UserCard({ user, onSecret }: { user: PanelUser; onSecret: (s: { name: s
       </dl>
 
       {!self ? (
-        confirm ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm">
-              {confirm === "disable" ? "متأكد؟ هيخرج من كل الأجهزة." : confirm === "reset-2fa" ? "متأكد؟ هيدخل بكلمة السر بس لحد ما يشغّله تاني." : "متأكد؟ كلمة السر الحالية هتبطل."}
-            </span>
-            <Button variant="danger" busy={change.isPending}
-              onClick={() => change.mutate({ path: confirm === "disable" ? "disable" : confirm === "reset-2fa" ? "reset-2fa" : "reset-password" })}>أيوه</Button>
-            <Button variant="ghost" onClick={() => setConfirm(null)}>لأ</Button>
-          </div>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {user.active ? (
-              <Button variant="ghost" onClick={() => setConfirm("disable")}><Icon name="lock" className="size-4" />عطّل</Button>
-            ) : (
-              <Button onClick={() => change.mutate({ path: "enable" })} busy={change.isPending}>فعّل</Button>
-            )}
-            <Button variant="ghost" onClick={() => setConfirm("reset")}><Icon name="key" className="size-4" />كلمة سر جديدة</Button>
-            {user.two_factor ? (
-              <Button variant="ghost" onClick={() => setConfirm("reset-2fa")}>اقفل التحقق بخطوتين (موبايل ضاع)</Button>
-            ) : null}
-          </div>
-        )
+        <div className="flex flex-wrap gap-2 border-t border-line pt-3">
+          {user.active ? (
+            <Button size="sm" variant="ghost" onClick={() => void ask("disable")}><Icon name="lock" className="size-4" />عطّل</Button>
+          ) : (
+            <Button size="sm" onClick={() => change.mutate({ path: "enable" })} busy={change.isPending}>فعّل</Button>
+          )}
+          <Button size="sm" variant="ghost" onClick={() => void ask("reset-password")}><Icon name="key" className="size-4" />كلمة سر جديدة</Button>
+          {user.two_factor ? (
+            <Button size="sm" variant="ghost" onClick={() => void ask("reset-2fa")}>اقفل التحقق بخطوتين (موبايل ضاع)</Button>
+          ) : null}
+        </div>
       ) : null}
       {change.isError ? <p className="text-sm text-bad" role="alert">{errorMessage(change.error)}</p> : null}
     </Card>

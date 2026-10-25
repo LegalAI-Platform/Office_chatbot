@@ -53,7 +53,6 @@ describe("TASK 10 service orders", () => {
   });
 
   it("the lawyer prices: outside the range only as an exception", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     const calls = serve({ "GET /auth/me": me("lawyer"), "GET /services?show=open": [order()] });
     renderAt("/services");
     const card = (await screen.findByText(/محمد أحمد علي حسن/)).closest("li")!;
@@ -63,6 +62,7 @@ describe("TASK 10 service orders", () => {
     fireEvent.click(within(card).getByLabelText(/ده استثناء/));
     fireEvent.change(within(card).getByLabelText("يوم التسليم"), { target: { value: "2026-11-25" } });
     fireEvent.click(send);
+    fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "ابعت السعر" }));
     await vi.waitFor(() => expect(calls.some((c) => c.method === "POST")).toBe(true));
     expect(calls.find((c) => c.method === "POST")).toMatchObject({
       path: "/services/o1/price", body: { price: 5000, exception: true, due_on: "2026-11-25", delivery: "file" },
@@ -70,7 +70,6 @@ describe("TASK 10 service orders", () => {
   });
 
   it("a delivered file that did not reach the client is said, and can be sent again", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     const calls = serve({
       "GET /auth/me": me("staff"),
       "GET /services?show=open": [],
@@ -81,11 +80,11 @@ describe("TASK 10 service orders", () => {
     const card = (await screen.findByText(/محمد أحمد علي حسن/)).closest("li")!;
     expect(within(card).getByText(/آخر رسالة ما وصلتش للعميل/)).toBeTruthy();
     fireEvent.click(within(card).getByRole("button", { name: /ابعت الملف تاني/ }));
+    fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "ابعته" }));
     await vi.waitFor(() => expect(calls.some((c) => c.path === "/services/o1/resend")).toBe(true));
   });
 
   it("the file goes to storage with the signed link, then the API is told where it is", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     const url = "/storage/office-sensitive/deliverables/o1/x.pdf?X-Amz-Signature=s";
     const calls = serve({
       "GET /auth/me": me("staff"),
@@ -96,6 +95,7 @@ describe("TASK 10 service orders", () => {
     const card = (await screen.findByText(/محمد أحمد علي حسن/)).closest("li")!;
     fireEvent.change(within(card).getByLabelText("الملف"), { target: { files: [new File(["%PDF"], "مراجعة.pdf", { type: "application/pdf" })] } });
     fireEvent.click(within(card).getByRole("button", { name: "ابعت الملف للعميل" }));
+    fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "ابعت الملف" }));
     await vi.waitFor(() => expect(calls.some((c) => c.path === "/services/o1/deliver")).toBe(true));
     expect(calls.filter((c) => c.method !== "GET").map((c) => `${c.method} ${c.path}`)).toEqual([
       "POST /services/o1/upload", `PUT ${url}`, "POST /services/o1/deliver",

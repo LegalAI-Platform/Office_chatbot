@@ -54,9 +54,10 @@ describe("TASK 08 booking", () => {
         { body: { cancelled: 1, not_told: 0 } },
       ],
     });
-    renderAt("/appointments");
+    renderAt("/appointments?tab=calendar");
     fireEvent.click(await screen.findByRole("gridcell", { name: /2026-11-20/ }));
-    fireEvent.click(screen.getByRole("button", { name: "احفظ" }));
+    fireEvent.click(screen.getByRole("button", { name: "غيّر ساعات اليوم ده" }));
+    fireEvent.click(screen.getByRole("button", { name: "احفظ التغيير" }));
     const ask = await screen.findByRole("alertdialog", { name: "فيه حجوزات" });
     expect(within(ask).getByText(/محمد أحمد علي حسن/)).toBeTruthy();
     fireEvent.click(within(ask).getByRole("button", { name: "كمّل وبلّغ العملاء" }));
@@ -79,6 +80,24 @@ describe("TASK 08 booking", () => {
     const sent = calls.find((c) => c.method === "PUT")!.body as { days: { weekday: number; ranges: { start: number; end: number }[] }[] };
     expect(sent.days.find((d) => d.weekday === 5)!.ranges).toEqual([]);
     expect(sent.days.find((d) => d.weekday === 6)!.ranges).toEqual([{ start: 600, end: 840 }]);
+  });
+
+  it("opens on the coming bookings, the urgent one in red, with no «خلص» before it starts", async () => {
+    serve({
+      "GET /auth/me": { body: staff },
+      "GET /booking/appointments": { body: [{ ...appointment, start: "2099-01-01T10:00:00Z", end: "2099-01-01T10:15:00Z", service: "consultation_urgent" }] },
+    });
+    renderAt("/appointments");
+    expect((await screen.findByRole("tab", { name: "الحجوزات" })).getAttribute("aria-selected")).toBe("true");
+    // shown twice: as «الميعاد الجاي» and in its day's list
+    const next = await screen.findByRole("region", { name: "الميعاد الجاي" });
+    expect(within(next).getByText("محمد أحمد علي حسن")).toBeTruthy();
+    const row = screen.getAllByText("محمد أحمد علي حسن").map((e) => e.closest("li")).find(Boolean)!;
+    expect(within(row).getByRole("button", { name: "إلغاء" })).toBeTruthy();
+    expect(within(row).queryByRole("button", { name: /خلص/ })).toBeNull();
+    fireEvent.click(within(row).getByRole("button", { name: "التفاصيل" }));
+    expect(within(row).getByText("وصل إيصال، مستني المراجعة")).toBeTruthy();
+    expect(within(row).getByText("متسجل في كالندر الأستاذ")).toBeTruthy();
   });
 
   it("the office's payment details are not shown to a staff member", async () => {

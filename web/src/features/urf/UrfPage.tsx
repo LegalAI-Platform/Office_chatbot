@@ -1,18 +1,31 @@
-import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { errorMessage } from "../../shared/api/client";
 import { can, useMe } from "../../shared/api/session";
 import { APPOINTMENT_STATES, label, PAYMENT_STATES, URF_ANSWERS, URF_KINDS, URF_STATES } from "../../shared/lib/labels";
 import { cairoWhen } from "../../shared/lib/time";
+import { useUrlState } from "../../shared/lib/url";
+import { ActionBar, CaseCard, CaseHead, CaseNote, Facts, Files, Meta, Summary } from "../../shared/ui/caseCard";
+import { confirmAction, toast } from "../../shared/ui/feedback";
+import type { Folder } from "../../shared/ui/folders";
 import { Icon } from "../../shared/ui/Icon";
-import { Button, Card, Chip, Empty, ErrorState, Loading } from "../../shared/ui/ui";
-import { fileUrl, urf, type Show, type UrfCase } from "./api";
+import { Button, Chip, Empty, ErrorState, Loading, PageHeader, Tabs } from "../../shared/ui/ui";
+import { listQuery, fileUrl, urf, type Show, type UrfCase } from "./api";
 
 const TONE: Record<string, string> = {
   collecting: "grey", documents_pending: "blue", booked: "orange", approved: "green", lawyer_rejected: "grey",
   rejected_age: "grey", rejected_guardian: "grey", redirected_consultation: "grey",
 };
+const EDGE: Record<string, Folder | "grey"> = {
+  collecting: "grey", documents_pending: "cobalt", booked: "saffron", approved: "jade", lawyer_rejected: "grey",
+  rejected_age: "grey", rejected_guardian: "grey", redirected_consultation: "grey",
+};
+const SHOWS = ["open", "done"] as const;
 const yesNo = (v: boolean | null) => (v == null ? "—" : v ? "أيوه" : "لأ");
+
+/** What the page shows first, fetched while the pointer is still on its link. */
+export function prefetchData(qc: QueryClient) {
+  void qc.prefetchQuery(listQuery("open"));
+}
 
 /**
  * «حالات العرفي» (TASK 11, DECISIONS v1.15 B-11 / S-06): Hazem's questions and the client's answers, the documents
@@ -21,38 +34,49 @@ const yesNo = (v: boolean | null) => (v == null ? "—" : v ? "أيوه" : "لأ
  * cancelled by the office and what was paid goes back).
  */
 export function UrfPage() {
-  const [show, setShow] = useState<Show>("open");
-  const list = useQuery({ queryKey: ["urf", show], queryFn: () => urf.list(show) });
+  const [show, setShow] = useUrlState<Show>("show", "open", SHOWS);
+  const list = useQuery(listQuery(show));
+  const open = useQuery(listQuery("open"));
+  const count = (...states: string[]) => open.data?.filter((c) => states.includes(c.state)).length;
   const tabs: [Show, string][] = [["open", "شغالة"], ["done", "اتقفلت"]];
 
   return (
-    <div className="grid gap-4">
-      <h1 className="text-2xl">حالات العرفي</h1>
-      <p className="text-sm text-ink-soft">عقد الجواز والطلاق العرفي: إجابات العميل، والورق، والميعاد في المكتب. الأستاذ يراجع الورق قبل الميعاد.</p>
-      <div className="flex flex-wrap gap-2" role="tablist" aria-label="حالات العرفي">
-        {tabs.map(([t, text]) => (
-          <Button key={t} role="tab" aria-selected={t === show} variant={t === show ? "primary" : "secondary"} onClick={() => setShow(t)}>{text}</Button>
-        ))}
-      </div>
+    <div className="grid gap-5">
+      <PageHeader title="حالات العرفي" description="عقد الجواز والطلاق العرفي: إجابات العميل، والورق، والميعاد في المكتب. الأستاذ يراجع الورق قبل الميعاد." />
+      <Summary items={[
+        { label: "بيجاوبوا على الأسئلة", value: count("collecting"), folder: "cobalt" },
+        { label: "بيختاروا ميعاد", value: count("documents_pending"), folder: "saffron" },
+        { label: "محجوزة ومحتاجة مراجعة", value: count("booked"), folder: "orchid" },
+      ]} />
+      <Tabs label="حالات العرفي" value={show} options={tabs} onChange={setShow} />
       {list.isPending ? <Loading /> : list.isError ? <ErrorState message={errorMessage(list.error)} onRetry={() => void list.refetch()} /> : (
-        list.data.length === 0 ? <Card><Empty title="مفيش حالات هنا" icon="check-circle" /></Card> : (
-          <ul className="grid gap-3">{list.data.map((c) => <CaseCard key={c.id} c={c} />)}</ul>
+        list.data.length === 0 ? (
+          <div className="surface rounded-[var(--radius-card)]">
+            <Empty title={show === "open" ? "مفيش حالات شغالة" : "مفيش حالات اتقفلت لسه"} icon="scale">
+              {show === "open" ? "لما عميل يطلب عقد أو طلاق عرفي، إجاباته وورقه هيظهروا هنا." : null}
+            </Empty>
+          </div>
+        ) : (
+          <ul className="grid gap-3">{list.data.map((c) => <CaseCardUrf key={c.id} c={c} />)}</ul>
         )
       )}
     </div>
   );
 }
 
-function CaseCard({ c }: { c: UrfCase }) {
+function CaseCardUrf({ c }: { c: UrfCase }) {
   const qc = useQueryClient();
   const { data: me } = useMe();
   const review = useMutation({
     mutationFn: (d: "approved" | "rejected") => urf.review(c.id, d),
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["urf"] }); void qc.invalidateQueries({ queryKey: ["payments"] }); },
+    onSuccess: (_, d) => {
+      void qc.invalidateQueries({ queryKey: ["urf"] }); void qc.invalidateQueries({ queryKey: ["payments"] });
+      toast(d === "approved" ? "اتوافق، وحازم هيبعت للعميل التأكيد" : "اترفضت، والميعاد اتلغى والفلوس هتترد");
+    },
   });
   const answers: [string, string][] = c.kind === "marriage"
     ? [
-        ["السن", c.husband_age != null ? `الزوج ${c.husband_age} · الزوجة ${c.wife_age}` : "—"],
+        ["السن", c.husband_age != null ? `الزوج ${c.husband_age} - الزوجة ${c.wife_age}` : "—"],
         ["الزوجة", label(URF_ANSWERS, c.wife_past ?? "") || "—"],
         ["الولي", label(URF_ANSWERS, c.guardian ?? "") || "—"],
         ["الشهود", label(URF_ANSWERS, c.witnesses ?? "") || "—"],
@@ -61,62 +85,41 @@ function CaseCard({ c }: { c: UrfCase }) {
         ["نسخة العقد", yesNo(c.has_copy)], ["متفقين", yesNo(c.agreed)], ["أطفال", yesNo(c.children)],
         ["الشهود", label(URF_ANSWERS, c.witnesses ?? "") || "—"],
       ];
-  const mayReview = can(me, "urf.review");
+  const mayReview = can(me, "urf.review") && c.state === "booked";
 
   return (
-    <li>
-      <Card>
-        <div className="flex flex-wrap items-start gap-3">
-          <span className="grid min-w-0 flex-1 gap-0.5">
-            <span className="font-semibold">{c.name ?? "من غير اسم"} · {label(URF_KINDS, c.kind)}</span>
-            <span className="text-xs text-ink-soft">بدأ {cairoWhen(c.created_at)} · <span dir="ltr">+{c.wa_id}</span></span>
-            {c.start ? (
-              <span className="text-sm">
-                الميعاد {cairoWhen(c.start)} · {label(APPOINTMENT_STATES, c.appointment ?? "")}
-                {c.payment ? <> · الدفع: {label(PAYMENT_STATES, c.payment)}</> : null}
-              </span>
-            ) : null}
-            {c.decided_by ? <span className="text-xs text-ink-soft">القرار: {c.decided_by} · {cairoWhen(c.decided_at!)}</span> : null}
-          </span>
-          <Chip tone={TONE[c.state] ?? "grey"}>{label(URF_STATES, c.state)}</Chip>
-        </div>
+    <CaseCard edge={EDGE[c.state] ?? "grey"} label={c.name ?? "من غير اسم"}>
+      <CaseHead
+        title={c.name ?? "من غير اسم"} kind={label(URF_KINDS, c.kind)} kindFolder="orchid"
+        meta={[
+          <Meta key="w" icon="clock">بدأ {cairoWhen(c.created_at)}</Meta>,
+          c.start ? <Meta key="a" icon="calendar">الميعاد {cairoWhen(c.start)} - {label(APPOINTMENT_STATES, c.appointment ?? "")}</Meta> : null,
+          c.payment ? <Meta key="m" icon="wallet">{label(PAYMENT_STATES, c.payment)}</Meta> : null,
+          <Meta key="p" icon="whatsapp"><span dir="ltr">+{c.wa_id}</span></Meta>,
+        ]}
+        status={<Chip tone={TONE[c.state] ?? "grey"}>{label(URF_STATES, c.state)}</Chip>} />
+      <Facts items={answers} />
+      <p className="px-5 pt-3 text-[13px] text-ink-soft"><span className="font-medium text-ink">المطلوب:</span> {c.documents}</p>
+      <Files label="ورق العميل" count={c.files} href={(i) => fileUrl(c.id, i)} />
+      {c.files === 0 && c.state === "booked" ? <CaseNote>لسه مفيش ورق. حازم طلبه من العميل بعد صورة التحويل.</CaseNote> : null}
+      {c.decided_by ? <CaseNote>القرار: {c.decided_by} - {cairoWhen(c.decided_at!)}</CaseNote> : null}
+      {c.notice === "failed" ? <CaseNote tone="bad">رسالة القرار ما وصلتش للعميل (غالبًا عدّى 24 ساعة من آخر رسالة منه). كلّموه.</CaseNote> : null}
 
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm md:grid-cols-4">
-          {answers.map(([k, v]) => (
-            <div key={k}><dt className="text-xs text-ink-soft">{k}</dt><dd>{v}</dd></div>
-          ))}
-        </dl>
-        <p className="text-xs text-ink-soft">المطلوب: {c.documents}</p>
-
-        {c.files > 0 ? (
-          <ul className="flex flex-wrap gap-2" aria-label="ورق العميل">
-            {Array.from({ length: c.files }, (_, i) => (
-              <li key={i}>
-                <a href={fileUrl(c.id, i)} target="_blank" rel="noopener noreferrer"
-                  className="inline-flex min-h-10 items-center gap-1.5 rounded-[var(--radius-control)] border border-line px-3 text-sm hover:border-gold-line">
-                  <Icon name="document" className="size-4" />مستند {i + 1}
-                </a>
-              </li>
-            ))}
-          </ul>
-        ) : c.state === "booked" ? <p className="text-sm text-ink-soft">لسه مفيش ورق. حازم طلبه من العميل بعد صورة التحويل.</p> : null}
-
-        {c.notice === "failed" ? <p className="text-sm text-bad" role="status">رسالة القرار ما وصلتش للعميل (غالبًا عدّى 24 ساعة من آخر رسالة منه). كلّموه.</p> : null}
-
-        {c.state === "booked" && mayReview ? (
-          <div className="flex flex-wrap gap-2 border-t border-line pt-3">
-            <Button variant="primary" busy={review.isPending}
-              onClick={() => { if (window.confirm("موافق على الورق؟ حازم هيبعت للعميل تأكيد الميعاد ومين لازم يحضر.")) review.mutate("approved"); }}>
+      <ActionBar>
+        {mayReview ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="primary" busy={review.isPending && review.variables === "approved"}
+              onClick={async () => { if (await confirmAction({ title: "موافق على الورق؟", yes: "موافق", body: "حازم هيبعت للعميل تأكيد الميعاد ومين لازم يحضر." })) review.mutate("approved"); }}>
               <Icon name="check-circle" className="size-4" />موافق
             </Button>
-            <Button variant="ghost" busy={review.isPending}
-              onClick={() => { if (window.confirm("ترفض الحالة؟ الميعاد هيتلغي من المكتب، واللي اتدفع هيترد كامل، وحازم هيبلّغ العميل.")) review.mutate("rejected"); }}>
+            <Button variant="danger" busy={review.isPending && review.variables === "rejected"}
+              onClick={async () => { if (await confirmAction({ title: "ترفض الحالة؟", yes: "ارفض", danger: true, body: "الميعاد هيتلغي من المكتب، واللي اتدفع هيترد كامل، وحازم هيبلّغ العميل." })) review.mutate("rejected"); }}>
               <Icon name="x" className="size-4" />رفض
             </Button>
-            {review.isError ? <span className="text-sm text-bad" role="alert">{errorMessage(review.error)}</span> : null}
+            {review.isError ? <span className="text-[13.5px] text-bad" role="alert">{errorMessage(review.error)}</span> : null}
           </div>
         ) : null}
-      </Card>
-    </li>
+      </ActionBar>
+    </CaseCard>
   );
 }

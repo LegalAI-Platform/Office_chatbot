@@ -1,29 +1,28 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { OwnerImg } from "../../shared/ui/Owner";
+import { FirmLogo } from "../../shared/ui/Brand";
 import { Field } from "../../shared/ui/ui";
 
-/** The pages before a session (sign-in, sign-up, a forgotten password): the office's black panel and a card. */
+/** The pages before a session (sign-in, sign-up, a forgotten password): the office's name and one card. */
 export function AuthLayout({ title, subtitle, children }: { title: string; subtitle?: ReactNode; children: ReactNode }) {
   return (
-    <main className="grid min-h-dvh lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
-      {/* the office's black panel with the seal (on a phone: a band over the form) */}
-      <section className="relative grid place-items-center overflow-hidden bg-side px-6 py-10 text-center text-side-ink lg:min-h-dvh">
-        <OwnerImg name="sidebar_art" className="fade-all pointer-events-none absolute bottom-0 left-0 w-56 opacity-80 lg:w-80" />
-        <div className="relative grid justify-items-center gap-3">
-          <OwnerImg name="logo_emblem" className="size-28 lg:size-36" />
-          <p className="text-xl font-bold lg:text-2xl">مكتب سعد فتحي سعد</p>
-          <p className="text-sm text-side-soft">للمحاماة والاستشارات القانونية</p>
+    <main className="grid min-h-dvh place-items-center px-4 py-10">
+      <div className="backdrop" aria-hidden />
+      <div className="relative z-[1] grid w-full max-w-[25rem] gap-6">
+        <div className="flex items-center gap-3">
+          <FirmLogo className="size-16" />
+          <div className="grid leading-tight">
+            <p className="text-[17px] font-semibold">مكتب سعد فتحي سعد</p>
+            <p className="text-[13.5px] text-ink-soft">للمحاماة والاستشارات القانونية</p>
+          </div>
         </div>
-      </section>
-
-      <div className="grid place-items-center px-4 py-10">
-        <div className="surface grid w-full max-w-sm gap-5 rounded-[var(--radius-sheet)] p-6 lg:p-8">
+        <div className="surface grid gap-5 rounded-[var(--radius-sheet)] p-6 sm:p-7">
           <div className="grid gap-1">
-            <h1 className="text-2xl">{title}</h1>
-            {subtitle ? <p className="text-sm text-ink-soft">{subtitle}</p> : null}
+            <h1 className="text-[22px]">{title}</h1>
+            {subtitle ? <p className="text-[14px] text-ink-soft">{subtitle}</p> : null}
           </div>
           {children}
         </div>
+        <p className="text-center text-[12.5px] text-ink-faint">لوحة حازم · للعاملين في المكتب بس</p>
       </div>
     </main>
   );
@@ -52,7 +51,7 @@ export function CodeField({ label, value, onChange, hint, allowRecovery = false 
 
 export function Notice({ tone = "bad", children }: { tone?: "bad" | "good"; children: ReactNode }) {
   return (
-    <p className={`rounded-[var(--radius-control)] px-3 py-2 text-sm ${tone === "bad" ? "bg-bad-bg text-bad" : "bg-ok-bg text-ok"}`}
+    <p className={`rounded-[var(--radius-control)] border px-3 py-2 text-[14px] ${tone === "bad" ? "border-red-ink/20 bg-bad-bg text-bad" : "border-green-ink/20 bg-ok-bg text-ok"}`}
       role={tone === "bad" ? "alert" : "status"}>
       {children}
     </p>

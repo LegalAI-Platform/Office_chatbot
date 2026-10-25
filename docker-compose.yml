@@ -78,6 +78,7 @@ services:
   postgres:
     image: postgres:16.15
     restart: unless-stopped
+    security_opt: ["no-new-privileges:true"] # no process inside can gain privileges (setuid binaries)
     depends_on:
       preflight:
         condition: service_completed_successfully
@@ -117,6 +118,7 @@ services:
   redis:
     image: redis:7.4.11
     restart: unless-stopped
+    security_opt: ["no-new-privileges:true"] # no process inside can gain privileges (setuid binaries)
     depends_on:
       preflight:
         condition: service_completed_successfully
@@ -143,6 +145,7 @@ services:
   garage:
     image: dxflrs/garage:v2.4.1
     restart: unless-stopped
+    security_opt: ["no-new-privileges:true"] # no process inside can gain privileges (setuid binaries)
     depends_on:
       preflight:
         condition: service_completed_successfully
@@ -175,6 +178,7 @@ services:
   n8n:
     image: n8nio/n8n:2.43.8
     restart: unless-stopped
+    security_opt: ["no-new-privileges:true"] # no process inside can gain privileges (setuid binaries)
     depends_on:
       postgres:
         condition: service_healthy
@@ -233,6 +237,7 @@ services:
     image: office-api:local
     pull_policy: build
     restart: unless-stopped
+    security_opt: ["no-new-privileges:true"] # no process inside can gain privileges (setuid binaries)
     depends_on:
       postgres:
         condition: service_healthy
@@ -250,6 +255,8 @@ services:
       # v1.9 (T-23): sign-up, e-mail codes and the authenticator. Without PANEL_SECRET_KEY and
       # SMTP_HOST/SMTP_FROM the sign-up page says it is not available; sign-in still works.
       Panel__SecretKey: ${PANEL_SECRET_KEY:-}
+      # The keys behind the panel's cookies, on a volume so a rebuild does not sign everyone out.
+      Panel__KeysPath: /app/keys
       Mail__Host: ${SMTP_HOST:-}
       Mail__Port: ${SMTP_PORT:-587}
       Mail__Ssl: ${SMTP_SSL:-true}
@@ -278,6 +285,15 @@ services:
       timeout: 5s
       retries: 12
       start_period: 20s
+    volumes:
+      - api_keys:/app/keys
+    # Locked down: no Linux capabilities, a read-only file system (only /tmp and the keys volume are
+    # writable), and a ceiling on memory and processes.
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    mem_limit: 1g
+    pids_limit: 256
     networks: [office_net, chatwoot_net]
 
   # TEST ONLY (profile "tests", never started by `up`): stands in for Meta's Graph API media
@@ -306,6 +322,7 @@ services:
     image: office-web:local
     pull_policy: build
     restart: unless-stopped
+    security_opt: ["no-new-privileges:true"] # no process inside can gain privileges (setuid binaries)
     depends_on:
       api:
         condition: service_healthy
@@ -317,12 +334,19 @@ services:
       timeout: 5s
       retries: 6
       start_period: 5s
+    # Locked down like the api: unprivileged nginx needs only /tmp (its pid and buffers).
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    mem_limit: 256m
+    pids_limit: 64
     networks: [office_net]
 
   # ---------- Chatwoot (TASK 07b, T-24) ----------
   chatwoot-db:
     image: pgvector/pgvector:0.8.7-pg16
     restart: unless-stopped
+    security_opt: ["no-new-privileges:true"] # no process inside can gain privileges (setuid binaries)
     depends_on:
       preflight:
         condition: service_completed_successfully
@@ -344,6 +368,7 @@ services:
   chatwoot-redis:
     image: redis:7.4.11
     restart: unless-stopped
+    security_opt: ["no-new-privileges:true"] # no process inside can gain privileges (setuid binaries)
     depends_on:
       preflight:
         condition: service_completed_successfully
@@ -374,6 +399,7 @@ services:
   chatwoot:
     <<: *chatwoot
     restart: unless-stopped
+    security_opt: ["no-new-privileges:true"] # no process inside can gain privileges (setuid binaries)
     entrypoint: ["docker/entrypoints/rails.sh"]
     command: ["bundle", "exec", "rails", "s", "-p", "3000", "-b", "0.0.0.0"]
     depends_on:
@@ -391,6 +417,7 @@ services:
   chatwoot-sidekiq:
     <<: *chatwoot
     restart: unless-stopped
+    security_opt: ["no-new-privileges:true"] # no process inside can gain privileges (setuid binaries)
     command: ["bundle", "exec", "sidekiq", "-C", "config/sidekiq.yml"]
     depends_on:
       chatwoot-init:
@@ -402,6 +429,7 @@ services:
     image: cloudflare/cloudflared:2026.9.3
     profiles: ["tunnel"]
     restart: unless-stopped
+    security_opt: ["no-new-privileges:true"] # no process inside can gain privileges (setuid binaries)
     depends_on:
       n8n:
         condition: service_healthy
@@ -420,6 +448,7 @@ services:
     image: cloudflare/cloudflared:2026.9.3
     profiles: ["tunnel-named"]
     restart: unless-stopped
+    security_opt: ["no-new-privileges:true"] # no process inside can gain privileges (setuid binaries)
     depends_on:
       n8n:
         condition: service_healthy
@@ -467,6 +496,7 @@ networks:
     name: chatwoot_net
 
 volumes:
+  api_keys:
   chatwoot_db_data:
   chatwoot_redis_data:
   chatwoot_storage:

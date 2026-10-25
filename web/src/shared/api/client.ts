@@ -135,6 +135,28 @@ export async function putToStorage(url: string, file: Blob, contentType: string)
   if (!res.ok) throw new ApiError(res.status, "upload failed", "upload_failed");
 }
 
+let earlyMe: Promise<Response> | null = null;
+
+/** src/boot.ts: «who is signed in» asked while the rest of the panel's code still loads. */
+export function askMeEarly(): void {
+  earlyMe = fetch(`${API_BASE}/auth/me`, { credentials: "same-origin", headers: { Accept: "application/json" } });
+  earlyMe.catch(() => undefined); // a failed early request is simply asked again
+}
+
+/** The early answer, once (useMe); null when there is none or it failed, and then useMe asks again. */
+export async function takeEarlyMe(): Promise<Response | null> {
+  const p = earlyMe;
+  earlyMe = null;
+  return p ? p.catch(() => null) : null;
+}
+
+/** A finished answer as the panel reads every answer: the JSON, nothing for 204, an ApiError otherwise. */
+export async function read<T>(res: Response): Promise<T> {
+  if (!res.ok) throw await toError(res);
+  if (res.status === 204) return undefined as T;
+  return (await res.json()) as T;
+}
+
 export async function api<T>(method: Method, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = { Accept: "application/json" };
   if (body !== undefined) headers["Content-Type"] = "application/json";
@@ -159,7 +181,5 @@ export async function api<T>(method: Method, path: string, body?: unknown): Prom
     });
   }
 
-  if (!res.ok) throw await toError(res);
-  if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
+  return read<T>(res);
 }

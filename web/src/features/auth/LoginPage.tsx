@@ -78,7 +78,7 @@ export function LoginPage() {
             hint="الموبايل مش معاك؟ اكتب كود من أكواد الاسترجاع (xxxx-xxxx)." />
           {error ? <Notice>{error}</Notice> : null}
           <Button type="submit" variant="primary" busy={busy} disabled={code.length < 6}>تأكيد</Button>
-          <button type="button" className="text-sm font-semibold text-gold-ink hover:underline"
+          <button type="button" className="text-sm font-semibold text-accent-ink hover:underline"
             onClick={() => { setTicket(undefined); setPassword(""); setError(undefined); }}>
             ارجع لكلمة السر
           </button>
@@ -96,7 +96,7 @@ export function LoginPage() {
         <div className="grid gap-1.5">
           <Field label="كلمة السر" name="password" type="password" autoComplete="current-password" dir="ltr" required
             value={password} onChange={(e) => setPassword(e.target.value)} />
-          <Link to="/forgot-password" className="justify-self-start text-xs font-semibold text-gold-ink hover:underline">
+          <Link to="/forgot-password" className="justify-self-start text-[13px] font-medium text-accent-ink hover:underline">
             نسيت كلمة السر؟
           </Link>
         </div>
@@ -107,7 +107,7 @@ export function LoginPage() {
         </Button>
         <p className="text-center text-sm text-ink-soft">
           معندكش حساب؟{" "}
-          <Link to="/register" className="font-semibold text-gold-ink hover:underline">اعمل حساب جديد</Link>
+          <Link to="/register" className="font-semibold text-accent-ink hover:underline">اعمل حساب جديد</Link>
         </p>
       </form>
     </AuthLayout>

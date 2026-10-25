@@ -16,7 +16,7 @@ export function SetupTwoFactorPage() {
       subtitle="حسابك بيقدر يدير كل الحسابات، فلازم يبقى محمي بالموبايل كمان. خطوة واحدة وبعدها تكمّل.">
       <TwoFactorCard />
       <Button variant="primary" disabled={!done} onClick={() => navigate("/", { replace: true })}>كمّل للوحة</Button>
-      <button type="button" className="text-sm font-semibold text-gold-ink hover:underline"
+      <button type="button" className="text-sm font-semibold text-accent-ink hover:underline"
         onClick={async () => { await logout(); navigate("/login", { replace: true }); }}>
         خروج
       </button>

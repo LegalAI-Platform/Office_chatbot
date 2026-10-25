@@ -1,129 +1,136 @@
-/* Hazem panel design tokens (TASK 07a; the owner's brand sheet, design-system/hazem-panel/MASTER.md).
-   Office black and seal gold on the warm light page and on near-black, the owner's photos (assets/owner), Cairo for
-   every word (SemiBold headings, Regular text), and the four status colors of the sheet. */
+/* Hazem panel design tokens (design-system/hazem-panel/MASTER.md): «Night desk».
+   Deep blue navy with four colors, each with one job: gold for what needs a person and the main action, red for
+   urgent and late, blue for appointments and work in progress, green for done and paid. Everything else is navy
+   and its greys. The folder names stay as the pages' vocabulary and name those roles:
+   coral = red, saffron = gold, cobalt = blue, jade = green, orchid = quiet grey.
+   Dark is the default; light is the same design on paper white (the person's choice, in the user menu).
+   IBM Plex Sans Arabic for everything. */
 @import "tailwindcss";
-@import "@fontsource/cairo/arabic-400.css";
-@import "@fontsource/cairo/arabic-600.css";
-@import "@fontsource/cairo/arabic-700.css";
-@import "@fontsource/cairo/latin-400.css";
-@import "@fontsource/cairo/latin-600.css";
-@import "@fontsource/cairo/latin-700.css";
-@import "@fontsource/aref-ruqaa/arabic-700.css";
+@import "@fontsource/ibm-plex-sans-arabic/arabic-400.css";
+@import "@fontsource/ibm-plex-sans-arabic/arabic-500.css";
+@import "@fontsource/ibm-plex-sans-arabic/arabic-600.css";
+@import "@fontsource/ibm-plex-sans-arabic/arabic-700.css";
+@import "@fontsource/ibm-plex-sans-arabic/latin-400.css";
+@import "@fontsource/ibm-plex-sans-arabic/latin-500.css";
+@import "@fontsource/ibm-plex-sans-arabic/latin-600.css";
+@import "@fontsource/ibm-plex-sans-arabic/latin-700.css";
 
-/* Light (the sheet's own palette). */
+/* Dark (the default) */
 :root {
-  --page: #f4f1ec;
+  --page: #091330;
+  --card: #101c3e;
+  --card-2: #15244c;
+  --line: #1f3062;
+  --line-strong: #2c417c;
+  --top: #0b1636;
+  --ink: #f3f6fd;
+  --ink-soft: #aebadb;
+  --ink-faint: #7586b0;
+  --on-ink: #091330;
+  /* the main action and what needs a person: the firm's gold */
+  --accent: #f7b733;
+  --accent-hover: #ffc85a;
+  --on-accent: #1f1400;
+  --accent-ink: #ffd37a;
+  --accent-tint: rgb(247 183 51 / 0.16);
+  --accent-line: #6b5222;
+  --gold: #f7b733;
+  --gold-ink: #ffd37a;
+  --gold-bg: rgb(247 183 51 / 0.16);
+  /* the side rail */
+  --side: #050c26;
+  --side-2: #16295c;
+  --side-ink: #f1f4fc;
+  --side-soft: #8a9bc7;
+  --side-line: #14214a;
+  --ink-tile: #16295c;
+  /* quiet: everything without a job of its own (orchid) */
+  --quiet: #7d93cc;
+  --quiet-tile: #2c417c;
+  --quiet-bg: rgb(125 147 204 / 0.15);
+  --quiet-ink: #c6d2f2;
+  /* blue: appointments, in progress, information (cobalt) */
+  --cobalt: #4d8dff;
+  --cobalt-tile: #2f6fe8;
+  --cobalt-bg: rgb(77 141 255 / 0.16);
+  --cobalt-ink: #9cc2ff;
+  /* green: done, paid, on time (jade) */
+  --jade: #2fd08a;
+  --jade-tile: #17a96b;
+  --jade-bg: rgb(47 208 138 / 0.15);
+  --jade-ink: #7fe8b8;
+  /* red: urgent, late, failed */
+  --coral: #ff5a45;
+  --coral-tile: #e8402b;
+  --coral-bg: rgb(255 90 69 / 0.17);
+  --coral-ink: #ff907f;
+  --grey-ink: #aebadb;
+  --grey-bg: rgb(173 190 235 / 0.08);
+  --shadow: none;
+  --shadow-pop: 0 18px 44px -10px rgb(0 0 0 / 0.65);
+  color-scheme: dark;
+}
+
+/* Light: the same desk on paper white, the rail stays navy */
+:root[data-theme="light"] {
+  --page: #edf1fb;
   --card: #ffffff;
-  --card-2: #f7f5f1;
-  --line: #ebe6de;
+  --card-2: #f4f7fe;
+  --line: #d9e1f2;
+  --line-strong: #c4cfe7;
   --top: #ffffff;
-  --hello: #1e1a14;
-  --light-only: inline-block;
-  --dark-only: none;
-  --line-strong: #e5e7eb;
-  --ink: #1e1a14;
-  --ink-soft: #776c5a;
-  --on-ink: #f7f3e9;
-  --gold: #c9a96a;
-  --gold-deep: #8b6f47;
-  --gold-ink: #8b6f47;
-  --gold-tint: #f5eddc;
-  --gold-line: #dcc8a5;
-  --side: #0f0e0b;
-  --side-2: #1e1a14;
-  --side-ink: #efe6db;
-  --side-soft: #a3977f;
-  --side-line: #2c2519;
-  --red: #ef4444;
-  --red-ink: #d42a2a;
-  --red-bg: #feeceb;
-  --orange: #f59e0b;
-  --orange-ink: #b86a00;
-  --orange-bg: #fef4e2;
-  --green: #10b981;
-  --green-ink: #078a5d;
-  --green-bg: #e3f6ee;
-  --blue: #3b82f6;
-  --blue-ink: #2563eb;
-  --blue-bg: #e8f1fe;
-  --grey-ink: #6b6253;
-  --grey-bg: #f0ece4;
-  --kpi-blue: #eef5fe;
-  --kpi-green: #edf8f2;
-  --kpi-orange: #fef7ea;
-  --kpi-red: #fff0ee;
-  --kpi-ink: #1e1a14;
-  --kpi-soft: #6b6253;
-  --shadow: 0 1px 2px rgb(30 26 20 / 0.04), 0 8px 24px rgb(139 111 71 / 0.07);
+  --ink: #0b1633;
+  --ink-soft: #495878;
+  --ink-faint: #7f8dae;
+  --on-ink: #ffffff;
+  --accent: #9a6200;
+  --accent-hover: #7f5100;
+  --on-accent: #ffffff;
+  --accent-ink: #8a5800;
+  --accent-tint: #fdf1d6;
+  --accent-line: #f0d49a;
+  --gold: #d99a0f;
+  --gold-ink: #8a5800;
+  --gold-bg: #fdf1d6;
+  --side: #0a1a48;
+  --side-2: #1a2f6c;
+  --side-ink: #ffffff;
+  --side-soft: #93a3cf;
+  --side-line: #1a2f6c;
+  --ink-tile: #0a1a48;
+  --quiet: #6c80b5;
+  --quiet-tile: #475b92;
+  --quiet-bg: #e9effc;
+  --quiet-ink: #31457c;
+  --cobalt: #2563eb;
+  --cobalt-tile: #2563eb;
+  --cobalt-bg: #e4edff;
+  --cobalt-ink: #1d4fc4;
+  --jade: #0fa968;
+  --jade-tile: #0d9a5e;
+  --jade-bg: #ddf6ea;
+  --jade-ink: #0a7a4a;
+  --coral: #e3341d;
+  --coral-tile: #e3341d;
+  --coral-bg: #ffe8e4;
+  --coral-ink: #c22914;
+  --grey-ink: #495878;
+  --grey-bg: #e9eef9;
+  --shadow: 0 1px 2px rgb(15 25 44 / 0.06);
+  --shadow-pop: 0 18px 44px -12px rgb(15 25 44 / 0.28);
   color-scheme: light;
 }
 
-/* Dark: the same family, on warm near-black. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --page: #0e0e0d;
-    --card: #161615;
-    --card-2: #1d1c1a;
-    --line: #2b2925;
-    --top: #121211;
-    --hello: #e8c48a;
-    --light-only: none;
-    --dark-only: inline-block;
-    --line-strong: #3a2f20;
-    --ink: #f7f3e9;
-    --ink-soft: #b2a68e;
-    --on-ink: #1e1a14;
-    --gold-ink: #dcc8a5;
-    --gold-tint: rgb(201 169 106 / 0.14);
-    --gold-line: #5a4a31;
-    --side: #0b0a08;
-    --side-2: #17140f;
-    --side-line: #241e15;
-    --red-ink: #ff8f8f;
-    --red-bg: rgb(239 68 68 / 0.17);
-    --orange-ink: #fbc35a;
-    --orange-bg: rgb(245 158 11 / 0.16);
-    --green-ink: #5fd8ac;
-    --green-bg: rgb(16 185 129 / 0.16);
-    --blue-ink: #8fb8ff;
-    --blue-bg: rgb(59 130 246 / 0.18);
-    --grey-ink: #b2a68e;
-    --grey-bg: rgb(255 255 255 / 0.06);
-    --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 10px 28px rgb(0 0 0 / 0.35);
-    color-scheme: dark;
-  }
-}
-:root[data-theme="dark"] {
-  --page: #0e0e0d;
-  --card: #161615;
-  --card-2: #1d1c1a;
-  --line: #2b2925;
-  --top: #121211;
-  --hello: #e8c48a;
-  --light-only: none;
-  --dark-only: inline-block;
-  --line-strong: #3a2f20;
-  --ink: #f7f3e9;
-  --ink-soft: #b2a68e;
-  --on-ink: #1e1a14;
-  --gold-ink: #dcc8a5;
-  --gold-tint: rgb(201 169 106 / 0.14);
-  --gold-line: #5a4a31;
-  --side: #0b0a08;
-  --side-2: #17140f;
-  --side-line: #241e15;
-  --red-ink: #ff8f8f;
-  --red-bg: rgb(239 68 68 / 0.17);
-  --orange-ink: #fbc35a;
-  --orange-bg: rgb(245 158 11 / 0.16);
-  --green-ink: #5fd8ac;
-  --green-bg: rgb(16 185 129 / 0.16);
-  --blue-ink: #8fb8ff;
-  --blue-bg: rgb(59 130 246 / 0.18);
-  --grey-ink: #b2a68e;
-  --grey-bg: rgb(255 255 255 / 0.06);
-  --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 10px 28px rgb(0 0 0 / 0.35);
-  color-scheme: dark;
+/* the folder names, by role */
+:root {
+  --orchid: var(--quiet);
+  --orchid-tile: var(--quiet-tile);
+  --orchid-bg: var(--quiet-bg);
+  --orchid-ink: var(--quiet-ink);
+  --saffron: var(--gold);
+  --saffron-tile: var(--accent);
+  --saffron-bg: var(--gold-bg);
+  --saffron-ink: var(--gold-ink);
 }
 
 @theme inline {
@@ -131,60 +138,91 @@
   --color-card: var(--card);
   --color-card-2: var(--card-2);
   --color-top: var(--top);
-  --color-hello: var(--hello);
   --color-surface: var(--card);
   --color-line: var(--line);
   --color-line-strong: var(--line-strong);
   --color-ink: var(--ink);
   --color-ink-soft: var(--ink-soft);
+  --color-ink-faint: var(--ink-faint);
   --color-on-ink: var(--on-ink);
-  --color-gold: var(--gold);
-  --color-gold-deep: var(--gold-deep);
-  --color-gold-ink: var(--gold-ink);
-  --color-gold-tint: var(--gold-tint);
-  --color-gold-line: var(--gold-line);
-  --color-brass: var(--gold);
-  --color-brass-ink: var(--gold-ink);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-on-accent: var(--on-accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-tint: var(--accent-tint);
+  --color-accent-line: var(--accent-line);
   --color-side: var(--side);
-  --color-side-2: var(--side-2);
   --color-side-ink: var(--side-ink);
   --color-side-soft: var(--side-soft);
   --color-side-line: var(--side-line);
-  --color-red: var(--red);
-  --color-red-ink: var(--red-ink);
-  --color-red-bg: var(--red-bg);
-  --color-orange: var(--orange);
-  --color-orange-ink: var(--orange-ink);
-  --color-orange-bg: var(--orange-bg);
-  --color-green: var(--green);
-  --color-green-ink: var(--green-ink);
-  --color-green-bg: var(--green-bg);
-  --color-blue: var(--blue);
-  --color-blue-ink: var(--blue-ink);
-  --color-blue-bg: var(--blue-bg);
+  --color-side-2: var(--side-2);
+  --color-ink-tile: var(--ink-tile);
+  --color-gold: var(--gold);
+  --color-gold-ink: var(--gold-ink);
+  --color-gold-bg: var(--gold-bg);
+  /* the folders */
+  --color-cobalt: var(--cobalt);
+  --color-cobalt-tile: var(--cobalt-tile);
+  --color-cobalt-bg: var(--cobalt-bg);
+  --color-cobalt-ink: var(--cobalt-ink);
+  --color-coral: var(--coral);
+  --color-coral-tile: var(--coral-tile);
+  --color-coral-bg: var(--coral-bg);
+  --color-coral-ink: var(--coral-ink);
+  --color-jade: var(--jade);
+  --color-jade-tile: var(--jade-tile);
+  --color-jade-bg: var(--jade-bg);
+  --color-jade-ink: var(--jade-ink);
+  --color-saffron: var(--saffron);
+  --color-saffron-tile: var(--saffron-tile);
+  --color-saffron-bg: var(--saffron-bg);
+  --color-saffron-ink: var(--saffron-ink);
+  --color-orchid: var(--orchid);
+  --color-orchid-tile: var(--orchid-tile);
+  --color-orchid-bg: var(--orchid-bg);
+  --color-orchid-ink: var(--orchid-ink);
+  /* status by role: urgent and late red, waiting gold, in progress blue, done green */
+  --color-red: var(--coral);
+  --color-red-ink: var(--coral-ink);
+  --color-red-bg: var(--coral-bg);
+  --color-orange: var(--saffron);
+  --color-orange-ink: var(--saffron-ink);
+  --color-orange-bg: var(--saffron-bg);
+  --color-green: var(--jade);
+  --color-green-ink: var(--jade-ink);
+  --color-green-bg: var(--jade-bg);
+  --color-blue: var(--cobalt);
+  --color-blue-ink: var(--cobalt-ink);
+  --color-blue-bg: var(--cobalt-bg);
   --color-grey-ink: var(--grey-ink);
   --color-grey-bg: var(--grey-bg);
-  /* the older names the pages use */
-  --color-ok: var(--green-ink);
-  --color-ok-bg: var(--green-bg);
-  --color-warn: var(--orange-ink);
-  --color-warn-bg: var(--orange-bg);
-  --color-bad: var(--red-ink);
-  --color-bad-bg: var(--red-bg);
-  --color-info: var(--blue-ink);
-  --color-info-bg: var(--blue-bg);
+  /* the semantic names the pages use */
+  --color-ok: var(--jade-ink);
+  --color-ok-bg: var(--jade-bg);
+  --color-warn: var(--saffron-ink);
+  --color-warn-bg: var(--saffron-bg);
+  --color-bad: var(--coral-ink);
+  --color-bad-bg: var(--coral-bg);
+  --color-info: var(--cobalt-ink);
+  --color-info-bg: var(--cobalt-bg);
   --color-muted: var(--grey-bg);
-  --color-kpi-blue: var(--kpi-blue);
-  --color-kpi-green: var(--kpi-green);
-  --color-kpi-orange: var(--kpi-orange);
-  --color-kpi-red: var(--kpi-red);
-  --color-kpi-ink: var(--kpi-ink);
-  --color-kpi-soft: var(--kpi-soft);
-  --font-ui: "Cairo", "Segoe UI", Tahoma, sans-serif;
-  --font-display: "Cairo", "Segoe UI", Tahoma, sans-serif;
-  --font-seal: "Aref Ruqaa", "Cairo", serif;
+  --font-ui: "IBM Plex Sans Arabic", "Segoe UI", Tahoma, sans-serif;
+  --font-display: "IBM Plex Sans Arabic", "Segoe UI", Tahoma, sans-serif;
+  /* type scale on the 15px base: 12.5 meta, 13.5 small, 15 body, 17 section, 20 title, 22 page title */
+  --text-xs: 0.8333rem;
+  --text-xs--line-height: 1.6;
+  --text-sm: 0.9rem;
+  --text-sm--line-height: 1.65;
+  --text-base: 1rem;
+  --text-base--line-height: 1.7;
+  --text-lg: 1.1333rem;
+  --text-lg--line-height: 1.55;
+  --text-xl: 1.3333rem;
+  --text-xl--line-height: 1.45;
+  --text-2xl: 1.4667rem;
+  --text-2xl--line-height: 1.35;
   --radius-sheet: 18px;
-  --radius-card: 14px;
+  --radius-card: 16px;
   --radius-control: 10px;
 }
 
@@ -194,8 +232,9 @@
     background-color: var(--page);
     color: var(--ink);
     font-family: var(--font-ui);
-    font-size: 14px;
-    line-height: 1.65;
+    font-size: 15px;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
   }
   body {
     margin: 0;
@@ -205,68 +244,141 @@
   h2,
   h3 {
     font-family: var(--font-display);
-    font-weight: 700;
-    line-height: 1.35;
+    font-weight: 600;
+    line-height: 1.4;
+    letter-spacing: 0;
     text-wrap: balance;
   }
+  ::selection {
+    background: var(--accent-tint);
+  }
   :focus-visible {
-    outline: 2px solid var(--gold);
+    outline: 2px solid var(--accent);
     outline-offset: 2px;
   }
   button,
-  [role="button"] {
+  [role="button"],
+  summary,
+  label[for] {
     cursor: pointer;
   }
   button:disabled {
     cursor: not-allowed;
   }
+  input,
+  select,
+  textarea {
+    accent-color: var(--accent);
+  }
+  input[type="search"]::-webkit-search-cancel-button {
+    display: none;
+  }
 }
 
 @layer components {
-  /* A content card: white on the light page, dark card on near-black. */
-  .surface,
-  .glass {
+  /* the pages' own selects, textareas and inputs take the field look of shared/ui (inputClass) */
+  :is(select, textarea, input).surface {
+    border-color: var(--line-strong);
     background: var(--card);
-    border: 1px solid var(--line);
-    box-shadow: var(--shadow);
+    box-shadow: none;
+    color: var(--ink);
+    transition: border-color 0.15s, box-shadow 0.15s;
   }
-  .btn-gold {
-    background: linear-gradient(180deg, #d4b67a 0%, var(--gold) 45%, var(--gold-deep) 100%);
-    color: #fff;
-    border-color: var(--gold-deep);
-    text-shadow: 0 1px 0 rgb(0 0 0 / 0.15);
+  :is(select, textarea, input).surface:hover:not(:disabled) {
+    border-color: var(--ink-faint);
   }
-  /* the mockup's active item: a gold bar with a lit edge */
-  .nav-active {
-    background: linear-gradient(270deg, #c9a46a 0%, #a8834f 55%, #6f5534 100%);
-    color: #fff7e6;
-    box-shadow: inset 0 1px 0 rgb(255 240 200 / 0.45), 0 4px 14px rgb(0 0 0 / 0.35);
+  :is(select, textarea, input).surface:focus {
+    border-color: var(--accent);
+    outline: none;
+    box-shadow: 0 0 0 3px var(--accent-tint);
   }
-  /* an image drawn for one theme only (the owner's assets come in a light and a dark cut) */
-  .only-light {
-    display: var(--light-only) !important;
+  .btn-primary {
+    background: var(--accent);
+    color: var(--on-accent);
+    border-color: var(--accent);
+    font-weight: 600;
   }
-  .only-dark {
-    display: var(--dark-only) !important;
+  .btn-primary:hover:not(:disabled) {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
   }
-  /* the owner's photos melt into the page instead of ending on a hard edge */
-  .fade-right {
-    -webkit-mask-image: linear-gradient(to right, #000 62%, transparent 100%);
-    mask-image: linear-gradient(to right, #000 62%, transparent 100%);
+  /* an appointment held until its receipt: diagonal hatching (status by texture, not color alone) */
+  .hatch {
+    background-image: repeating-linear-gradient(135deg, color-mix(in oklab, var(--ink) 13%, transparent) 0 5px, transparent 5px 11px);
   }
-  .fade-top {
-    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 38%), linear-gradient(to right, transparent 0%, #000 12%);
-    -webkit-mask-composite: source-in;
-    mask-image: linear-gradient(to bottom, transparent 0%, #000 38%), linear-gradient(to right, transparent 0%, #000 12%);
-    mask-composite: intersect;
-  }
-  .fade-all {
-    -webkit-mask-image: radial-gradient(50% 50% at 50% 55%, #000 50%, transparent 100%);
-    mask-image: radial-gradient(50% 50% at 50% 55%, #000 50%, transparent 100%);
+  /* numbers: tabular, so columns of figures line up */
+  .display {
+    font-family: var(--font-display);
+    font-variant-numeric: tabular-nums;
   }
   .tabular {
     font-variant-numeric: tabular-nums;
   }
+}
+
+/* ---------- panels ----------
+   One kind of panel everywhere: solid card, a 1px line, no blur and no gradients (fast on every machine).
+   .liquid and .liquid-tint are older names for the same panel (the tint is no longer drawn). */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: var(--page);
+}
+.surface:not(:is(input, select, textarea)),
+.liquid,
+.liquid-tint {
+  position: relative;
+  border: 1px solid var(--line);
+  background: var(--card);
+  box-shadow: var(--shadow);
+}
+/* menus, the bell, dialogs, toasts */
+.pop {
+  background: var(--card);
+  border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow-pop);
+}
+.glass-bar {
+  background: var(--top);
+  border-color: var(--line);
+}
+.glass-side {
+  background: var(--side);
+}
+/* a small piece inside a panel (a badge, the roll's track), and the hover on rows */
+.glass-chip {
+  background: var(--card-2);
+  border: 1px solid var(--line);
+}
+.glass-hover:hover {
+  background: var(--card-2);
+}
+/* the firm's gold, as a fine rule */
+.gold-rule {
+  height: 2px;
+  border-radius: 2px;
+  background: var(--gold);
+}
+
+/* Motion that answers a person: a page arriving, a toast, a dialog. Short, and off for reduced motion. */
+@keyframes page-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes sheet-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+.page-in {
+  animation: page-in 160ms ease-out both;
+}
+.toast-in {
+  animation: sheet-in 200ms ease-out both;
+}
+.sheet-in {
+  animation: sheet-in 180ms ease-out both;
 }
 
 @media (prefers-reduced-motion: reduce) {

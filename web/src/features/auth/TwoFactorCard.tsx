@@ -40,7 +40,7 @@ export function TwoFactorCard() {
 
   const header = (
     <div className="flex flex-wrap items-center justify-between gap-2">
-      <h2 className="text-lg">التحقق بخطوتين</h2>
+      <h2 className="text-[16px] font-semibold">التحقق بخطوتين</h2>
       {status.data ? <Chip tone={status.data.enabled ? "green" : "grey"}>{status.data.enabled ? "شغال" : "مقفول"}</Chip> : null}
     </div>
   );

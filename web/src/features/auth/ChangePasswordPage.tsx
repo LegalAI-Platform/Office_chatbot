@@ -43,7 +43,7 @@ export function ChangePasswordPage() {
 
   return (
     <main className="mx-auto grid w-full max-w-md gap-4 px-4 py-6">
-      <h1 className="text-2xl">تغيير كلمة السر</h1>
+      <h1 className="text-[22px] leading-tight font-semibold">تغيير كلمة السر</h1>
       {forced ? (
         <p className="rounded-[var(--radius-control)] bg-warn-bg px-3 py-2 text-sm text-warn">
           دي كلمة سر مؤقتة من المدير. غيّرها الأول عشان تكمّل.
