@@ -189,6 +189,30 @@ public static class PanelBookingEndpoints
             .RequireAuthorization(PanelAuth.Policy(Permissions.ServicesPrice));
     }
 
+    /// <summary>TASK 06 (DECISIONS v1.17, B-23): «الإعدادات ← الأسعار». docs/panel-api.md.</summary>
+    public static void MapPanelPrices(this IEndpointRouteBuilder app)
+    {
+        var prices = app.MapGroup("/api/panel/prices")
+            .AddEndpointFilter<NoStoreFilter>()
+            .AddEndpointFilter<AntiforgeryFilter>()
+            .AddEndpointFilter<MustChangePasswordFilter>()
+            .AddEndpointFilter<TwoFactorRequiredFilter>()
+            .RequireAuthorization(PanelAuth.Policy(Permissions.AccountSelf));
+
+        prices.MapGet("", async (Office.Infrastructure.Panel.PanelPrices p, CancellationToken ct) => Results.Ok(await p.ListAsync(ct)));
+
+        prices.MapGet("/changes", async (Office.Infrastructure.Panel.PanelPrices p, CancellationToken ct) => Results.Ok(await p.ChangesAsync(ct)))
+            .RequireAuthorization(PanelAuth.Policy(Permissions.PricesManage));
+
+        prices.MapPut("", async (PricesRequest? body, HttpContext ctx, Office.Infrastructure.Panel.PanelPrices p, CancellationToken ct) =>
+        {
+            var me = ctx.CurrentUser();
+            return await p.SaveAsync(me.Id, me.Username, body?.Values, ct) is { } error ? Results.BadRequest(new { error }) : Results.NoContent();
+        }).RequireAuthorization(PanelAuth.Policy(Permissions.PricesManage));
+    }
+
+    public sealed record PricesRequest(Dictionary<string, int>? Values);
+
     /// <summary>TASK 11 (DECISIONS v1.15, B-11 / S-06): «حالات العرفي». docs/panel-api.md.</summary>
     public static void MapPanelUrf(this IEndpointRouteBuilder app)
     {

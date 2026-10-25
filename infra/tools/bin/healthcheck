@@ -307,7 +307,26 @@ if [[ "$(psql_super office -c "SELECT count(*) FROM hazem.staff_tasks WHERE type
   warn "a reminder could not reach a client (outside the 24 hours the M-03 templates need Meta's approval): the office reminds by phone (the tasks)"
 fi
 
+echo "== The prices and the office's questions (TASK 06, DECISIONS v1.17 B-20 / B-23)"
+check "the price list has its 10 lines, each a whole number from 1 to 1,000,000 (price.*)" \
+  sql_equals office "SELECT count(*) FROM hazem.settings WHERE key IN ('price.phone_video', 'price.office', 'price.urgent', 'price.review_min',
+    'price.review_max', 'price.drafting_from', 'price.formal_notice', 'price.written_opinion', 'price.urf_office_witnesses', 'price.urf_own_witnesses')
+    AND value ~ '^[1-9][0-9]{0,6}$' AND value::int <= 1000000" "10"
+check "the review's range is the right way round (price.review_min <= price.review_max)" \
+  sql_equals office "SELECT (hazem.price('price.review_min', 1500) <= hazem.price('price.review_max', 3000))::text" "true"
+check "no active text quotes a price as a fixed number where B-23 has a slot (the prices come from the panel)" \
+  sql_equals office "SELECT count(*) FROM hazem.approved_texts WHERE active AND key IN ('consultation_offer', 'urgent_price', 'price_formal_notice', 'price_urf')
+    AND text !~ '\{\{price_' AND updated_by NOT LIKE 'panel%'" "0"
+if [[ "$(psql_super office -c "SELECT count(*) FROM hazem.settings WHERE key IN ('office.address', 'office.map_url') AND value <> ''")" != "2" ]]; then
+  warn "the office's address or map link is empty: «المكتب فين؟» gets the offer and a task until they are written (المواعيد ← بيانات المكتب)"
+fi
+if [[ "$(psql_super office -c "SELECT count(*) FROM hazem.approved_texts WHERE source = 'proposal TASK 06' AND active")" == "0" ]]; then
+  warn "TASK 06's texts are not approved yet: an office question gets the consultation offer only (docs/approved-texts-proposal.md)"
+fi
+
 echo "== Migrations"
+check "migration 0018 (the prices and the office's questions) is applied" \
+  sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0018'" "1"
 check "migration 0017 (the reminders) is applied" \
   sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0017'" "1"
 check "migration 0016 (the Urfi cases) is applied" \

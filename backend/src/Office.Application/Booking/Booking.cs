@@ -1,3 +1,4 @@
+using Office.Application.Prices;
 using Office.Application.Responders;
 using Office.Domain.Booking;
 using Office.Domain.Tasks;
@@ -40,7 +41,8 @@ public sealed record BookingService(string Code, string Short, int Minutes, int 
 }
 
 /// <summary>The booking.* and office.* settings, read in every turn (the panel's changes count at once).</summary>
-public sealed record BookingSettings(bool Enabled, BookingRules Rules, string CalendarId, OfficeInfo Office, HoldRules Hold, int UrfMinutes = 60)
+public sealed record BookingSettings(bool Enabled, BookingRules Rules, string CalendarId, OfficeInfo Office, HoldRules Hold, int UrfMinutes = 60,
+    PriceList? PriceList = null)
 {
     public const string HoldMinutesKey = "booking.hold_minutes";
     public const string HoldShortMinutesKey = "booking.hold_short_minutes";
@@ -79,11 +81,19 @@ public sealed record BookingSettings(bool Enabled, BookingRules Rules, string Ca
         var hold = new HoldRules(Int(HoldMinutesKey, h.Minutes), Int(HoldShortMinutesKey, h.ShortMinutes), Int(HoldShortWithinKey, h.ShortWithinHours),
             Int(HoldGapKey, h.GapMinutes));
         return new(s.Flag(EnabledKey), rules.Problem() is null ? rules : d, s.Get(CalendarIdKey), OfficeInfo.From(s),
-            hold.Problem() is null ? hold : h, UrfMinutesValid(Int(UrfMinutesKey, 60)) ? Int(UrfMinutesKey, 60) : 60);
+            hold.Problem() is null ? hold : h, UrfMinutesValid(Int(UrfMinutesKey, 60)) ? Int(UrfMinutesKey, 60) : 60,
+            PriceList.From(s));
     }
 
-    /// <summary>The service with its length here: an Urfi appointment takes <see cref="UrfMinutes"/>.</summary>
-    public BookingService Fit(BookingService service) => service.IsUrf ? service with { Minutes = UrfMinutes } : service;
+    /// <summary>B-23 as the panel has it now (TASK 06); the 1.4 values when it was not read.</summary>
+    public PriceList Prices => PriceList ?? PriceList.Default;
+
+    /// <summary>
+    /// The service as it is booked now: its price from the panel (TASK 06) and, for an Urfi appointment, its length
+    /// (<see cref="UrfMinutes"/>).
+    /// </summary>
+    public BookingService Fit(BookingService service) =>
+        service with { Amount = Prices.For(service), Minutes = service.IsUrf ? UrfMinutes : service.Minutes };
 }
 
 /// <summary>
@@ -274,6 +284,13 @@ public sealed class BookingDesk(IBookingStore store, IBusyCalendar calendar)
 {
     public static TimeZoneInfo Zone => OfficeHours.Cairo;
 
+    /// <summary>TASK 06 (B-20): the consultation hours in words, from the panel's default week (null when no day is open).</summary>
+    public async Task<string?> WeekHoursAsync(DateTimeOffset now, CancellationToken ct)
+    {
+        var today = Today(now);
+        return BookingWords.WeekHours((await store.LoadScheduleAsync(today, today, ct)).Weekly);
+    }
+
     public async Task<FreeSlots> FindAsync(BookingSettings booking, HazemSettings settings, BookingService service, DateTimeOffset now,
         DateTimeOffset after, DateOnly? onlyDay, int limit, Guid? except, CancellationToken ct, bool holdCheck = true)
     {
@@ -442,6 +459,56 @@ public static class BookingWords
 
     /// <summary>The weekday as Hazem and the office's e-mails write it.</summary>
     public static string DayName(DayOfWeek day) => Days[(int)day];
+
+    /// <summary>The Egyptian week, Saturday first.</summary>
+    private static readonly DayOfWeek[] Week =
+        [DayOfWeek.Saturday, DayOfWeek.Sunday, DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday];
+
+    /// <summary>
+    /// TASK 06 (B-20): the consultation hours from the panel's default week, in Hazem's words: «كل يوم من 10:00 ص لـ 12 بالليل»,
+    /// or «السبت لـ الخميس من 10:00 ص لـ 6:00 م، والجمعة إجازة». Null when no day is open (nothing to say yet).
+    /// </summary>
+    public static string? WeekHours(WeeklyHours week)
+    {
+        string? Ranges(DayOfWeek d) => week.On(d) is { Count: > 0 } r
+            ? string.Join(" ومن ", r.Select(x => $"{Minute(x.Start)} لـ {Minute(x.End)}"))
+            : null;
+
+        var days = Week.Select(d => (Day: d, Hours: Ranges(d))).ToList();
+        if (days.All(d => d.Hours is null))
+        {
+            return null;
+        }
+
+        if (days.All(d => d.Hours == days[0].Hours))
+        {
+            return $"كل يوم من {days[0].Hours}";
+        }
+
+        var parts = new List<string>();
+        for (var i = 0; i < days.Count;)
+        {
+            var j = i;
+            while (j + 1 < days.Count && days[j + 1].Hours == days[i].Hours)
+            {
+                j++;
+            }
+
+            var when = i == j ? DayName(days[i].Day) : $"{DayName(days[i].Day)} لـ {DayName(days[j].Day)}";
+            parts.Add(days[i].Hours is { } h ? $"{when} من {h}" : $"{when} إجازة");
+            i = j + 1;
+        }
+
+        return string.Join("، و", parts);
+    }
+
+    /// <summary>A minute of the day as Hazem says it: «10:00 ص»، «6:30 م»، «12 الضهر»، «12 بالليل».</summary>
+    private static string Minute(int minute) => minute switch
+    {
+        0 or 1440 => "12 بالليل",
+        720 => "12 الضهر",
+        _ => $"{(minute / 60 % 12 == 0 ? 12 : minute / 60 % 12)}:{minute % 60:00} {(minute < 720 ? "ص" : "م")}",
+    };
 
     /// <summary>«النهارده»، «بكرة»، or «الخميس 29/10».</summary>
     public static string Day(DateTimeOffset at, DateTimeOffset now)

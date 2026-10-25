@@ -113,7 +113,7 @@ public sealed class HazemResponder(
         var plan = new Plan(now);
         Check(state.Conversation.ClientWroteAt(now)); // B-12: 12 hours after the staff
         Classification? classification = null;
-        var texts = await approvedTexts.GetActiveAsync(ct);
+        var texts = await approvedTexts.GetActiveAsync(settings, ct);
         var bookingSettings = BookingSettings.From(settings);
         var bookingOn = booking is not null && bookingSettings.Enabled && BookingTextKeys.All(k => texts.TryGetValue(k, out var t) && t.Active);
         // TASK 12 (B-18): the reminders run whenever their texts are approved, the booking from WhatsApp on or off.
@@ -214,8 +214,11 @@ public sealed class HazemResponder(
                     classification = Classification.From(await classifier.ClassifyAsync(aiText, settings, ct), settings);
                 }
 
+                var office = classification is { Intent: Intent.OfficeInfo } asked
+                    ? await OfficeDetailsAsync(settings, asked.Topic == InfoTopic.Hours, now, ct)
+                    : null;
                 flow = new Flow(turn, state, list, classification, plan, settings.Flag(HandoffEnabledKey), bookingOn ? bookingSettings : null,
-                    servicesOn, urfOn, urfOpen);
+                    servicesOn, urfOn, urfOpen, office);
                 flow.Respond(firstContact);
             }
 
@@ -288,6 +291,35 @@ public sealed class HazemResponder(
         return BookingChoice.Parse(last?.Interactive?.Id ?? last?.Button?.Payload);
     }
 
+    /// <summary>
+    /// TASK 06 (B-20): what an office answer is filled with, from «بيانات المكتب» and (for the hours) the panel's default week.
+    /// A detail not written yet is left out, so its answer is not sent half.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<string, string>> OfficeDetailsAsync(HazemSettings settings, bool hours, DateTimeOffset now,
+        CancellationToken ct)
+    {
+        var o = OfficeInfo.From(settings);
+        var details = new Dictionary<string, string>(StringComparer.Ordinal);
+        void Add(string slot, string? value)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                details[slot] = value;
+            }
+        }
+
+        Add("address", o.Address);
+        Add("map", o.MapUrl);
+        Add("instapay", o.InstaPay);
+        Add("wallet", o.WalletNumber.Length > 0 ? o.Wallet : null);
+        if (hours && booking is not null)
+        {
+            Add("hours", await booking.WeekHoursAsync(now, ct));
+        }
+
+        return details;
+    }
+
     /// <summary>TASK 11: the Urfi button the client pressed last, if any.</summary>
     private static UrfAnswer? UrfAnswerIn(Turn turn)
     {
@@ -321,7 +353,8 @@ public sealed class HazemResponder(
 
     /// <summary>The decisions for one turn. Changes the state in memory; the store saves it with the turn.</summary>
     private sealed class Flow(Turn turn, ClientState state, ListMatch list, Classification? c, Plan plan, bool handoffEnabled,
-        BookingSettings? booking, bool servicesOn, bool urfOn = false, IReadOnlyList<UrfCase>? urfOpen = null)
+        BookingSettings? booking, bool servicesOn, bool urfOn = false, IReadOnlyList<UrfCase>? urfOpen = null,
+        IReadOnlyDictionary<string, string>? office = null)
     {
         /// <summary>TASK 11: the client's Urfi case (B-11) this turn is about (the newest running one), as the turn leaves it.</summary>
         public UrfCase? Urf { get; private set; } = urfOpen?.FirstOrDefault();
@@ -765,6 +798,10 @@ public sealed class HazemResponder(
                 case Intent.HumanRequest or Intent.RescheduleOrCancel or Intent.ThanksOrClosing:
                     Answer(turnClass);
                     break;
+                case Intent.OfficeInfo:
+                    // TASK 06: the address or the hours do not depend on a new matter: answered at once, no offer.
+                    AnswerOffice(turnClass.Topic, existingClient: true);
+                    break;
                 default:
                     if (!Intake.ExistingQuestionAsked)
                     {
@@ -851,6 +888,9 @@ public sealed class HazemResponder(
                     break;
                 case Intent.PriceQuestion:
                     AnswerPrice(turnClass.Service);
+                    break;
+                case Intent.OfficeInfo:
+                    AnswerOffice(turnClass.Topic);
                     break;
                 case Intent.ExistingMatter:
                     HandToOffice(TextKeys.ExistingMatter, PendingTask.ExistingClientMessage);
@@ -941,6 +981,51 @@ public sealed class HazemResponder(
                 default:
                     Offer(); // consultations, case representation (priced after it) or unknown
                     break;
+            }
+        }
+
+        /// <summary>
+        /// TASK 06 (B-20, 1.17): a question about the office, answered from its approved text filled from the panel (the address,
+        /// the week, the payment details, the price list), then the offer. A detail not written in the panel yet never leaves
+        /// half a message: the offer alone, and the office gets a task to write it. A listed client (B-04) gets the answer
+        /// without the offer, or the neutral reply and their staff member when there is nothing to answer with.
+        /// </summary>
+        private void AnswerOffice(InfoTopic? topic, bool existingClient = false)
+        {
+            (string Key, string[] Needs)? answer = topic switch
+            {
+                InfoTopic.Address => (TextKeys.OfficeAddress, ["address", "map"]),
+                InfoTopic.Hours => (TextKeys.OfficeHours, ["hours"]),
+                InfoTopic.HowToBook => (TextKeys.OfficeHowToBook, []),
+                InfoTopic.HowToPay => (TextKeys.OfficeHowToPay, ["instapay", "wallet"]),
+                InfoTopic.Refund => (TextKeys.OfficeRefund, []),
+                InfoTopic.Prices => (TextKeys.OfficePrices, []),
+                InfoTopic.FeePolicy => (TextKeys.OfficeFeePolicy, []),
+                InfoTopic.PracticeAreas => (TextKeys.OfficePracticeAreas, []),
+                _ => null, // mode: the offer itself says both ways and their prices
+            };
+            var answered = false;
+            if (answer is var (key, needs))
+            {
+                if (needs.All(n => office?.GetValueOrDefault(n) is { Length: > 0 }))
+                {
+                    plan.Say(key, Fill: office);
+                    answered = true;
+                }
+                else
+                {
+                    plan.Task(PendingTask.OfficeInfoMissing);
+                }
+            }
+
+            if (!existingClient)
+            {
+                Offer(askTopic: false);
+            }
+            else if (!answered)
+            {
+                plan.Say(TextKeys.ExistingMatter);
+                plan.Task(PendingTask.ExistingClientMessage, list.ExistingClient?.StaffId);
             }
         }
 

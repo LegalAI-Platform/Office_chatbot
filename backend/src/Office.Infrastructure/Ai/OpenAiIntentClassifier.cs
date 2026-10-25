@@ -20,7 +20,7 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
 {
     public const string HttpClientName = "openai";
     /// <summary>The prompt in use: Ai/prompts/{PromptVersion}.md. Older versions stay in the folder as history.</summary>
-    public const string PromptVersion = "classify-v6";
+    public const string PromptVersion = "classify-v7";
     public const string StubEnabledKey = "ai.stub_enabled";
     public const string StubBaseUrlKey = "ai.stub_base_url";
 
@@ -122,7 +122,8 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
                 confidence.GetValue<double>(),
                 StringOrNull(o["matter_type"]),
                 StringOrNull(o["matter_subtype"]),
-                StringOrNull(o["sender_role"])), null);
+                StringOrNull(o["sender_role"]),
+                StringOrNull(o["info_topic"])), null);
         }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException)
         {
@@ -178,7 +179,7 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
             ["type"] = "object",
             ["additionalProperties"] = false,
             ["required"] = new JsonArray("intent", "service", "consultation_mode", "full_name", "confidence",
-                "matter_type", "matter_subtype", "sender_role"),
+                "matter_type", "matter_subtype", "sender_role", "info_topic"),
             ["properties"] = new JsonObject
             {
                 ["intent"] = new JsonObject { ["type"] = "string", ["enum"] = Codes<Intent>(false) },
@@ -188,6 +189,7 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
                 ["matter_type"] = new JsonObject { ["type"] = new JsonArray("string", "null"), ["enum"] = Codes<MatterType>(true) },
                 ["matter_subtype"] = new JsonObject { ["type"] = new JsonArray("string", "null"), ["enum"] = Codes<MatterSubtype>(true) },
                 ["sender_role"] = new JsonObject { ["type"] = "string", ["enum"] = Codes<SenderRole>(false) },
+                ["info_topic"] = new JsonObject { ["type"] = new JsonArray("string", "null"), ["enum"] = Codes<InfoTopic>(true) },
                 ["confidence"] = new JsonObject { ["type"] = "number" },
             },
         };

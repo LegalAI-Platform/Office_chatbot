@@ -218,6 +218,18 @@ try {
     Step @('hazem12-attend') | Out-Null
     Forward
     Check 'check-hazem12-attend'
+    Write-Host "==== 16. TASK 06: the office's address from the panel, a price changed in the panel and quoted"
+    Step @('hazem06-setup') | Out-Null
+    Forward
+    Step @('hazem06-say', '2', 'محمد أحمد علي حسن') | Out-Null
+    Forward
+    Step @('hazem06-say', '3', 'المكتب فين؟') | Out-Null
+    Forward
+    Check 'check-hazem06-address'
+    PanelStep 'hazem06-price'
+    Step @('hazem06-say', '4', 'عايز أحجز') | Out-Null
+    Forward
+    Check 'check-hazem06-offer'
     Remove-Item env:E2E_PANEL_PASSWORD -ErrorAction SilentlyContinue
 } catch {
     Write-Host "FAIL  $_"; $script:failed = $true

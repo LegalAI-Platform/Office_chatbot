@@ -51,11 +51,19 @@ export async function deliverFile(id: string, file: File): Promise<void> {
   await services.deliver(id, up.key, file.name);
 }
 
-/** B-10: the range of each kind (outside it, only as a confirmed exception). */
-export function inRange(kind: string, price: number): boolean {
-  if (kind === "document_review") return price >= 1500 && price <= 3000;
-  if (kind === "contract_drafting") return price >= 3000;
-  return price === 2000;
+/** B-10: the range of each kind from the panel's price list (TASK 06); outside it, only as a confirmed exception. */
+export function inRange(kind: string, price: number, p: Record<string, number>): boolean {
+  if (kind === "document_review") return price >= p["price.review_min"]! && price <= p["price.review_max"]!;
+  if (kind === "contract_drafting") return price >= p["price.drafting_from"]!;
+  if (kind === "formal_notice") return price === p["price.formal_notice"];
+  return price === p["price.written_opinion"];
+}
+
+/** The price a pricing form starts from: the bottom of the kind's range. */
+export function startPrice(kind: string, p: Record<string, number>): number {
+  if (kind === "document_review") return p["price.review_min"]!;
+  if (kind === "contract_drafting") return p["price.drafting_from"]!;
+  return kind === "formal_notice" ? p["price.formal_notice"]! : p["price.written_opinion"]!;
 }
 
 export const ACCEPT = ".pdf,.doc,.docx";

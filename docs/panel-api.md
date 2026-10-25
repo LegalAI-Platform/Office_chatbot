@@ -165,6 +165,17 @@ the documents. States: `collecting` → `documents_pending` → `booked` → `ap
 
 `/booking/settings` also carries `urf_minutes` (15–480, default 60): the length of an Urfi appointment.
 
+## Prices (TASK 06, DECISIONS v1.17 B-23)
+
+B-23's prices are settings (`price.*`). Every amount the system asks for (a booking, a service's range, the written opinion,
+the Urfi appointment) and every price a text quotes (`{{price_*}}`) comes from them. A new price counts for new requests only.
+
+| Endpoint | Permission | What |
+|---|---|---|
+| `GET /prices` | account.self (everyone) | the 10 lines: `key`, `name`, `value`, `default` (B-23's 1.4 value) |
+| `PUT /prices` | **prices.manage** (manager, lawyer) | `{ values: { "price.phone_video": 600, … } }`: only the lines that changed (the others keep their value, so two editors never undo each other), whole pounds 1–1,000,000, the review's range the right way round once applied; one save at a time. `400 invalid_price \| review_range`. Each changed line goes to the audit (`price.changed`, from → to) |
+| `GET /prices/changes` | prices.manage | the last 50 changes: `at`, `by`, `key`, `from`, `to` |
+
 ## Chatwoot (TASK 07b, T-24)
 
 | Endpoint | Permission | What |
@@ -198,6 +209,7 @@ The code checks permissions, never role names. A role is a set of permissions, d
 | `services.price` (TASK 10, decision b: the price of a service, the written opinion) | ✅ | ✅ | |
 | `urf.manage` (TASK 11: the Urfi cases and their documents) | ✅ | ✅ | ✅ |
 | `urf.review` (TASK 11: approve or refuse a case before the appointment) | ✅ | ✅ | |
+| `prices.manage` (TASK 06: change the price list of B-23) | ✅ | ✅ | |
 
 No permission → `403`. Not signed in → `401`. A task the user may not see → `404`.
 

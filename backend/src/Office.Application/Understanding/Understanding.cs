@@ -28,6 +28,23 @@ public enum Intent
 
     /// <summary>S-01: insults, threats or spam.</summary>
     Abusive,
+
+    /// <summary>TASK 06 (B-20, 1.17): a question about the office itself; <see cref="InfoTopic"/> says which.</summary>
+    OfficeInfo,
+}
+
+/// <summary>B-20 (1.17): what the client asks about the office (with intent office_info).</summary>
+public enum InfoTopic
+{
+    Address,
+    Hours,
+    HowToBook,
+    HowToPay,
+    Refund,
+    Mode,
+    Prices,
+    FeePolicy,
+    PracticeAreas,
 }
 
 /// <summary>B-25: the topic of the request (for the office only, never told to the client).</summary>
@@ -102,7 +119,8 @@ public sealed record RawClassification(
     double? Confidence,
     string? MatterType = null,
     string? MatterSubtype = null,
-    string? SenderRole = null);
+    string? SenderRole = null,
+    string? InfoTopic = null);
 
 /// <summary>One call to the classifier: the answer, or why there is none, plus what it cost.</summary>
 public sealed record ClassifierOutcome(
@@ -137,7 +155,8 @@ public sealed record Classification(
     ClassifierOutcome? Call,
     MatterType? Matter = null,
     MatterSubtype? Subtype = null,
-    SenderRole Role = SenderRole.Client)
+    SenderRole Role = SenderRole.Client,
+    InfoTopic? Topic = null)
 {
     public const string UnknownValue = "unknown_value";
     public const string LowConfidence = "low_confidence";
@@ -180,8 +199,15 @@ public sealed record Classification(
         MatterType? matter = TryEnum<MatterType>(a.MatterType, out var mt) ? mt : null;
         MatterSubtype? subtype = TryEnum<MatterSubtype>(a.MatterSubtype, out var ms) ? ms : null;
         var role = TryEnum<SenderRole>(a.SenderRole, out var sr) ? sr : SenderRole.Client;
+        InfoTopic? topic = TryEnum<InfoTopic>(a.InfoTopic, out var it) ? it : null;
+        // An office question without a topic it can be answered by is no office question (the offer, as for other).
+        if (intent == Intent.OfficeInfo && topic is null)
+        {
+            return Fallback(UnknownValue, call);
+        }
+
         return new(intent, service, mode, string.IsNullOrWhiteSpace(a.FullName) ? null : a.FullName.Trim(), a.Confidence.Value, null, call,
-            matter, subtype, role);
+            matter, subtype, role, intent == Intent.OfficeInfo ? topic : null);
     }
 
     public static string Code<T>(T value)

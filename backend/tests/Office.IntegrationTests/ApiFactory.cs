@@ -130,9 +130,22 @@ public sealed class FakeOpenAi : HttpMessageHandler
             : text.Contains("إنذار", StringComparison.Ordinal) ? ("service_by_name", "formal_notice", null)
             : text.Split(' ').Length >= 4 ? ("provide_name", (string?)null, (string?)text)
             : ("other", null, null);
+        // TASK 06: the office's questions (B-20), each with its topic.
+        string? topic = text.Contains("المكتب فين", StringComparison.Ordinal) ? "address"
+            : text.Contains("بتشتغلوا لحد", StringComparison.Ordinal) ? "hours"
+            : text.Contains("أدفع إزاي", StringComparison.Ordinal) ? "how_to_pay"
+            : text.Contains("الأسعار إيه", StringComparison.Ordinal) ? "prices"
+            : text.Contains("قضايا إيه", StringComparison.Ordinal) ? "practice_areas"
+            : null;
+        if (topic is not null)
+        {
+            (intent, service, name) = ("office_info", null, null);
+        }
+
         var content = new JsonObject
         {
             ["intent"] = intent, ["service"] = service, ["consultation_mode"] = "unknown", ["full_name"] = name, ["confidence"] = 0.9,
+            ["info_topic"] = topic,
         }.ToJsonString();
         return new HttpResponseMessage(HttpStatusCode.OK)
         {

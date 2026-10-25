@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Office.Application.Responders;
 using Office.Application.Turns;
 
 namespace Office.Application.Texts;
@@ -10,6 +11,9 @@ public interface IApprovedTexts
 {
     /// <summary>The active version of every key.</summary>
     Task<IReadOnlyDictionary<string, ApprovedText>> GetActiveAsync(CancellationToken ct);
+
+    /// <summary>The same, with the settings the caller has already read this turn (TASK 06: the prices in the texts).</summary>
+    Task<IReadOnlyDictionary<string, ApprovedText>> GetActiveAsync(HazemSettings settings, CancellationToken ct) => GetActiveAsync(ct);
 }
 
 /// <summary>The keys Hazem uses in TASK 04 (seeded by migration 0005; docs/approved-texts-proposal.md).</summary>
@@ -139,6 +143,16 @@ public static class TextKeys
     public const string BtnUrfWitnessOwn = "btn_urf_witness_own";
     public const string BtnYes = "btn_yes";
     public const string BtnNo = "btn_no";
+
+    // TASK 06 (v1.17, B-20): the answers to the office's questions, filled from «بيانات المكتب», the price list and the week.
+    public const string OfficeAddress = "office_address";
+    public const string OfficeHours = "office_hours";
+    public const string OfficeHowToBook = "office_how_to_book";
+    public const string OfficeHowToPay = "office_how_to_pay";
+    public const string OfficeRefund = "office_refund";
+    public const string OfficePrices = "office_prices";
+    public const string OfficeFeePolicy = "office_fee_policy";
+    public const string OfficePracticeAreas = "office_practice_areas";
 
     // TASK 12 (v1.16, B-18): the reminders. The two M-03 bodies (active, word for word as submitted to Meta) and the
     // texts proposed in TASK 12 (approved by the owner as proposed).

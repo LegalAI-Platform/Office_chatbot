@@ -30,6 +30,7 @@ export function SettingsPage() {
     { to: "/users", icon: "users", title: "الحسابات", text: "زوّد موظف، اقفل حساب، أو اعمل كلمة سر مؤقتة.", show: can(me, "users.manage") },
     { to: "/lists", icon: "clients", title: "قوايم المكتب", text: "الموكلين الحاليين، وقايمة الأستاذ، والممنوعين" + (can(me, "conversations.unmute") ? "، والمحادثات الساكتة." : "."), show: can(me, "lists.manage") },
     { to: "/texts", icon: "chat", title: "نصوص حازم", text: "الكلام اللي حازم بيرد بيه، وكل نسخة قديمة محفوظة.", show: can(me, "texts.manage") },
+    { to: "/prices", icon: "receipt", title: "الأسعار", text: "الأسعار اللي حازم بيقولها وبيطلبها؛ التعديل للأستاذ والمدير.", show: true },
   ];
   return (
     <div className="grid gap-4">

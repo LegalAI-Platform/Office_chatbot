@@ -76,7 +76,7 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
               FROM hazem.persons p JOIN hazem.conversations c ON c.person_id = p.id JOIN hazem.intakes i ON i.person_id = p.id
              WHERE p.wa_id = '{Client}'
             """));
-        Assert.Equal("welcome_ask_name:1,consultation_offer:1,ask_topic:1", await db.ScalarAsync<string>(
+        Assert.Equal("welcome_ask_name:1,consultation_offer:2,ask_topic:1", await db.ScalarAsync<string>(
             "SELECT string_agg(text_key || ':' || text_version, ',' ORDER BY created_at, idempotency_key) FROM hazem.turn_replies"));
     }
 
@@ -227,6 +227,10 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
             ["{{instapay}}"] = "[العنوان]", ["{{wallet}}"] = "[الرقم]",
             ["{{attendees}}"] = "الزوج والزوجة والولي [والشاهدين]", // TASK 11: B-11.7, filled from the answers (a divorce: «الطرفين»)
             ["{{details}}"] = "[التفاصيل]", // TASK 12: B-18's details line (the office, the call, or who comes)
+            // TASK 06: B-23's prices, filled from the panel's price list (its starting values are DECISIONS' numbers).
+            ["{{price_phone}}"] = "500", ["{{price_office}}"] = "1,000", ["{{price_urgent}}"] = "1,000", ["{{price_review_min}}"] = "1,500",
+            ["{{price_review_max}}"] = "3,000", ["{{price_drafting_from}}"] = "3,000", ["{{price_notice}}"] = "2,000",
+            ["{{price_opinion}}"] = "2,000", ["{{price_urf_office}}"] = "5,000", ["{{price_urf_own}}"] = "4,000",
         };
         var count = 0;
         while (await r.ReadAsync(Ct))
@@ -246,9 +250,11 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
 
     [Fact]
     public async Task Migration_0007_activated_exactly_the_23_proposals_approved_by_the_owner() =>
+        // TASK 06: six of them quote a price and have a newer version with the price slots (0018): the key is what stays active.
         Assert.Equal("23|23", await db.ScalarAsync<string>("""
-            SELECT count(*) FILTER (WHERE active) || '|' || count(*) FROM hazem.approved_texts
-             WHERE source LIKE 'proposal TASK 04%' AND updated_by = 'owner approval 2026-10-22'
+            SELECT count(*) FILTER (WHERE EXISTS (SELECT 1 FROM hazem.approved_texts n WHERE n.key = t.key AND n.active)) || '|' || count(*)
+              FROM hazem.approved_texts t
+             WHERE t.source LIKE 'proposal TASK 04%' AND t.updated_by = 'owner approval 2026-10-22'
             """));
 
     [Theory]
