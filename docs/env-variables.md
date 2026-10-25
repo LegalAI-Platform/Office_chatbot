@@ -41,6 +41,7 @@ contains `CHANGE_ME`, or has the wrong format.
 | `SMTP_USERNAME`, `SMTP_PASSWORD` | api (`Mail__Username`, `Mail__Password`) | **yes** (password) | from the provider. Never printed or logged | v1.9 |
 | `SMTP_FROM`, `SMTP_FROM_NAME` | api (`Mail__From`, `Mail__FromName`) | no | e.g. `no-reply@<domain>`; empty name = the office's name | v1.9 |
 | `S3_API_ACCESS_KEY_ID`, `S3_API_SECRET_ACCESS_KEY` | api (`S3__*`); storage-init | **yes** | `GK` + 24 hex / 64 hex (`gen-secrets`): read-only on `office-media` and `office-sensitive`, nothing on backups. The panel opens client files with it | 07c |
+| `PANEL_MANAGERS_NEED_2FA` | api (`Panel__ManagersNeedTwoFactor`) | no | empty / `false` = the authenticator is optional for everyone (v1.16, the owner's decision); `true` = a manager must turn it on before anything else works (v1.9) | 12 |
 | `PANEL_URL` | api (`Panel__PublicUrl`) | no | empty = `http://127.0.0.1:8080`: the link in alert e-mails | 07c |
 | `CHATWOOT_SECRET_KEY_BASE`, `CHATWOOT_DB_PASSWORD`, `CHATWOOT_REDIS_PASSWORD` | chatwoot, chatwoot-sidekiq, chatwoot-db, chatwoot-redis | **yes** | from `gen-secrets` (TASK 07b) | 07b |
 | `CHATWOOT_BOT_TOKEN` | api (`Chatwoot__BotToken`); `chatwoot-setup` gives it to «حازم (النظام)» | **yes** | from `gen-secrets`. Empty = the Chatwoot link is off | 07b |

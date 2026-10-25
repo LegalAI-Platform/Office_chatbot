@@ -137,6 +137,22 @@ public sealed class BookingStore(HazemDbContext db) : IBookingStore
              WHERE id = {id} AND state IN ('confirmed', 'pending_payment')
             """, ct) == 1;
 
+    /// <summary>TASK 12: «هحضر ✅» for this time; the calendar event is updated to show it.</summary>
+    public async Task<bool> ConfirmAttendanceAsync(Guid id, DateTimeOffset start, CancellationToken ct)
+    {
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE hazem.appointments
+               SET attendance_at = now(), attendance_for = starts_at,
+                   calendar_attempts = CASE WHEN calendar_state IN ('synced', 'update') THEN 0 ELSE calendar_attempts END,
+                   calendar_next_at = CASE WHEN calendar_state IN ('synced', 'update') THEN now() ELSE calendar_next_at END,
+                   calendar_state = CASE WHEN calendar_state = 'synced' THEN 'update' ELSE calendar_state END
+             WHERE id = {id} AND state = 'confirmed' AND starts_at = {start.ToUniversalTime()}
+               AND attendance_for IS DISTINCT FROM starts_at
+            """, ct);
+        var at = start.ToUniversalTime();
+        return await db.Appointments.AnyAsync(a => a.Id == id && a.State == "confirmed" && a.AttendanceFor == at, ct);
+    }
+
     /// <summary>A task the booking opens outside a turn (the panel, the calendar worker). Once per key.</summary>
     public Task AddTaskAsync(Guid personId, string key, string type, DateTimeOffset dueAt, CancellationToken ct) =>
         db.Database.ExecuteSqlInterpolatedAsync($"""

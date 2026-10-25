@@ -25,6 +25,21 @@ export const TASK_TYPES: Record<string, string> = {
   urf_review: "ورق عرفي وصل: راجعه قبل الميعاد",
   urf_documents_missing: "عرفي: فاضل 24 ساعة ومفيش ورق",
   urf_help: "عرفي: محتاج مساعدة في الأسئلة",
+  reminder_failed: "تذكير ما وصلش: فكّر العميل بالتليفون",
+};
+
+/** TASK 12 (B-18): the reminders before a confirmed appointment. */
+export const REMINDER_KINDS: Record<string, string> = {
+  day_before: "تذكير اليوم اللي قبله",
+  two_hours: "تذكير قبلها بساعتين",
+};
+
+/** Why a reminder never went out (appointment_reminders.skip_reason). */
+export const REMINDER_SKIPS: Record<string, string> = {
+  too_close: "الوقت قريب من الميعاد",
+  passed: "الحجز اتأكد بعد وقته",
+  late: "فات وقته",
+  off: "نصوص التذكير مش متفعّلة",
 };
 
 /** TASK 10 (v1.14): the written services and their order's states (S-07). */

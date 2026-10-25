@@ -250,6 +250,8 @@ services:
       # v1.9 (T-23): sign-up, e-mail codes and the authenticator. Without PANEL_SECRET_KEY and
       # SMTP_HOST/SMTP_FROM the sign-up page says it is not available; sign-in still works.
       Panel__SecretKey: ${PANEL_SECRET_KEY:-}
+      # v1.16: the authenticator is optional for everyone; true makes it a must for a manager again (v1.9).
+      Panel__ManagersNeedTwoFactor: ${PANEL_MANAGERS_NEED_2FA:-false}
       Mail__Host: ${SMTP_HOST:-}
       Mail__Port: ${SMTP_PORT:-587}
       Mail__Ssl: ${SMTP_SSL:-true}

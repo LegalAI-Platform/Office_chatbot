@@ -41,7 +41,8 @@ public sealed record OutboundMessage(
     string? TemplateName = null,
     string? Language = null,
     InteractivePayload? Interactive = null,
-    DocumentPayload? Document = null);
+    DocumentPayload? Document = null,
+    System.Text.Json.Nodes.JsonArray? Components = null); // TASK 12: a template's parameters (Meta's shape), n8n passes them on
 
 /// <summary>
 /// TASK 10 (B-16.6): a document for WhatsApp, as a short signed link to storage that Meta reads (never the

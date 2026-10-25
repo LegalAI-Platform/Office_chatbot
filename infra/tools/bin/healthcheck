@@ -293,7 +293,23 @@ if [[ "$(psql_super office -c "SELECT count(*) FROM hazem.approved_texts WHERE s
   warn "TASK 11's texts are not approved yet: Hazem answers an Urfi request as before (the text and a task) (docs/approved-texts-proposal.md)"
 fi
 
+echo "== The reminders (TASK 12, DECISIONS v1.16 B-18 / M-03)"
+check "table appointment_reminders exists" \
+  sql_equals office "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'hazem' AND table_name = 'appointment_reminders'" "1"
+check "office_app (n8n) cannot read the reminders" \
+  expect_fail psql_as office_app "$OFFICE_APP_PASSWORD" office -c 'SELECT 1 FROM hazem.appointment_reminders LIMIT 1'
+check "no reminder forgotten by the worker (one more than 10 minutes past its time)" \
+  sql_equals office "SELECT count(*) FROM hazem.appointment_reminders WHERE (state = 'scheduled' AND due_at < now() - interval '10 minutes') OR (state = 'sending' AND updated_at < now() - interval '10 minutes')" "0"
+# By key, not by source: the office may reword one in «نصوص حازم» (a new version, source «panel …»).
+check "every reminder text is active (9 keys; without one, no reminder is sent)" \
+  sql_equals office "SELECT count(DISTINCT key) FROM hazem.approved_texts WHERE active AND key IN ('reminder_day_before', 'reminder_2h_before', 'btn_reminder_attend', 'btn_reminder_change', 'reminder_attend_ok', 'reminder_details_office', 'reminder_details_phone', 'reminder_details_urf', 'reminder_old_button')" "9"
+if [[ "$(psql_super office -c "SELECT count(*) FROM hazem.staff_tasks WHERE type = 'reminder_failed' AND state NOT IN ('done', 'cancelled')")" != "0" ]]; then
+  warn "a reminder could not reach a client (outside the 24 hours the M-03 templates need Meta's approval): the office reminds by phone (the tasks)"
+fi
+
 echo "== Migrations"
+check "migration 0017 (the reminders) is applied" \
+  sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0017'" "1"
 check "migration 0016 (the Urfi cases) is applied" \
   sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0016'" "1"
 check "migration 0015 (the written services) is applied" \

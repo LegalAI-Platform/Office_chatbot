@@ -2,11 +2,11 @@ import { useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, errorMessage } from "../../shared/api/client";
 import { can, useMe } from "../../shared/api/session";
-import { APPOINTMENT_STATES, BOOKING_SERVICES, label, matterLabel, PAYMENT_STATES } from "../../shared/lib/labels";
+import { APPOINTMENT_STATES, BOOKING_SERVICES, label, matterLabel, PAYMENT_STATES, REMINDER_KINDS, REMINDER_SKIPS } from "../../shared/lib/labels";
 import { cairoTime, cairoWhen } from "../../shared/lib/time";
 import { Icon } from "../../shared/ui/Icon";
 import { Button, Card, Chip, Empty, ErrorState, Field, Loading } from "../../shared/ui/ui";
-import { booking, cairoDate, hhmm, monthOf, shiftMonth, TIMES, type Appointment, type Day, type Done, type Office, type Settings, type WeekDay } from "./api";
+import { booking, cairoDate, hhmm, monthOf, shiftMonth, TIMES, type Appointment, type Day, type Done, type Office, type Reminder, type Settings, type WeekDay } from "./api";
 
 type Tab = "calendar" | "bookings" | "week" | "settings" | "office";
 // The office week starts on Saturday; the API's weekday is 0 = Sunday … 6 = Saturday.
@@ -276,8 +276,18 @@ function Bookings() {
   if (list.isPending) return <Loading />;
   if (list.isError) return <ErrorState message={errorMessage(list.error)} onRetry={() => void list.refetch()} />;
   if (list.data.length === 0) return <Empty title="مفيش حجوزات في الشهر الجاي" icon="calendar" />;
+  // TASK 12 (B-18): tomorrow's confirmed appointments whose client has not pressed «هحضر ✅» yet (nothing is cancelled for it).
+  const tomorrow = cairoDate(new Date(Date.now() + 86_400_000));
+  const tomorrows = list.data.filter((a) => a.state === "confirmed" && cairoDate(new Date(a.start)) === tomorrow);
+  const unconfirmed = tomorrows.filter((a) => !a.attending).length;
   return (
     <Card>
+      {tomorrows.length > 0 ? (
+        <p className="pb-2 text-sm" role="status">
+          بكرة {tomorrows.length} {tomorrows.length === 1 ? "ميعاد" : "مواعيد"}
+          {unconfirmed > 0 ? <>، <span className="font-semibold text-orange-ink">{unconfirmed} ما أكدوش حضورهم</span></> : "، وكلهم أكدوا حضورهم ✅"}
+        </p>
+      ) : null}
       <ul className="grid divide-y divide-line">
         {list.data.map((a) => (
           <li key={a.id} className="flex flex-wrap items-center gap-3 py-2.5">
@@ -287,7 +297,9 @@ function Bookings() {
                 {label(BOOKING_SERVICES, a.service)} · {matterLabel(a.matter_type ?? undefined)} · <span dir="ltr">+{a.wa_id}</span>{a.reschedules ? " · اتغيّر مرة" : ""}
                 {a.payment && a.state !== "pending_payment" ? ` · الدفع: ${label(PAYMENT_STATES, a.payment)}` : ""}
               </span>
+              {a.state === "confirmed" && a.reminders.length > 0 ? <Reminders items={a.reminders} /> : null}
             </span>
+            {a.state === "confirmed" && a.attending ? <Chip tone="green">أكّد حضوره ✅</Chip> : null}
             <Chip tone={STATE_TONE[a.state] ?? "grey"}>
               {label(APPOINTMENT_STATES, a.state)}{a.state === "pending_payment" && a.hold_until ? ` لحد ${cairoTime(new Date(a.hold_until))}` : ""}
             </Chip>
@@ -311,6 +323,24 @@ function Bookings() {
       </ul>
       {mark.isError || cancel.isError ? <p className="text-sm text-bad" role="alert">{errorMessage(mark.error ?? cancel.error)}</p> : null}
     </Card>
+  );
+}
+
+/** TASK 12 (B-18): what happened to each reminder of the appointment's current time. */
+function Reminders({ items }: { items: Reminder[] }) {
+  const word = (r: Reminder) =>
+    r.state === "scheduled" && r.due_at ? `هيتبعت ${cairoWhen(r.due_at)}`
+    : r.state === "sending" ? "بيتبعت دلوقتي"
+    : r.state === "sent" ? `اتبعت ✓${r.channel === "template" ? " (قالب واتساب)" : ""}`
+    : r.state === "failed" ? "ما وصلش ✗ (فيه مهمة تكلّمه)"
+    : r.state === "skipped" ? `ما اتبعتش: ${label(REMINDER_SKIPS, r.skip_reason ?? "")}`
+    : null;
+  const shown = items.filter((r) => word(r) !== null);
+  if (shown.length === 0) return null;
+  return (
+    <span className="text-xs text-ink-soft">
+      {shown.map((r, i) => <span key={r.kind}>{i > 0 ? " · " : ""}{label(REMINDER_KINDS, r.kind)}: {word(r)}</span>)}
+    </span>
   );
 }
 

@@ -6,7 +6,7 @@ import { useDashboard } from "../../shared/api/dashboard";
 import { useMe } from "../../shared/api/session";
 import type { DashboardTask } from "../../shared/api/types";
 import { label, TASK_TYPES } from "../../shared/lib/labels";
-import { cairoDayWord, cairoHour, cairoMonth, cairoWeek, timeAgo } from "../../shared/lib/time";
+import { cairoDate, cairoDayWord, cairoHour, cairoMonth, cairoWeek, timeAgo } from "../../shared/lib/time";
 import { Icon } from "../../shared/ui/Icon";
 import { OwnerImg, type OwnerImage } from "../../shared/ui/Owner";
 import { Chip, ErrorState } from "../../shared/ui/ui";
@@ -24,6 +24,13 @@ export function HomePage() {
   // TASK 09: the receipts waiting for a person's review (the system never confirms a payment).
   const receipts = useQuery({ queryKey: ["payments", "review"], queryFn: () => api<unknown[]>("GET", "/payments?show=review") });
   const now = new Date();
+  // TASK 12: today's appointments (held or confirmed) are a real number now.
+  const today = cairoDate(now);
+  const appointments = useQuery({
+    queryKey: ["booking", "appointments", "today", today],
+    queryFn: () => api<{ state: string }[]>("GET", `/booking/appointments?from=${today}&to=${today}`),
+  });
+  const todays = appointments.data?.filter((a) => a.state === "confirmed" || a.state === "pending_payment").length;
   const greeting = cairoHour(now) < 12 ? "صباح الخير" : "مساء الخير";
   const name = me?.role === "lawyer" ? "أستاذ سعد" : me?.display_name.split(/\s+/)[0] ?? "";
 
@@ -44,7 +51,7 @@ export function HomePage() {
 
         {/* the four numbers */}
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <Kpi tone="blue" icon="stat_calendar_blue" title="مواعيد اليوم" value={null} to="/appointments" more="عرض المواعيد" />
+          <Kpi tone="blue" icon="stat_calendar_blue" title="مواعيد اليوم" value={appointments.isError ? null : todays} to="/appointments" more="عرض المواعيد" />
           <Kpi tone="green" icon="stat_card_green" title="إيصالات تحتاج تأكيد" value={receipts.isError ? null : receipts.data?.length} to="/receipts" more="من الإيصالات" />
           <Kpi tone="orange" icon="stat_alert_yellow" title="أمور عاجلة" value={dash.data?.urgent} series={dash.data?.urgent_by_day} to="/tasks" more="عرض التفاصيل" />
           <Kpi tone="red" icon="stat_clock_red" title="مهام متأخرة" value={dash.data?.overdue} series={dash.data?.overdue_by_day} to="/tasks?state=overdue" more="عرض المهام" />

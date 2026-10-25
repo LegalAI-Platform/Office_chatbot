@@ -59,8 +59,11 @@ public sealed record UrfCase(
     }
 
     /// <summary>B-11.7: who comes to the office.</summary>
-    public string Attendees() =>
-        (IsMarriage ? "الزوج والزوجة والولي" : "الطرفين") + (Witnesses == "own" ? " والشاهدين" : "");
+    public string Attendees() => AttendeesFor(Kind, Witnesses);
+
+    /// <summary>B-11.7 for a case read elsewhere (TASK 12: the reminder of its appointment).</summary>
+    public static string AttendeesFor(string kind, string? witnesses) =>
+        (kind == Marriage ? "الزوج والزوجة والولي" : "الطرفين") + (witnesses == "own" ? " والشاهدين" : "");
 
     public static string GuardianName(string? guardian) => guardian switch
     {

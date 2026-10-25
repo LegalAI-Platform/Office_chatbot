@@ -210,6 +210,14 @@ try {
     Check 'check-hazem11-documents'
     PanelStep 'hazem11-approve'
     Check 'check-hazem11-confirmed'
+    Write-Host "==== 15. TASK 12: the reminders of that appointment, and «هحضر ✅»"
+    Step @('hazem12-setup') | Out-Null
+    Check 'check-hazem12-made'
+    Step @('hazem12-due') | Out-Null
+    Check 'check-hazem12-sent'
+    Step @('hazem12-attend') | Out-Null
+    Forward
+    Check 'check-hazem12-attend'
     Remove-Item env:E2E_PANEL_PASSWORD -ErrorAction SilentlyContinue
 } catch {
     Write-Host "FAIL  $_"; $script:failed = $true
