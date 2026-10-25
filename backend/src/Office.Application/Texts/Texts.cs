@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Office.Application.Responders;
 using Office.Application.Turns;
 
 namespace Office.Application.Texts;
@@ -10,6 +11,9 @@ public interface IApprovedTexts
 {
     /// <summary>The active version of every key.</summary>
     Task<IReadOnlyDictionary<string, ApprovedText>> GetActiveAsync(CancellationToken ct);
+
+    /// <summary>The same, with the settings the caller has already read this turn (TASK 06: the prices in the texts).</summary>
+    Task<IReadOnlyDictionary<string, ApprovedText>> GetActiveAsync(HazemSettings settings, CancellationToken ct) => GetActiveAsync(ct);
 }
 
 /// <summary>The keys Hazem uses in TASK 04 (seeded by migration 0005; docs/approved-texts-proposal.md).</summary>

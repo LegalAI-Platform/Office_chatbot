@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Office.Application.Conversations;
 using Office.Application.Ports;
 using Office.Application.Prices;
+using Office.Application.Responders;
 using Office.Application.Texts;
 using Office.Domain.Clients;
 using Office.Domain.Common;
@@ -77,9 +78,13 @@ public sealed class ConversationStore(HazemDbContext db) : IConversationStore
 
         foreach (var task in e.Tasks)
         {
+            // TASK 06: «write the missing office detail» is one job for the office, however many clients ask meanwhile.
             await db.Database.ExecuteSqlInterpolatedAsync($"""
                 INSERT INTO hazem.staff_tasks (person_id, intake_id, turn_id, type, staff_id, due_at)
-                VALUES ({person.Id}, {intake.Id}, {turnId}, {task.Kind}, {task.StaffId}, {Utc(task.DueAt)})
+                SELECT {person.Id}, {intake.Id}, {turnId}, {task.Kind}, {task.StaffId}, {Utc(task.DueAt)}
+                 WHERE {task.Kind} <> {PendingTask.OfficeInfoMissing}
+                    OR NOT EXISTS (SELECT 1 FROM hazem.staff_tasks
+                                    WHERE type = {PendingTask.OfficeInfoMissing} AND state IN ('open', 'in_progress', 'overdue'))
                 ON CONFLICT (turn_id, type) DO NOTHING
                 """, ct);
         }
@@ -143,9 +148,13 @@ public sealed class ConversationStore(HazemDbContext db) : IConversationStore
 /// </summary>
 public sealed class ApprovedTextStore(HazemDbContext db, ISettingsReader settings) : IApprovedTexts
 {
-    public async Task<IReadOnlyDictionary<string, ApprovedText>> GetActiveAsync(CancellationToken ct)
+    public async Task<IReadOnlyDictionary<string, ApprovedText>> GetActiveAsync(CancellationToken ct) =>
+        await GetActiveAsync(await settings.GetAsync(ct), ct);
+
+    /// <summary>With the settings the turn already has: one read, and the texts quote the price the booking asks for.</summary>
+    public async Task<IReadOnlyDictionary<string, ApprovedText>> GetActiveAsync(HazemSettings current, CancellationToken ct)
     {
-        var prices = PriceList.From(await settings.GetAsync(ct));
+        var prices = PriceList.From(current);
         return await db.ApprovedTexts.AsNoTracking().Where(t => t.Active)
             .ToDictionaryAsync(t => t.Key, t => new ApprovedText(t.Key, t.Version, prices.Fill(t.Text), t.MaxChars, t.Active), StringComparer.Ordinal, ct);
     }

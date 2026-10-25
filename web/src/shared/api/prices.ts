@@ -16,12 +16,7 @@ export function usePrices() {
   return useQuery({ queryKey: ["prices"], queryFn: prices.list, staleTime: 60_000 });
 }
 
-/** The price list as a map, with B-23's 1.4 values while it loads. */
-export function priceMap(list: Price[] | undefined): Record<string, number> {
-  const map: Record<string, number> = {
-    "price.review_min": 1500, "price.review_max": 3000, "price.drafting_from": 3000,
-    "price.formal_notice": 2000, "price.written_opinion": 2000,
-  };
-  for (const p of list ?? []) map[p.key] = p.value;
-  return map;
+/** The price list as a map (key → value). */
+export function priceMap(list: Price[]): Record<string, number> {
+  return Object.fromEntries(list.map((p) => [p.key, p.value]));
 }

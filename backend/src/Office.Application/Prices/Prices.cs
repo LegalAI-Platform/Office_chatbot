@@ -84,9 +84,10 @@ public sealed class PriceList
         return text;
     }
 
-    /// <summary>A whole number from 1 to <see cref="Max"/>, or null.</summary>
+    /// <summary>A whole number from 1 to <see cref="Max"/> written plainly (no leading zero, as hazem.price in SQL), or null.</summary>
     public static int? Valid(string? value) =>
-        int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var v) && v is >= 1 and <= Max ? v : null;
+        int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var v) && v is >= 1 and <= Max
+        && value == v.ToString(CultureInfo.InvariantCulture) ? v : null;
 
     /// <summary>What is wrong with a whole list before it is saved: the review's range upside down, or a price out of bounds.</summary>
     public static string? Problem(IReadOnlyDictionary<string, int> values)

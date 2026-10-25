@@ -113,7 +113,7 @@ public sealed class HazemResponder(
         var plan = new Plan(now);
         Check(state.Conversation.ClientWroteAt(now)); // B-12: 12 hours after the staff
         Classification? classification = null;
-        var texts = await approvedTexts.GetActiveAsync(ct);
+        var texts = await approvedTexts.GetActiveAsync(settings, ct);
         var bookingSettings = BookingSettings.From(settings);
         var bookingOn = booking is not null && bookingSettings.Enabled && BookingTextKeys.All(k => texts.TryGetValue(k, out var t) && t.Active);
         // TASK 12 (B-18): the reminders run whenever their texts are approved, the booking from WhatsApp on or off.
@@ -798,6 +798,10 @@ public sealed class HazemResponder(
                 case Intent.HumanRequest or Intent.RescheduleOrCancel or Intent.ThanksOrClosing:
                     Answer(turnClass);
                     break;
+                case Intent.OfficeInfo:
+                    // TASK 06: the address or the hours do not depend on a new matter: answered at once, no offer.
+                    AnswerOffice(turnClass.Topic, existingClient: true);
+                    break;
                 default:
                     if (!Intake.ExistingQuestionAsked)
                     {
@@ -983,9 +987,10 @@ public sealed class HazemResponder(
         /// <summary>
         /// TASK 06 (B-20, 1.17): a question about the office, answered from its approved text filled from the panel (the address,
         /// the week, the payment details, the price list), then the offer. A detail not written in the panel yet never leaves
-        /// half a message: the offer alone, and the office gets a task to write it.
+        /// half a message: the offer alone, and the office gets a task to write it. A listed client (B-04) gets the answer
+        /// without the offer, or the neutral reply and their staff member when there is nothing to answer with.
         /// </summary>
-        private void AnswerOffice(InfoTopic? topic)
+        private void AnswerOffice(InfoTopic? topic, bool existingClient = false)
         {
             (string Key, string[] Needs)? answer = topic switch
             {
@@ -999,11 +1004,13 @@ public sealed class HazemResponder(
                 InfoTopic.PracticeAreas => (TextKeys.OfficePracticeAreas, []),
                 _ => null, // mode: the offer itself says both ways and their prices
             };
+            var answered = false;
             if (answer is var (key, needs))
             {
                 if (needs.All(n => office?.GetValueOrDefault(n) is { Length: > 0 }))
                 {
                     plan.Say(key, Fill: office);
+                    answered = true;
                 }
                 else
                 {
@@ -1011,7 +1018,15 @@ public sealed class HazemResponder(
                 }
             }
 
-            Offer(askTopic: false);
+            if (!existingClient)
+            {
+                Offer(askTopic: false);
+            }
+            else if (!answered)
+            {
+                plan.Say(TextKeys.ExistingMatter);
+                plan.Task(PendingTask.ExistingClientMessage, list.ExistingClient?.StaffId);
+            }
         }
 
         private void AnswerPrice(Service? service)

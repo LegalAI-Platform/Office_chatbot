@@ -131,6 +131,22 @@ public sealed class Task05aFlowTests
     }
 
     [Fact]
+    public async Task A_listed_client_asking_about_the_office_is_answered_at_once_without_the_offer()
+    {
+        // TASK 06 (B-20): the address does not depend on a new matter, so no «عميل قديم ولا جديد؟» first.
+        _list = new ListMatch(false, false, new ExistingClientEntry("محمد أحمد علي حسن", Staff));
+        Add(TextKeys.OfficeAddress, "📍 {{address}} {{map}}");
+        var (none, d) = await Say("المكتب فين؟", R("office_info") with { InfoTopic = "address" });
+        Assert.Equal([TextKeys.ExistingMatter], none); // nothing written to answer with: the neutral reply and their staff member
+        Assert.Equal([PendingTask.OfficeInfoMissing, PendingTask.ExistingClientMessage], d.Effects!.Tasks.Select(t => t.Kind));
+
+        _settings["office.address"] = "183 شارع التحرير";
+        _settings["office.map_url"] = "https://maps.example.test/office";
+        var (keys, _) = await Say("المكتب فين؟", R("office_info") with { InfoTopic = "address" });
+        Assert.Equal([TextKeys.OfficeAddress], keys);
+    }
+
+    [Fact]
     public async Task An_unclear_message_from_an_existing_client_gets_the_B04_question_once()
     {
         _list = new ListMatch(false, false, new ExistingClientEntry("محمد أحمد علي حسن", Staff));

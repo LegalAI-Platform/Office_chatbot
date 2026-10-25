@@ -173,7 +173,7 @@ the Urfi appointment) and every price a text quotes (`{{price_*}}`) comes from t
 | Endpoint | Permission | What |
 |---|---|---|
 | `GET /prices` | account.self (everyone) | the 10 lines: `key`, `name`, `value`, `default` (B-23's 1.4 value) |
-| `PUT /prices` | **prices.manage** (manager, lawyer) | `{ values: { "price.phone_video": 600, … } }`: the whole list, whole pounds 1–1,000,000, the review's range the right way round. `400 invalid_price \| review_range`. Each changed line goes to the audit (`price.changed`, from → to) |
+| `PUT /prices` | **prices.manage** (manager, lawyer) | `{ values: { "price.phone_video": 600, … } }`: only the lines that changed (the others keep their value, so two editors never undo each other), whole pounds 1–1,000,000, the review's range the right way round once applied; one save at a time. `400 invalid_price \| review_range`. Each changed line goes to the audit (`price.changed`, from → to) |
 | `GET /prices/changes` | prices.manage | the last 50 changes: `at`, `by`, `key`, `from`, `to` |
 
 ## Chatwoot (TASK 07b, T-24)

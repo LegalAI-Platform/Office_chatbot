@@ -1032,6 +1032,8 @@ public sealed class BookingFlowTests
     [InlineData("abc", 500)]
     [InlineData("12.5", 500)]
     [InlineData("2000000", 500)]
+    [InlineData("0750", 500)] // a leading zero: hazem.price in SQL falls back too, so both sides agree
+    [InlineData("1000000", 1000000)]
     [InlineData("750", 750)]
     public void Prices_a_broken_setting_falls_back_to_b23(string value, int expected) =>
         Assert.Equal(expected, Office.Application.Prices.PriceList.From(

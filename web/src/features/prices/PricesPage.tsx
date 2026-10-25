@@ -17,7 +17,8 @@ export function PricesPage() {
   const qc = useQueryClient();
   const [draft, setDraft] = useState<Record<string, string>>({});
   const save = useMutation({
-    mutationFn: () => prices.save(Object.fromEntries((list.data ?? []).map((p) => [p.key, Number(draft[p.key] ?? p.value)]))),
+    // Only the lines changed here: a line someone else changed meanwhile keeps their value.
+    mutationFn: () => prices.save(Object.fromEntries(changed.map((p) => [p.key, Number(draft[p.key])]))),
     onSuccess: () => { setDraft({}); void qc.invalidateQueries({ queryKey: ["prices"] }); void qc.invalidateQueries({ queryKey: ["price-changes"] }); },
   });
   const changed = (list.data ?? []).filter((p) => draft[p.key] !== undefined && Number(draft[p.key]) !== p.value);
@@ -41,7 +42,7 @@ export function PricesPage() {
                     value={draft[p.key] ?? String(p.value)} onChange={(e) => setDraft({ ...draft, [p.key]: e.target.value })} />
                 ) : <b id={p.key} className="tabular">{p.value.toLocaleString("en-US")}</b>}
                 <span className="text-sm text-ink-soft">جنيه</span>
-                {p.value !== p.default ? <span className="text-xs text-ink-soft">(كان {p.default.toLocaleString("en-US")})</span> : null}
+                {p.value !== p.default ? <span className="text-xs text-ink-soft">(الأصلي {p.default.toLocaleString("en-US")})</span> : null}
               </li>
             ))}
           </ul>

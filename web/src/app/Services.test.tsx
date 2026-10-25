@@ -18,6 +18,13 @@ const order = (over: object = {}) => ({
   payment: null, file_name: null, delivered_at: null, closed_reason: null, appointment_id: null, notice: null, ...over,
 });
 
+// TASK 06: the pricing form waits for the panel's price list (its ranges).
+const PRICES = [
+  { key: "price.review_min", name: "", value: 1500, default: 1500 }, { key: "price.review_max", name: "", value: 3000, default: 3000 },
+  { key: "price.drafting_from", name: "", value: 3000, default: 3000 }, { key: "price.formal_notice", name: "", value: 2000, default: 2000 },
+  { key: "price.written_opinion", name: "", value: 2000, default: 2000 },
+];
+
 function serve(table: Record<string, unknown>) {
   const calls: { method: string; path: string; body: unknown }[] = [];
   vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
@@ -54,10 +61,10 @@ describe("TASK 10 service orders", () => {
 
   it("the lawyer prices: outside the range only as an exception", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
-    const calls = serve({ "GET /auth/me": me("lawyer"), "GET /services?show=open": [order()] });
+    const calls = serve({ "GET /auth/me": me("lawyer"), "GET /services?show=open": [order()], "GET /prices": PRICES });
     renderAt("/services");
     const card = (await screen.findByText(/محمد أحمد علي حسن/)).closest("li")!;
-    fireEvent.change(within(card).getByLabelText("السعر (جنيه)"), { target: { value: "5000" } });
+    fireEvent.change(await within(card).findByLabelText("السعر (جنيه)"), { target: { value: "5000" } });
     const send = within(card).getByRole("button", { name: "ابعت السعر للعميل" }) as HTMLButtonElement;
     expect(send.disabled).toBe(true);
     fireEvent.click(within(card).getByLabelText(/ده استثناء/));

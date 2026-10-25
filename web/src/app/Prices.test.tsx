@@ -6,7 +6,8 @@ import type { Me } from "../shared/api/types";
 import { makeQueryClient, routes } from "./App";
 
 // TASK 06 (DECISIONS v1.17, B-23): «الأسعار». Everyone sees the list; the lawyer and the manager change it, with a confirmation
-// that says the new price is for new requests only, and the whole list goes to the API.
+// that says the new price is for new requests only, and only the changed lines go to the API (a line someone else changed
+// meanwhile is never put back).
 const me = (role: "staff" | "lawyer"): Me => ({
   id: "u1", username: "u", display_name: "x", email: "u@example.test", role,
   permissions: ["tasks.view_own", "tasks.update", "account.self", ...(role === "lawyer" ? ["prices.manage" as const] : [])],
@@ -50,7 +51,7 @@ describe("TASK 06 prices", () => {
     expect(screen.queryByRole("spinbutton")).toBeNull();
   });
 
-  it("the lawyer changes a price after confirming, and the whole list is saved", async () => {
+  it("the lawyer changes a price after confirming, and only that line is saved", async () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     const calls = serve({ "GET /auth/me": me("lawyer"), "GET /prices": list, "GET /prices/changes": [] });
     renderAt("/prices");
@@ -58,6 +59,6 @@ describe("TASK 06 prices", () => {
     fireEvent.click(screen.getByRole("button", { name: "احفظ الأسعار" }));
     await vi.waitFor(() => expect(calls.some((c) => c.method === "PUT")).toBe(true));
     expect(confirm.mock.calls[0]![0]).toContain("للطلبات الجديدة بس");
-    expect(calls.find((c) => c.method === "PUT")).toMatchObject({ path: "/prices", body: { values: { "price.phone_video": 600, "price.office": 1000 } } });
+    expect(calls.find((c) => c.method === "PUT")).toEqual({ method: "PUT", path: "/prices", body: { values: { "price.phone_video": 600 } } });
   });
 });

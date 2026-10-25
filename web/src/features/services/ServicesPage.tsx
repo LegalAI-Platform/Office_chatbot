@@ -118,7 +118,14 @@ function OrderCard({ o }: { o: ServiceOrder }) {
 
 /** B-16.3 (B-10): the price, the delivery day and how; outside the range only as an exception. */
 function PriceForm({ o, onDone }: { o: ServiceOrder; onDone: () => void }) {
-  const list = priceMap(usePrices().data);
+  // The ranges are the panel's price list (TASK 06): no form until it is here, so the check never disagrees with the API's.
+  const prices = usePrices();
+  if (prices.isPending) return <Loading />;
+  if (prices.isError) return <ErrorState message={errorMessage(prices.error)} onRetry={() => void prices.refetch()} />;
+  return <PriceFields o={o} onDone={onDone} list={priceMap(prices.data)} />;
+}
+
+function PriceFields({ o, onDone, list }: { o: ServiceOrder; onDone: () => void; list: Record<string, number> }) {
   const [price, setPrice] = useState<string | null>(null);
   const shown = price ?? String(startPrice(o.kind, list));
   const [due, setDue] = useState(cairoDate(new Date(Date.now() + 3 * 86_400_000)));

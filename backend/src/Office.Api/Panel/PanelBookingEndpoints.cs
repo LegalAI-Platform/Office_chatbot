@@ -189,7 +189,6 @@ public static class PanelBookingEndpoints
             .RequireAuthorization(PanelAuth.Policy(Permissions.ServicesPrice));
     }
 
-    /// <summary>TASK 11 (DECISIONS v1.15, B-11 / S-06): «حالات العرفي». docs/panel-api.md.</summary>
     /// <summary>TASK 06 (DECISIONS v1.17, B-23): «الإعدادات ← الأسعار». docs/panel-api.md.</summary>
     public static void MapPanelPrices(this IEndpointRouteBuilder app)
     {
@@ -214,6 +213,7 @@ public static class PanelBookingEndpoints
 
     public sealed record PricesRequest(Dictionary<string, int>? Values);
 
+    /// <summary>TASK 11 (DECISIONS v1.15, B-11 / S-06): «حالات العرفي». docs/panel-api.md.</summary>
     public static void MapPanelUrf(this IEndpointRouteBuilder app)
     {
         var urf = app.MapGroup("/api/panel/urf")

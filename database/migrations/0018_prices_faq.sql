@@ -20,10 +20,10 @@ INSERT INTO hazem.settings (key, value, description) VALUES
   ('price.urf_own_witnesses', '4000', 'B-23 (1.17): an Urfi contract or divorce with the client''s witnesses')
 ON CONFLICT (key) DO NOTHING;
 
--- A price the panel set, or B-23's when it is missing or not a positive whole number.
+-- A price the panel set, or B-23's when it is missing or not a whole number from 1 to 1,000,000 (PriceList.Valid in .NET).
 CREATE FUNCTION hazem.price(p_key text, p_default int)
 RETURNS int LANGUAGE sql STABLE SET search_path = hazem, pg_temp AS $$
-  SELECT COALESCE((SELECT value::int FROM hazem.settings WHERE key = p_key AND value ~ '^[1-9][0-9]{0,6}$'), p_default)
+  SELECT COALESCE((SELECT value::int FROM hazem.settings WHERE key = p_key AND value ~ '^([1-9][0-9]{0,5}|1000000)$'), p_default)
 $$;
 
 -- B-16.3 / B-17 (1.17): as in 0015, the ranges and the 2,000 from the price list.

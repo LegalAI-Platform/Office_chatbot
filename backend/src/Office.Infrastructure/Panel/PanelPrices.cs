@@ -33,26 +33,29 @@ public sealed class PanelPrices(HazemDbContext db, ISettingsReader settings, Tim
             """).ToListAsync(ct);
 
     /// <summary>
-    /// Saves the whole list (every line of B-23, whole pounds, the review's range the right way round). Each line that
-    /// changed is recorded with its old and new value. Returns the error code, or null.
+    /// Saves the lines the editor changed (whole pounds, the review's range the right way round once applied); every other
+    /// line keeps what it has now, so two editors never undo each other. One save at a time: the old values are read under
+    /// the lock, and each line that changed is recorded with its old and new value. Returns the error code, or null.
     /// </summary>
     public async Task<string?> SaveAsync(Guid by, string username, IReadOnlyDictionary<string, int>? values, CancellationToken ct)
     {
-        if (values is null)
+        if (values is null || values.Keys.Any(k => PriceList.Lines.All(l => l.Key != k)))
         {
             return ErrInvalid;
         }
 
-        if (PriceList.Problem(values) is { } problem)
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtext({"panel:prices"}))", ct);
+        var before = PriceList.From(await settings.GetAsync(ct));
+        var after = PriceList.Lines.ToDictionary(l => l.Key, l => values.TryGetValue(l.Key, out var v) ? v : before[l.Key]);
+        if (PriceList.Problem(after) is { } problem)
         {
             return problem;
         }
 
-        var before = PriceList.From(await settings.GetAsync(ct));
-        await using var tx = await db.Database.BeginTransactionAsync(ct);
         foreach (var line in PriceList.Lines)
         {
-            var value = values[line.Key];
+            var value = after[line.Key];
             if (value == before[line.Key])
             {
                 continue;

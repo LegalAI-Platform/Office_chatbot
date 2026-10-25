@@ -31,6 +31,7 @@ public sealed class Task06ApiTests(TestDatabase db) : IAsyncLifetime
         UPDATE hazem.settings SET value = '' WHERE key IN ('booking.calendar_id', 'office.instapay', 'office.wallet_number', 'office.wallet_provider',
                                                           'office.address', 'office.map_url');
         UPDATE hazem.settings SET value = '500' WHERE key = 'price.phone_video';
+        UPDATE hazem.settings SET value = '1000' WHERE key = 'price.office';
         UPDATE hazem.settings SET value = '3000' WHERE key = 'price.review_max';
         UPDATE hazem.approved_texts SET active = true
          WHERE source IN ('proposal TASK 08', 'proposal TASK 09', 'proposal TASK 06');
@@ -148,6 +149,28 @@ public sealed class Task06ApiTests(TestDatabase db) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Two_editors_change_different_lines_and_neither_undoes_the_other()
+    {
+        var lawyer = await SignIn("saad", Permissions.Lawyer);
+        var manager = await SignIn("mona", Permissions.Manager);
+        Assert.Equal(HttpStatusCode.NoContent, (await lawyer.PutAsJsonAsync("/api/panel/prices",
+            new { values = new Dictionary<string, int> { ["price.phone_video"] = 650 } }, Ct)).StatusCode);
+        // The manager's page was opened before: only the line she changed is sent, so 650 stays.
+        Assert.Equal(HttpStatusCode.NoContent, (await manager.PutAsJsonAsync("/api/panel/prices",
+            new { values = new Dictionary<string, int> { ["price.office"] = 1200 } }, Ct)).StatusCode);
+        Assert.Equal("650|1200", await db.ScalarAsync<string>("""
+            SELECT (SELECT value FROM hazem.settings WHERE key = 'price.phone_video') || '|' || (SELECT value FROM hazem.settings WHERE key = 'price.office')
+            """));
+        Assert.Equal(2, await db.ScalarAsync<int>("SELECT count(*)::int FROM hazem.panel_audit WHERE action = 'price.changed'"));
+
+        // A line that does not exist, or a change that turns the review's range upside down with the line kept: refused.
+        async Task<string?> Error(Dictionary<string, int> values) => (string?)(await (await manager.PutAsJsonAsync("/api/panel/prices",
+            new { values }, Ct)).Content.ReadFromJsonAsync<JsonNode>(Ct))!["error"];
+        Assert.Equal("invalid_price", await Error(new() { ["price.unknown"] = 100 }));
+        Assert.Equal("review_range", await Error(new() { ["price.review_min"] = 3500 }));
+    }
+
+    [Fact]
     public async Task A_new_price_is_quoted_and_asked_for_while_an_earlier_hold_keeps_its_amount()
     {
         await BookingOn();
@@ -180,6 +203,10 @@ public sealed class Task06ApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal(2000, await db.ScalarAsync<int>("SELECT hazem.price('price.written_opinion', 1)"));
         await db.ExecAsync("UPDATE hazem.settings SET value = 'broken' WHERE key = 'price.review_max'");
         Assert.Equal(3000, await db.ScalarAsync<int>("SELECT hazem.price('price.review_max', 3000)")); // a broken value is B-23's
+        await db.ExecAsync("UPDATE hazem.settings SET value = '2000000' WHERE key = 'price.review_max'");
+        Assert.Equal(3000, await db.ScalarAsync<int>("SELECT hazem.price('price.review_max', 3000)")); // over 1,000,000: as PriceList.Valid
+        await db.ExecAsync("UPDATE hazem.settings SET value = '1000000' WHERE key = 'price.review_max'");
+        Assert.Equal(1000000, await db.ScalarAsync<int>("SELECT hazem.price('price.review_max', 3000)"));
     }
 
     // ---------- B-20 (1.17): the office's questions ----------
@@ -195,6 +222,10 @@ public sealed class Task06ApiTests(TestDatabase db) : IAsyncLifetime
             SELECT (SELECT intent || '|' || info_topic FROM hazem.classifications ORDER BY created_at DESC LIMIT 1) || '|' ||
                    (SELECT count(*) FROM hazem.staff_tasks WHERE type = 'office_info_missing')
             """));
+        // A second client asks before it is written: still one task for the office, not one per question.
+        await Named(Second);
+        await Say(Second, "المكتب فين؟");
+        Assert.Equal(1, await db.ScalarAsync<int>("SELECT count(*)::int FROM hazem.staff_tasks WHERE type = 'office_info_missing'"));
 
         await db.ExecAsync("""
             UPDATE hazem.settings SET value = '183 شارع التحرير، وسط البلد، القاهرة' WHERE key = 'office.address';
