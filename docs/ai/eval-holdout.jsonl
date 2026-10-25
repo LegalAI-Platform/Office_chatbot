@@ -33,7 +33,7 @@
 {"id":1033,"text":"متشكرين يا فندم","intent":"thanks_or_closing"}
 {"id":1034,"text":"تمام كده","intent":"thanks_or_closing"}
 {"id":1035,"text":"ممكن تبعتلي اللوكيشن","intent":"other"}
-{"id":1036,"text":"انتو بتشتغلو قضايا ايه","intent":"other"}
+{"id":1036,"text":"انتو بتشتغلو قضايا ايه","intent":"office_info","info_topic":"practice_areas"}
 {"id":1037,"text":"السلام عليكم انا ابو احمد وعايز ميعاد","intent":"consultation_request"}
 {"id":1038,"text":"عايز اعرف اتعاب المحامي في قضية طلاق","intent":"price_question","service":"case_representation"}
 {"id":1039,"text":"الاستشارة اونلاين بكام","intent":"price_question","service":"consultation_phone_video"}
@@ -58,3 +58,13 @@
 {"id":1058,"text":"اتجوزنا عرفي وعايزين نوثق","intent":"service_by_name","service":"urf_proof","matter_type":"urfi"}
 {"id":1059,"text":"عندي موضوع حساس شوية","intent":"describe_matter","matter_type":"unclear"}
 {"id":1060,"text":"مضيت ايصالات امانة لمعرض العربيات وبيهددوني","intent":"describe_matter","matter_type":"cheques_trust_receipts"}
+{"id":1061,"text":"عنوانكم ايه","intent":"office_info","info_topic":"address"}
+{"id":1062,"text":"مواعيد الشغل عندكم ايه","intent":"office_info","info_topic":"hours"}
+{"id":1063,"text":"ازاي اعمل حجز","intent":"office_info","info_topic":"how_to_book"}
+{"id":1064,"text":"ابعت الفلوس على ايه","intent":"office_info","info_topic":"how_to_pay"}
+{"id":1065,"text":"لو مقدرتش اجي هسترد فلوسي؟","intent":"office_info","info_topic":"refund"}
+{"id":1066,"text":"ينفع الاستشارة تبقى فيديو","intent":"office_info","info_topic":"mode"}
+{"id":1067,"text":"عايز اعرف اسعاركم","intent":"office_info","info_topic":"prices"}
+{"id":1068,"text":"فلوس الاستشارة بتتحسب من اتعاب القضية؟","intent":"office_info","info_topic":"fee_policy"}
+{"id":1069,"text":"بتاخدوا قضايا عمال؟","intent":"office_info","info_topic":"practice_areas"}
+{"id":1070,"text":"الانذار بكام","intent":"price_question","service":"formal_notice"}

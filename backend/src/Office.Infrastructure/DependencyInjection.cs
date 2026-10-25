@@ -100,6 +100,7 @@ public static class DependencyInjection
         services.AddScoped<Application.Panel.IPanelAlertStore, Panel.PanelAlertStore>();
         services.AddScoped<Application.Panel.PanelAlerts>();
         services.AddScoped<Panel.PanelTools>();
+        services.AddScoped<Panel.PanelPrices>(); // TASK 06
 
         // TASK 07b (T-24): Chatwoot, through its API inbox and platform API. Off without its tokens.
         services.AddOptions<Chatwoot.ChatwootOptions>().Bind(config.GetSection(Chatwoot.ChatwootOptions.Section));

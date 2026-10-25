@@ -19,7 +19,8 @@ K=201000000070   # TASK 05a: a client who tells the topic first (B-25)
 L=201000000071   # TASK 08: books from the buttons; the panel closes days
 M=201000000072   # TASK 10: a document review from the request to the delivered file
 N=201000000073   # TASK 11: an Urfi marriage contract from the questions to the lawyer's approval; TASK 12: its reminders
-ALL="'$A','$B','$C','$D','$E','$F','$G','$H','$I','$K','$L','$M','$N'"
+P=201000000074   # TASK 06: the office's address from the panel, a price changed in the panel and quoted
+ALL="'$A','$B','$C','$D','$E','$F','$G','$H','$I','$K','$L','$M','$N','$P'"
 STUB=http://meta-stub:8080
 
 passed=0; failed=0
@@ -124,6 +125,10 @@ case "${1:-}" in
        WHERE source = 'proposal TASK 11'
          AND key = ANY (string_to_array(COALESCE((SELECT value FROM hazem.settings WHERE key = 'e2e.texts11'), ''), ','));
       DELETE FROM hazem.settings WHERE key = 'e2e.texts11';
+      UPDATE hazem.approved_texts SET active = false
+       WHERE source = 'proposal TASK 06'
+         AND key = ANY (string_to_array(COALESCE((SELECT value FROM hazem.settings WHERE key = 'e2e.texts06'), ''), ','));
+      DELETE FROM hazem.settings WHERE key = 'e2e.texts06';
       DELETE FROM hazem.panel_audit WHERE target_type IN ('service', 'payment')
          AND target_id IN (SELECT id FROM hazem.service_orders WHERE person_id IN (SELECT id FROM hazem.persons WHERE wa_id IN ($ALL)));
       DELETE FROM hazem.payment_receipts WHERE payment_id IN (
@@ -193,7 +198,7 @@ case "${1:-}" in
   setup)
     "$0" cleanup >/dev/null
     backup_set whatsapp.dry_run true
-    backup_set whatsapp.test_recipients "$A,$B,$C,$D,$E,$F,$G,$H,$I,$K,$L,$M,$N"   # 0006: only test numbers get sends
+    backup_set whatsapp.test_recipients "$A,$B,$C,$D,$E,$F,$G,$H,$I,$K,$L,$M,$N,$P"   # 0006: only test numbers get sends
     backup_set whatsapp.graph_base_url "$STUB"
     backup_set ai.openai_base_url "$STUB/v1"
     if [[ -z "$(q "SELECT value FROM app.settings WHERE key = 'whatsapp.graph_api_version'")" ]]; then
@@ -430,7 +435,7 @@ SQL
     wait_eq "the person has a full name and the request is at offer_sent" \
       "SELECT p.full_name_provided || '/' || i.state || '/' || i.client_type FROM hazem.persons p JOIN hazem.intakes i ON i.person_id = p.id WHERE p.wa_id = '$F'" "true/offer_sent/new_client"
     wait_eq "every reply recorded with its approved text key and version" \
-      "SELECT string_agg(r.text_key || ':' || r.text_version, ',' ORDER BY r.created_at, r.idempotency_key) FROM hazem.turn_replies r JOIN hazem.turns t USING (turn_id) WHERE t.wa_id = '$F'" "welcome_ask_name:1,consultation_offer:1,ask_topic:1"
+      "SELECT string_agg(r.text_key || ':' || r.text_version, ',' ORDER BY r.created_at, r.idempotency_key) FROM hazem.turn_replies r JOIN hazem.turns t USING (turn_id) WHERE t.wa_id = '$F'" "welcome_ask_name:1,consultation_offer:2,ask_topic:1"
     finish
     ;;
 
@@ -1000,6 +1005,59 @@ SQL
               (SELECT count(*) FROM app.wa_outbound_messages WHERE wa_id = '$N' AND request_payload->'text'->>'body' = 'تمام ✅ في انتظار حضرتك بكرة الساعة 12:00 م.')" "1/1"
     assert_eq "the button never reached the AI (no classification)" \
       "$(q "SELECT count(*) FROM hazem.classifications WHERE turn_id = $(turn_of wamid.E2E-N12)")" "0"
+    finish
+    ;;
+
+  # ---------------------------------------------------------------- TASK 06
+  # B-20 (1.17): «المكتب فين؟» answered from «بيانات المكتب» (written by step 15), then the offer. B-23: a price changed in the
+  # panel by the lawyer (a staff account cannot) is the price Hazem quotes next. TASK 06's proposed texts are on for the test
+  # only (e2e.texts06); the price is backed up and restored by cleanup.
+  hazem06-setup)
+    hazem_backup_set hazem.recipients "$P"
+    hazem_backup_set price.phone_video 500
+    q "INSERT INTO hazem.settings (key, value, description)
+         SELECT 'e2e.texts06', COALESCE(string_agg(t.key, ','), ''), 'hazem-e2e: TASK 06 texts switched on for the test, off again by cleanup'
+           FROM hazem.approved_texts t
+          WHERE t.source = 'proposal TASK 06' AND NOT t.active
+            AND NOT EXISTS (SELECT 1 FROM hazem.approved_texts a WHERE a.key = t.key AND a.active)
+       ON CONFLICT (key) DO NOTHING;
+       UPDATE hazem.approved_texts SET active = true
+        WHERE source = 'proposal TASK 06'
+          AND key = ANY (string_to_array((SELECT value FROM hazem.settings WHERE key = 'e2e.texts06'), ','));" >/dev/null
+    inject "$P" wamid.E2E-P1 text "$(text "السلام عليكم")" 10
+    echo "TASK 06 texts on, a new client writes"
+    ;;
+
+  hazem06-say)  # hazem06-say WAMID_SUFFIX TEXT
+    inject "$P" "wamid.E2E-P$2" text "$(text "$3")" 10
+    echo "$P writes «$3»"
+    ;;
+
+  check-hazem06-address)
+    wait_eq "B-20 (1.17): the address and the map from «بيانات المكتب», then the offer" \
+      "SELECT count(*) FROM app.wa_outbound_messages WHERE wa_id = '$P'
+          AND request_payload->'text'->>'body' = '📍 عنوان المكتب: e2e: 12 شارع التجربة.
+الخريطة: https://maps.example/e2e'" "1"
+    assert_eq "the AI's answer was the office question and its topic" \
+      "$(q "SELECT intent || '/' || info_topic FROM hazem.classifications WHERE turn_id = $(turn_of wamid.E2E-P3)")" "office_info/address"
+    finish
+    ;;
+
+  hazem06-price)
+    panel_login
+    body="$(panel_get /prices | jq -c '{values: (map({key: .key, value: (if .key == "price.phone_video" then 650 else .value end)}) | from_entries)}')"
+    r="$(curl -s -b "$JAR" -c "$JAR" -X PUT -H "X-CSRF-TOKEN: $(panel_csrf)" -H 'Content-Type: application/json' -w ' %{http_code}' -d "$body" "$PANEL/prices")"
+    assert_eq "B-23 (1.17): a staff account cannot change the prices" "${r##* }" "403"
+    panel_login e2e-lawyer
+    r="$(curl -s -b "$JAR" -c "$JAR" -X PUT -H "X-CSRF-TOKEN: $(panel_csrf)" -H 'Content-Type: application/json' -w ' %{http_code}' -d "$body" "$PANEL/prices")"
+    assert_eq "the lawyer sets the phone consultation to 650" "${r##* }/$(panel_get /prices | jq -r '.[] | select(.key == "price.phone_video") | .value')" "204/650"
+    finish
+    ;;
+
+  check-hazem06-offer)
+    wait_eq "the next offer quotes the panel's price (the same one the booking will ask for)" \
+      "SELECT count(*) FROM app.wa_outbound_messages WHERE wa_id = '$P'
+          AND COALESCE(request_payload->'interactive'->'body'->>'text', request_payload->'text'->>'body') LIKE '%بالتليفون بـ650 أو في المكتب بـ1,000%'" "1"
     finish
     ;;
 

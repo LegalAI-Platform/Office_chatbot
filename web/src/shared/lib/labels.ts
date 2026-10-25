@@ -26,6 +26,7 @@ export const TASK_TYPES: Record<string, string> = {
   urf_documents_missing: "عرفي: فاضل 24 ساعة ومفيش ورق",
   urf_help: "عرفي: محتاج مساعدة في الأسئلة",
   reminder_failed: "تذكير ما وصلش: فكّر العميل بالتليفون",
+  office_info_missing: "سؤال عن المكتب ومعلومته مش مكتوبة في اللوحة",
 };
 
 /** TASK 12 (B-18): the reminders before a confirmed appointment. */

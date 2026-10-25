@@ -140,6 +140,16 @@ public static class TextKeys
     public const string BtnYes = "btn_yes";
     public const string BtnNo = "btn_no";
 
+    // TASK 06 (v1.17, B-20): the answers to the office's questions, filled from «بيانات المكتب», the price list and the week.
+    public const string OfficeAddress = "office_address";
+    public const string OfficeHours = "office_hours";
+    public const string OfficeHowToBook = "office_how_to_book";
+    public const string OfficeHowToPay = "office_how_to_pay";
+    public const string OfficeRefund = "office_refund";
+    public const string OfficePrices = "office_prices";
+    public const string OfficeFeePolicy = "office_fee_policy";
+    public const string OfficePracticeAreas = "office_practice_areas";
+
     // TASK 12 (v1.16, B-18): the reminders. The two M-03 bodies (active, word for word as submitted to Meta) and the
     // texts proposed in TASK 12 (approved by the owner as proposed).
     public const string ReminderDayBefore = "reminder_day_before";          // the worker, the day before (with two buttons)

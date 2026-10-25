@@ -67,6 +67,7 @@ public sealed record PendingTask(string Kind, DateTimeOffset DueAt, Guid? StaffI
     public const string UrfReview = "urf_review";             // TASK 11: an Urfi case's documents came, the lawyer reviews them
     public const string UrfDocumentsMissing = "urf_documents_missing"; // TASK 11: 24 hours left, no document yet
     public const string UrfHelp = "urf_help";                 // TASK 11: the ages could not be read twice
+    public const string OfficeInfoMissing = "office_info_missing"; // TASK 06: an office question whose answer is not written in the panel yet
     public const string ReminderFailed = "reminder_failed";   // TASK 12: a reminder could not be sent, the office reminds by phone
 }
 
@@ -86,7 +87,8 @@ public sealed record ClassificationRecord(
     string? FallbackReason,
     string? MatterType = null,
     string? MatterSubtype = null,
-    string? SenderRole = null)
+    string? SenderRole = null,
+    string? InfoTopic = null)
 {
     public static ClassificationRecord From(string turnId, Classification c) => new(
         turnId,
@@ -103,7 +105,8 @@ public sealed record ClassificationRecord(
         c.FallbackReason,
         c.Matter is { } m ? Classification.Code(m) : null,
         c.Subtype is { } st ? Classification.Code(st) : null,
-        Classification.Code(c.Role));
+        Classification.Code(c.Role),
+        c.Topic is { } t ? Classification.Code(t) : null);
 }
 
 /// <summary>Everything a Hazem turn changes, saved in the same transaction as the turn itself.</summary>

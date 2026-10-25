@@ -129,8 +129,8 @@
 {"id":129,"text":"👍","intent":"thanks_or_closing"}
 {"id":130,"text":"ههههه","intent":"other"}
 {"id":131,"text":"؟؟","intent":"other"}
-{"id":132,"text":"انتو فين بالظبط","intent":"other"}
-{"id":133,"text":"بتشتغلو يوم الجمعة؟","intent":"other"}
+{"id":132,"text":"انتو فين بالظبط","intent":"office_info","info_topic":"address"}
+{"id":133,"text":"بتشتغلو يوم الجمعة؟","intent":"office_info","info_topic":"hours"}
 {"id":134,"text":"ممكن اشتري منكو عربية","intent":"other"}
 {"id":135,"text":"asdfgh","intent":"other"}
 {"id":136,"text":"الو","intent":"other"}
@@ -202,3 +202,21 @@
 {"id":202,"text":"اتحكم عليا غيابي من سنتين وعايز اعرف اعمل ايه","intent":"legal_question","matter_type":"criminal"}
 {"id":203,"text":"عملولي محضر الشهر اللي فات","intent":"describe_matter","matter_type":"criminal"}
 {"id":204,"text":"صاحب البيت جايب الشرطة بكرة عشان يطردنا","intent":"urgent","matter_type":"rent"}
+{"id":205,"text":"المكتب فين؟","intent":"office_info","info_topic":"address"}
+{"id":206,"text":"ممكن العنوان واللوكيشن","intent":"office_info","info_topic":"address"}
+{"id":207,"text":"بتشتغلوا لحد الساعة كام","intent":"office_info","info_topic":"hours"}
+{"id":208,"text":"انتو فاتحين النهارده؟","intent":"office_info","info_topic":"hours"}
+{"id":209,"text":"احجز ازاي","intent":"office_info","info_topic":"how_to_book"}
+{"id":210,"text":"الحجز بيبقى ازاي عندكم","intent":"office_info","info_topic":"how_to_book"}
+{"id":211,"text":"ادفع ازاي","intent":"office_info","info_topic":"how_to_pay"}
+{"id":212,"text":"بتقبلوا فودافون كاش؟","intent":"office_info","info_topic":"how_to_pay"}
+{"id":213,"text":"لو لغيت الميعاد الفلوس بترجع؟","intent":"office_info","info_topic":"refund"}
+{"id":214,"text":"الاستشارة اونلاين ولا لازم اجي المكتب","intent":"office_info","info_topic":"mode"}
+{"id":215,"text":"الاسعار ايه","intent":"office_info","info_topic":"prices"}
+{"id":216,"text":"ممكن قايمة الاسعار","intent":"office_info","info_topic":"prices"}
+{"id":217,"text":"هو تمن الاستشارة بيتخصم من الاتعاب لو مسكتوا القضية؟","intent":"office_info","info_topic":"fee_policy"}
+{"id":218,"text":"بتمسكوا قضايا مخدرات؟","intent":"office_info","info_topic":"practice_areas"}
+{"id":219,"text":"بتشتغلوا في اسكندرية ولا القاهرة بس","intent":"office_info","info_topic":"practice_areas"}
+{"id":220,"text":"القضية بتاعتي وصلت لفين","intent":"existing_matter"}
+{"id":221,"text":"القانون بيقول ايه في قضايا المخدرات","intent":"legal_question","matter_type":"criminal"}
+{"id":222,"text":"عايز احجز استشارة والمكتب فين","intent":"office_info","info_topic":"address"}

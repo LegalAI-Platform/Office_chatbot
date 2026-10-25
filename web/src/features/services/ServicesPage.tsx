@@ -7,7 +7,8 @@ import { label, PAYMENT_STATES, SERVICE_KINDS, SERVICE_STATES } from "../../shar
 import { cairoDate, cairoWhen } from "../../shared/lib/time";
 import { Icon } from "../../shared/ui/Icon";
 import { Button, Card, Chip, Empty, ErrorState, Field, Loading } from "../../shared/ui/ui";
-import { ACCEPT, deliverFile, fileUrl, inRange, services, type ServiceOrder, type Show } from "./api";
+import { priceMap, usePrices } from "../../shared/api/prices";
+import { ACCEPT, deliverFile, fileUrl, inRange, services, startPrice, type ServiceOrder, type Show } from "./api";
 
 const TONE: Record<string, string> = {
   collecting: "grey", awaiting_price: "orange", awaiting_payment: "blue", in_progress: "blue", delivered: "green", closed: "grey",
@@ -117,18 +118,20 @@ function OrderCard({ o }: { o: ServiceOrder }) {
 
 /** B-16.3 (B-10): the price, the delivery day and how; outside the range only as an exception. */
 function PriceForm({ o, onDone }: { o: ServiceOrder; onDone: () => void }) {
-  const [price, setPrice] = useState(o.kind === "document_review" ? "1500" : o.kind === "contract_drafting" ? "3000" : "2000");
+  const list = priceMap(usePrices().data);
+  const [price, setPrice] = useState<string | null>(null);
+  const shown = price ?? String(startPrice(o.kind, list));
   const [due, setDue] = useState(cairoDate(new Date(Date.now() + 3 * 86_400_000)));
   const [delivery, setDelivery] = useState<"file" | "call">("file");
   const [exception, setException] = useState(false);
-  const save = useMutation({ mutationFn: () => services.price(o.id, { price: Number(price), exception, due_on: due, delivery }), onSuccess: onDone });
-  const out = !inRange(o.kind, Number(price));
+  const save = useMutation({ mutationFn: () => services.price(o.id, { price: Number(shown), exception, due_on: due, delivery }), onSuccess: onDone });
+  const out = !inRange(o.kind, Number(shown), list);
 
   return (
     <fieldset className="grid gap-2 border-t border-line pt-3">
       <legend className="text-sm font-semibold">السعر</legend>
       <div className="grid gap-2 md:grid-cols-3">
-        <Field label="السعر (جنيه)" type="number" min={1} inputMode="numeric" value={price} onChange={(e) => setPrice(e.target.value)} />
+        <Field label="السعر (جنيه)" type="number" min={1} inputMode="numeric" value={shown} onChange={(e) => setPrice(e.target.value)} />
         <Field label="يوم التسليم" type="date" min={cairoDate(new Date())} value={due} onChange={(e) => setDue(e.target.value)} />
         <label className="grid gap-1.5 text-sm font-semibold">
           التسليم
@@ -144,8 +147,8 @@ function PriceForm({ o, onDone }: { o: ServiceOrder; onDone: () => void }) {
         </label>
       ) : null}
       <div>
-        <Button variant="primary" busy={save.isPending} disabled={!(Number(price) > 0) || !due || (out && !exception)}
-          onClick={() => { if (window.confirm(`حازم هيبعت للعميل: ${Number(price).toLocaleString("en-US")} جنيه، والتسليم يوم ${due}. أكيد؟`)) save.mutate(); }}>
+        <Button variant="primary" busy={save.isPending} disabled={!(Number(shown) > 0) || !due || (out && !exception)}
+          onClick={() => { if (window.confirm(`حازم هيبعت للعميل: ${Number(shown).toLocaleString("en-US")} جنيه، والتسليم يوم ${due}. أكيد؟`)) save.mutate(); }}>
           ابعت السعر للعميل
         </Button>
       </div>

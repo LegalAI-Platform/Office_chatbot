@@ -218,4 +218,16 @@ step check-hazem12-sent || failed=1
 step hazem12-attend
 forward
 step check-hazem12-attend || failed=1
+echo "==== 16. TASK 06: the office's address from the panel, a price changed in the panel and quoted"
+step hazem06-setup
+forward
+step hazem06-say 2 "محمد أحمد علي حسن"
+forward
+step hazem06-say 3 "المكتب فين؟"
+forward
+step check-hazem06-address || failed=1
+panel_step hazem06-price || failed=1
+step hazem06-say 4 "عايز أحجز"
+forward
+step check-hazem06-offer || failed=1
 unset E2E_PANEL_PASSWORD

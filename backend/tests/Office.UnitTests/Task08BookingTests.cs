@@ -944,6 +944,111 @@ public sealed class BookingFlowTests
         Assert.Empty(_booking.UrfCases);
     }
 
+    // ---------- TASK 06: the price list and the office's questions (B-20, B-23) ----------
+
+    private void OfficeOn()
+    {
+        foreach (var k in new[]
+                 {
+                     TextKeys.OfficeAddress, TextKeys.OfficeHours, TextKeys.OfficeHowToBook, TextKeys.OfficeHowToPay, TextKeys.OfficeRefund,
+                     TextKeys.OfficePrices, TextKeys.OfficeFeePolicy, TextKeys.OfficePracticeAreas,
+                 })
+        {
+            _texts[k] = new ApprovedText(k, 1, "T:" + k[..Math.Min(k.Length, 14)], 600, true);
+        }
+
+        _texts[TextKeys.OfficeAddress] = new ApprovedText(TextKeys.OfficeAddress, 1, "📍 {{address}} {{map}}", 300, true);
+        _texts[TextKeys.OfficeHours] = new ApprovedText(TextKeys.OfficeHours, 1, "🕐 {{hours}}.", 300, true);
+        _script["المكتب فين"] = new("office_info", null, "unknown", null, 0.9, InfoTopic: "address");
+        _script["بتشتغلوا لحد إمتى"] = new("office_info", null, "unknown", null, 0.9, InfoTopic: "hours");
+        _script["أونلاين ولا في المكتب"] = new("office_info", null, "unknown", null, 0.9, InfoTopic: "mode");
+        _script["المكتب فين بقى"] = new("office_info", null, "unknown", null, 0.9); // no topic: not an office question
+    }
+
+    [Fact]
+    public async Task Office_the_address_from_the_panel_then_the_offer_and_never_half_a_message_without_it()
+    {
+        OfficeOn();
+        await ToTheOffer();
+        var none = await Say("المكتب فين");
+        Assert.Equal([TextKeys.ConsultationOffer], Keys(none)); // no address written yet: the offer alone
+        Assert.Contains(PendingTask.OfficeInfoMissing, TaskKinds(none));
+
+        _settings[OfficeInfo.AddressKey] = "183 شارع التحرير";
+        _settings[OfficeInfo.MapUrlKey] = "https://maps.example.test/office";
+        var d = await Say("المكتب فين");
+        Assert.Equal([TextKeys.OfficeAddress, TextKeys.ConsultationOffer], Keys(d));
+        Assert.Equal("📍 183 شارع التحرير https://maps.example.test/office", d.Actions[0].Text);
+        Assert.DoesNotContain(PendingTask.OfficeInfoMissing, TaskKinds(d));
+    }
+
+    [Fact]
+    public async Task Office_the_hours_come_from_the_panel_s_default_week()
+    {
+        OfficeOn();
+        _booking.Schedule = new(AvailabilityTests.Every(600, 1080, DayOfWeek.Friday), []);
+        await ToTheOffer();
+        var d = await Say("بتشتغلوا لحد إمتى");
+        Assert.Equal("🕐 السبت لـ الخميس من 10:00 ص لـ 6:00 م، والجمعة إجازة.", d.Actions[0].Text);
+    }
+
+    [Fact]
+    public async Task Office_phone_or_office_is_the_offer_itself_and_a_topicless_office_question_is_unclear()
+    {
+        OfficeOn();
+        await ToTheOffer();
+        Assert.Equal([TextKeys.ConsultationOffer], Keys(await Say("أونلاين ولا في المكتب")));
+        Assert.DoesNotContain(TextKeys.OfficeAddress, Keys(await Say("المكتب فين بقى")));
+    }
+
+    [Theory]
+    [InlineData(new[] { DayOfWeek.Friday }, 600, 1080, "السبت لـ الخميس من 10:00 ص لـ 6:00 م، والجمعة إجازة")]
+    [InlineData(new DayOfWeek[0], 600, 1440, "كل يوم من 10:00 ص لـ 12 بالليل")]
+    [InlineData(new[] { DayOfWeek.Friday, DayOfWeek.Saturday }, 720, 1230, "السبت إجازة، والأحد لـ الخميس من 12 الضهر لـ 8:30 م، والجمعة إجازة")]
+    public void Office_the_week_in_hazem_s_words(DayOfWeek[] off, int start, int end, string expected) =>
+        Assert.Equal(expected, BookingWords.WeekHours(AvailabilityTests.Every(start, end, off)));
+
+    [Fact]
+    public void Office_a_week_with_no_open_day_says_nothing() =>
+        Assert.Null(BookingWords.WeekHours(WeeklyHours.Create([]).Hours!));
+
+    [Fact]
+    public async Task Prices_a_new_price_is_asked_for_and_quoted_and_an_earlier_hold_keeps_its_own()
+    {
+        await ToTheOffer();
+        var first = await Press(BookingChoice.Pick(BookingService.PhoneVideo, AvailabilityTests.At(20, 12)));
+        Assert.Equal(500, Assert.Single(_booking.Appointments).Amount);
+
+        _settings[Office.Application.Prices.PriceList.PhoneVideo] = "600";
+        var prices = Office.Application.Prices.PriceList.From(new HazemSettings(_settings));
+        Assert.Equal(600, BookingSettings.From(new HazemSettings(_settings)).Fit(BookingService.PhoneVideo).Amount);
+        Assert.Equal("بالتليفون بـ600", prices.Fill("بالتليفون بـ{{price_phone}}"));
+        Assert.Equal(500, Assert.Single(_booking.Appointments).Amount); // the hold made before keeps 500
+        Assert.NotEmpty(first.Actions);
+    }
+
+    [Theory]
+    [InlineData("0", 500)]
+    [InlineData("abc", 500)]
+    [InlineData("12.5", 500)]
+    [InlineData("2000000", 500)]
+    [InlineData("750", 750)]
+    public void Prices_a_broken_setting_falls_back_to_b23(string value, int expected) =>
+        Assert.Equal(expected, Office.Application.Prices.PriceList.From(
+            new HazemSettings(new Dictionary<string, string> { [Office.Application.Prices.PriceList.PhoneVideo] = value }))[Office.Application.Prices.PriceList.PhoneVideo]);
+
+    [Fact]
+    public void Prices_the_whole_list_is_checked_before_it_is_saved()
+    {
+        var ok = Office.Application.Prices.PriceList.Lines.ToDictionary(l => l.Key, l => l.Default);
+        Assert.Null(Office.Application.Prices.PriceList.Problem(ok));
+        Assert.Equal("review_range", Office.Application.Prices.PriceList.Problem(
+            new Dictionary<string, int>(ok) { [Office.Application.Prices.PriceList.ReviewMin] = 4000 }));
+        Assert.Equal("invalid_price", Office.Application.Prices.PriceList.Problem(
+            new Dictionary<string, int>(ok) { [Office.Application.Prices.PriceList.Urgent] = 0 }));
+        Assert.Equal("invalid_price", Office.Application.Prices.PriceList.Problem(ok.Where(kv => kv.Key != ok.Keys.First()).ToDictionary()));
+    }
+
     // ---------- fakes ----------
 
     /// <summary>hazem.urf_cases and add_urf_file, in memory (the cases live in <see cref="MemoryBooking"/> for file_target).</summary>

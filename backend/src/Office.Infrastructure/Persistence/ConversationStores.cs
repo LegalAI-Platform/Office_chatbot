@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Office.Application.Conversations;
+using Office.Application.Ports;
+using Office.Application.Prices;
 using Office.Application.Texts;
 using Office.Domain.Clients;
 using Office.Domain.Common;
@@ -87,10 +89,10 @@ public sealed class ConversationStore(HazemDbContext db) : IConversationStore
             await db.Database.ExecuteSqlInterpolatedAsync($"""
                 INSERT INTO hazem.classifications (turn_id, intent, confidence, service, consultation_mode, full_name_present,
                                                    model, prompt_version, latency_ms, input_tokens, output_tokens, fallback_reason,
-                                                   matter_type, matter_subtype, sender_role)
+                                                   matter_type, matter_subtype, sender_role, info_topic)
                 VALUES ({c.TurnId}, {c.Intent}, {(decimal)Math.Round(c.Confidence, 3)}, {c.Service}, {c.ConsultationMode}, {c.FullNamePresent},
                         {c.Model}, {c.PromptVersion}, {c.LatencyMs}, {c.InputTokens}, {c.OutputTokens}, {c.FallbackReason},
-                        {c.MatterType}, {c.MatterSubtype}, {c.SenderRole})
+                        {c.MatterType}, {c.MatterSubtype}, {c.SenderRole}, {c.InfoTopic})
                 ON CONFLICT (turn_id) DO NOTHING
                 """, ct);
         }
@@ -135,11 +137,18 @@ public sealed class ConversationStore(HazemDbContext db) : IConversationStore
     }
 }
 
-public sealed class ApprovedTextStore(HazemDbContext db) : IApprovedTexts
+/// <summary>
+/// The active texts, with B-23's prices already in their {{price_*}} slots (TASK 06): every reply, from the flow or a worker,
+/// quotes the price the panel has now, the same one the booking asks for.
+/// </summary>
+public sealed class ApprovedTextStore(HazemDbContext db, ISettingsReader settings) : IApprovedTexts
 {
-    public async Task<IReadOnlyDictionary<string, ApprovedText>> GetActiveAsync(CancellationToken ct) =>
-        await db.ApprovedTexts.AsNoTracking().Where(t => t.Active)
-            .ToDictionaryAsync(t => t.Key, t => new ApprovedText(t.Key, t.Version, t.Text, t.MaxChars, t.Active), StringComparer.Ordinal, ct);
+    public async Task<IReadOnlyDictionary<string, ApprovedText>> GetActiveAsync(CancellationToken ct)
+    {
+        var prices = PriceList.From(await settings.GetAsync(ct));
+        return await db.ApprovedTexts.AsNoTracking().Where(t => t.Active)
+            .ToDictionaryAsync(t => t.Key, t => new ApprovedText(t.Key, t.Version, prices.Fill(t.Text), t.MaxChars, t.Active), StringComparer.Ordinal, ct);
+    }
 }
 
 /// <summary>B-14 lists (hazem.list_entries), imported from the office's files.</summary>

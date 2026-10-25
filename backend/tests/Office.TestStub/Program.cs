@@ -113,6 +113,15 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request) =>
     }
 
     var (intent, name) = StubAi.Classify(text);
+    // TASK 06: an office question (B-20) with its topic.
+    string? topic = text.Contains("المكتب فين", StringComparison.Ordinal) ? "address"
+        : text.Contains("الأسعار إيه", StringComparison.Ordinal) ? "prices"
+        : null;
+    if (topic is not null)
+    {
+        (intent, name) = ("office_info", null);
+    }
+
     var service = intent != "service_by_name" ? null
         : text.Contains("جواز عرفي", StringComparison.Ordinal) ? "urf_marriage" // TASK 11
         : "document_review"; // TASK 10
@@ -120,7 +129,7 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request) =>
     {
         ["intent"] = intent, ["service"] = service, ["consultation_mode"] = "unknown", ["full_name"] = name, ["confidence"] = 0.95,
         ["matter_type"] = text.Contains("ورث", StringComparison.Ordinal) ? "inheritance" : null,
-        ["matter_subtype"] = null, ["sender_role"] = "client",
+        ["matter_subtype"] = null, ["sender_role"] = "client", ["info_topic"] = topic,
     }.ToJsonString();
     return Results.Json(new
     {

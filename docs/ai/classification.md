@@ -23,6 +23,7 @@ fields. It never writes a word the client sees: every reply is an approved text
 | `other` | anything else, or the fallback | "unclear" (approved, 0007); the 2nd in a row → task |
 | `describe_matter` (05a) | tells the problem without asking | the offer (+ the B-25 question when the topic is still unknown); after that question: «تمام، وصلت ✅» |
 | `abusive` (05a) | insults, threats, spam | once: `abuse_warning` (proposed) + task `complaint`; then muted for good |
+| `office_info` (06) | a question about the office itself, with `info_topic` | its approved text filled from the panel (address, hours, payment, prices…), then the offer; a detail not written yet → the offer and a task `office_info_missing` |
 
 `service`: `consultation_phone_video`, `consultation_office`, `consultation_urgent`,
 `document_review`, `contract_drafting`, `formal_notice`, `urf_marriage`, `urf_divorce`,
@@ -34,9 +35,9 @@ fields. It never writes a word the client sees: every reply is an approved text
 
 - OpenAI Chat Completions, **Structured Outputs** (`response_format: json_schema`, `strict: true`,
   `additionalProperties: false`, every field required, enums = the lists above), `temperature: 0`.
-- Prompt: `backend/src/Office.Infrastructure/Ai/prompts/classify-v6.md` (v1..v5 kept as history), embedded in the build.
-  Its version (`classify-v6`) is saved with every classification. **Change the prompt = a new
-  file (`classify-v7.md` next) and a new `PromptVersion`**, then run `classify-eval` again.
+- Prompt: `backend/src/Office.Infrastructure/Ai/prompts/classify-v7.md` (v1..v6 kept as history), embedded in the build.
+  Its version (`classify-v7`) is saved with every classification. **Change the prompt = a new
+  file (`classify-v8.md` next) and a new `PromptVersion`**, then run `classify-eval` again.
 - Model: `OPENAI_MODEL`. Empty = `gpt-4.1-mini`, **a starting point only**. The final model is
   chosen by the owner after `classify-eval` (T-08).
 - Key: `HAZEM_OPENAI_API_KEY` in `.env` — the .NET key, separate from n8n's voice key. It may be
@@ -151,3 +152,19 @@ police at home, or a hearing / investigation / execution today or tomorrow, with
 - **Caution:** the samples were written by us and v2's rules were written after seeing v1's
   mistakes, so real clients may score lower. Re-run on real (anonymised, owner-approved) samples
   once Meta is live.
+
+### TASK 06: the office's questions (`office_info`, `classify-v7`)
+
+A new intent `office_info` with `info_topic` (`address`, `hours`, `how_to_book`, `how_to_pay`, `refund`, `mode`, `prices`,
+`fee_policy`, `practice_areas`); an office question without a topic is a fallback (`unknown_value`). Two rules: one price
+(«الاستشارة بكام») stays `price_question`, the whole list («الأسعار إيه») is `office_info / prices`; «بتمسكوا قضايا مخدرات؟»
+is the office (`practice_areas`), «القانون بيقول إيه في المخدرات» is the law (`legal_question`).
+
+Samples written **before** any v7 run: 18 new in the set (ids 205–222) and 10 new hold-out samples (1061–1070). Three labels
+changed with the new intent (not tuning: the expected answer is new): 132 «انتو فين بالظبط» and 133 «بتشتغلو يوم الجمعة؟»
+(other → office_info), hold-out 1036 «انتو بتشتغلو قضايا ايه» (other → office_info / practice_areas, the owner's P3).
+`classify-eval` also reports `info_topic_accuracy`.
+
+**v7 is not measured yet**: `HAZEM_OPENAI_API_KEY` is not in `.env` on this machine (the owner enters it). Until the run,
+`office_info` is tested with the stub only (unit, integration, e2e step 16). Run, once the key is in:
+`dotnet /app/cli/Office.Cli.dll classify-eval --file docs/ai/eval-set.jsonl`, then the hold-out set, and add the table here.
