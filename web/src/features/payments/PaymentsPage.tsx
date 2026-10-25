@@ -1,17 +1,31 @@
 import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { errorMessage } from "../../shared/api/client";
 import { can, useMe } from "../../shared/api/session";
 import { APPOINTMENT_STATES, BOOKING_SERVICES, label, PAYMENT_STATES, REFUND_REASONS, SERVICE_KINDS, SERVICE_STATES } from "../../shared/lib/labels";
 import { cairoWhen } from "../../shared/lib/time";
-import { Icon } from "../../shared/ui/Icon";
-import { Button, Card, Chip, Empty, ErrorState, Field, Loading } from "../../shared/ui/ui";
-import { payments, pounds, receiptUrl, type Payment, type Review, type Show } from "./api";
+import { useUrlState } from "../../shared/lib/url";
+import { ActionBar, CaseCard, CaseHead, CaseNote, Facts, Files, Meta, Summary } from "../../shared/ui/caseCard";
+import { confirmAction, toast } from "../../shared/ui/feedback";
+import type { Folder } from "../../shared/ui/folders";
+import { Button, Chip, Empty, ErrorState, Field, Loading, PageHeader, Tabs } from "../../shared/ui/ui";
+import { listQuery, payments, pounds, receiptUrl, type Payment, type Review, type Show } from "./api";
 
 const TONE: Record<string, string> = {
-  requested: "grey", proof_received: "blue", duplicate_suspected: "orange", verified: "green", partial: "orange",
+  requested: "grey", proof_received: "orange", duplicate_suspected: "orange", verified: "green", partial: "orange",
   not_received: "red", refund_requested: "orange", refunded: "grey",
 };
+const EDGE: Record<string, Folder | "grey"> = {
+  requested: "grey", proof_received: "saffron", duplicate_suspected: "saffron", verified: "jade", partial: "saffron",
+  not_received: "coral", refund_requested: "saffron", refunded: "grey",
+};
+const SHOWS = ["review", "refunds", "all"] as const;
+
+/** What the page shows first, fetched while the pointer is still on its link. */
+export function prefetchData(qc: QueryClient) {
+  void qc.prefetchQuery(listQuery("review"));
+  void qc.prefetchQuery(listQuery("refunds"));
+}
 
 /**
  * «الإيصالات والمدفوعات» (TASK 09, DECISIONS v1.13): the system never confirms a payment. Whoever checks
@@ -19,24 +33,28 @@ const TONE: Record<string, string> = {
  * the staff); a refund due is transferred by a person, who records it here (P2). Hazem tells the client.
  */
 export function PaymentsPage() {
-  const [show, setShow] = useState<Show>("review");
-  const list = useQuery({ queryKey: ["payments", show], queryFn: () => payments.list(show) });
+  const [show, setShow] = useUrlState<Show>("show", "review", SHOWS);
+  const list = useQuery(listQuery(show));
+  const review = useQuery(listQuery("review"));
+  const refunds = useQuery(listQuery("refunds"));
   const tabs: [Show, string][] = [["review", "مستني مراجعتك"], ["refunds", "استرداد مطلوب"], ["all", "الكل"]];
 
   return (
-    <div className="grid gap-4">
-      <h1 className="text-2xl">الإيصالات والمدفوعات</h1>
-      <p className="text-sm text-ink-soft">
-        حازم بيأكد الميعاد بصورة التحويل بس. افتح الإيصال، اتأكد إن الفلوس وصلت، وعلّم اللي لقيته.
-      </p>
-      <div className="flex flex-wrap gap-2" role="tablist" aria-label="المدفوعات">
-        {tabs.map(([t, text]) => (
-          <Button key={t} role="tab" aria-selected={t === show} variant={t === show ? "primary" : "secondary"} onClick={() => setShow(t)}>{text}</Button>
-        ))}
-      </div>
+    <div className="grid gap-5">
+      <PageHeader title="الإيصالات والمدفوعات" description="حازم بيأكد الميعاد بصورة التحويل بس. افتح الإيصال، اتأكد إن الفلوس وصلت، وعلّم اللي لقيته." />
+      <Summary items={[
+        { label: "مستني مراجعة", value: review.data?.length, folder: "saffron" },
+        { label: "جنيه مستنية تتأكد", value: review.data?.reduce((s, p) => s + p.amount_due, 0), folder: "ink" },
+        { label: "استرداد مطلوب", value: refunds.data?.length, folder: "orchid" },
+      ]} />
+      <Tabs label="المدفوعات" value={show} options={tabs} onChange={setShow} />
       {list.isPending ? <Loading /> : list.isError ? <ErrorState message={errorMessage(list.error)} onRetry={() => void list.refetch()} /> : (
         list.data.length === 0 ? (
-          <Card><Empty title="مفيش حاجة هنا" icon="check-circle" /></Card>
+          <div className="surface rounded-[var(--radius-card)]">
+            <Empty title={show === "review" ? "مفيش إيصالات مستنية مراجعة" : show === "refunds" ? "مفيش استرداد مطلوب" : "مفيش مدفوعات لسه"} icon="wallet">
+              {show === "review" ? "أول ما عميل يبعت صورة تحويل هتظهر هنا تراجعها." : null}
+            </Empty>
+          </div>
         ) : (
           <ul className="grid gap-3">{list.data.map((p) => <PaymentCard key={p.appointment_id} p={p} />)}</ul>
         )
@@ -49,105 +67,83 @@ function PaymentCard({ p }: { p: Payment }) {
   const qc = useQueryClient();
   const { data: me } = useMe();
   const [amount, setAmount] = useState(String(p.amount_received ?? p.amount_due));
-  const [ask, setAsk] = useState<Review | "refunded" | null>(null);
   const [method, setMethod] = useState("");
   const [note, setNote] = useState("");
-  const done = () => { setAsk(null); void qc.invalidateQueries({ queryKey: ["payments"] }); void qc.invalidateQueries({ queryKey: ["booking"] }); };
-  const review = useMutation({ mutationFn: (s: Review) => payments.review(p.appointment_id, s, s === "not_received" ? undefined : Number(amount)), onSuccess: done });
-  const refunded = useMutation({ mutationFn: () => payments.refunded(p.appointment_id, method, note || undefined), onSuccess: done });
+  const refresh = () => { void qc.invalidateQueries({ queryKey: ["payments"] }); void qc.invalidateQueries({ queryKey: ["booking"] }); void qc.invalidateQueries({ queryKey: ["appointments"] }); };
+  const review = useMutation({
+    mutationFn: (s: Review) => payments.review(p.appointment_id, s, s === "not_received" ? undefined : Number(amount)),
+    onSuccess: (_, s) => { refresh(); toast(s === "verified" ? "اتعلّم إن الفلوس وصلت" : s === "partial" ? "اتعلّم ناقص، وحازم هيبلّغ العميل" : "اتعلّم ما وصلش، وحازم هيبلّغ العميل"); },
+  });
+  const refunded = useMutation({
+    mutationFn: () => payments.refunded(p.appointment_id, method, note || undefined),
+    onSuccess: () => { refresh(); toast("الاسترداد اتسجّل، وحازم هيبلّغ العميل"); },
+  });
   const reviewable = can(me, "payments.verify") && ["proof_received", "duplicate_suspected", "verified", "partial", "not_received"].includes(p.state);
   const received = Number(amount);
-  const what: Record<Review, string> = {
-    verified: received > p.amount_due ? `تمام، ووصل ${pounds(received)} جنيه: الزيادة (${pounds(received - p.amount_due)}) هتتعمل بيها مهمة استرداد.` : `تمام: وصل ${pounds(received)} جنيه.`,
-    partial: `ناقص: وصل ${pounds(received)} من ${pounds(p.amount_due)}. حازم هيبعت للعميل يكمّل ${pounds(p.amount_due - received)} جنيه.`,
-    not_received: "ما وصلش: حازم هيطلب من العميل يتأكد ويبعت الصورة تاني.",
+  const ask: Record<Review, { title: string; body: string; yes: string; danger?: boolean }> = {
+    verified: {
+      title: "الفلوس وصلت كاملة؟", yes: "أيوه، وصلت",
+      body: received > p.amount_due ? `وصل ${pounds(received)} جنيه: الزيادة (${pounds(received - p.amount_due)}) هتتعمل بيها مهمة استرداد.` : `وصل ${pounds(received)} جنيه، والحجز هيتأكد.`,
+    },
+    partial: { title: "المبلغ ناقص؟", yes: "أيوه، ناقص", body: `وصل ${pounds(received)} من ${pounds(p.amount_due)}. حازم هيبعت للعميل يكمّل ${pounds(p.amount_due - received)} جنيه.` },
+    not_received: { title: "الفلوس ما وصلتش؟", yes: "أيوه، ما وصلتش", danger: true, body: "حازم هيطلب من العميل يتأكد من التحويل ويبعت الصورة تاني." },
   };
+  const mark = async (s: Review) => { if (await confirmAction(ask[s])) review.mutate(s); };
 
   return (
-    <li>
-      <Card>
-        <div className="flex flex-wrap items-start gap-3">
-          <span className="grid min-w-0 flex-1 gap-0.5">
-            <span className="font-semibold">{p.name ?? "من غير اسم"} · {cairoWhen(p.start)}</span>
-            <span className="text-xs text-ink-soft">
-              {p.order ? label(SERVICE_KINDS, p.service) : label(BOOKING_SERVICES, p.service)} · {p.order ? label(SERVICE_STATES, p.appointment) : label(APPOINTMENT_STATES, p.appointment)} · <span dir="ltr">+{p.wa_id}</span>
-            </span>
-            <span className="text-sm">
-              المطلوب <b className="tabular">{pounds(p.amount_due)}</b> جنيه
-              {p.amount_received != null ? <> · وصل <b className="tabular">{pounds(p.amount_received)}</b></> : null}
-              {p.proof_at ? <> · الإيصال وصل {cairoWhen(p.proof_at)}</> : null}
-            </span>
-            {p.reviewed_by ? <span className="text-xs text-ink-soft">راجعه {p.reviewed_by}{p.reviewed_at ? `، ${cairoWhen(p.reviewed_at)}` : ""}</span> : null}
-          </span>
-          <span className="flex flex-wrap gap-1.5">
-            <Chip tone={TONE[p.state] ?? "grey"}>{label(PAYMENT_STATES, p.state)}</Chip>
-            {p.duplicate ? <Chip tone="orange">نفس الصورة على حجز تاني</Chip> : null}
-          </span>
-        </div>
+    <CaseCard edge={EDGE[p.state] ?? "grey"} label={p.name ?? "من غير اسم"}>
+      <CaseHead
+        title={p.name ?? "من غير اسم"}
+        kind={p.order ? label(SERVICE_KINDS, p.service) : label(BOOKING_SERVICES, p.service)} kindFolder={p.order ? "saffron" : "cobalt"}
+        meta={[
+          <Meta key="w" icon="calendar">{p.order ? "اتطلب" : "الميعاد"} {cairoWhen(p.start)}</Meta>,
+          <Meta key="s" icon="info">{p.order ? label(SERVICE_STATES, p.appointment) : label(APPOINTMENT_STATES, p.appointment)}</Meta>,
+          <Meta key="p" icon="whatsapp"><span dir="ltr">+{p.wa_id}</span></Meta>,
+        ]}
+        status={<>
+          <Chip tone={TONE[p.state] ?? "grey"}>{label(PAYMENT_STATES, p.state)}</Chip>
+          {p.duplicate ? <Chip tone="orange">نفس الصورة على حجز تاني</Chip> : null}
+        </>} />
+      <Facts items={[
+        ["المطلوب", <><span className="display">{pounds(p.amount_due)}</span> <span className="text-[12px] font-normal text-ink-soft">جنيه</span></>],
+        ["وصل", p.amount_received != null ? <><span className="display">{pounds(p.amount_received)}</span> <span className="text-[12px] font-normal text-ink-soft">جنيه</span></> : "—",
+          p.amount_received != null ? (p.amount_received >= p.amount_due ? "text-jade-ink" : "text-saffron-ink") : undefined],
+        ["الإيصال وصل", p.proof_at ? cairoWhen(p.proof_at) : "لسه"],
+        ["راجعه", p.reviewed_by ? `${p.reviewed_by}${p.reviewed_at ? `، ${cairoWhen(p.reviewed_at)}` : ""}` : "لسه"],
+      ]} />
+      <Files label="صور التحويل" count={p.receipts} href={(i) => receiptUrl(p.appointment_id, i)} word="فتح الإيصال" icon="receipt" />
+      {p.state === "refunded" ? (
+        <CaseNote>اترد {pounds(p.refund_due ?? 0)} جنيه على {p.refund_method}، سجّله {p.refunded_by}{p.refunded_at ? `، ${cairoWhen(p.refunded_at)}` : ""}.</CaseNote>
+      ) : null}
 
-        {p.receipts > 0 ? (
-          <ul className="flex flex-wrap gap-2" aria-label="صور التحويل">
-            {Array.from({ length: p.receipts }, (_, i) => (
-              <li key={i}>
-                <a href={receiptUrl(p.appointment_id, i)} target="_blank" rel="noopener noreferrer"
-                  className="inline-flex min-h-10 items-center gap-1.5 rounded-[var(--radius-control)] border border-line px-3 text-sm hover:border-gold-line">
-                  <Icon name="receipt" className="size-4" />فتح الإيصال{p.receipts > 1 ? ` ${i + 1}` : ""}
-                </a>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-
+      <ActionBar>
         {reviewable ? (
-          <div className="grid gap-2 border-t border-line pt-3">
-            <div className="flex flex-wrap items-end gap-2">
-              <Field label="المبلغ اللي وصل فعلًا (جنيه)" type="number" min={1} inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value)} />
-              <Button variant="primary" disabled={!(received >= p.amount_due)} onClick={() => setAsk("verified")}>تمام</Button>
-              <Button disabled={!(received > 0 && received < p.amount_due)} onClick={() => setAsk("partial")}>ناقص</Button>
-              <Button variant="danger" onClick={() => setAsk("not_received")}>ما وصلش</Button>
-            </div>
-            {ask && ask !== "refunded" ? (
-              <Sure text={what[ask]} busy={review.isPending} onYes={() => review.mutate(ask)} onNo={() => setAsk(null)} />
-            ) : null}
-            {review.isError ? <p className="text-sm text-bad" role="alert">{errorMessage(review.error)}</p> : null}
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="w-44"><Field label="المبلغ اللي وصل فعلًا (جنيه)" type="number" min={1} inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value)} /></div>
+            <Button variant="primary" busy={review.isPending && review.variables === "verified"} disabled={!(received >= p.amount_due)} onClick={() => void mark("verified")}>تمام</Button>
+            <Button busy={review.isPending && review.variables === "partial"} disabled={!(received > 0 && received < p.amount_due)} onClick={() => void mark("partial")}>ناقص</Button>
+            <Button variant="danger" busy={review.isPending && review.variables === "not_received"} onClick={() => void mark("not_received")}>ما وصلش</Button>
+            {review.isError ? <p className="basis-full text-[13.5px] text-bad" role="alert">{errorMessage(review.error)}</p> : null}
           </div>
         ) : null}
-
         {p.state === "refund_requested" && can(me, "payments.refund") ? (
-          <div className="grid gap-2 border-t border-line pt-3">
-            <p className="text-sm font-semibold">
+          <div className="grid gap-2">
+            <p className="text-[14px] font-semibold">
               استرداد {pounds(p.refund_due ?? 0)} جنيه{p.refund_reason ? ` (${label(REFUND_REASONS, p.refund_reason)})` : ""}.
               {!p.reviewed_by ? " لسه ما اتراجعش." : ""}
             </p>
-            <div className="grid gap-2 md:grid-cols-2">
+            <div className="grid items-end gap-2 md:grid-cols-[1fr_1fr_auto]">
               <Field label="حوّلته على إيه" hint="مثلًا فودافون كاش أو InstaPay" maxLength={100} value={method} onChange={(e) => setMethod(e.target.value)} />
               <Field label="ملاحظة (اختياري)" maxLength={200} value={note} onChange={(e) => setNote(e.target.value)} />
+              <Button variant="primary" busy={refunded.isPending} disabled={method.trim() === ""}
+                onClick={async () => {
+                  if (await confirmAction({ title: "المبلغ اتحوّل فعلًا؟", yes: "أيوه، اتحوّل", body: `إنت حوّلت ${pounds(p.refund_due ?? 0)} جنيه على ${method}؟ حازم هيبلّغ العميل إن المبلغ اترد.` })) refunded.mutate();
+                }}>اتحوّل</Button>
             </div>
-            <div><Button variant="primary" disabled={method.trim() === ""} onClick={() => setAsk("refunded")}>اتحوّل</Button></div>
-            {ask === "refunded" ? (
-              <Sure text={`إنت حوّلت ${pounds(p.refund_due ?? 0)} جنيه فعلًا على ${method}؟ حازم هيبلّغ العميل إن المبلغ اترد.`} busy={refunded.isPending}
-                onYes={() => refunded.mutate()} onNo={() => setAsk(null)} />
-            ) : null}
-            {refunded.isError ? <p className="text-sm text-bad" role="alert">{errorMessage(refunded.error)}</p> : null}
+            {refunded.isError ? <p className="text-[13.5px] text-bad" role="alert">{errorMessage(refunded.error)}</p> : null}
           </div>
         ) : null}
-
-        {p.state === "refunded" ? (
-          <p className="text-sm text-ink-soft">اترد {pounds(p.refund_due ?? 0)} جنيه على {p.refund_method} · {p.refunded_by}{p.refunded_at ? `، ${cairoWhen(p.refunded_at)}` : ""}</p>
-        ) : null}
-      </Card>
-    </li>
-  );
-}
-
-function Sure({ text, busy, onYes, onNo }: { text: string; busy: boolean; onYes: () => void; onNo: () => void }) {
-  return (
-    <div className="grid gap-2 rounded-lg border border-gold-line bg-gold-tint p-3 text-sm" role="alertdialog" aria-label="تأكيد">
-      <p>{text}</p>
-      <div className="flex gap-2">
-        <Button variant="primary" busy={busy} onClick={onYes}>أيوه، أكّد</Button>
-        <Button onClick={onNo}>لأ</Button>
-      </div>
-    </div>
+      </ActionBar>
+    </CaseCard>
   );
 }

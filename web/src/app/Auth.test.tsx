@@ -165,4 +165,29 @@ describe("sign-in, sign-up and the authenticator (v1.9)", () => {
     await vi.waitFor(() => expect(calls.some((c) => c.path === "/users/p1/approve")).toBe(true));
     expect(calls.find((c) => c.path === "/users/p1/approve")!.body).toEqual({ role: "lawyer", staff_name: null });
   });
+
+  it("signs out after an hour without use, not before (the refreshes do not count)", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      localStorage.removeItem("hazem.last_activity");
+      const calls = serve({
+        "GET /auth/me": { body: boss },
+        "GET /alerts": { body: { unread: 0, items: [] } },
+        "POST /auth/logout": { status: 204 },
+      });
+      renderAt("/account");
+      await screen.findByRole("button", { name: /تسجيل الخروج|خروج/ });
+
+      await vi.advanceTimersByTimeAsync(50 * 60_000);
+      fireEvent.keyDown(window, { key: "a" }); // still working: the hour starts again
+      await vi.advanceTimersByTimeAsync(50 * 60_000);
+      expect(calls.some((c) => c.path === "/auth/logout")).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(11 * 60_000);
+      await vi.waitFor(() => expect(calls.some((c) => c.method === "POST" && c.path === "/auth/logout")).toBe(true));
+      expect(await screen.findByText(/مفيش استخدام بقاله ساعة/)).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

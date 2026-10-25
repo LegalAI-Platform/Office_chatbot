@@ -52,6 +52,9 @@ public sealed class ApiFactory(TestDatabase db, TimeProvider? clock = null) : We
     /// <summary>The panel's login rate limit; high by default because tests sign in many times a minute.</summary>
     public int LoginsPerMinute { get; init; } = 1000;
 
+    /// <summary>Tries at the current password or a code inside a session, per account; high unless a test is about it.</summary>
+    public int SensitivePer15Minutes { get; init; } = 1000;
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("test");
@@ -61,6 +64,7 @@ public sealed class ApiFactory(TestDatabase db, TimeProvider? clock = null) : We
         builder.UseSetting("Hazem:N8nInternalSendToken", N8nToken);
         builder.UseSetting("Hazem:OpenAiApiKey", OpenAiKey);
         builder.UseSetting("Panel:LoginsPerMinute", LoginsPerMinute.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        builder.UseSetting("Panel:SensitivePer15Minutes", SensitivePer15Minutes.ToString(System.Globalization.CultureInfo.InvariantCulture));
         builder.UseSetting("Panel:SecretKey", SignupConfigured ? PanelSecretKey : "");
         builder.UseSetting("Panel:ManagersNeedTwoFactor", ManagersNeedTwoFactor ? "true" : "false");
         builder.UseSetting("Chatwoot:RunWorker", "false");

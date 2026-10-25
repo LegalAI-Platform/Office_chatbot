@@ -2,7 +2,7 @@ import { useNavigate } from "react-router";
 import { useLogout, useMe } from "../../shared/api/session";
 import { label, ROLES } from "../../shared/lib/labels";
 import { Icon } from "../../shared/ui/Icon";
-import { Button, Card } from "../../shared/ui/ui";
+import { Button, Card, PageHeader } from "../../shared/ui/ui";
 import { TwoFactorCard } from "./TwoFactorCard";
 
 export function AccountPage() {
@@ -12,10 +12,10 @@ export function AccountPage() {
   if (!me) return null;
 
   return (
-    <div className="grid gap-4">
-      <h1 className="text-2xl">حسابي</h1>
+    <div className="grid max-w-2xl gap-5">
+      <PageHeader title="حسابي" />
       <Card>
-        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+        <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2.5 text-[14.5px]">
           <dt className="text-ink-soft">الاسم</dt>
           <dd className="font-medium">{me.display_name}</dd>
           <dt className="text-ink-soft">اسم المستخدم</dt>

@@ -40,7 +40,7 @@ export function ForgotPasswordPage() {
             onChange={(e) => setLogin(e.target.value)} />
           {ask.isError ? <Notice>{errorMessage(ask.error)}</Notice> : null}
           <Button type="submit" variant="primary" busy={ask.isPending} disabled={!login.trim()}>ابعت الكود</Button>
-          <Link to="/login" className="text-center text-sm font-semibold text-gold-ink hover:underline">ارجع لتسجيل الدخول</Link>
+          <Link to="/login" className="text-center text-sm font-semibold text-accent-ink hover:underline">ارجع لتسجيل الدخول</Link>
         </form>
       </AuthLayout>
     );

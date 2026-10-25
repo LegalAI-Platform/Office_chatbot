@@ -54,9 +54,9 @@ describe("TASK 09 payments", () => {
     fireEvent.change(within(card).getByLabelText(/المبلغ اللي وصل/), { target: { value: "300" } });
     expect((within(card).getByRole("button", { name: "تمام" }) as HTMLButtonElement).disabled).toBe(true); // less than due
     fireEvent.click(within(card).getByRole("button", { name: "ناقص" }));
-    const sure = within(card).getByRole("alertdialog", { name: "تأكيد" });
+    const sure = await screen.findByRole("alertdialog");
     expect(within(sure).getByText(/يكمّل 200 جنيه/)).toBeTruthy();
-    fireEvent.click(within(sure).getByRole("button", { name: "أيوه، أكّد" }));
+    fireEvent.click(within(sure).getByRole("button", { name: "أيوه، ناقص" }));
     await vi.waitFor(() => expect(calls.some((c) => c.method === "POST")).toBe(true));
     expect(calls.find((c) => c.method === "POST")).toMatchObject({ path: "/payments/a1/review", body: { state: "partial", received: 300 } });
   });
@@ -74,7 +74,7 @@ describe("TASK 09 payments", () => {
     expect((within(card).getByRole("button", { name: "اتحوّل" }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.change(within(card).getByLabelText("حوّلته على إيه"), { target: { value: "فودافون كاش" } });
     fireEvent.click(within(card).getByRole("button", { name: "اتحوّل" }));
-    fireEvent.click(within(within(card).getByRole("alertdialog", { name: "تأكيد" })).getByRole("button", { name: "أيوه، أكّد" }));
+    fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "أيوه، اتحوّل" }));
     await vi.waitFor(() => expect(calls.some((c) => c.method === "POST")).toBe(true));
     expect(calls.find((c) => c.method === "POST")).toMatchObject({ path: "/payments/a1/refunded", body: { method: "فودافون كاش" } });
   });

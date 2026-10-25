@@ -6,7 +6,9 @@ import type { ListEntry, ListKind, MutedConversation, StaffRef } from "../../sha
 import { label, LIST_KINDS } from "../../shared/lib/labels";
 import { cairoWhen } from "../../shared/lib/time";
 import { Icon } from "../../shared/ui/Icon";
-import { Button, Card, Empty, ErrorState, Field, Loading } from "../../shared/ui/ui";
+import { Button, Card, Empty, ErrorState, Field, FileInput, Loading, PageHeader, inputClass } from "../../shared/ui/ui";
+import { toast } from "../../shared/ui/feedback";
+import { FOLDER, type Folder } from "../../shared/ui/folders";
 
 const KINDS: ListKind[] = ["existing_client", "lawyer_direct", "blocked"];
 const ERRORS: Record<string, string> = {
@@ -16,6 +18,29 @@ const ERRORS: Record<string, string> = {
 };
 const PAGE = 50; // the API's page
 const MAX_CSV_BYTES = 600_000; // 300,000 Arabic characters: what the API takes
+
+const KIND_FOLDER: Record<ListKind, Folder> = { existing_client: "jade", lawyer_direct: "cobalt", blocked: "coral" };
+const KIND_HINT: Record<ListKind, string> = {
+  existing_client: "حازم بيحوّلهم لموظفهم على طول",
+  lawyer_direct: "رسايلهم بتروح للأستاذ مباشرة",
+  blocked: "حازم ما بيردش عليهم",
+};
+
+/** A list with its size (its own query, so each tile knows its count), pressed to open it. */
+function ListTile({ kind, on, onClick }: { kind: ListKind; on: boolean; onClick: () => void }) {
+  const f = FOLDER[KIND_FOLDER[kind]];
+  const total = useQuery({ queryKey: ["lists", kind, "", 1], queryFn: () => api<{ total: number; items: ListEntry[] }>("GET", `/lists?kind=${kind}&page=1`) }).data?.total;
+  return (
+    <button type="button" aria-pressed={on} onClick={onClick}
+      className={`surface grid gap-0.5 rounded-[var(--radius-card)] px-4 py-3.5 text-start transition-colors hover:border-line-strong ${on ? "ring-2 ring-gold ring-inset" : ""}`}>
+      <span className="flex items-baseline gap-2">
+        <span className={`display text-[28px] leading-tight font-semibold ${f.ink}`}>{total ?? "…"}</span>
+        <span className="text-[15px] font-semibold">{label(LIST_KINDS, kind)}</span>
+      </span>
+      <span className="text-[13px] text-ink-soft">{KIND_HINT[kind]}</span>
+    </button>
+  );
+}
 
 /**
  * The office's lists (B-14, TASK 07c): who Hazem treats as a current client, the lawyer's own list,
@@ -36,30 +61,28 @@ export function ListsPage() {
   const pages = list.data ? Math.max(1, Math.ceil(list.data.total / PAGE)) : 1;
   const remove = useMutation({
     mutationFn: (id: string) => api<void>("DELETE", `/lists/${id}`),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["lists"] }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["lists"] }); toast("الرقم اتشال من القايمة"); },
   });
 
   return (
     <div className="grid gap-4">
-      <h1 className="text-2xl">قوايم المكتب</h1>
-      <p className="max-w-2xl text-sm text-ink-soft">
-        حازم بيستخدم القوايم دي علشان يعرف مين بيكلمه. لو الرقم في أكتر من قايمة: الممنوعين الأول، بعدين قايمة الأستاذ، بعدين الموكلين الحاليين.
-      </p>
+      <PageHeader title="قوايم المكتب" description="حازم بيستخدم القوايم دي علشان يعرف مين بيكلمه. لو الرقم في أكتر من قايمة: الممنوعين الأول، بعدين قايمة الأستاذ، بعدين الموكلين الحاليين." />
 
-      <div className="flex flex-wrap gap-2" role="group" aria-label="القايمة">
+      {/* each list with its size; pressing one opens it */}
+      <section aria-label="القايمة" role="group" className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {KINDS.map((k) => (
-          <Button key={k} variant={k === kind ? "primary" : "secondary"} aria-pressed={k === kind} onClick={() => { setKind(k); setPage(1); }}>
-            {label(LIST_KINDS, k)}
-          </Button>
+          <ListTile key={k} kind={k} on={k === kind} onClick={() => { setKind(k); setPage(1); setQ(""); }} />
         ))}
-      </div>
+      </section>
 
-      <AddEntry kind={kind} />
-      <ImportCsv kind={kind} />
+      <div className="grid items-start gap-4 lg:grid-cols-2">
+        <AddEntry kind={kind} />
+        <ImportCsv kind={kind} />
+      </div>
 
       <Card>
         <div className="flex flex-wrap items-end justify-between gap-2">
-          <h2 className="text-lg">{label(LIST_KINDS, kind)} {list.data ? <span className="tabular text-sm text-ink-soft">({list.data.total})</span> : null}</h2>
+          <h2 className="text-[16px] font-semibold">{label(LIST_KINDS, kind)} {list.data ? <span className="tabular text-sm text-ink-soft">({list.data.total})</span> : null}</h2>
           <div className="w-full max-w-xs">
             <Field label="دوّر بالاسم أو آخر أرقام" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />
           </div>
@@ -105,21 +128,21 @@ function AddEntry({ kind }: { kind: ListKind }) {
   const [form, setForm] = useState({ phone: "", name: "", staff_name: "", note: "" });
   const add = useMutation({
     mutationFn: () => api<void>("POST", "/lists", { kind, ...form, staff_name: kind === "existing_client" ? form.staff_name : null }),
-    onSuccess: () => { setForm({ phone: "", name: "", staff_name: "", note: "" }); void qc.invalidateQueries({ queryKey: ["lists"] }); },
+    onSuccess: () => { setForm({ phone: "", name: "", staff_name: "", note: "" }); void qc.invalidateQueries({ queryKey: ["lists"] }); toast("الرقم اتضاف"); },
   });
   const error = add.error instanceof ApiError && add.error.code ? ERRORS[add.error.code] ?? errorMessage(add.error) : add.isError ? errorMessage(add.error) : undefined;
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm({ ...form, [k]: e.target.value });
 
   return (
     <Card>
-      <h2 className="text-lg">ضيف رقم</h2>
+      <h2 className="text-[16px] font-semibold">ضيف رقم</h2>
       <form onSubmit={(e: FormEvent) => { e.preventDefault(); add.mutate(); }} className="grid gap-3 md:grid-cols-2" noValidate>
         <Field label="الرقم" required dir="ltr" inputMode="tel" value={form.phone} onChange={set("phone")} />
         <Field label="الاسم" value={form.name} onChange={set("name")} />
         {kind === "existing_client" ? (
           <label className="grid gap-1.5 text-sm font-semibold">
             الموظف المسؤول
-            <select className="surface min-h-11 rounded-[var(--radius-control)] px-3 font-normal text-ink" value={form.staff_name} onChange={set("staff_name")}>
+            <select className={inputClass} value={form.staff_name} onChange={set("staff_name")}>
               <option value="">من غير موظف</option>
               {(staff.data ?? []).map((s) => <option key={s.id} value={s.name}>{s.name}</option>)}
             </select>
@@ -140,23 +163,21 @@ function ImportCsv({ kind }: { kind: ListKind }) {
   const run = useMutation({
     mutationFn: async (file: File) =>
       api<{ imported: number; rejected: { line: number; reason: string }[] }>("POST", "/lists/import", { kind, csv: await file.text(), replace }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["lists"] }),
+    onSuccess: (r) => { void qc.invalidateQueries({ queryKey: ["lists"] }); toast(`اتضاف ${r.imported} رقم`); },
   });
 
   return (
     <Card>
-      <h2 className="text-lg">استورد من Excel</h2>
+      <h2 className="text-[16px] font-semibold">استورد من Excel</h2>
       <p className="text-sm text-ink-soft">احفظ الشيت كـ CSV فيه عمود <code dir="ltr">phone</code> (ومعاه <code dir="ltr">name</code>، و<code dir="ltr">staff</code> للموكلين). الأرقام الغلط بتتعدّى وبيتقالك سطرها.</p>
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" checked={replace} onChange={(e) => setReplace(e.target.checked)} />
         استبدل القايمة كلها بالملف ده (لو فيه سطر غلط، مفيش حاجة بتتغير)
       </label>
-      <input type="file" accept=".csv,text/csv" aria-label="ملف CSV" disabled={run.isPending}
-        onChange={(e) => {
-          const f = e.target.files?.[0];
+      <FileInput label="اختار ملف CSV" name="ملف CSV" accept=".csv,text/csv" disabled={run.isPending}
+        onFile={(f) => {
           setTooBig(!!f && f.size > MAX_CSV_BYTES);
           if (f && f.size <= MAX_CSV_BYTES) run.mutate(f);
-          e.target.value = "";
         }} />
       {tooBig ? <p className="text-sm text-bad" role="alert">الملف كبير. قسّمه لملفات أصغر من 600 كيلو (حوالي 6,000 سطر) واستوردها واحد ورا التاني.</p> : null}
       {run.isSuccess ? (
@@ -175,12 +196,12 @@ function Muted() {
   const muted = useQuery({ queryKey: ["muted"], queryFn: () => api<MutedConversation[]>("GET", "/conversations/muted") });
   const unmute = useMutation({
     mutationFn: (wa: string) => api<void>("POST", "/conversations/unmute", { wa_id: wa }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["muted"] }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["muted"] }); toast("المحادثة رجعت، وحازم هيرد على الرقم ده تاني"); },
   });
 
   return (
     <Card>
-      <h2 className="text-lg">محادثات حازم ساكت فيها</h2>
+      <h2 className="text-[16px] font-semibold">محادثات حازم ساكت فيها</h2>
       <p className="text-sm text-ink-soft">بسبب شتيمة أو سبام أو رقم ممنوع. لو رجّعتها، حازم بيرد على الرقم ده تاني.</p>
       {muted.isPending ? <Loading /> : muted.isError ? <ErrorState message={errorMessage(muted.error)} /> :
         muted.data.length === 0 ? <Empty title="مفيش محادثات ساكتة" /> : (

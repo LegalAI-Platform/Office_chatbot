@@ -1,5 +1,5 @@
-// One family of line icons (24px grid, 1.8px stroke, round caps), drawn here so the panel needs no
-// icon library and no emoji. The set follows the owner's brand sheet. Icons that point along the
+// One family of line icons (24px grid, 1.75px stroke, round caps), drawn here so the panel needs no
+// icon library and no emoji, and every icon follows the theme's colors. Icons that point along the
 // reading direction are drawn for LTR and flip in RTL.
 
 export type IconName =
@@ -39,9 +39,23 @@ export type IconName =
   | "moon"
   | "trend-up"
   | "message"
-  | "whatsapp";
+  | "whatsapp"
+  | "upload"
+  | "inbox"
+  | "plus"
+  | "filter"
+  | "scale"
+  | "file-text"
+  | "wallet";
 
 const PATHS: Record<IconName, string[]> = {
+  upload: ["M12 15V4", "m7 9 5-5 5 5", "M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"],
+  inbox: ["M3 13h5l1.5 3h5L16 13h5", "M5.5 5h13L21 13v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-5z"],
+  plus: ["M12 5v14", "M5 12h14"],
+  filter: ["M4 5h16", "M7 12h10", "M10 19h4"],
+  scale: ["M12 4v16", "M8 20h8", "M5 8h14", "m5 8-2.5 6a3 3 0 0 0 5 0z", "m19 8-2.5 6a3 3 0 0 0 5 0z"],
+  "file-text": ["M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z", "M14 3v5h5", "M9 13h6M9 17h4"],
+  wallet: ["M4 7a2 2 0 0 1 2-2h11v4", "M4 7v11a2 2 0 0 0 2 2h13a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1H6a2 2 0 0 1-2-2z", "M16 14.5h.01"],
   home: ["M3 10.5 12 3l9 7.5", "M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5"],
   clients: ["M15 19v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 3 17.5V19", "M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z", "M21 19v-1.5a3.5 3.5 0 0 0-2.5-3.35", "M15.5 4.2a3.5 3.5 0 0 1 0 6.6"],
   tasks: ["M9 4h6v3H9z", "M15 5.5h2a2 2 0 0 1 2 2V19a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7.5a2 2 0 0 1 2-2h2", "m9 14 2 2 4-4"],
@@ -90,7 +104,7 @@ export function Icon({ name, className = "size-5", label }: { name: IconName; cl
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth={1.8}
+      strokeWidth={1.75}
       strokeLinecap="round"
       strokeLinejoin="round"
       className={`${className} ${DIRECTIONAL.has(name) ? "rtl:-scale-x-100" : ""}`}

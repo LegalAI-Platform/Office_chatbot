@@ -1,4 +1,4 @@
-// Light or dark: the device's choice unless the person picks one (kept on this device only).
+// Light or dark: «Night desk» is dark unless the person picks light (kept on this device only).
 import { useSyncExternalStore } from "react";
 
 export type Theme = "light" | "dark";
@@ -14,16 +14,11 @@ function stored(): Theme | null {
   }
 }
 
-const system = (): Theme =>
-  typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+export const currentTheme = (): Theme => stored() ?? "dark";
 
-export const currentTheme = (): Theme => stored() ?? system();
-
-/** Puts the stored choice on <html> (none = follow the device). Called once before the first render. */
+/** Puts the theme on <html> (the stored choice, else dark). Called once before the first render. */
 export function applyStoredTheme() {
-  const t = stored();
-  if (t) document.documentElement.dataset.theme = t;
-  else delete document.documentElement.dataset.theme;
+  document.documentElement.dataset.theme = currentTheme();
 }
 
 export function setTheme(t: Theme) {
@@ -40,13 +35,8 @@ export function useTheme(): Theme {
   return useSyncExternalStore(
     (l) => {
       listeners.add(l);
-      const mq = typeof matchMedia === "function" ? matchMedia("(prefers-color-scheme: dark)") : null;
-      mq?.addEventListener("change", l);
-      return () => {
-        listeners.delete(l);
-        mq?.removeEventListener("change", l);
-      };
+      return () => listeners.delete(l);
     },
-    () => (document.documentElement.dataset.theme as Theme | undefined) ?? system(),
+    () => (document.documentElement.dataset.theme as Theme | undefined) ?? currentTheme(),
   );
 }

@@ -1,4 +1,5 @@
 // TASK 09 (DECISIONS v1.13, B-05 / B-22 / S-04): /api/panel/payments. docs/panel-api.md.
+import { queryOptions } from "@tanstack/react-query";
 import { api } from "../../shared/api/client";
 
 export type Show = "review" | "refunds" | "all";
@@ -40,3 +41,6 @@ export const receiptUrl = (id: string, index: number): string => `/api/panel/pay
 
 /** «1,000». */
 export const pounds = (n: number): string => n.toLocaleString("en-US");
+
+/** One list, the same key wherever it is read or fetched ahead (a hover on the page's link). */
+export const listQuery = (show: Show) => queryOptions({ queryKey: ["payments", show], queryFn: () => payments.list(show) });

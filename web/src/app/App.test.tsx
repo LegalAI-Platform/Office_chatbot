@@ -101,13 +101,15 @@ describe("routing and permissions", () => {
   it("shows the real task numbers on the home screen and the urgent task first", async () => {
     serve(me());
     renderAt("/");
-    const urgent = await screen.findByRole("heading", { name: "أمور عاجلة" });
-    expect(await within(urgent.closest("section")!).findByText("3")).toBeTruthy();
-    const late = screen.getByRole("heading", { name: "مهام متأخرة" });
-    expect(within(late.closest("section")!).getByText("2")).toBeTruthy();
-    const table = screen.getByRole("heading", { name: "المهام العاجلة والمتأخرة" }).closest("section")!;
-    expect(within(table).getByText("عاجلة")).toBeTruthy();
-    expect(within(table).getByRole("link", { name: "افتح مهمة سارة محمد" }).getAttribute("href")).toBe("/tasks/t1");
+    const numbers = await screen.findByRole("region", { name: "أرقام النهارده" });
+    const urgent = within(numbers).getByRole("link", { name: /طلبات عاجلة/ });
+    expect(await within(urgent).findByText("3")).toBeTruthy();
+    const late = within(numbers).getByRole("link", { name: /مهام متأخرة/ });
+    expect(within(late).getByText("2")).toBeTruthy();
+    expect(late.getAttribute("href")).toBe("/tasks?state=overdue");
+    const queue = screen.getByRole("region", { name: /محتاج منك دلوقتي/ });
+    expect(within(queue).getAllByText("عاجلة").length).toBeGreaterThan(0);
+    expect(within(queue).getByRole("link", { name: "افتح مهمة سارة محمد" }).getAttribute("href")).toBe("/tasks/t1");
   });
 
   it("opens the overdue tasks from a link", async () => {

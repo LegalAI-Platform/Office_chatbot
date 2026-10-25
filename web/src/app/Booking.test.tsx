@@ -54,9 +54,10 @@ describe("TASK 08 booking", () => {
         { body: { cancelled: 1, not_told: 0 } },
       ],
     });
-    renderAt("/appointments");
+    renderAt("/appointments?tab=calendar");
     fireEvent.click(await screen.findByRole("gridcell", { name: /2026-11-20/ }));
-    fireEvent.click(screen.getByRole("button", { name: "احفظ" }));
+    fireEvent.click(screen.getByRole("button", { name: "غيّر ساعات اليوم ده" }));
+    fireEvent.click(screen.getByRole("button", { name: "احفظ التغيير" }));
     const ask = await screen.findByRole("alertdialog", { name: "فيه حجوزات" });
     expect(within(ask).getByText(/محمد أحمد علي حسن/)).toBeTruthy();
     fireEvent.click(within(ask).getByRole("button", { name: "كمّل وبلّغ العملاء" }));
@@ -81,6 +82,24 @@ describe("TASK 08 booking", () => {
     expect(sent.days.find((d) => d.weekday === 6)!.ranges).toEqual([{ start: 600, end: 840 }]);
   });
 
+  it("opens on the coming bookings, the urgent one in red, with no «خلص» before it starts", async () => {
+    serve({
+      "GET /auth/me": { body: staff },
+      "GET /booking/appointments": { body: [{ ...appointment, start: "2099-01-01T10:00:00Z", end: "2099-01-01T10:15:00Z", service: "consultation_urgent" }] },
+    });
+    renderAt("/appointments");
+    expect((await screen.findByRole("tab", { name: "الحجوزات" })).getAttribute("aria-selected")).toBe("true");
+    // shown twice: as «الميعاد الجاي» and in its day's list
+    const next = await screen.findByRole("region", { name: "الميعاد الجاي" });
+    expect(within(next).getByText("محمد أحمد علي حسن")).toBeTruthy();
+    const row = screen.getAllByText("محمد أحمد علي حسن").map((e) => e.closest("li")).find(Boolean)!;
+    expect(within(row).getByRole("button", { name: "إلغاء" })).toBeTruthy();
+    expect(within(row).queryByRole("button", { name: /خلص/ })).toBeNull();
+    fireEvent.click(within(row).getByRole("button", { name: "التفاصيل" }));
+    expect(within(row).getByText("وصل إيصال، مستني المراجعة")).toBeTruthy();
+    expect(within(row).getByText("متسجل في كالندر الأستاذ")).toBeTruthy();
+  });
+
   // TASK 12 (B-18): each appointment's reminders and «هحضر ✅», and tomorrow's that are not confirmed yet.
   it("the bookings show the reminders, who will come, and tomorrow's unconfirmed", async () => {
     const tomorrow = new Date(Date.now() + 86_400_000).toISOString();
@@ -96,7 +115,8 @@ describe("TASK 08 booking", () => {
     renderAt("/appointments");
     fireEvent.click(await screen.findByRole("tab", { name: "الحجوزات" }));
     expect((await screen.findByText(/ما أكدوش حضورهم/)).closest("p")!.textContent).toMatch(/بكرة 2 مواعيد، 1 ما أكدوش حضورهم/);
-    const first = screen.getByText(/محمد أحمد علي حسن/).closest("li")!;
+    // the first one is also «الميعاد الجاي» above the list: its row is the one inside the list
+    const first = screen.getAllByText(/محمد أحمد علي حسن/).map((e) => e.closest("li")).find(Boolean)!;
     expect(within(first).getByText("أكّد حضوره ✅")).toBeTruthy();
     expect(within(first).getByText(/تذكير اليوم اللي قبله: اتبعت ✓ \(قالب واتساب\)/)).toBeTruthy();
     expect(within(first).getByText(/تذكير قبلها بساعتين: ما اتبعتش: الوقت قريب من الميعاد/)).toBeTruthy();

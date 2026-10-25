@@ -129,7 +129,7 @@ public static class PanelEndpoints
             // Every other session ends (new stamp); this one continues with a fresh cookie.
             await PanelAuth.SignInAsync(ctx, r.Value!);
             return Results.NoContent();
-        });
+        }).RequireRateLimiting(PanelAuth.SensitiveLimiter);
 
         // ---------- everything else: not until a temporary password is changed ----------
         var work = panel.MapGroup("").AddEndpointFilter<MustChangePasswordFilter>().AddEndpointFilter<TwoFactorRequiredFilter>();
@@ -162,7 +162,7 @@ public static class PanelEndpoints
             // Every other session ended (new stamp); this one continues with a fresh cookie.
             await PanelAuth.SignInAsync(ctx, (await accounts.FindAsync(ctx.CurrentUser().Id, ct))!);
             return Results.Ok(new { recovery_codes = r.Value });
-        });
+        }).RequireRateLimiting(PanelAuth.SensitiveLimiter);
 
         twoFa.MapPost("/disable", async (DisableTwoFactorRequest? body, HttpContext ctx, PanelTwoFactor tf, PanelAccounts accounts, CancellationToken ct) =>
         {
@@ -174,13 +174,13 @@ public static class PanelEndpoints
 
             await PanelAuth.SignInAsync(ctx, (await accounts.FindAsync(ctx.CurrentUser().Id, ct))!);
             return Results.NoContent();
-        });
+        }).RequireRateLimiting(PanelAuth.SensitiveLimiter);
 
         twoFa.MapPost("/recovery-codes", async (OneCodeRequest? body, HttpContext ctx, PanelTwoFactor tf, CancellationToken ct) =>
         {
             var r = await tf.RenewRecoveryCodesAsync(ctx.CurrentUser().Id, body?.Code, ct);
             return r.Outcome == PanelOutcome.Ok ? Results.Ok(new { recovery_codes = r.Value }) : Refused(r);
-        });
+        }).RequireRateLimiting(PanelAuth.SensitiveLimiter);
 
         var tasks = work.MapGroup("/tasks");
         tasks.MapGet("", async (string? scope, string? state, int? page, string? q, HttpContext ctx, PanelTasks use, CancellationToken ct) =>

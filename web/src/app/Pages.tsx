@@ -1,22 +1,20 @@
 import { Link } from "react-router";
 import { can, useMe } from "../shared/api/session";
-import { OwnerImg } from "../shared/ui/Owner";
 import { Icon, type IconName } from "../shared/ui/Icon";
+import { PageHeader } from "../shared/ui/ui";
 
 /** A side-bar page whose feature is not built yet: says what it will hold and when, not a dead end. */
-export function ComingSoon({ title, icon, what, when }: { title: string; icon: IconName; what: string; when: string }) {
+export function ComingSoon({ title, icon, what }: { title: string; icon: IconName; what: string }) {
   return (
-    <div className="grid gap-4">
-      <h1 className="text-2xl">{title}</h1>
-      <section className="surface relative grid justify-items-center gap-3 overflow-hidden rounded-[var(--radius-card)] px-6 py-14 text-center">
-        <OwnerImg name="sidebar_art" className="pointer-events-none absolute bottom-0 left-0 w-44 opacity-25" />
-        <span className="grid size-14 place-items-center rounded-2xl bg-side text-gold">
-          <Icon name={icon} className="size-7" />
+    <div className="grid gap-5">
+      <PageHeader title={title} />
+      <section className="surface grid justify-items-center gap-2 rounded-[var(--radius-card)] px-6 py-14 text-center">
+        <span className="mb-1 grid size-12 place-items-center rounded-full bg-accent-tint text-accent-ink">
+          <Icon name={icon} className="size-6" />
         </span>
-        <p className="text-lg font-bold">قريبًا</p>
-        <p className="max-w-md text-sm text-ink-soft">{what}</p>
-        <p className="rounded-md bg-gold-tint px-3 py-1 text-xs font-semibold text-gold-ink">{when}</p>
-        <Link to="/" className="mt-2 text-sm font-semibold text-gold-ink hover:underline">ارجع للرئيسية</Link>
+        <p className="text-[17px] font-semibold">الصفحة دي لسه بتتعمل</p>
+        <p className="max-w-md text-[14px] text-ink-soft">{what}</p>
+        <Link to="/" className="mt-2 text-[14px] font-medium text-accent-ink hover:underline">ارجع للرئيسية</Link>
       </section>
     </div>
   );
@@ -32,17 +30,18 @@ export function SettingsPage() {
     { to: "/texts", icon: "chat", title: "نصوص حازم", text: "الكلام اللي حازم بيرد بيه، وكل نسخة قديمة محفوظة.", show: can(me, "texts.manage") },
   ];
   return (
-    <div className="grid gap-4">
-      <h1 className="text-2xl">الإعدادات</h1>
-      <ul className="grid gap-3 md:grid-cols-3">
+    <div className="grid gap-5">
+      <PageHeader section="/settings" title="الإعدادات" description="حسابك، والحسابات، والقوايم، والنصوص اللي حازم بيرد بيها." />
+      <ul className="surface grid divide-y divide-line overflow-hidden rounded-[var(--radius-card)]">
         {rows.filter((r) => r.show).map((r) => (
           <li key={r.to}>
-            <Link to={r.to} className="surface flex h-full items-start gap-3 rounded-[var(--radius-card)] p-4 hover:border-gold-line">
-              <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-side text-gold"><Icon name={r.icon} className="size-5" /></span>
-              <span className="grid gap-0.5">
-                <span className="font-bold">{r.title}</span>
-                <span className="text-sm text-ink-soft">{r.text}</span>
+            <Link to={r.to} className="flex items-center gap-4 px-4 py-3.5 transition-colors hover:bg-card-2 lg:px-5">
+              <span className="grid size-10 shrink-0 place-items-center rounded-full bg-muted text-ink-soft"><Icon name={r.icon} className="size-5" /></span>
+              <span className="grid min-w-0 flex-1 leading-snug">
+                <span className="font-medium">{r.title}</span>
+                <span className="text-[13.5px] text-ink-soft">{r.text}</span>
               </span>
+              <Icon name="chevron-end" className="size-4 shrink-0 text-ink-faint" />
             </Link>
           </li>
         ))}

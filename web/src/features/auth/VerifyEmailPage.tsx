@@ -24,7 +24,7 @@ export function VerifyEmailPage() {
     return (
       <AuthLayout title="الإيميل اتأكد">
         <Notice tone="good">تمام. حسابك دلوقتي مستني المدير يفعّله ويحدد صلاحياتك، وهيوصلك إيميل أول ما يتفعّل.</Notice>
-        <Link to="/login" className="text-center text-sm font-semibold text-gold-ink hover:underline">ارجع لتسجيل الدخول</Link>
+        <Link to="/login" className="text-center text-sm font-semibold text-accent-ink hover:underline">ارجع لتسجيل الدخول</Link>
       </AuthLayout>
     );
   }
