@@ -47,5 +47,8 @@ export default defineConfig({
     globals: true,
     css: false,
     setupFiles: ["src/test-setup.ts"],
+    // Each test renders the whole app (and since the pages are split, loads its page on the way): one that
+    // waits twice for findBy* (4 s each, test-setup.ts) can pass 5 s on a busy machine without being wrong.
+    testTimeout: 15_000,
   },
 });
