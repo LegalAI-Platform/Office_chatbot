@@ -1,0 +1,39 @@
+#!/bin/bash
+# The monthly restore drill (TASK 13, DECISIONS v1.18): the latest backup of every database goes into a throwaway
+# database (the same tables as the live one, then dropped), and every file of the latest manifest is fetched,
+# decrypted and checked. Recorded in hazem.ops_runs; the healthcheck fails when the last drill failed or is older
+# than 35 days. Nothing live is touched.
+#   restore-drill            run it now
+#   restore-drill --if-due   only when the last drill that worked is 28 days old or more (the nightly job)
+set -euo pipefail
+source /usr/local/bin/_lib
+need_backup_key
+
+if [[ "${1:-}" == "--if-due" ]]; then
+  recent="$(psql_super office -c "SELECT count(*) FROM hazem.ops_runs WHERE kind = 'drill' AND ok AND started_at > now() - interval '28 days'")"
+  if [[ "$recent" != "0" ]]; then
+    echo "Drill not due (one worked within 28 days)."
+    exit 0
+  fi
+fi
+
+run="$(ops_start drill)"
+step="start"
+checked=0
+trap 'ops_finish "$run" false NULL "$checked" "failed_at_$step"' EXIT
+
+for db in office n8n chatwoot; do
+  step="restore_$db"
+  log "Drill: $db ..."
+  restore "$db" latest "drill_${db}_$(date '+%Y%m%d%H%M%S')" --drop-after-verify --structure-only
+  checked=$((checked + 1))
+done
+
+step="restore_files"
+log "Drill: the files ..."
+restore files latest
+checked=$((checked + 1))
+
+trap - EXIT
+ops_finish "$run" true NULL "$checked"
+log "Drill complete: the three databases and the files restore."

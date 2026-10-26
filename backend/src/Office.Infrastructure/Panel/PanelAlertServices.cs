@@ -11,6 +11,7 @@ namespace Office.Infrastructure.Panel;
 /// <summary>
 /// hazem.panel_alerts and panel_alert_reads (migration 0012). Who may see an alert is who may see
 /// its task (T-23): the manager and the lawyer every one, a staff member their own and the unassigned.
+/// TASK 13 (0019): a system alert (a failed nightly job, n8n failures in an hour) has no task: the managers only.
 /// </summary>
 public sealed class PanelAlertStore(HazemDbContext db) : IPanelAlertStore
 {
@@ -29,13 +30,53 @@ public sealed class PanelAlertStore(HazemDbContext db) : IPanelAlertStore
         ON CONFLICT (kind, task_id) DO NOTHING
         """, ct);
 
-    public async Task<IReadOnlyList<AlertToMail>> UnsentAsync(CancellationToken ct) =>
-        await (from a in db.PanelAlerts.AsNoTracking()
-               join t in db.StaffTasks.AsNoTracking() on a.TaskId equals t.Id
-               where a.EmailedAt == null && a.CreatedAt > DateTimeOffset.UtcNow.AddDays(-1)
-                     && (a.Kind == AlertKinds.Overdue ? t.State == "overdue" : t.State != "done" && t.State != "cancelled")
-               orderby a.Id
-               select new AlertToMail(a.Id, a.Kind, a.TaskId, t.Type, t.DueAt, t.StaffId)).ToListAsync(ct);
+    public async Task<int> MakeSystemAsync(CancellationToken ct)
+    {
+        // Each insert says how many alerts it made (ON CONFLICT: one per failed run, one per hour of n8n failures).
+        const string Since = "GREATEST(now() - interval '2 days', (SELECT value::timestamptz FROM hazem.settings WHERE key = 'alerts.since'))";
+        var failed = await db.Database.ExecuteSqlRawAsync($"""
+            INSERT INTO hazem.panel_alerts (kind, system_what, system_ref)
+            SELECT 'system', r.kind, 'run:' || r.id FROM hazem.ops_runs r
+             WHERE r.ok = false AND r.finished_at >= {Since}
+            ON CONFLICT (system_ref) DO NOTHING
+            """, ct);
+        var n8n = await db.Database.ExecuteSqlRawAsync($"""
+            INSERT INTO hazem.panel_alerts (kind, system_what, system_ref)
+            SELECT 'system', 'n8n', 'n8n:' || to_char(h.hour AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24')
+              FROM hazem.n8n_error_hours({Since}) h
+            ON CONFLICT (system_ref) DO NOTHING
+            """, ct);
+        // A night with no backup at all (the PC or Docker off at 03:00, the scheduled task gone, a run killed half way):
+        // once a backup has ever run, 26 hours with none that finished is an alert, one a day (a failed one has its own).
+        var missed = await db.Database.ExecuteSqlRawAsync("""
+            INSERT INTO hazem.panel_alerts (kind, system_what, system_ref)
+            SELECT 'system', 'backup', 'missed:' || to_char(now() AT TIME ZONE 'Africa/Cairo', 'YYYY-MM-DD')
+             WHERE EXISTS (SELECT 1 FROM hazem.ops_runs WHERE kind = 'backup')
+               AND NOT EXISTS (SELECT 1 FROM hazem.ops_runs WHERE kind = 'backup' AND finished_at IS NOT NULL AND started_at > now() - interval '26 hours')
+            ON CONFLICT (system_ref) DO NOTHING
+            """, ct);
+        return failed + n8n + missed;
+    }
+
+    public async Task<IReadOnlyList<string>> ManagersAsync(CancellationToken ct) =>
+        await db.PanelUsers.AsNoTracking()
+            .Where(u => u.Active && u.Approval == PanelUser.ApprovalApproved && u.Role == Permissions.Manager)
+            .Select(u => u.Email).ToListAsync(ct);
+
+    public async Task<IReadOnlyList<AlertToMail>> UnsentAsync(CancellationToken ct)
+    {
+        var tasks = await (from a in db.PanelAlerts.AsNoTracking()
+                           join t in db.StaffTasks.AsNoTracking() on a.TaskId equals (Guid?)t.Id
+                           where a.EmailedAt == null && a.CreatedAt > DateTimeOffset.UtcNow.AddDays(-1)
+                                 && (a.Kind == AlertKinds.Overdue ? t.State == "overdue" : t.State != "done" && t.State != "cancelled")
+                           orderby a.Id
+                           select new AlertToMail(a.Id, a.Kind, a.TaskId, t.Type, t.DueAt, t.StaffId, null)).ToListAsync(ct);
+        var system = await db.PanelAlerts.AsNoTracking()
+            .Where(a => a.Kind == AlertKinds.System && a.EmailedAt == null && a.CreatedAt > DateTimeOffset.UtcNow.AddDays(-1))
+            .OrderBy(a => a.Id)
+            .Select(a => new AlertToMail(a.Id, a.Kind, null, null, null, null, a.SystemWhat)).ToListAsync(ct);
+        return [.. tasks, .. system];
+    }
 
     /// <summary>An alert whose task was finished before its e-mail went out is never mailed.</summary>
     public Task<int> DropFinishedAsync(CancellationToken ct) => db.Database.ExecuteSqlInterpolatedAsync($"""
@@ -58,15 +99,18 @@ public sealed class PanelAlertStore(HazemDbContext db) : IPanelAlertStore
     public async Task<IReadOnlyList<PanelAlert>> ListAsync(Viewer viewer, int limit, CancellationToken ct)
     {
         var rows = await (from a in Visible(viewer)
-                          join t in db.StaffTasks.AsNoTracking() on a.TaskId equals t.Id
-                          join p in db.Persons.AsNoTracking() on t.PersonId equals p.Id
+                          join t in db.StaffTasks.AsNoTracking() on a.TaskId equals (Guid?)t.Id into ts
+                          from t in ts.DefaultIfEmpty()
+                          join p in db.Persons.AsNoTracking() on t.PersonId equals p.Id into ps
+                          from p in ps.DefaultIfEmpty()
                           orderby a.CreatedAt descending, a.Id descending
                           select new
                           {
-                              a.Id, a.Kind, a.TaskId, t.Type, p.NameRaw, t.DueAt, a.CreatedAt,
+                              a.Id, a.Kind, a.TaskId, Type = t == null ? null : t.Type, Name = p == null ? null : p.NameRaw,
+                              DueAt = t == null ? (DateTimeOffset?)null : t.DueAt, a.CreatedAt, a.SystemWhat,
                               Read = db.PanelAlertReads.Any(r => r.AlertId == a.Id && r.UserId == viewer.UserId),
                           }).Take(limit).ToListAsync(ct);
-        return rows.Select(r => new PanelAlert(r.Id, r.Kind, r.TaskId, r.Type, r.NameRaw, r.DueAt, r.CreatedAt, r.Read)).ToList();
+        return rows.Select(r => new PanelAlert(r.Id, r.Kind, r.TaskId, r.Type, r.Name, r.DueAt, r.CreatedAt, r.Read, r.SystemWhat)).ToList();
     }
 
     public Task<int> UnreadAsync(Viewer viewer, CancellationToken ct) =>
@@ -95,14 +139,16 @@ public sealed class PanelAlertStore(HazemDbContext db) : IPanelAlertStore
     private IQueryable<PanelAlertRow> Visible(Viewer viewer)
     {
         var alerts = db.PanelAlerts.AsNoTracking();
+        // TASK 13: a system alert is the managers' (the ones who manage the accounts and the office's machine).
+        var managers = viewer.Can(Permissions.UsersManage);
         if (viewer.Can(Permissions.TasksViewAll))
         {
-            return alerts;
+            return managers ? alerts : alerts.Where(a => a.Kind != AlertKinds.System);
         }
 
         var staff = viewer.StaffId;
         return from a in alerts
-               join t in db.StaffTasks.AsNoTracking() on a.TaskId equals t.Id
+               join t in db.StaffTasks.AsNoTracking() on a.TaskId equals (Guid?)t.Id
                where t.StaffId == null || (staff != null && t.StaffId == staff)
                select a;
     }

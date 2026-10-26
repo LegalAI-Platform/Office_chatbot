@@ -258,7 +258,7 @@ public static class PanelEndpoints
             return Results.Ok(new
             {
                 unread,
-                items = items.Select(a => new AlertDto(a.Id, a.Kind, a.TaskId, a.TaskType, a.ClientName, a.DueAt, a.CreatedAt, a.Read)),
+                items = items.Select(a => new AlertDto(a.Id, a.Kind, a.TaskId, a.TaskType, a.ClientName, a.DueAt, a.CreatedAt, a.Read, a.SystemWhat)),
             });
         }).RequireAuthorization(PanelAuth.Policy(Permissions.TasksViewOwn));
 
@@ -431,8 +431,8 @@ public sealed record MeDto(Guid Id, string Username, string DisplayName, string 
 
 public sealed record StaffDto(Guid Id, string Name);
 
-public sealed record AlertDto(long Id, string Kind, Guid TaskId, string TaskType, string? ClientName, DateTimeOffset DueAt,
-    DateTimeOffset CreatedAt, bool Read);
+public sealed record AlertDto(long Id, string Kind, Guid? TaskId, string? TaskType, string? ClientName, DateTimeOffset? DueAt,
+    DateTimeOffset CreatedAt, bool Read, string? SystemWhat);
 
 public sealed record DashboardTaskDto(Guid Id, string Type, string State, DateTimeOffset DueAt, DateTimeOffset CreatedAt,
     string? ClientName, string? StaffName, bool Late);

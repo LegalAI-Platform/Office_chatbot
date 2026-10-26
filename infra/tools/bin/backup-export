@@ -1,0 +1,34 @@
+#!/bin/bash
+# A copy of the backups off this disk (TASK 13, DECISIONS v1.18): the latest dump of every database, the latest
+# files manifest and every file it names go to /export/<YYYYmmdd-HHMMSS>/, still encrypted (the key is never
+# copied). The scripts mount the folder the owner names at /export:
+#   scripts/windows/backup-export.ps1 -To E:\OfficeBackups      (an external drive, for example)
+set -euo pipefail
+source /usr/local/bin/_lib
+
+[[ -d /export ]] || die "no folder mounted at /export (use scripts/windows/backup-export.ps1 -To <folder>)"
+out="/export/$(date '+%Y%m%d-%H%M%S')"
+mkdir -p "$out/postgres" "$out/files/objects" "$out/files/manifests"
+
+for db in office n8n chatwoot; do
+  name="$(s3_as backup s3 ls "s3://$BUCKET_BACKUPS/postgres/$db/" | awk '{print $4}' | sort | tail -1)"
+  [[ -n "$name" ]] || die "no backup of $db yet"
+  s3_as backup s3 cp --only-show-errors "s3://$BUCKET_BACKUPS/postgres/$db/$name" "$out/postgres/$name"
+done
+
+need_backup_key
+kid="$(backup_kid)"
+manifest="$(backups_list "files/manifests/" | grep -E "_${kid}\.json\.enc$" | sed 's#^files/manifests/##' | sort | tail -1 || true)"
+files=0
+if [[ -n "$manifest" ]]; then
+  mkdir -p "$out/files/objects/$kid"
+  s3_as backup s3 cp --only-show-errors "s3://$BUCKET_BACKUPS/files/manifests/$manifest" "$out/files/manifests/$manifest"
+  decrypt_file "$out/files/manifests/$manifest" /tmp/m.json
+  for sha in $(jq -r '.objects[].sha' /tmp/m.json | sort -u); do
+    s3_as backup s3 cp --only-show-errors "s3://$BUCKET_BACKUPS/files/objects/$kid/$sha.enc" "$out/files/objects/$kid/$sha.enc"
+    files=$((files + 1))
+  done
+  rm -f /tmp/m.json
+fi
+
+echo "EXPORTED: 3 databases and $files files to $(basename "$out"), encrypted. Keep BACKUP_ENCRYPTION_KEY apart from it."

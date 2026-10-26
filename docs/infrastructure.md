@@ -8,7 +8,8 @@ n8n is the WhatsApp layer; the .NET API is the brain ([hazem-internal-api.md](ha
 ```mermaid
 flowchart LR
     META[Meta WhatsApp Cloud API<br/>TASK 02] -. HTTPS webhook .-> CF[cloudflared<br/>profile: tunnel]
-    CF -->|http://n8n:5678 only| N8N[n8n 2.43.8<br/>Regular mode]
+    CF -->|http://edge:8081 only| EDGE[edge nginx<br/>Meta's webhook only, TASK 13]
+    EDGE -->|one path| N8N[n8n 2.43.8<br/>Regular mode]
 
     subgraph office_net [Docker network office_net — all host ports on 127.0.0.1]
         N8N -->|n8n_user| PGN[(PostgreSQL 16<br/>db: n8n)]
@@ -97,8 +98,10 @@ original file name. The API has no S3 key: it only receives the bucket and key
 ## Network exposure
 
 - Every published port is bound to `127.0.0.1`.
-- Only n8n can be reached from the internet, and only through cloudflared (profiles `tunnel`
-  or `tunnel-named`), which forwards to `http://n8n:5678` and nothing else.
+- Only Meta's WhatsApp webhook can be reached from the internet: cloudflared (profiles `tunnel` or
+  `tunnel-named`) forwards to the `edge` (TASK 13, `infra/edge/nginx.conf`), which lets through
+  `/webhook/<the WhatsApp Trigger's id>/webhook` (GET and POST) to n8n and answers 404 to everything else:
+  n8n's login page, its API and `hazem-internal-send` are not on the internet.
 - `meta-stub` (profile `tests`, test only) has no published port and runs only during `hazem-e2e`.
 - The .NET API has **no** published port: only n8n, the `web` container and the tools container
   reach it, at `http://api:8080` inside `office_net`. n8n's internal webhook `hazem-internal-send` is

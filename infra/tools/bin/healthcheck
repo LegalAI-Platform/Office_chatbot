@@ -94,7 +94,8 @@ check "n8n key can write to $BUCKET_MEDIA" s3_as n8n s3 cp /tmp/probe.txt "s3://
 check "n8n key can write to $BUCKET_SENSITIVE" s3_as n8n s3 cp /tmp/probe.txt "s3://$BUCKET_SENSITIVE/$probe"
 check "n8n key cannot write to $BUCKET_BACKUPS" expect_fail s3_as n8n s3 cp /tmp/probe.txt "s3://$BUCKET_BACKUPS/$probe"
 check "backup key can write to $BUCKET_BACKUPS" s3_as backup s3 cp /tmp/probe.txt "s3://$BUCKET_BACKUPS/$probe"
-check "backup key cannot read $BUCKET_SENSITIVE" expect_fail s3_as backup s3 ls "s3://$BUCKET_SENSITIVE"
+# TASK 13: the backup key reads the client files to back them up (and never writes them: «Backups and security» below).
+check "backup key cannot write to $BUCKET_SENSITIVE" expect_fail s3_as backup s3 cp /tmp/probe.txt "s3://$BUCKET_SENSITIVE/$probe"
 # TASK 10 (v1.14): the api signs the upload of a delivered file into office-sensitive/deliverables/; nowhere else.
 check "api key can write a delivered file to $BUCKET_SENSITIVE" s3_as api s3 cp /tmp/probe.txt "s3://$BUCKET_SENSITIVE/deliverables/$probe"
 check "api key cannot write to $BUCKET_MEDIA" expect_fail s3_as api s3 cp /tmp/probe.txt "s3://$BUCKET_MEDIA/$probe"
@@ -324,6 +325,42 @@ if [[ "$(psql_super office -c "SELECT count(*) FROM hazem.approved_texts WHERE s
   warn "TASK 06's texts are not approved yet: an office question gets the consultation offer only (docs/approved-texts-proposal.md)"
 fi
 
+echo "== Backups and security (TASK 13, DECISIONS v1.18)"
+check "table ops_runs exists (the nightly jobs' records)" \
+  sql_equals office "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'hazem' AND table_name = 'ops_runs'" "1"
+check "BACKUP_ENCRYPTION_KEY is set (64 hex): every backup is encrypted" \
+  bash -c '[[ "${BACKUP_ENCRYPTION_KEY:-}" =~ ^[0-9a-f]{64}$ ]]'
+check "the backup key reads the client files and cannot write them" \
+  bash -c 's3_as backup s3 ls "s3://$BUCKET_SENSITIVE/" >/dev/null 2>&1 && ! echo x | s3_as backup s3 cp - "s3://$BUCKET_SENSITIVE/healthcheck-probe" >/dev/null 2>&1'
+check "office-backups never expires the files themselves (lifecycle on postgres/ and files/manifests/ only)" \
+  bash -c 's3_as backup s3api get-bucket-lifecycle-configuration --bucket "$BUCKET_BACKUPS" --output json | jq -e "[.Rules[] | select(.Status == \"Enabled\") | (.Filter.Prefix // .Prefix // \"\")] | sort == [\"files/manifests/\", \"postgres/\"]" >/dev/null'
+ops_last() {  # ops_last KIND -> "none", or "<ok>|<hours since the last run that worked>"
+  psql_super office -c "SELECT coalesce((SELECT ok::text FROM hazem.ops_runs WHERE kind = '$1' AND finished_at IS NOT NULL ORDER BY started_at DESC LIMIT 1), 'none')
+    || coalesce('|' || (SELECT floor(extract(epoch FROM now() - max(started_at)) / 3600)::int FROM hazem.ops_runs WHERE kind = '$1' AND ok), '|-1')" 2>/dev/null || echo "none|-1"
+}
+for job in "backup:26:the nightly backup" "drill:840:the monthly restore drill" "log_scan:26:the nightly log scan"; do
+  kind="${job%%:*}"; rest="${job#*:}"; hours="${rest%%:*}"; what="${rest#*:}"
+  last="$(ops_last "$kind")"
+  if [[ "$last" == none* ]]; then
+    warn "$what has never run yet (the nightly job in README, «Nightly job»)"
+  else
+    check "the last run of $what worked" bash -c "[[ '${last%%|*}' == 'true' ]]"
+    ago="${last##*|}"
+    check "$what worked within the last $hours hours" bash -c "[[ $ago -ge 0 && $ago -lt $hours ]]"
+  fi
+done
+if curl -fsS -m 5 http://edge:8081/healthz >/dev/null 2>&1; then
+  # n8n answers it (its own JSON, a 404 too while META-WA-INBOUND is inactive), never the edge's own HTML 404.
+  check "the edge lets Meta's WhatsApp webhook through to n8n" \
+    bash -c 'b="$(curl -s -m 10 "http://edge:8081/webhook/3c1f0b6e-6a52-4f0e-9a51-0e0c0a5ea001/webhook")"; [[ -n "$b" && "$b" != *"<html>"* ]]'
+  check "the edge hides n8n's login page and API (404)" \
+    bash -c '[[ "$(curl -s -o /dev/null -w "%{http_code}" -m 10 http://edge:8081/rest/login)" == "404" && "$(curl -s -o /dev/null -w "%{http_code}" -m 10 http://edge:8081/)" == "404" ]]'
+  check "the edge hides the internal send webhook (404)" \
+    bash -c '[[ "$(curl -s -o /dev/null -w "%{http_code}" -m 10 -X POST http://edge:8081/webhook/hazem-internal-send)" == "404" ]]'
+else
+  echo "SKIP  the edge is not running (no tunnel up): its checks run when the tunnel is up"
+fi
+
 echo "== Migrations"
 check "migration 0018 (the prices and the office's questions) is applied" \
   sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0018'" "1"
@@ -361,4 +398,7 @@ check "function app.set_updated_at() exists" \
 
 echo
 echo "Result: $passed passed, $failed failed.$([[ $warned -gt 0 ]] && echo " $warned warning(s).")"
+# TASK 13: recorded, so a failed healthcheck reaches the managers (the bell and an e-mail).
+run="$(ops_start healthcheck 2>/dev/null || true)"
+ops_finish "$run" "$([[ $failed -eq 0 ]] && echo true || echo false)" NULL "$passed" "$([[ $failed -gt 0 ]] && echo "failed:$failed")" 2>/dev/null || true
 [[ $failed -eq 0 ]]

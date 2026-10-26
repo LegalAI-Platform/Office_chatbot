@@ -154,17 +154,19 @@ export interface Dashboard {
 
 // ---------- TASK 07c ----------
 
-export type AlertKind = "task_overdue" | "task_urgent" | "task_human";
+export type AlertKind = "task_overdue" | "task_urgent" | "task_human" | "system";
 
+/** TASK 13: a system alert (the managers only) has no task: `system_what` says what failed. */
 export interface PanelAlert {
   id: number;
   kind: AlertKind;
-  task_id: string;
-  task_type: string;
+  task_id?: string;
+  task_type?: string;
   client_name?: string;
-  due_at: string;
+  due_at?: string;
   created_at: string;
   read: boolean;
+  system_what?: "backup" | "healthcheck" | "drill" | "log_scan" | "n8n";
 }
 
 export interface AlertList {

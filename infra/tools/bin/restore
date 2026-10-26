@@ -1,76 +1,152 @@
 #!/bin/bash
-# Restores a backup into a NEW database and verifies it against the source.
-# It never overwrites the live office or n8n databases.
+# Restores a backup and checks it (TASK 13: Chatwoot, the files, the encryption). It never overwrites a live database,
+# and it never overwrites a file the office already has.
 #
-#   restore list [office|n8n]
-#   restore <office|n8n> <latest|FILE_NAME> [TARGET_DB] [--drop-after-verify]
+#   restore list [office|n8n|chatwoot|files]
+#   restore <office|n8n|chatwoot> <latest|FILE_NAME> [TARGET_DB] [--drop-after-verify] [--structure-only]
+#   restore files <latest|MANIFEST_NAME> [--into-live]
 #
-# TARGET_DB defaults to <db>_restore_<YYYYmmdd_HHMMSS>.
+# A database goes into a NEW database (TARGET_DB defaults to <db>_restore_<YYYYmmdd_HHMMSS>), then every table's row
+# count is compared with the live one (--structure-only: the same tables; the monthly drill, the data has moved on).
+# Files: every file of that night's manifest is fetched, decrypted and checked against its sha256; --into-live puts
+# back only the files the office no longer has. Backups made before TASK 13 (.dump, not encrypted) restore too.
 set -euo pipefail
 source /usr/local/bin/_lib
 
-usage() { sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
+usage() { sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
 
 [[ $# -ge 1 ]] || usage
 if [[ "$1" == "list" ]]; then
-  for db in ${2:-office n8n}; do
-    echo "== $db"
-    s3_as backup s3 ls "s3://$BUCKET_BACKUPS/postgres/$db/" | sort
+  for what in ${2:-office n8n chatwoot files}; do
+    echo "== $what"
+    if [[ "$what" == "files" ]]; then
+      s3_as backup s3 ls "s3://$BUCKET_BACKUPS/files/manifests/" | sort
+    else
+      s3_as backup s3 ls "s3://$BUCKET_BACKUPS/postgres/$what/" | sort
+    fi
   done
   exit 0
 fi
 
 drop_after=false
+structure=false
+into_live=false
 args=()
 for a in "$@"; do
-  if [[ "$a" == "--drop-after-verify" ]]; then drop_after=true; else args+=("$a"); fi
+  case "$a" in
+    --drop-after-verify) drop_after=true ;;
+    --structure-only) structure=true ;;
+    --into-live) into_live=true ;;
+    *) args+=("$a") ;;
+  esac
 done
 [[ ${#args[@]} -ge 2 ]] || usage
-db="${args[0]}"; name="${args[1]}"
-target="${args[2]:-${db}_restore_$(date '+%Y%m%d_%H%M%S')}"
+what="${args[0]}"; name="${args[1]}"
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
 
-[[ "$db" == "office" || "$db" == "n8n" ]] || die "database must be office or n8n"
+# ---------- the files ----------
+if [[ "$what" == "files" ]]; then
+  need_backup_key
+  if [[ "$name" == "latest" ]]; then
+    # The newest manifest made with this key (an older key's needs that key: docs/runbooks/secrets.md).
+    name="$(backups_list "files/manifests/" | grep -E "_$(backup_kid)\.json\.enc$" | sed 's#^files/manifests/##' | sort | tail -1 || true)"
+    [[ -n "$name" ]] || die "no file backups made with this BACKUP_ENCRYPTION_KEY"
+  fi
+  s3_as backup s3 cp --only-show-errors "s3://$BUCKET_BACKUPS/files/manifests/$name" "$work/m.enc"
+  decrypt_file "$work/m.enc" "$work/m.json" || die "the manifest cannot be decrypted: wrong BACKUP_ENCRYPTION_KEY?"
+  kid="$(jq -r '.kid // empty' "$work/m.json")"
+  jq -r '.objects[] | [.b, .k, .sha] | @tsv' "$work/m.json" > "$work/m.tsv"
+  total=0; ok=0; bad=0; back=0
+  while IFS=$'\t' read -r b k sha; do
+    [[ -n "$k" ]] || continue
+    total=$((total + 1))
+    if ! s3_as backup s3 cp --only-show-errors "s3://$BUCKET_BACKUPS/files/objects/${kid:+$kid/}$sha.enc" "$work/o.enc" 2>/dev/null \
+       || ! decrypt_file "$work/o.enc" "$work/o" 2>/dev/null \
+       || [[ "$(sha256sum "$work/o" | cut -d' ' -f1)" != "$sha" ]]; then
+      bad=$((bad + 1)); rm -f "$work/o.enc" "$work/o"; continue
+    fi
+    ok=$((ok + 1))
+    # Put back only a file the office no longer has (a 404); any other answer leaves the live file alone.
+    if $into_live && s3_as n8n s3api head-object --bucket "$b" --key "$k" 2>&1 | grep -qiE 'Not Found|404'; then
+      s3_as n8n s3 cp --only-show-errors "$work/o" "s3://$b/$k"
+      back=$((back + 1))
+    fi
+    rm -f "$work/o.enc" "$work/o"
+  done < "$work/m.tsv"
+  echo "FILES: $total in $name, $ok checked OK, $bad missing or damaged$($into_live && echo ", $back put back")."
+  [[ $bad -eq 0 ]] || exit 2
+  exit 0
+fi
+
+# ---------- a database ----------
+db="$what"
+target="${args[2]:-${db}_restore_$(date '+%Y%m%d_%H%M%S')}"
+[[ "$db" == "office" || "$db" == "n8n" || "$db" == "chatwoot" ]] || die "database must be office, n8n or chatwoot"
 [[ "$target" =~ ^[a-z0-9_]+$ ]] || die "target database name may only contain a-z, 0-9 and _"
-case "$target" in office|n8n|postgres|template0|template1) die "refusing to restore over '$target'" ;; esac
+case "$target" in office|n8n|chatwoot|postgres|template0|template1) die "refusing to restore over '$target'" ;; esac
+
+if [[ "$db" == "chatwoot" ]]; then
+  host=chatwoot-db; user=chatwoot; pw="$CHATWOOT_DB_PASSWORD"
+else
+  host=postgres; user="$POSTGRES_SUPERUSER"; pw="$POSTGRES_SUPERUSER_PASSWORD"
+fi
+sql() { local d="$1"; shift; PGPASSWORD="$pw" psql -h "$host" -U "$user" -d "$d" -v ON_ERROR_STOP=1 --no-psqlrc -qAt "$@"; }
 
 if [[ "$name" == "latest" ]]; then
   name="$(s3_as backup s3 ls "s3://$BUCKET_BACKUPS/postgres/$db/" | awk '{print $4}' | sort | tail -1)"
   [[ -n "$name" ]] || die "no backups found for $db"
 fi
 
-exists="$(psql_super postgres -c "SELECT count(*) FROM pg_database WHERE datname = '$target'")"
+exists="$(sql postgres -c "SELECT count(*) FROM pg_database WHERE datname = '$target'")"
 [[ "$exists" == "0" ]] || die "database $target already exists"
-
-work="$(mktemp -d)"
-trap 'rm -rf "$work"' EXIT
 
 log "Downloading $name ..."
 s3_as backup s3 cp --only-show-errors "s3://$BUCKET_BACKUPS/postgres/$db/$name" "$work/$name"
+dump="$work/$name"
+if [[ "$name" == *.enc ]]; then
+  need_backup_key
+  decrypt_file "$work/$name" "$work/plain.dump" || die "the backup cannot be decrypted: wrong BACKUP_ENCRYPTION_KEY?"
+  dump="$work/plain.dump"
+fi
 
 log "Creating database $target ..."
-psql_super postgres -c "CREATE DATABASE \"$target\""
+sql postgres -c "CREATE DATABASE \"$target\""
 if $drop_after; then
   # Also clean up when restore or verification fails half-way.
-  trap 'psql_super postgres -c "DROP DATABASE IF EXISTS \"$target\"" >/dev/null 2>&1 || true; rm -rf "$work"' EXIT
+  trap 'sql postgres -c "DROP DATABASE IF EXISTS \"$target\"" >/dev/null 2>&1 || true; rm -rf "$work"' EXIT
 fi
-psql_super postgres -c "REVOKE ALL ON DATABASE \"$target\" FROM PUBLIC"
+sql postgres -c "REVOKE ALL ON DATABASE \"$target\" FROM PUBLIC"
+# A dump does not carry the database's own owner and CONNECT rights: copied from the live one, so a restored
+# database can be swapped in (docs/runbooks/backup-restore.md) and every service can still connect.
+owner="$(sql postgres -c "SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname = '$db'")"
+[[ -n "$owner" ]] && sql postgres -c "ALTER DATABASE \"$target\" OWNER TO \"$owner\""
+sql postgres -c "SELECT format('GRANT %s ON DATABASE %I TO %I;', a.privilege_type, '$target', pg_get_userbyid(a.grantee))
+                   FROM pg_database d, aclexplode(d.datacl) a WHERE d.datname = '$db' AND a.grantee <> 0" | sql postgres
 
 log "Restoring into $target ..."
-PGPASSWORD="$POSTGRES_SUPERUSER_PASSWORD" pg_restore -h postgres -U "$POSTGRES_SUPERUSER" \
-  -d "$target" --no-password --exit-on-error "$work/$name"
+PGPASSWORD="$pw" pg_restore -h "$host" -U "$user" -d "$target" --no-password --exit-on-error "$dump"
 
-# Verify: exact row count of every table, source vs restored.
+# Verify: exact row count of every table, source vs restored (--structure-only: the same tables).
 count_sql="SELECT format('SELECT %L || ''|'' || count(*) FROM %I.%I;', n.nspname || '.' || c.relname, n.nspname, c.relname)
            FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
            WHERE c.relkind = 'r' AND n.nspname NOT IN ('pg_catalog','information_schema')
+             AND NOT (n.nspname = 'hazem' AND c.relname = 'ops_runs')  -- the nightly jobs' own log grows after every backup
            ORDER BY 1"
-counts() { psql_super "$1" -c "$count_sql" | psql_super "$1" | sort; }
-counts "$db"     > "$work/source.txt"
-counts "$target" > "$work/target.txt"
+tables_sql="SELECT n.nspname || '.' || c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE c.relkind = 'r' AND n.nspname NOT IN ('pg_catalog','information_schema') ORDER BY 1"
+if $structure; then
+  sql "$db" -c "$tables_sql" > "$work/source.txt"
+  sql "$target" -c "$tables_sql" > "$work/target.txt"
+else
+  counts() { sql "$1" -c "$count_sql" | sql "$1" | sort; }
+  counts "$db"     > "$work/source.txt"
+  counts "$target" > "$work/target.txt"
+fi
 
 tables="$(wc -l < "$work/target.txt" | tr -d ' ')"
 if diff -q "$work/source.txt" "$work/target.txt" >/dev/null; then
-  echo "VERIFY OK: $tables tables, row counts identical between $db and $target."
+  if $structure; then echo "VERIFY OK: $tables tables, the same as in $db."; else echo "VERIFY OK: $tables tables, row counts identical between $db and $target."; fi
   result=0
 else
   echo "VERIFY MISMATCH between $db and $target (the source may have changed since the backup):"
@@ -79,7 +155,7 @@ else
 fi
 
 if $drop_after; then
-  psql_super postgres -c "DROP DATABASE \"$target\""
+  sql postgres -c "DROP DATABASE \"$target\""
   trap 'rm -rf "$work"' EXIT
   log "Dropped $target."
 else

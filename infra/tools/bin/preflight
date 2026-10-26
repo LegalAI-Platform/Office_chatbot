@@ -18,6 +18,7 @@ required=(
   HAZEM_API_TOKEN N8N_INTERNAL_SEND_TOKEN
   CHATWOOT_SECRET_KEY_BASE CHATWOOT_DB_PASSWORD CHATWOOT_REDIS_PASSWORD
   CHATWOOT_PLATFORM_TOKEN CHATWOOT_BOT_TOKEN CHATWOOT_WEBHOOK_TOKEN
+  BACKUP_ENCRYPTION_KEY
 )
 
 for v in "${required[@]}"; do
@@ -72,6 +73,8 @@ for v in S3_N8N_SECRET_ACCESS_KEY S3_BACKUP_SECRET_ACCESS_KEY S3_API_SECRET_ACCE
   [[ "${!v:-}" =~ ^[0-9a-f]{64}$ ]] || err "$v must be exactly 64 lowercase hex characters"
 done
 [[ "${S3_N8N_ACCESS_KEY_ID:-}" != "${S3_BACKUP_ACCESS_KEY_ID:-}" ]] || err "n8n and backup S3 keys must be different"
+# TASK 13: every backup is encrypted with it (and nothing can be read back without it).
+[[ "${BACKUP_ENCRYPTION_KEY:-}" =~ ^[0-9a-f]{64}$ ]] || err "BACKUP_ENCRYPTION_KEY must be exactly 64 lowercase hex characters (gen-secrets)"
 [[ "${S3_API_ACCESS_KEY_ID:-}" != "${S3_N8N_ACCESS_KEY_ID:-}" && "${S3_API_ACCESS_KEY_ID:-}" != "${S3_BACKUP_ACCESS_KEY_ID:-}" ]] \
   || err "the api's S3 key must be its own"
 

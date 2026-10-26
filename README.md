@@ -136,7 +136,8 @@ powershell -ExecutionPolicy Bypass -File scripts\windows\up-tunnel.ps1
   start, set `WEBHOOK_URL=<url>/` and `N8N_SECURE_COOKIE=true` in `.env`, then run
   `docker compose up -d n8n`. The URL must also be updated in Meta (TASK 02).
 - **Named Tunnel** (recommended before connecting Meta): create a tunnel in the Cloudflare
-  dashboard (free account), add a public hostname pointing to `http://n8n:5678`, put the
+  dashboard (free account), add a public hostname pointing to `http://edge:8081` (TASK 13: never
+  `http://n8n:5678`; the edge lets through Meta's webhook only), put the
   token in `CLOUDFLARE_TUNNEL_TOKEN`, and set `WEBHOOK_URL=https://<your-hostname>/`.
   The URL then stays the same.
 
@@ -161,22 +162,32 @@ powershell -ExecutionPolicy Bypass -File scripts\windows\restore.ps1 n8n latest 
 `restore` never overwrites the live `office` or `n8n` databases. To replace a live database
 with a restored copy, stop n8n, rename the databases by hand with `psql`, and start n8n again.
 
-### Daily backup
+### Nightly job (TASK 13)
 
-**Windows (Task Scheduler), every day at 03:00.** Docker Desktop must be running.
-Replace `<REPO>` with the full path of this folder:
+One job every night at 03:00: the backup (the three databases **and the client files**, encrypted with
+`BACKUP_ENCRYPTION_KEY`), the healthcheck, a scan of the last day's logs, and once a month a restore drill. Each
+step is recorded, and a failed one reaches the managers (the panel's bell and an e-mail).
+
+**Windows (Task Scheduler).** Docker Desktop must be running at 03:00. Replace `<REPO>` with the full path of this
+folder (here `K:\law-office-whatsapp`):
 
 ```powershell
-schtasks /Create /SC DAILY /ST 03:00 /TN "OfficeWhatsAppBackup" /TR "powershell -NoProfile -ExecutionPolicy Bypass -File \"<REPO>\scripts\windows\backup.ps1\""
+schtasks /Create /SC DAILY /ST 03:00 /TN "OfficeWhatsAppNightly" /TR "powershell -NoProfile -ExecutionPolicy Bypass -File \"<REPO>\scripts\windows\nightly.ps1\""
 ```
+
+If an older `OfficeWhatsAppBackup` task exists, remove it (`schtasks /Delete /TN "OfficeWhatsAppBackup"`): the
+nightly job includes the backup.
 
 **Linux (cron):**
 
 ```bash
-0 3 * * * /path/to/repo/scripts/linux/backup.sh >> /var/log/office-backup.log 2>&1
+0 3 * * * /path/to/repo/scripts/linux/nightly.sh >> /var/log/office-nightly.log 2>&1
 ```
 
-Backups older than 30 days are deleted automatically by the bucket's lifecycle rule.
+The dumps and the files manifests are kept 30 days; a file deleted from the office stays in the backup 30 days.
+**Keep a copy of `BACKUP_ENCRYPTION_KEY` outside this machine**: without it no backup can be read. A copy of the
+backups off this disk: `scripts/windows/backup-export.ps1 -To E:\OfficeBackups`. Restoring:
+[docs/runbooks/backup-restore.md](docs/runbooks/backup-restore.md). Keys: [docs/runbooks/secrets.md](docs/runbooks/secrets.md).
 
 ## Troubleshooting
 

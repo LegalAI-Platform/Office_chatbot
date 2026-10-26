@@ -329,9 +329,11 @@ public sealed class PanelAlertRow
 {
     public long Id { get; set; }
     public required string Kind { get; set; }
-    public Guid TaskId { get; set; }
+    public Guid? TaskId { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? EmailedAt { get; set; }
+    public string? SystemWhat { get; set; }  // TASK 13: a system alert (no task)
+    public string? SystemRef { get; set; }
 }
 
 public sealed class PanelAlertReadRow

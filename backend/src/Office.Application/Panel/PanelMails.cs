@@ -81,11 +81,26 @@ public static class PanelMails
             AlertKinds.Urgent => ("طلب عاجل", "فيه طلب عاجل جديد محتاج حد يمسكه دلوقتي."),
             _ => ("عميل عايز يكلم حد", "فيه عميل طلب يكلم حد من المكتب."),
         };
-        var due = ArabicTime(TimeZoneInfo.ConvertTime(a.DueAt, Cairo));
+        var due = a.DueAt is { } d ? ArabicTime(TimeZoneInfo.ConvertTime(d, Cairo)) : "";
         return Build(to, subject, "أهلًا،",
-            [line, $"النوع: {TaskType(a.TaskType)}", $"المطلوب قبل: {due}"],
+            [line, $"النوع: {TaskType(a.TaskType ?? "")}", $"المطلوب قبل: {due}"],
             null,
             [$"افتحها من لوحة المكتب: {panelUrl.TrimEnd('/')}/tasks/{a.TaskId}", "اسم العميل ورقمه وكلامه في اللوحة بس، مش في الإيميل."]);
+    }
+
+    /// <summary>TASK 13 (v1.18): a job of the system failed. To the managers; what failed and where to look, nothing else.</summary>
+    public static PanelMail SystemAlert(string to, string? what, string panelUrl)
+    {
+        var (subject, line, look) = what switch
+        {
+            SystemWhat.Backup => ("النسخة الاحتياطية فشلت", "النسخة الاحتياطية بتاعة الليلة ما اتعملتش.", "شغّل backup تاني، ولو فشل شوف docs/runbooks/backup-restore.md."),
+            SystemWhat.Drill => ("تجربة الاسترجاع فشلت", "تجربة استرجاع النسخة الاحتياطية الشهرية فشلت، يعني ممكن النسخة ما تنفعش وقت الحاجة.", "شوف docs/runbooks/backup-restore.md."),
+            SystemWhat.LogScan => ("السجلات فيها بيانات ما ينفعش تتسجل", "فحص سجلات السيستم لقى مفتاح أو رقم تليفون كامل.", "شوف docs/runbooks/secrets.md، وغيّر المفتاح لو اتسجل."),
+            SystemWhat.N8n => ("فيه حاجات في n8n فشلت", "فيه workflows في n8n فشلت في الساعة اللي فاتت.", "افتح n8n وشوف Executions."),
+            _ => ("فحص السيستم لقى مشكلة", "الفحص اليومي للسيستم (healthcheck) لقى حاجة مش شغالة.", "شغّل healthcheck وشوف السطر اللي فيه FAIL."),
+        };
+        return Build(to, subject, "أهلًا،", [line, look], null,
+            [$"لوحة المكتب: {panelUrl.TrimEnd('/')}", "الإيميل ده ما فيهوش أي بيانات عملاء."]);
     }
 
     private static TimeZoneInfo Cairo => global::Office.Domain.Tasks.OfficeHours.Cairo;
