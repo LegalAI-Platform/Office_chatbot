@@ -24,6 +24,8 @@ ENV TZ=Africa/Cairo ASPNETCORE_HTTP_PORTS=8080 DOTNET_CLI_TELEMETRY_OPTOUT=1
 RUN apk add --no-cache krb5-libs
 COPY --from=build /out/api /app/api
 COPY --from=build /out/cli /app/cli
+# The panel's Data Protection keys (Panel:KeysPath): the volume mounted here takes this owner.
+RUN mkdir -p /app/keys && chown $APP_UID /app/keys
 USER $APP_UID
 EXPOSE 8080
 WORKDIR /app/api

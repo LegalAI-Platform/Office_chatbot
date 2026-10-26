@@ -28,7 +28,11 @@ builder.Host.UseSerilog(writeToProviders: true, configureLogger: (ctx, cfg) => c
     .Enrich.FromLogContext()
     .WriteTo.Console(new CompactJsonFormatter()));
 
-builder.WebHost.ConfigureKestrel(k => k.Limits.MaxRequestBodySize = 1024 * 1024); // a turn is far smaller
+builder.WebHost.ConfigureKestrel(k =>
+{
+    k.Limits.MaxRequestBodySize = 1024 * 1024; // a turn is far smaller
+    k.AddServerHeader = false; // no "Server: Kestrel" telling a visitor what runs here
+});
 builder.Services.ConfigureHttpJsonOptions(o => HazemJson.Configure(o.SerializerOptions));
 builder.Services.AddOfficeInfrastructure(builder.Configuration);
 builder.Services.AddProblemDetails();
