@@ -1,31 +1,145 @@
 #!/bin/bash
-# Dumps the office and n8n databases, and Chatwoot's (TASK 07b: a second copy of client
-# messages, T-24), in pg_dump custom format, compressed, and uploads them to
-# s3://office-backups/postgres/<db>/<db>_<YYYYmmdd-HHMMSS>.dump
-# Restoring Chatwoot's is not in the restore command yet (TASK 13).
-# Timestamps use Africa/Cairo. Objects expire after 30 days (bucket lifecycle).
+# The nightly backup (T-15; TASK 13, DECISIONS v1.18). Everything it writes is encrypted with BACKUP_ENCRYPTION_KEY.
+#
+#   1. The office, n8n and Chatwoot databases (pg_dump custom format), each to
+#      s3://office-backups/postgres/<db>/<db>_<YYYYmmdd-HHMMSS>.dump.enc
+#   2. The client files of office-media and office-sensitive (receipts, IDs, contracts, voice notes). Each file is
+#      kept once, by its content, under files/objects/<kid>/<sha256>.enc; a manifest of that night (which file was
+#      where) goes to files/manifests/manifest_<ts>_<kid>.json.enc. <kid> is the key's id (_lib backup_kid): a new key
+#      starts its own set and never reuses or prunes what an older key made. Only what changed since the last
+#      manifest of the same key is read again; a file that vanishes during the run (n8n removes late files) is skipped.
+#   3. The dumps and the manifests expire after 30 days (bucket lifecycle, storage-init); a file no manifest of the
+#      last 30 days names is deleted here, so a file deleted from the office stays 30 days. Pruning stops unless every
+#      listing worked and tonight's manifest is among them.
+#
+# The run is recorded in hazem.ops_runs (never a file name or a key). Timestamps use Africa/Cairo.
 set -euo pipefail
 source /usr/local/bin/_lib
+need_backup_key
 
 ts="$(date '+%Y%m%d-%H%M%S')"
+kid="$(backup_kid)"
 work="$(mktemp -d)"
-trap 'rm -rf "$work"' EXIT
+run="$(ops_start backup)"
+uploaded=0
+copied=0
+step="start"
+finish_failed() { ops_finish "$run" false "$uploaded" "$copied" "failed_at_$step"; rm -rf "$work"; }
+trap finish_failed EXIT
 
-for db in office n8n; do
+put() {  # put LOCAL_FILE S3_PATH: encrypt, upload, count the bytes
+  encrypt_file "$1" "$1.enc"
+  s3_as backup s3 cp --only-show-errors "$1.enc" "s3://$BUCKET_BACKUPS/$2"
+  uploaded=$((uploaded + $(stat -c %s "$1.enc")))
+  rm -f "$1" "$1.enc"
+}
+
+# ---------- 1. the databases ----------
+for db in office n8n chatwoot; do
+  step="dump_$db"
   file="${db}_${ts}.dump"
   log "Dumping $db ..."
-  PGPASSWORD="$POSTGRES_SUPERUSER_PASSWORD" pg_dump -h postgres -U "$POSTGRES_SUPERUSER" \
-    -d "$db" -Fc -Z 6 --no-password -f "$work/$file"
-  size="$(du -h "$work/$file" | cut -f1)"
-  s3_as backup s3 cp --only-show-errors "$work/$file" "s3://$BUCKET_BACKUPS/postgres/$db/$file"
-  echo "s3://$BUCKET_BACKUPS/postgres/$db/$file  ($size)"
+  if [[ "$db" == "chatwoot" ]]; then
+    PGPASSWORD="$CHATWOOT_DB_PASSWORD" pg_dump -h chatwoot-db -U chatwoot -d chatwoot -Fc -Z 6 --no-password -f "$work/$file"
+  else
+    PGPASSWORD="$POSTGRES_SUPERUSER_PASSWORD" pg_dump -h postgres -U "$POSTGRES_SUPERUSER" -d "$db" -Fc -Z 6 --no-password -f "$work/$file"
+  fi
+  put "$work/$file" "postgres/$db/$file.enc"
+  echo "s3://$BUCKET_BACKUPS/postgres/$db/$file.enc"
 done
 
-file="chatwoot_${ts}.dump"
-log "Dumping chatwoot ..."
-PGPASSWORD="$CHATWOOT_DB_PASSWORD" pg_dump -h chatwoot-db -U chatwoot -d chatwoot -Fc -Z 6 --no-password -f "$work/$file"
-size="$(du -h "$work/$file" | cut -f1)"
-s3_as backup s3 cp --only-show-errors "$work/$file" "s3://$BUCKET_BACKUPS/postgres/chatwoot/$file"
-echo "s3://$BUCKET_BACKUPS/postgres/chatwoot/$file  ($size)"
+# ---------- 2. the client files ----------
+step="files_list"
+log "Listing the client files ..."
+backups_list "files/objects/$kid/" > "$work/have.keys"
+sed -E 's#^.*/([0-9a-f]{64})\.enc$#\1#' "$work/have.keys" | grep -E '^[0-9a-f]{64}$' | sort -u > "$work/have.txt" || true
+backups_list "files/manifests/" > "$work/manifests.keys"
 
+prev="$(grep -E "/manifest_[0-9-]+_${kid}\.json\.enc$" "$work/manifests.keys" | sort | tail -1 || true)"
+if [[ -n "$prev" ]]; then
+  step="files_previous"
+  s3_as backup s3 cp --only-show-errors "s3://$BUCKET_BACKUPS/$prev" "$work/prev.enc"
+  decrypt_file "$work/prev.enc" "$work/prev.json"
+else
+  echo '{"objects":[]}' > "$work/prev.json"   # the first night of this key: everything is copied
+fi
+# bucket \t key \t etag \t size \t sha, from the last manifest of this key
+jq -r '.objects[] | [.b, .k, .etag, (.size|tostring), .sha] | @tsv' "$work/prev.json" > "$work/prev.tsv"
+
+: > "$work/now.tsv"
+for bucket in "$BUCKET_MEDIA" "$BUCKET_SENSITIVE"; do
+  step="files_list_$bucket"
+  s3_as backup s3api list-objects-v2 --bucket "$bucket" --output json \
+    | jq -r --arg b "$bucket" '(.Contents // []) | .[] | [$b, .Key, (.ETag | gsub("\""; "")), (.Size|tostring)] | @tsv' >> "$work/now.tsv"
+done
+
+step="files_copy"
+: > "$work/manifest.tsv"
+vanished=0
+while IFS=$'\t' read -r b k etag size; do
+  [[ -n "$k" ]] || continue
+  sha="$(awk -F'\t' -v b="$b" -v k="$k" -v e="$etag" -v s="$size" '$1==b && $2==k && $3==e && $4==s {print $5; exit}' "$work/prev.tsv")"
+  if [[ -z "$sha" ]] || ! grep -qx "$sha" "$work/have.txt"; then
+    if ! s3_as backup s3 cp --only-show-errors "s3://$b/$k" "$work/obj" 2>"$work/cp.err"; then
+      # Gone since the listing (n8n removes a late file): not in tonight's manifest. Anything else stops the run.
+      if s3_as backup s3api head-object --bucket "$b" --key "$k" 2>&1 | grep -qiE 'Not Found|404'; then
+        vanished=$((vanished + 1))
+        continue
+      fi
+      cat "$work/cp.err" >&2
+      exit 1
+    fi
+    sha="$(sha256sum "$work/obj" | cut -d' ' -f1)"
+    if ! grep -qx "$sha" "$work/have.txt"; then
+      put "$work/obj" "files/objects/$kid/$sha.enc"
+      echo "$sha" >> "$work/have.txt"
+      copied=$((copied + 1))
+    fi
+    rm -f "$work/obj"
+  fi
+  printf '%s\t%s\t%s\t%s\t%s\n' "$b" "$k" "$etag" "$size" "$sha" >> "$work/manifest.tsv"
+done < "$work/now.tsv"
+
+step="files_manifest"
+total="$(wc -l < "$work/manifest.tsv" | tr -d ' ')"
+manifest="files/manifests/manifest_${ts}_${kid}.json.enc"
+jq -Rn --arg created "$ts" --arg kid "$kid" \
+  '{created: $created, kid: $kid, objects: [inputs | split("\t") | {b: .[0], k: .[1], etag: .[2], size: (.[3]|tonumber), sha: .[4]}]}' \
+  < "$work/manifest.tsv" > "$work/manifest.json"
+put "$work/manifest.json" "$manifest"
+echo "files: $total in the office, $copied new copied$([[ $vanished -gt 0 ]] && echo ", $vanished gone during the run")"
+
+# ---------- 3. files no manifest of the last 30 days names ----------
+step="files_prune"
+backups_list "files/manifests/" > "$work/manifests.keys"   # a failed listing stops here: nothing is deleted
+grep -qx "$manifest" "$work/manifests.keys" || { log "tonight's manifest is not listed yet: not pruning"; exit 1; }
+: > "$work/named.txt"
+while read -r m; do
+  [[ "$m" =~ _${kid}\.json\.enc$ ]] || continue
+  s3_as backup s3 cp --only-show-errors "s3://$BUCKET_BACKUPS/$m" "$work/m.enc"
+  decrypt_file "$work/m.enc" "$work/m.json"
+  jq -r '.objects[].sha' "$work/m.json" >> "$work/named.txt"
+done < "$work/manifests.keys"
+sort -u -o "$work/named.txt" "$work/named.txt"
+pruned=0
+for sha in $(comm -23 "$work/have.txt" "$work/named.txt"); do
+  s3_as backup s3api delete-object --bucket "$BUCKET_BACKUPS" --key "files/objects/$kid/$sha.enc" >/dev/null
+  pruned=$((pruned + 1))
+done
+# An older key's files: deleted once no manifest of that key is left (its 30 days are over).
+backups_list "files/objects/" > "$work/all.keys"
+for old in $(sed -nE 's#^files/objects/([0-9a-f]{12})/.*#\1#p' "$work/all.keys" | sort -u); do
+  [[ "$old" != "$kid" ]] || continue
+  if ! grep -qE "_${old}\.json\.enc$" "$work/manifests.keys"; then
+    while read -r key; do
+      s3_as backup s3api delete-object --bucket "$BUCKET_BACKUPS" --key "$key" >/dev/null
+      pruned=$((pruned + 1))
+    done < <(grep -E "^files/objects/${old}/" "$work/all.keys")
+  fi
+done
+if [[ $pruned -gt 0 ]]; then echo "files: $pruned no longer named by any manifest, deleted"; fi
+
+trap - EXIT
+ops_finish "$run" true "$uploaded" "$copied"
+rm -rf "$work"
 log "Backup complete."

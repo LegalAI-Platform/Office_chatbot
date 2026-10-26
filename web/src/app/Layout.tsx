@@ -3,7 +3,7 @@ import { Link, NavLink, Outlet, useNavigate } from "react-router";
 import { useAlerts, useMarkAlertsRead } from "../shared/api/alerts";
 import { useDashboard } from "../shared/api/dashboard";
 import { can, useLogout, useMe } from "../shared/api/session";
-import { ALERT_KINDS, label, ROLES, TASK_TYPES } from "../shared/lib/labels";
+import { ALERT_KINDS, label, ROLES, SYSTEM_WHAT, TASK_TYPES } from "../shared/lib/labels";
 import { setTheme, useTheme } from "../shared/lib/theme";
 import { cairoLongDate, cairoTime, timeAgo } from "../shared/lib/time";
 import { Icon } from "../shared/ui/Icon";
@@ -174,14 +174,16 @@ function Bell({ late }: { late: number }) {
             <ul className="grid max-h-[60vh] gap-0.5 overflow-y-auto">
               {items.map((a) => (
                 <li key={a.id}>
-                  <button type="button" onClick={() => { if (!a.read) read.mutate([a.id]); setOpen(false); navigate(`/tasks/${a.task_id}`); }}
+                  <button type="button" onClick={() => { if (!a.read) read.mutate([a.id]); setOpen(false); if (a.task_id) navigate(`/tasks/${a.task_id}`); }}
                     className={`grid w-full gap-0.5 rounded-lg px-2.5 py-2 text-start hover:bg-muted ${a.read ? "opacity-70" : ""}`}>
                     <span className="flex items-center gap-2 text-sm font-bold">
                       {!a.read ? <span className="size-2 shrink-0 rounded-full bg-red" aria-label="جديد" role="img" /> : null}
                       {label(ALERT_KINDS, a.kind)}
                       <span className="ms-auto text-[11px] font-normal text-ink-soft">{timeAgo(a.created_at, now)}</span>
                     </span>
-                    <span className="truncate text-xs text-ink-soft">{label(TASK_TYPES, a.task_type)} · {a.client_name ?? "رقم من غير اسم"}</span>
+                    <span className="truncate text-xs text-ink-soft">
+                      {a.kind === "system" ? label(SYSTEM_WHAT, a.system_what ?? "") : `${label(TASK_TYPES, a.task_type ?? "")} · ${a.client_name ?? "رقم من غير اسم"}`}
+                    </span>
                   </button>
                 </li>
               ))}

@@ -25,7 +25,7 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
     {
         await db.ExecAsync("""
             TRUNCATE hazem.panel_audit; DELETE FROM hazem.panel_users;
-            TRUNCATE hazem.panel_alerts, hazem.panel_alert_reads;
+            TRUNCATE hazem.panel_alerts, hazem.panel_alert_reads, hazem.ops_runs; DELETE FROM app.workflow_errors;
             TRUNCATE hazem.turns, hazem.send_results, hazem.turn_replies, hazem.classifications, hazem.panel_alerts, hazem.panel_alert_reads, hazem.staff_tasks, hazem.list_entries;
             DELETE FROM hazem.staff; DELETE FROM hazem.intakes; DELETE FROM hazem.conversations; DELETE FROM hazem.persons;
             UPDATE hazem.settings SET value = to_char((now() - interval '1 hour') AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
@@ -141,6 +141,81 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal(0, (int)(await yasmin.GetFromJsonAsync<JsonNode>("/api/panel/alerts", Ct))!["unread"]!);
         var boss = await SignIn("boss");
         Assert.Equal(3, (int)(await boss.GetFromJsonAsync<JsonNode>("/api/panel/alerts", Ct))!["unread"]!);
+    }
+
+    // ---------- TASK 13: the system's own alerts ----------
+
+    [Fact]
+    public async Task A_failed_nightly_job_or_n8n_failures_alert_the_managers_only_once_with_no_client_data()
+    {
+        await db.ExecAsync("""
+            INSERT INTO hazem.ops_runs (kind, started_at, finished_at, ok, error_code) VALUES
+              ('backup', now() - interval '5 minutes', now() - interval '4 minutes', false, 'failed_at_dump_office'),
+              ('drill', now() - interval '5 minutes', now() - interval '4 minutes', true, NULL);
+            INSERT INTO app.workflow_errors (workflow_name, node_name, message) VALUES
+              ('META-WA-INBOUND', 'Send', 'سارة 2010****123 failed'), ('META-WA-INBOUND', 'Send', 'again');
+            """);
+
+        var (made, mailed) = await RunAlerts();
+        Assert.Equal((2, 2), (made, mailed)); // the failed backup and the hour n8n failed in (the drill worked), to the one manager
+        Assert.Equal((0, 0), await RunAlerts()); // once
+
+        var mails = _factory.Mail.Sent.ToList();
+        Assert.Equal(["boss@example.test", "boss@example.test"], mails.Select(m => m.To));
+        Assert.Contains(mails, m => m.Subject.StartsWith("النسخة الاحتياطية فشلت |"));
+        Assert.Contains(mails, m => m.Subject.StartsWith("فيه حاجات في n8n فشلت |"));
+        Assert.All(mails, m =>
+        {
+            Assert.DoesNotContain("سارة", m.Text); // n8n's message never leaves its schema
+            Assert.DoesNotContain("2010", m.Text);
+            Assert.DoesNotContain("failed_at_dump_office", m.Text);
+        });
+
+        var boss = (await (await SignIn("boss")).GetFromJsonAsync<JsonNode>("/api/panel/alerts", Ct))!;
+        Assert.Equal(["n8n", "backup"], boss["items"]!.AsArray().Select(a => (string)a!["system_what"]!).Order(StringComparer.Ordinal).Reverse());
+        Assert.All(boss["items"]!.AsArray(), a => Assert.Null(a!["task_id"]));
+        Assert.Equal(0, (int)(await (await SignIn("lawyer")).GetFromJsonAsync<JsonNode>("/api/panel/alerts", Ct))!["unread"]!);
+        Assert.Equal(0, (int)(await (await SignIn("yasmin")).GetFromJsonAsync<JsonNode>("/api/panel/alerts", Ct))!["unread"]!);
+        Assert.Equal(0L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.panel_alerts WHERE kind = 'system' AND emailed_at IS NULL"));
+    }
+
+    [Fact]
+    public async Task A_night_with_no_backup_alerts_the_managers_once_a_day()
+    {
+        // Never run yet (a new install): no alert. Then the last backup that worked is 30 hours old.
+        Assert.Equal((0, 0), await RunAlerts());
+        await db.ExecAsync("""
+            INSERT INTO hazem.ops_runs (kind, started_at, finished_at, ok) VALUES ('backup', now() - interval '30 hours', now() - interval '30 hours', true);
+            """);
+        Assert.Equal((1, 1), await RunAlerts());
+        Assert.Equal((0, 0), await RunAlerts()); // one a day
+        Assert.StartsWith("النسخة الاحتياطية فشلت |", Assert.Single(_factory.Mail.Sent).Subject);
+        Assert.StartsWith("missed:", await db.ScalarAsync<string>("SELECT system_ref FROM hazem.panel_alerts WHERE kind = 'system'"));
+    }
+
+    [Fact]
+    public async Task The_api_reads_the_nightly_jobs_but_never_writes_them_nor_n8n_s_errors()
+    {
+        await using var c = new Npgsql.NpgsqlConnection(db.ApiConnectionString);
+        await c.OpenAsync(Ct);
+        async Task<bool> Works(string sql)
+        {
+            try
+            {
+                await using var cmd = new Npgsql.NpgsqlCommand(sql, c);
+                await cmd.ExecuteNonQueryAsync(Ct);
+                return true;
+            }
+            catch (Npgsql.PostgresException)
+            {
+                return false;
+            }
+        }
+
+        Assert.True(await Works("SELECT count(*) FROM hazem.ops_runs"));
+        Assert.True(await Works("SELECT count(*) FROM hazem.n8n_error_hours(now() - interval '1 day')"));
+        Assert.False(await Works("INSERT INTO hazem.ops_runs (kind) VALUES ('backup')"));
+        Assert.False(await Works("SELECT message FROM app.workflow_errors"));
     }
 
     // ---------- files ----------

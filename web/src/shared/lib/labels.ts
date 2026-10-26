@@ -182,6 +182,16 @@ export const ALERT_KINDS: Record<string, string> = {
   task_overdue: "مهمة اتأخرت",
   task_urgent: "طلب عاجل",
   task_human: "عميل عايز يكلم حد",
+  system: "مشكلة في السيستم",
+};
+
+/** TASK 13: what a system alert is about. */
+export const SYSTEM_WHAT: Record<string, string> = {
+  backup: "النسخة الاحتياطية بتاعة الليلة فشلت",
+  healthcheck: "الفحص اليومي لقى حاجة مش شغالة",
+  drill: "تجربة استرجاع النسخة الاحتياطية فشلت",
+  log_scan: "السجلات فيها مفتاح أو رقم كامل",
+  n8n: "فيه حاجات في n8n فشلت",
 };
 
 /** B-14: the office's lists. */

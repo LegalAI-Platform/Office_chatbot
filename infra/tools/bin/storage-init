@@ -84,18 +84,21 @@ set_perm() {
 set_perm "$media_id"     "$S3_N8N_ACCESS_KEY_ID"     true  true  false
 set_perm "$sensitive_id" "$S3_N8N_ACCESS_KEY_ID"     true  true  false
 set_perm "$backups_id"   "$S3_N8N_ACCESS_KEY_ID"     false false false
-set_perm "$media_id"     "$S3_BACKUP_ACCESS_KEY_ID"  false false false
-set_perm "$sensitive_id" "$S3_BACKUP_ACCESS_KEY_ID"  false false false
+# TASK 13: the backup reads the client files to copy them (encrypted) into office-backups; it never writes them.
+set_perm "$media_id"     "$S3_BACKUP_ACCESS_KEY_ID"  true  false false
+set_perm "$sensitive_id" "$S3_BACKUP_ACCESS_KEY_ID"  true  false false
 set_perm "$backups_id"   "$S3_BACKUP_ACCESS_KEY_ID"  true  true  true
 set_perm "$media_id"     "$S3_API_ACCESS_KEY_ID"     true  false false
 set_perm "$sensitive_id" "$S3_API_ACCESS_KEY_ID"     true  true  false
 set_perm "$backups_id"   "$S3_API_ACCESS_KEY_ID"     false false false
 log "Key permissions applied."
 
-# 6. Backups expire after 30 days (T-15).
+# 6. Backups expire after 30 days (T-15): the database dumps and the files manifests. TASK 13: the files themselves
+#    (files/objects/, kept once by their content) are deleted by the backup when no manifest of the last 30 days
+#    names them; a lifecycle rule would delete a file the office has kept for longer than 30 days.
 s3_as backup s3api put-bucket-lifecycle-configuration --bucket "$BUCKET_BACKUPS" \
-  --lifecycle-configuration '{"Rules":[{"ID":"expire-after-30-days","Status":"Enabled","Filter":{"Prefix":""},"Expiration":{"Days":30}}]}' \
+  --lifecycle-configuration '{"Rules":[{"ID":"dumps-30-days","Status":"Enabled","Filter":{"Prefix":"postgres/"},"Expiration":{"Days":30}},{"ID":"manifests-30-days","Status":"Enabled","Filter":{"Prefix":"files/manifests/"},"Expiration":{"Days":30}}]}' \
   || die "put-bucket-lifecycle-configuration failed"
-log "Lifecycle rule (30 days) set on $BUCKET_BACKUPS."
+log "Lifecycle rules (30 days: the dumps and the files manifests) set on $BUCKET_BACKUPS."
 
 log "Storage init complete."

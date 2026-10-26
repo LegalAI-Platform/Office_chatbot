@@ -50,6 +50,28 @@ psql_as() {
 }
 psql_super() { local db="$1"; shift; psql_as "$POSTGRES_SUPERUSER" "$POSTGRES_SUPERUSER_PASSWORD" "$db" "$@"; }
 
+# ---------- TASK 13: the nightly jobs' records (hazem.ops_runs) ----------
+# ops_start KIND -> prints the run's id. ops_finish ID OK [SIZE] [ITEMS] [ERROR_CODE]: never a file name or a key.
+ops_start() { psql_super office -c "INSERT INTO hazem.ops_runs (kind) VALUES ('$1') RETURNING id"; }
+ops_finish() {
+  local id="$1" ok="$2" size="${3:-NULL}" items="${4:-NULL}" code="${5:-}"
+  [[ -n "$id" ]] || return 0
+  code="${code//\'/}"; code="${code:0:120}"
+  psql_super office -c "UPDATE hazem.ops_runs SET finished_at = now(), ok = $ok, size_bytes = $size, items = $items,
+    error_code = NULLIF('$code', '') WHERE id = $id AND finished_at IS NULL" >/dev/null || true
+}
+
+# ---------- TASK 13: the backups are encrypted (AES-256, a key from PBKDF2) ----------
+# The key is BACKUP_ENCRYPTION_KEY (gen-secrets). Without it nothing is written and nothing can be read back.
+need_backup_key() { [[ "${#BACKUP_ENCRYPTION_KEY}" -ge 32 ]] || die "BACKUP_ENCRYPTION_KEY is missing or too short (gen-secrets)"; }
+encrypt_file() { openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:BACKUP_ENCRYPTION_KEY -in "$1" -out "$2"; }
+decrypt_file() { openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass env:BACKUP_ENCRYPTION_KEY -in "$1" -out "$2"; }
+# The key's id: 12 hex of a one-way hash (it never reveals the key). The file backups keep their objects and manifests
+# under it, so a new key never reuses or prunes what an older key made (docs/runbooks/secrets.md).
+backup_kid() { printf 'hazem-backup-kid:%s' "$BACKUP_ENCRYPTION_KEY" | sha256sum | cut -c1-12; }
+# backups_list PREFIX -> every key under it in office-backups, one per line (none: nothing, exit 0; a failure: exit 1).
+backups_list() { s3_as backup s3api list-objects-v2 --bucket "$BUCKET_BACKUPS" --prefix "$1" --output json | jq -r '(.Contents // [])[].Key'; }
+
 # Make helpers available inside `bash -c` sub-shells.
 export GARAGE_ADMIN_URL S3_ENDPOINT BUCKET_MEDIA BUCKET_SENSITIVE BUCKET_BACKUPS
-export -f log die garage_api s3_as psql_as psql_super
+export -f log die garage_api s3_as psql_as psql_super ops_start ops_finish need_backup_key encrypt_file decrypt_file backup_kid backups_list

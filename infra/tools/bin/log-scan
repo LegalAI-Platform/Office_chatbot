@@ -1,0 +1,30 @@
+#!/bin/bash
+# The log scan (TASK 13, DECISIONS v1.18): reads the last day of the API's and n8n's logs on stdin and looks for what
+# must never be logged: an access token (Meta, OpenAI, a bearer) or a full Egyptian phone number (a WhatsApp id).
+# It prints and records only how many lines of each kind it found, never the lines themselves.
+#   docker compose logs --no-color --since 24h api n8n | docker compose run --rm -T tools log-scan
+set -euo pipefail
+source /usr/local/bin/_lib
+
+run="$(ops_start log_scan)"
+trap 'ops_finish "$run" false NULL NULL "scan_failed"' EXIT
+tmp="$(mktemp)"
+cat > "$tmp"
+lines="$(wc -l < "$tmp" | tr -d ' ')"
+
+count() { grep -cE "$1" "$tmp" || true; }
+# A Meta token (EAA…), an OpenAI key (sk-…), a bearer header, a Google private key.
+tokens="$(count 'EAA[A-Za-z0-9]{40,}|sk-[A-Za-z0-9_-]{24,}|[Bb]earer [A-Za-z0-9._~+/-]{24,}|BEGIN PRIVATE KEY')"
+# 2010…/2011…/2012…/2015… + 8 digits, or 010…/011…/012…/015… + 8, not inside a longer number (a masked one has ****).
+phones="$(count '(^|[^0-9])(20|0)1[0125][0-9]{8}([^0-9]|$)')"
+rm -f "$tmp"
+
+trap - EXIT
+if [[ "$tokens" == "0" && "$phones" == "0" ]]; then
+  ops_finish "$run" true NULL "$lines"
+  echo "LOG SCAN OK: $lines lines, no token, no full phone number."
+else
+  ops_finish "$run" false NULL "$lines" "tokens:$tokens,phones:$phones"
+  echo "LOG SCAN FOUND: $tokens line(s) with a token, $phones line(s) with a full phone number (in $lines lines)."
+  exit 2
+fi

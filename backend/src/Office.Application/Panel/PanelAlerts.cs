@@ -10,19 +10,38 @@ public static class AlertKinds
     public const string Overdue = "task_overdue";
     public const string Urgent = "task_urgent";
     public const string Human = "task_human";
+
+    /// <summary>TASK 13 (v1.18): a nightly job failed, or n8n workflows failed in an hour. No task; the managers only.</summary>
+    public const string System = "system";
 }
 
-/// <summary>An alert as the bell shows it.</summary>
-public sealed record PanelAlert(long Id, string Kind, Guid TaskId, string TaskType, string? ClientName, DateTimeOffset DueAt,
-    DateTimeOffset CreatedAt, bool Read);
+/// <summary>What a system alert is about (hazem.panel_alerts.system_what).</summary>
+public static class SystemWhat
+{
+    public const string Backup = "backup";
+    public const string Healthcheck = "healthcheck";
+    public const string Drill = "drill";
+    public const string LogScan = "log_scan";
+    public const string N8n = "n8n";
+}
+
+/// <summary>An alert as the bell shows it. A system alert has no task (<see cref="SystemWhat"/> instead).</summary>
+public sealed record PanelAlert(long Id, string Kind, Guid? TaskId, string? TaskType, string? ClientName, DateTimeOffset? DueAt,
+    DateTimeOffset CreatedAt, bool Read, string? SystemWhat = null);
 
 /// <summary>An alert whose e-mail has not gone out yet.</summary>
-public sealed record AlertToMail(long Id, string Kind, Guid TaskId, string TaskType, DateTimeOffset DueAt, Guid? StaffId);
+public sealed record AlertToMail(long Id, string Kind, Guid? TaskId, string? TaskType, DateTimeOffset? DueAt, Guid? StaffId, string? SystemWhat = null);
 
 public interface IPanelAlertStore
 {
     /// <summary>Alerts for tasks made since alerts.since that need one and have none; how many were made.</summary>
     Task<int> MakeAsync(CancellationToken ct);
+
+    /// <summary>TASK 13: an alert for every failed nightly job, and one for every hour n8n workflows failed in.</summary>
+    Task<int> MakeSystemAsync(CancellationToken ct);
+
+    /// <summary>The e-mail of every active manager (a system alert is theirs only).</summary>
+    Task<IReadOnlyList<string>> ManagersAsync(CancellationToken ct);
 
     /// <summary>Not e-mailed yet, from the last day only (an old backlog is never mailed in a burst).</summary>
     Task<IReadOnlyList<AlertToMail>> UnsentAsync(CancellationToken ct);
@@ -53,7 +72,7 @@ public sealed class PanelAlerts(IPanelAlertStore store, IPanelMailer mailer)
     /// </summary>
     public async Task<(int Made, int Mailed, int Failed, string? Error)> RunAsync(string panelUrl, CancellationToken ct)
     {
-        var made = await store.MakeAsync(ct);
+        var made = await store.MakeAsync(ct) + await store.MakeSystemAsync(ct);
         int mailed = 0, failed = 0;
         string? error = null;
         if (!mailer.Configured)
@@ -64,11 +83,12 @@ public sealed class PanelAlerts(IPanelAlertStore store, IPanelMailer mailer)
         await store.DropFinishedAsync(ct);
         foreach (var alert in await store.UnsentAsync(ct))
         {
-            foreach (var to in await store.RecipientsAsync(alert.StaffId, ct))
+            var system = alert.Kind == AlertKinds.System;
+            foreach (var to in system ? await store.ManagersAsync(ct) : await store.RecipientsAsync(alert.StaffId, ct))
             {
                 try
                 {
-                    if (await mailer.SendAsync(PanelMails.Alert(to, alert, panelUrl), ct))
+                    if (await mailer.SendAsync(system ? PanelMails.SystemAlert(to, alert.SystemWhat, panelUrl) : PanelMails.Alert(to, alert, panelUrl), ct))
                     {
                         mailed++;
                     }
