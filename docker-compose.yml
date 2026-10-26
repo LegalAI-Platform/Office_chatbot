@@ -15,15 +15,24 @@ name: ${COMPOSE_PROJECT_NAME:-office}
 # Chatwoot Community Edition (T-24), pinned. It talks to the api only (an API inbox), never to
 # WhatsApp or Meta. Its database holds a second copy of client messages: backup and security
 # treat it like ours (TASK 13).
+# Every long-running service's log: at most 5 files of 10 MB, the oldest dropped (security review 2026-10-26,
+# finding 7). Before, Docker kept every line forever on this disk, outside the backups' 30 days.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 x-chatwoot: &chatwoot
-  image: chatwoot/chatwoot:v4.18.0-ce
+  image: chatwoot/chatwoot:v4.19.1-ce
   environment: &chatwoot-env
     TZ: Africa/Cairo
     RAILS_ENV: production
     NODE_ENV: production
     INSTALLATION_ENV: docker
     RAILS_LOG_TO_STDOUT: "true"
-    LOG_LEVEL: info
+    # warn, not info: at info Rails logs every request's parameters, which can carry the staff's replies.
+    LOG_LEVEL: warn
     SECRET_KEY_BASE: ${CHATWOOT_SECRET_KEY_BASE}
     FRONTEND_URL: ${CHATWOOT_URL:-http://127.0.0.1:3000}
     DEFAULT_LOCALE: ar
@@ -78,6 +87,7 @@ services:
   postgres:
     image: postgres:16.15
     restart: unless-stopped
+    logging: *logging
     security_opt: ["no-new-privileges:true"] # no process inside can gain privileges (setuid binaries)
     depends_on:
       preflight:
@@ -118,6 +128,7 @@ services:
   redis:
     image: redis:7.4.11
     restart: unless-stopped
+    logging: *logging
     security_opt: ["no-new-privileges:true"] # no process inside can gain privileges (setuid binaries)
     depends_on:
       preflight:
@@ -145,6 +156,7 @@ services:
   garage:
     image: dxflrs/garage:v2.4.1
     restart: unless-stopped
+    logging: *logging
     security_opt: ["no-new-privileges:true"] # no process inside can gain privileges (setuid binaries)
     depends_on:
       preflight:
@@ -176,8 +188,9 @@ services:
         condition: service_healthy
 
   n8n:
-    image: n8nio/n8n:2.43.8
+    image: n8nio/n8n:2.44.7
     restart: unless-stopped
+    logging: *logging
     security_opt: ["no-new-privileges:true"] # no process inside can gain privileges (setuid binaries)
     depends_on:
       postgres:
@@ -237,6 +250,7 @@ services:
     image: office-api:local
     pull_policy: build
     restart: unless-stopped
+    logging: *logging
     security_opt: ["no-new-privileges:true"] # no process inside can gain privileges (setuid binaries)
     depends_on:
       postgres:
@@ -324,6 +338,7 @@ services:
     image: office-web:local
     pull_policy: build
     restart: unless-stopped
+    logging: *logging
     security_opt: ["no-new-privileges:true"] # no process inside can gain privileges (setuid binaries)
     depends_on:
       api:
@@ -348,6 +363,7 @@ services:
   chatwoot-db:
     image: pgvector/pgvector:0.8.7-pg16
     restart: unless-stopped
+    logging: *logging
     security_opt: ["no-new-privileges:true"] # no process inside can gain privileges (setuid binaries)
     depends_on:
       preflight:
@@ -370,6 +386,7 @@ services:
   chatwoot-redis:
     image: redis:7.4.11
     restart: unless-stopped
+    logging: *logging
     security_opt: ["no-new-privileges:true"] # no process inside can gain privileges (setuid binaries)
     depends_on:
       preflight:
@@ -401,6 +418,7 @@ services:
   chatwoot:
     <<: *chatwoot
     restart: unless-stopped
+    logging: *logging
     security_opt: ["no-new-privileges:true"] # no process inside can gain privileges (setuid binaries)
     entrypoint: ["docker/entrypoints/rails.sh"]
     command: ["bundle", "exec", "rails", "s", "-p", "3000", "-b", "0.0.0.0"]
@@ -419,6 +437,7 @@ services:
   chatwoot-sidekiq:
     <<: *chatwoot
     restart: unless-stopped
+    logging: *logging
     security_opt: ["no-new-privileges:true"] # no process inside can gain privileges (setuid binaries)
     command: ["bundle", "exec", "sidekiq", "-C", "config/sidekiq.yml"]
     depends_on:
@@ -428,9 +447,10 @@ services:
   # TASK 13 (v1.18): the edge. The tunnels reach this nginx, never n8n itself: it lets through Meta's WhatsApp
   # webhook only (infra/edge/nginx.conf); n8n's login page and API answer 404 from the internet.
   edge:
-    image: nginxinc/nginx-unprivileged:1.30.4-alpine3.24
+    image: nginxinc/nginx-unprivileged:1.30.6-alpine3.24
     profiles: ["tunnel", "tunnel-named"]
     restart: unless-stopped
+    logging: *logging
     depends_on:
       n8n:
         condition: service_healthy
@@ -452,9 +472,10 @@ services:
   # Cloudflare Quick Tunnel: no account needed, random https://*.trycloudflare.com
   # URL that changes on every start. Forwards to the edge only (Meta's webhook).
   tunnel:
-    image: cloudflare/cloudflared:2026.9.3
+    image: cloudflare/cloudflared:2026.10.4
     profiles: ["tunnel"]
     restart: unless-stopped
+    logging: *logging
     security_opt: ["no-new-privileges:true"] # no process inside can gain privileges (setuid binaries)
     depends_on:
       edge:
@@ -471,9 +492,10 @@ services:
   # Cloudflare Named Tunnel: stable hostname. Configure the public hostname
   # -> http://edge:8081 in the Cloudflare dashboard (TASK 13: never n8n:5678) and set CLOUDFLARE_TUNNEL_TOKEN.
   tunnel-named:
-    image: cloudflare/cloudflared:2026.9.3
+    image: cloudflare/cloudflared:2026.10.4
     profiles: ["tunnel-named"]
     restart: unless-stopped
+    logging: *logging
     security_opt: ["no-new-privileges:true"] # no process inside can gain privileges (setuid binaries)
     depends_on:
       edge:

@@ -13,7 +13,7 @@ step() {
 }
 step backup docker compose run --rm tools backup
 step healthcheck docker compose run --rm --no-deps tools healthcheck
-step log-scan bash -c 'docker compose logs --no-color --since 24h api n8n 2>/dev/null | docker compose run --rm -T --no-deps tools log-scan'
+step log-scan bash -c 'docker compose logs --no-color --since 24h api n8n chatwoot chatwoot-sidekiq postgres chatwoot-db 2>/dev/null | docker compose run --rm -T --no-deps tools log-scan'
 step restore-drill docker compose run --rm tools restore-drill --if-due
 if [[ ${#failed[@]} -gt 0 ]]; then
   echo "Nightly job: FAILED in ${failed[*]} (the managers are told in the panel and by e-mail)."

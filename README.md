@@ -37,7 +37,7 @@ and OpenAI).
 
 | Service | Local URL / port | Purpose | Starts with |
 |---|---|---|---|
-| n8n 2.43.8 | http://127.0.0.1:5678 | WhatsApp layer: Meta in and out (Regular mode, PostgreSQL backend) | core |
+| n8n 2.44.7 | http://127.0.0.1:5678 | WhatsApp layer: Meta in and out (Regular mode, PostgreSQL backend) | core |
 | .NET API (ASP.NET Core 10) | none (`http://api:8080` inside Docker only) | The brain: turns, decisions, the panel API (`/api/panel`) | core |
 | Panel (React, nginx) | http://127.0.0.1:8080 | Staff tasks and accounts (TASK 07a); forwards `/api/panel` only | core |
 | Chatwoot (Community Edition 4.18) | http://127.0.0.1:3000 | The staff's conversations (TASK 07b, T-24); its own database (`chatwoot-db`) and redis; opened from the panel without a second password | core |
@@ -45,7 +45,7 @@ and OpenAI).
 | Redis 7.4.11 | 127.0.0.1:6379 | Debounce, dedup, locks, rate limits (later tasks) | core |
 | Garage v2.4.1 (S3) | http://127.0.0.1:3900 | Object storage: `office-media`, `office-sensitive`, `office-backups` | core |
 | meta-stub (.NET, test only) | none | Stand-in for Meta media and OpenAI transcription during `hazem-e2e` | `tests` profile, started by `hazem-e2e` only |
-| cloudflared 2026.9.3 | public https URL | Exposes **n8n only** for the Meta webhook | `tunnel` / `tunnel-named` profile |
+| cloudflared 2026.10.4 | public https URL | Exposes **only Meta's webhook** (through `edge`) | `tunnel` / `tunnel-named` profile |
 
 Every port is bound to `127.0.0.1`. Nothing is reachable from the network except n8n,
 and only while a tunnel profile is running. Appsmith was removed in TASK 07a (the panel is React).

@@ -1,7 +1,7 @@
 # The nightly job (TASK 13, DECISIONS v1.18), every day at 03:00 from Task Scheduler (README, "Nightly job"):
 #   1. backup         the three databases and the client files, encrypted
 #   2. healthcheck    every check of the system
-#   3. log-scan       the last day of the API's and n8n's logs: no token, no full phone number
+#   3. log-scan       the last day of the API's, n8n's, Chatwoot's and the databases' logs: no token, no full phone number
 #   4. restore-drill  when the last drill that worked is 28 days old or more
 # Every step records itself (hazem.ops_runs) and a failed one reaches the managers (the panel's bell and an
 # e-mail). A failed step does not stop the next ones. Docker Desktop must be running.
@@ -21,7 +21,7 @@ function Step([string]$Name, [scriptblock]$Run) {
 
 Step 'backup' { & docker compose run --rm tools backup }
 Step 'healthcheck' { & docker compose run --rm --no-deps tools healthcheck }
-Step 'log-scan' { & docker compose logs --no-color --since 24h api n8n 2>$null | & docker compose run --rm -T --no-deps tools log-scan }
+Step 'log-scan' { & docker compose logs --no-color --since 24h api n8n chatwoot chatwoot-sidekiq postgres chatwoot-db 2>$null | & docker compose run --rm -T --no-deps tools log-scan }
 Step 'restore-drill' { & docker compose run --rm tools restore-drill --if-due }
 
 if ($failed.Count -gt 0) {

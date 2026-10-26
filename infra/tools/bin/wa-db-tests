@@ -255,6 +255,33 @@ $(claim "'201000000092'")
 SELECT '=' || jsonb_array_length(:'c'::jsonb) || '/' || (SELECT processing_status FROM app.wa_inbound_messages WHERE wamid = 'wamid.G-GRP');")"
 assert_eq "group messages never join a turn" "$r" "0/ignored_group"
 
+# 0020: a turn the API keeps failing on stops after whatsapp.turn_max_attempts (5) and unblocks the client.
+r="$(tx "$(msg 201000000093 wamid.G-X1 text 10)
+$(claim "'201000000093'")
+SELECT (:'c'::jsonb->0->>'turn_id') AS first \\gset
+UPDATE app.wa_turns SET attempts = 5 WHERE turn_id = :'first';
+SELECT app.wa_turns_finish(:'first', 'pending', '{\"code\":\"API_ERROR\"}');
+$(claim "'201000000093'")
+SELECT '=' || jsonb_array_length(:'c'::jsonb) || '/' || (SELECT status || ':' || (last_error->>'code') || ':' || (last_error->'last'->>'code') FROM app.wa_turns WHERE turn_id = :'first')
+       || '/' || (SELECT processing_status FROM app.wa_inbound_messages WHERE wamid = 'wamid.G-X1')
+       || '/' || (SELECT count(*) FROM hazem.failed_turns(now() - interval '1 hour') WHERE turn_id = :'first');
+$(msg 201000000093 wamid.G-X2 text 10)
+$(claim "'201000000093'")
+SELECT '=' || (SELECT string_agg(x->>'wamid', ',') FROM jsonb_array_elements(:'c'::jsonb->0->'messages') x);")"
+assert_eq "a turn failed 5 times is set aside (TOO_MANY_ATTEMPTS, alerted) and the client's next message gets a turn" \
+  "$(tr '\n' ' ' <<<"$r")" "0/failed:TOO_MANY_ATTEMPTS:API_ERROR/failed/1 wamid.G-X2 "
+
+# 0020: at most whatsapp.turns_per_client_hour (30) turns a client an hour; the rest wait, nothing is lost.
+r="$(tx "INSERT INTO app.wa_turns (turn_id, wa_id, status, attempts, created_at)
+  SELECT 'wt:' || gen_random_uuid(), '201000000094', 'processed', 1, now() - interval '30 minutes' FROM generate_series(1, 30);
+$(msg 201000000094 wamid.G-H1 text 10)$(msg 201000000094 wamid.G-H2 text 9)
+$(claim "'201000000094'")
+SELECT '=' || jsonb_array_length(:'c'::jsonb) || '/' || (SELECT string_agg(processing_status, ',' ORDER BY wamid) FROM app.wa_inbound_messages WHERE wa_id = '201000000094');
+UPDATE app.wa_turns SET created_at = now() - interval '61 minutes' WHERE wa_id = '201000000094';
+$(claim "'201000000094'")
+$(turns_of)")"
+assert_eq "past 30 turns in an hour a client's messages wait, then go together in one turn" "$(tr '\n' ' ' <<<"$r")" "0/pending,pending true:wamid.G-H1,wamid.G-H2 "
+
 echo "== Media in turns (TASK 03)"
 IMG='{"id":"MEDIA-IMG","mime_type":"image/jpeg","sha256":"aa"}'
 r="$(tx "$(msg 201000000093 wamid.G-IMG image 10 "$IMG")

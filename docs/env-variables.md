@@ -30,7 +30,7 @@ contains `CHANGE_ME`, or has the wrong format.
 | `WEBHOOK_URL` | n8n (passed as `N8N_WEBHOOK_URL`, the n8n 2.x name) | no | `http://127.0.0.1:5678/` or `https://<tunnel>/` (trailing slash) | 01 / 02 |
 | `N8N_PROXY_HOPS` | n8n | no | `1` (cloudflared) | 01 |
 | `N8N_SECURE_COOKIE` | n8n | no | `false` for local http, `true` behind HTTPS | 01 |
-| `EXECUTIONS_DATA_MAX_AGE` | n8n | no | hours; `336` = 14 days | 01 |
+| `EXECUTIONS_DATA_MAX_AGE` | n8n | no | hours; `168` = 7 days (security review 2026-10-26: the executions hold the clients' messages) | 01 |
 | `HAZEM_API_TOKEN` | api; n8n credential `hazem-api` (n8n → API, header `X-Hazem-Token`) | **yes** | 64 hex chars; different from the next one | v1.3 |
 | `N8N_INTERNAL_SEND_TOKEN` | api; n8n credential `hazem-internal-send` (API → n8n internal send webhook) | **yes** | 64 hex chars | v1.3 |
 | `CLOUDFLARE_TUNNEL_TOKEN` | tunnel-named | **yes** | empty = Quick Tunnel | 01 / 02 |

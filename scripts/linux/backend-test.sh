@@ -8,7 +8,7 @@
 source "$(dirname "$0")/_common.sh"
 require_env_file
 
-SDK_IMAGE=mcr.microsoft.com/dotnet/sdk:10.0.401-alpine3.23
+SDK_IMAGE=mcr.microsoft.com/dotnet/sdk:10.0.403-alpine3.24
 vars=(POSTGRES_SUPERUSER POSTGRES_SUPERUSER_PASSWORD OFFICE_MIGRATOR_PASSWORD OFFICE_APP_PASSWORD OFFICE_API_PASSWORD)
 for v in "${vars[@]}"; do export "$v=$(env_value "$v")"; done
 

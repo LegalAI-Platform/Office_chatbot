@@ -1,5 +1,5 @@
 # Builds the API and the CLI into one image. Runtime runs as the non-root "app" user.
-FROM mcr.microsoft.com/dotnet/sdk:10.0.401-alpine3.23 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0.403-alpine3.24 AS build
 WORKDIR /src
 ENV DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1
 
@@ -17,7 +17,7 @@ RUN dotnet publish src/Office.Api/Office.Api.csproj -c Release --no-restore -o /
  && dotnet publish src/Office.Cli/Office.Cli.csproj -c Release --no-restore -o /out/cli
 
 # "-extra" variant includes ICU and tzdata (Africa/Cairo).
-FROM mcr.microsoft.com/dotnet/aspnet:10.0.12-alpine3.23-extra AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0.13-alpine3.24-extra AS runtime
 WORKDIR /app
 ENV TZ=Africa/Cairo ASPNETCORE_HTTP_PORTS=8080 DOTNET_CLI_TELEMETRY_OPTOUT=1
 # Npgsql loads GSSAPI at connect time; without it every connection logs an error.
