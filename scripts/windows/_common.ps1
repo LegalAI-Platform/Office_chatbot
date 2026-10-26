@@ -25,7 +25,7 @@ function Assert-EnvFile {
 }
 
 function Get-EnvValue([string]$Name) {
-    $line = Get-Content (Join-Path $Root '.env') | Where-Object { $_ -match "^$Name=" } | Select-Object -Last 1
+    $line = Get-Content (Join-Path $Root '.env') -Encoding UTF8 | Where-Object { $_ -match "^$Name=" } | Select-Object -Last 1
     if ($null -eq $line) { return '' }
     return $line.Substring($Name.Length + 1)
 }
@@ -43,7 +43,9 @@ function Invoke-Workflow([string]$Id) {
 
 function Set-EnvValue([string]$Name, [string]$Value) {
     $path = Join-Path $Root '.env'
-    $lines = @(Get-Content $path)
+    # -Encoding UTF8: Windows PowerShell 5.1 would read the file in the ANSI code page and garble
+    # every non-ASCII value (an Arabic SMTP_FROM_NAME) each time a script rewrites .env.
+    $lines = @(Get-Content $path -Encoding UTF8)
     $found = $false
     $lines = $lines | ForEach-Object {
         if ($_ -match "^$Name=") { $found = $true; "$Name=$Value" } else { $_ }
@@ -77,7 +79,7 @@ function Get-MetaCallbackUrl {
 
 function Assert-NoPlaceholders {
     Assert-EnvFile
-    $bad = Get-Content (Join-Path $Root '.env') |
+    $bad = Get-Content (Join-Path $Root '.env') -Encoding UTF8 |
         Where-Object { $_ -notmatch '^\s*#' -and $_ -match 'CHANGE_ME' } |
         ForEach-Object { ($_ -split '=', 2)[0] }
     if ($bad) {
