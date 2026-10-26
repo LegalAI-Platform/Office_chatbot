@@ -45,6 +45,7 @@ and OpenAI).
 | Redis 7.4.11 | 127.0.0.1:6379 | Debounce, dedup, locks, rate limits (later tasks) | core |
 | Garage v2.4.1 (S3) | http://127.0.0.1:3900 | Object storage: `office-media`, `office-sensitive`, `office-backups` | core |
 | meta-stub (.NET, test only) | none | Stand-in for Meta media and OpenAI transcription during `hazem-e2e` | `tests` profile, started by `hazem-e2e` only |
+| WAHA noweb-2026.9.2 (test channel) | http://127.0.0.1:3010 (dashboard, QR code) | TASK 02b: WhatsApp on a **spare number** until Meta approves; n8n uses it only while `whatsapp.provider` = `waha` (docs/runbooks/waha.md) | `waha` profile, by hand only |
 | cloudflared 2026.10.4 | public https URL | Exposes **only Meta's webhook** (through `edge`) | `tunnel` / `tunnel-named` profile |
 
 Every port is bound to `127.0.0.1`. Nothing is reachable from the network except n8n,

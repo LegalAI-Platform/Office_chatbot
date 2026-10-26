@@ -26,6 +26,7 @@ cleanup() {
     DELETE FROM app.wa_inbound_messages WHERE wa_id LIKE '2010000000%';
     DELETE FROM app.wa_turns WHERE wa_id LIKE '2010000000%';
     DELETE FROM app.wa_contact_windows WHERE wa_id LIKE '2010000000%';
+    DELETE FROM app.waha_menus WHERE wa_id LIKE '2010000000%';
     DELETE FROM hazem.turns WHERE wa_id LIKE '2010000000%';
     DELETE FROM app.wa_webhook_events WHERE phone_number_id = '100000000000001' OR payload->>'message_template_name' = 'hello_world' AND payload->>'message_template_id' = '999000111';
     DELETE FROM app.wa_templates WHERE meta_template_id = '999000111';
@@ -431,6 +432,72 @@ if psql_super office -c "INSERT INTO app.settings(key, value) VALUES ('whatsapp.
 else
   assert_eq "settings refuses secret-looking keys" "refused" "refused"
 fi
+
+echo "== TASK 02b: the WAHA test channel (app.waha_event / app.waha_sent)"
+W=201000000098
+waha() { app -v ev="$1" -v pn="${2:-}" <<<"SELECT app.waha_event(:'ev'::jsonb, NULLIF(:'pn', ''))::text;"; }
+msg() { jq -nc --arg id "$1" --arg from "$2" --arg body "$3" '{event: "message", session: "default", payload: {id: $id, timestamp: 1793000000, from: $from, fromMe: false, body: $body, hasMedia: false}}'; }
+assert_eq "the channel is Meta unless the owner switches it" \
+  "$(q "SELECT value FROM app.settings WHERE key = 'whatsapp.provider'")" "meta"
+r="$(waha "$(msg TEST-W1 "$W@c.us" "السلام عليكم")")"
+assert_eq "a text becomes Meta's message (wamid waha.…, phone_number_id waha)" \
+  "$(jq -r '.event.messages[0] | "\(.id)/\(.type)/\(.from)/\(.text.body)"' <<<"$r")/$(jq -r '.event.metadata.phone_number_id' <<<"$r")" \
+  "waha.TEST-W1/text/$W/السلام عليكم/waha"
+assert_eq "Meta's event goes through wa_process_event as it is" \
+  "$(app -v ev="$(jq -c .event <<<"$r")" <<<"SELECT (app.wa_process_event(:'ev'::jsonb))->>'messages_new';")" "1"
+img='{"event":"message","payload":{"id":"TEST-W2","from":"'"$W"'@c.us","hasMedia":true,"body":"","media":{"url":"http://evil.example/api/files/default/W2.jpeg","mimetype":"image/jpeg"}}}'
+assert_eq "a file keeps only its path on WAHA (never another address)" \
+  "$(waha "$img" | jq -r '.event.messages[0] | "\(.type)/\(.image.id)"')" "image/waha:/api/files/default/W2.jpeg"
+bad='{"event":"message","payload":{"id":"TEST-W3","from":"'"$W"'@c.us","hasMedia":true,"media":{"url":"http://waha:3000/etc/passwd","mimetype":"application/pdf"}}}'
+assert_eq "a file outside /api/files has no path (WA-MEDIA-ONE fails it)" \
+  "$(waha "$bad" | jq -r '.event.messages[0] | "\(.type)/\(.document.id)"')" "document/waha:"
+assert_eq "a LID is the number WAHA found for it" \
+  "$(waha "$(msg TEST-W4 "1234567@lid" "hi")" "$W@c.us" | jq -r '.event.messages[0].from')" "$W"
+assert_eq "a LID without a number is dropped" "$(waha "$(msg TEST-W5 "1234567@lid" "hi")" | jq -r .ignored)" "unknown_number"
+assert_eq "a group is dropped" "$(waha "$(msg TEST-W6 "120363@g.us" "hi")" | jq -r .ignored)" "not_a_person"
+assert_eq "our own message is dropped" \
+  "$(waha "$(msg TEST-W7 "$W@c.us" "hi" | jq -c '.payload.fromMe = true')" | jq -r .ignored)" "from_me"
+r="$(app -v c='[{"n":1,"id":"bk:m:pv","title":"تليفون"},{"n":2,"id":"bk:m:of","title":"مكتب"}]' \
+  <<<"SELECT (app.waha_sent(gen_random_uuid(), '$W', 'buttons', :'c'::jsonb, 201, '{\"key\":{\"id\":\"BAE5\"}}'))::text;")"
+assert_eq "WAHA's answer becomes Meta's (messages[0].id) and the list is kept" \
+  "$(jq -r '"\(.statusCode)/\(.body.messages[0].id)"' <<<"$r")/$(q "SELECT kind || jsonb_array_length(choices) FROM app.waha_menus WHERE wa_id = '$W'")" \
+  "200/waha.true_$W@c.us_BAE5/buttons2"
+assert_eq "«2» is the press of the second button" \
+  "$(waha "$(msg TEST-W8 "$W@c.us" " 2 ")" | jq -r '.event.messages[0] | "\(.type)/\(.interactive.type)/\(.interactive.button_reply.id)"')" \
+  "interactive/button_reply/bk:m:of"
+assert_eq "«١» (Arabic-Indic) is the first" \
+  "$(waha "$(msg TEST-W9 "$W@c.us" "١")" | jq -r '.event.messages[0].interactive.button_reply.id')" "bk:m:pv"
+assert_eq "«3» is out of the list: plain text" "$(waha "$(msg TEST-W10 "$W@c.us" "3")" | jq -r '.event.messages[0].type')" "text"
+# A text in the SAME reply as the list (the offer, then «what is it about?») keeps it; one of a LATER reply ends it.
+outbound() {  # outbound KEY: an outbound row as n8n's Prepare leaves it; prints its id
+  psql_super office -c "INSERT INTO app.wa_outbound_messages (idempotency_key, wa_id, kind, request_payload, requested_by)
+    VALUES ('$1', '$W', 'text', '{}', 'wa-db-tests') RETURNING id"; }
+o_list="$(outbound hazem:wt:TEST-WAHA-1:0)"; o_same="$(outbound hazem:wt:TEST-WAHA-1:1)"; o_next="$(outbound hazem:wt:TEST-WAHA-2:0)"
+app -v c='[{"n":1,"id":"bk:m:pv","title":"تليفون"},{"n":2,"id":"bk:m:of","title":"مكتب"}]' \
+  <<<"SELECT app.waha_sent('$o_list', '$W', 'buttons', :'c'::jsonb, 201, '{\"key\":{\"id\":\"BAE6\"}}');" >/dev/null
+app -c "SELECT app.waha_sent('$o_same', '$W', 'text', NULL, 201, '{\"key\":{\"id\":\"BAE7\"}}')" >/dev/null
+assert_eq "a text in the same reply keeps the list: «1» is still the press" \
+  "$(waha "$(msg TEST-W12 "$W@c.us" "1")" | jq -r '.event.messages[0].type')" "interactive"
+app -c "SELECT app.waha_sent('$o_next', '$W', 'text', NULL, 201, '{\"key\":{\"id\":\"BAE8\"}}')" >/dev/null
+assert_eq "a text of a later reply ends it: «1» is words again" \
+  "$(waha "$(msg TEST-W13 "$W@c.us" "1")" | jq -r '.event.messages[0].type')" "text"
+psql_super office -c "DELETE FROM app.wa_outbound_messages WHERE idempotency_key LIKE 'hazem:wt:TEST-WAHA-%'" >/dev/null
+app -v c='[{"n":1,"id":"bk:m:pv","title":"تليفون"},{"n":2,"id":"bk:m:of","title":"مكتب"}]' \
+  <<<"SELECT app.waha_sent(gen_random_uuid(), '$W', 'buttons', :'c'::jsonb, 201, '{\"key\":{\"id\":\"BAE9\"}}');" >/dev/null
+psql_super office -c "UPDATE app.waha_menus SET sent_at = now() - interval '25 hours' WHERE wa_id = '$W'" >/dev/null
+assert_eq "after 24 hours «1» is plain text" "$(waha "$(msg TEST-W11 "$W@c.us" "1")" | jq -r '.event.messages[0].type')" "text"
+ack='{"event":"message.ack","payload":{"id":"true_'"$W"'@c.us_BAE5","fromMe":true,"ack":3,"to":"'"$W"'@c.us"}}'
+assert_eq "a WAHA ack is Meta's status for the same wamid" \
+  "$(waha "$ack" | jq -r '.event.statuses[0] | "\(.id)/\(.status)"')" "waha.true_$W@c.us_BAE5/read"
+assert_eq "a failed send answers in Meta's error shape (mapped to NETWORK_OR_UNKNOWN downstream)" \
+  "$(app -c "SELECT (app.waha_sent(gen_random_uuid(), '$W', 'text', NULL, 500, '{}'))->>'statusCode'")" "500"
+if psql_as office_readonly "$OFFICE_READONLY_PASSWORD" office -c "SELECT app.waha_event('{}'::jsonb)" >/dev/null 2>&1; then
+  assert_eq "office_readonly cannot call waha_event" "allowed" "denied"
+else
+  assert_eq "office_readonly cannot call waha_event" "denied" "denied"
+fi
+psql_super office -c "DELETE FROM app.wa_inbound_messages WHERE wa_id = '$W'; DELETE FROM app.wa_contact_windows WHERE wa_id = '$W';
+  DELETE FROM app.wa_webhook_events WHERE phone_number_id = 'waha' AND payload::text LIKE '%TEST-W%';" >/dev/null
 
 cleanup
 echo

@@ -119,7 +119,7 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT app.wa_outbound_prepare($1, $2, 'text', $3::jsonb, $4) AS r, $3::jsonb AS payload, COALESCE((SELECT value = 'true' FROM app.settings WHERE key = 'whatsapp.dry_run'), false) AS dry_run",
+        "query": "SELECT app.wa_outbound_prepare($1, $2, 'text', $3::jsonb, $4) AS r, $3::jsonb AS payload, COALESCE((SELECT value = 'true' FROM app.settings WHERE key = 'whatsapp.dry_run'), false) AS dry_run, COALESCE((SELECT value FROM app.settings WHERE key = 'whatsapp.provider'), 'meta') AS provider",
         "options": {
           "queryReplacement": "={{ (() => { const i = $json.interactive ? (typeof $json.interactive === 'string' ? JSON.parse($json.interactive) : $json.interactive) : null; const d = $json.document ? (typeof $json.document === 'string' ? JSON.parse($json.document) : $json.document) : null; const body = d ? { type: 'document', document: { link: d.link, filename: d.filename, caption: $json.text } } : !i ? { type: 'text', text: { preview_url: false, body: $json.text } } : { type: 'interactive', interactive: i.kind === 'list' ? { type: 'list', body: { text: $json.text }, action: { button: i.button, sections: [{ rows: i.choices.map((c) => Object.assign({ id: c.id, title: c.title }, c.description ? { description: c.description } : {})) }] } } : { type: 'button', body: { text: $json.text }, action: { buttons: i.choices.map((c) => ({ type: 'reply', reply: { id: c.id, title: c.title } })) } } }; return [ $json.idempotency_key, $json.wa_id, JSON.stringify(Object.assign({ messaging_product: 'whatsapp', recipient_type: 'individual', to: $json.wa_id }, body, $json.context_wamid ? { context: { message_id: $json.context_wamid } } : {})), $json.requested_by ]; })() }}"
         }
@@ -575,6 +575,72 @@
         1920,
         0
       ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "de5fd201-ec3c-541d-8cfc-8c3bdd8d4076",
+              "leftValue": "={{ $json.provider === 'waha' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "298520c0-6737-5986-a066-76a88ce1dd79",
+      "name": "WAHA?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1920,
+        500
+      ]
+    },
+    {
+      "id": "9c5ed8c8-d3c5-5a8d-92b1-a9af6e1d1525",
+      "name": "Send through WAHA",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.4,
+      "position": [
+        2160,
+        500
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "WahaSend00000001",
+          "mode": "id",
+          "cachedResultName": "WAHA-SEND"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
     }
   ],
   "connections": {
@@ -749,7 +815,7 @@
         ],
         [
           {
-            "node": "Config request",
+            "node": "WAHA?",
             "type": "main",
             "index": 0
           }
@@ -757,6 +823,35 @@
       ]
     },
     "Dry-run response": {
+      "main": [
+        [
+          {
+            "node": "Record result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WAHA?": {
+      "main": [
+        [
+          {
+            "node": "Send through WAHA",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Config request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send through WAHA": {
       "main": [
         [
           {

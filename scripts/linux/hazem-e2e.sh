@@ -230,4 +230,16 @@ panel_step hazem06-price || failed=1
 step hazem06-say 4 "عايز أحجز"
 forward
 step check-hazem06-offer || failed=1
+echo "==== 17. TASK 02b: the WAHA test channel: in by webhook, out as a numbered list, «١» back as the press"
+step hazem02b-setup
+step check-hazem02b-auth || failed=1
+step hazem02b-say 1 "السلام عليكم"
+step check-hazem02b-welcome || failed=1
+step hazem02b-say 2 "محمد أحمد علي حسن"
+step check-hazem02b-offer || failed=1
+step hazem02b-say 3 "١"
+step check-hazem02b-press || failed=1
+step hazem02b-meta-again
+step hazem02b-say 9 "مرحبا"
+step check-hazem02b-off || failed=1
 unset E2E_PANEL_PASSWORD

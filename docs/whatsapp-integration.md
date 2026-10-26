@@ -50,6 +50,13 @@ flowchart LR
 | `WA-SEND-ACTION` | sub-workflow | One action: `send_text`, `send_interactive` (TASK 08) or `send_document` (TASK 10) → SEND-MESSAGE, `send_template` → SEND-TEMPLATE, anything else → `INVALID_INPUT`. |
 | `WA-INTERNAL-SEND` | Webhook `POST /webhook/hazem-internal-send` | Sends for the API (reminders, panel). Header `X-Hazem-Token` checked against credential `hazem-internal-send`; 403 otherwise. |
 | `WA-TEST-HARNESS` | manual (`n8n execute`) | Runs fixtures through the real wiring without Meta (used by `wa-tests`). |
+| `WAHA-INBOUND` | Webhook `POST /webhook/waha-inbound` | **TASK 02b, the WAHA test channel** (docs/runbooks/waha.md): WAHA's `message` / `message.ack`, header `X-Waha-Token` (`waha-webhook`), heard only while `whatsapp.provider` = `waha`; a LID → the number (WAHA); `app.waha_event` → Meta's event → PROCESS-EVENT → MEDIA-FETCH → quiet period → FORWARD-TURN. Published only when its credentials exist. |
+| `WAHA-SEND` | sub-workflow | Called by SEND-MESSAGE (after `wa_outbound_prepare`) while the channel is WAHA: text, buttons / list as a numbered list (`app.waha_menus`), document → WAHA; `app.waha_sent` answers in Meta's shape. |
+| `WAHA-MEDIA-ONE` | sub-workflow | WA-MEDIA-ONE for a `waha:` file: read from `waha.base_url` + its path with `waha-api`, sha256 computed here, then the same checks and storage. |
+
+**TASK 02b:** `META-WA-SEND-MESSAGE` and `META-WA-SEND-TEMPLATE` read `whatsapp.provider` in `Prepare` and switch after
+every rule (`WAHA?`): `meta` goes on to Meta exactly as before; `waha` → `WAHA-SEND` (a template is refused on WAHA).
+`WA-MEDIA-ONE` hands a `waha:` file to `WAHA-MEDIA-ONE`. Nothing else of the Meta flow changed.
 
 All workflows: timezone `Africa/Cairo`, error workflow `META-WA-ERROR-HANDLER`, successful
 executions not saved (they contain customer data), failed ones kept (pruned after 14 days).

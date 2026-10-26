@@ -73,6 +73,14 @@ for v in S3_N8N_SECRET_ACCESS_KEY S3_BACKUP_SECRET_ACCESS_KEY S3_API_SECRET_ACCE
   [[ "${!v:-}" =~ ^[0-9a-f]{64}$ ]] || err "$v must be exactly 64 lowercase hex characters"
 done
 [[ "${S3_N8N_ACCESS_KEY_ID:-}" != "${S3_BACKUP_ACCESS_KEY_ID:-}" ]] || err "n8n and backup S3 keys must be different"
+# TASK 02b: the WAHA test channel's keys are optional; when one is set, all three are, strong and distinct.
+if [[ -n "${WAHA_API_KEY:-}${WAHA_WEBHOOK_TOKEN:-}${WAHA_DASHBOARD_PASSWORD:-}" ]]; then
+  for v in WAHA_API_KEY WAHA_WEBHOOK_TOKEN; do
+    [[ "${!v:-}" =~ ^[A-Za-z0-9_-]{32,}$ ]] || err "$v must be at least 32 letters, digits, '_' or '-' (gen-secrets)"
+  done
+  [[ "${WAHA_DASHBOARD_PASSWORD:-}" =~ ^[A-Za-z0-9_-]{16,}$ ]] || err "WAHA_DASHBOARD_PASSWORD must be at least 16 letters, digits, '_' or '-' (gen-secrets)"
+  [[ "${WAHA_API_KEY:-}" != "${WAHA_WEBHOOK_TOKEN:-}" ]] || err "WAHA_API_KEY and WAHA_WEBHOOK_TOKEN must be different"
+fi
 # TASK 13: every backup is encrypted with it (and nothing can be read back without it).
 [[ "${BACKUP_ENCRYPTION_KEY:-}" =~ ^[0-9a-f]{64}$ ]] || err "BACKUP_ENCRYPTION_KEY must be exactly 64 lowercase hex characters (gen-secrets)"
 [[ "${S3_API_ACCESS_KEY_ID:-}" != "${S3_N8N_ACCESS_KEY_ID:-}" && "${S3_API_ACCESS_KEY_ID:-}" != "${S3_BACKUP_ACCESS_KEY_ID:-}" ]] \

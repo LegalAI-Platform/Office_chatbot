@@ -783,6 +783,72 @@
         2640,
         400
       ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "4780596c-0e7e-5cf9-aa60-79168fda4994",
+              "leftValue": "={{ String($json.meta_media_id || '').startsWith('waha:') }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "c7684eec-3e92-5768-8b0f-974759eefe21",
+      "name": "WAHA file?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        360,
+        520
+      ]
+    },
+    {
+      "id": "c2115bd4-861c-5ed3-aedc-abc246546817",
+      "name": "WAHA file",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.4,
+      "position": [
+        600,
+        520
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "WahaMediaOne0001",
+          "mode": "id",
+          "cachedResultName": "WAHA-MEDIA-ONE"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
     }
   ],
   "connections": {
@@ -790,7 +856,7 @@
       "main": [
         [
           {
-            "node": "Settings",
+            "node": "WAHA file?",
             "type": "main",
             "index": 0
           }
@@ -1056,6 +1122,24 @@
         [
           {
             "node": "sha256 matches?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WAHA file?": {
+      "main": [
+        [
+          {
+            "node": "WAHA file",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Settings",
             "type": "main",
             "index": 0
           }

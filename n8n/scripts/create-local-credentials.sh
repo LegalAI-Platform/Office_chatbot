@@ -66,3 +66,26 @@ EOF
 
 n8n import:credentials --input="$tmp" >/dev/null
 echo "credentials office-postgres-app, hazem-api, hazem-internal-send, office-s3 are ready"
+
+# TASK 02b: the WAHA test channel, only when its keys are in .env. Without them WAHA-INBOUND is not published
+# (import-workflows skips a webhook whose credentials are missing) and nothing calls WAHA.
+if [ -n "${WAHA_API_KEY:-}" ] && [ -n "${WAHA_WEBHOOK_TOKEN:-}" ]; then
+  cat > "$tmp" <<EOF
+[
+  {
+    "id": "WahaApiCred00001",
+    "name": "waha-api",
+    "type": "httpHeaderAuth",
+    "data": { "name": "X-Api-Key", "value": "${WAHA_API_KEY}" }
+  },
+  {
+    "id": "WahaHookCred0001",
+    "name": "waha-webhook",
+    "type": "httpHeaderAuth",
+    "data": { "name": "X-Waha-Token", "value": "${WAHA_WEBHOOK_TOKEN}" }
+  }
+]
+EOF
+  n8n import:credentials --input="$tmp" >/dev/null
+  echo "credentials waha-api, waha-webhook are ready (the WAHA test channel)"
+fi

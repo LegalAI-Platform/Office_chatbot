@@ -312,6 +312,36 @@ services:
     pids_limit: 256
     networks: [office_net, chatwoot_net]
 
+  # TASK 02b (DECISIONS v1.19, T-03): WAHA, a second WhatsApp channel FOR TESTING ONLY, on a spare number, until Meta
+  # approves the account (profile "waha", never started by `up`). It is not an official API: WhatsApp can ban the number
+  # it runs, so never the office's number. n8n talks to it only while whatsapp.provider = waha (the rules stay Meta's:
+  # test recipients, 24 hours, templates). Its dashboard (the QR code) is on 127.0.0.1:3010 only; the session and its
+  # webhook to n8n are set by `tools waha-session`. docs/runbooks/waha.md.
+  waha:
+    image: devlikeapro/waha:noweb-2026.9.2
+    profiles: ["waha"]
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      WHATSAPP_DEFAULT_ENGINE: NOWEB
+      WAHA_API_KEY: ${WAHA_API_KEY:-}
+      WAHA_DASHBOARD_USERNAME: office
+      WAHA_DASHBOARD_PASSWORD: ${WAHA_DASHBOARD_PASSWORD:-}
+      WHATSAPP_SWAGGER_ENABLED: "false"
+      # The address in media.url of its webhooks (n8n keeps only the path and adds waha.base_url).
+      WAHA_BASE_URL: http://waha:3000
+      # A received file stays 10 minutes on WAHA: n8n fetches it within seconds.
+      WHATSAPP_FILES_LIFETIME: "600"
+      WHATSAPP_RESTART_ALL_SESSIONS: "true"
+      TZ: Africa/Cairo
+    volumes:
+      - waha_sessions:/app/.sessions
+    ports:
+      - "127.0.0.1:3010:3000"
+    mem_limit: 768m
+    pids_limit: 512
+    networks: [office_net]
+
   # TEST ONLY (profile "tests", never started by `up`): stands in for Meta's Graph API media
   # endpoints and OpenAI transcription. hazem-e2e starts it, points whatsapp.graph_base_url and
   # ai.openai_base_url at it, and stops it again. It never stores Authorization values.
@@ -548,6 +578,7 @@ networks:
 
 volumes:
   api_keys:
+  waha_sessions:   # TASK 02b: the WhatsApp session of the spare number (delete it to forget the number)
   chatwoot_db_data:
   chatwoot_redis_data:
   chatwoot_storage:

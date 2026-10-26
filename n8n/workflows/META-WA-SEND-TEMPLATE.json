@@ -119,7 +119,7 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT app.wa_outbound_prepare($1, $2, 'template', $3::jsonb, $4, $5, $6) AS r, $3::jsonb AS payload, COALESCE((SELECT value = 'true' FROM app.settings WHERE key = 'whatsapp.dry_run'), false) AS dry_run",
+        "query": "SELECT app.wa_outbound_prepare($1, $2, 'template', $3::jsonb, $4, $5, $6) AS r, $3::jsonb AS payload, COALESCE((SELECT value = 'true' FROM app.settings WHERE key = 'whatsapp.dry_run'), false) AS dry_run, COALESCE((SELECT value FROM app.settings WHERE key = 'whatsapp.provider'), 'meta') AS provider",
         "options": {
           "queryReplacement": "={{ [ $json.idempotency_key, $json.wa_id, JSON.stringify({ messaging_product: 'whatsapp', recipient_type: 'individual', to: $json.wa_id, type: 'template', template: { name: $json.template_name, language: { code: $json.language || 'ar' }, components: $json.components || [] } }), $json.requested_by, $json.template_name, $json.language || 'ar' ] }}"
         }
@@ -575,6 +575,56 @@
         1920,
         0
       ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ce6517d2-fb06-5b08-85c0-188f4aba2739",
+              "leftValue": "={{ $json.provider === 'waha' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "fac52971-3edb-5bb1-b022-98b5d855cb41",
+      "name": "WAHA?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1920,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify({ statusCode: 400, body: { error: { message: 'WAHA test channel: templates go only through Meta' } } }) }}",
+        "options": {}
+      },
+      "id": "e79b69fc-c1a1-5db2-8c3f-2deef099c034",
+      "name": "No templates on WAHA",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        2160,
+        500
+      ]
     }
   ],
   "connections": {
@@ -749,7 +799,7 @@
         ],
         [
           {
-            "node": "Config request",
+            "node": "WAHA?",
             "type": "main",
             "index": 0
           }
@@ -757,6 +807,35 @@
       ]
     },
     "Dry-run response": {
+      "main": [
+        [
+          {
+            "node": "Record result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WAHA?": {
+      "main": [
+        [
+          {
+            "node": "No templates on WAHA",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Config request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No templates on WAHA": {
       "main": [
         [
           {

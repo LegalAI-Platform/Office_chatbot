@@ -10,8 +10,10 @@ using System.Text.Json.Nodes;
 //   POST /v1/audio/transcriptions      OpenAI transcription (multipart), fixed Arabic text
 //   POST /v1/chat/completions          OpenAI classification (TASK 04), keyword answers; /_ai/down, /_ai/up
 //   /google/...                        Google Calendar (TASK 08): token, freeBusy, events; /_google/*
+//   /api/sendText, /api/sendFile, /api/files/..., /api/{session}/lids/{lid}
+//                                      WAHA (TASK 02b, the test channel): what n8n sends, a received file, a LID
 //   GET  /_log, POST /_log/reset       what was received, for the test's assertions
-// The log records whether an Authorization header was present, NEVER its value: if a real
+// The log records whether an Authorization (or WAHA's X-Api-Key) header was present, NEVER its value: if a real
 // credential exists in n8n, its value would reach this container.
 var builder = WebApplication.CreateBuilder(args);
 builder.Logging.SetMinimumLevel(LogLevel.Warning);
@@ -255,6 +257,41 @@ app.MapPost("/_google/reset", () =>
     return Results.Ok();
 });
 
+// ---------- WAHA (TASK 02b): answers like the NOWEB engine (key.id), refuses a call without X-Api-Key ----------
+var wahaSent = 0;
+foreach (var path in new[] { "/api/sendText", "/api/sendFile" })
+{
+    app.MapPost(path, async (HttpRequest request) =>
+    {
+        var body = JsonNode.Parse(await new StreamReader(request.Body).ReadToEndAsync());
+        var keyed = request.Headers.ContainsKey("X-Api-Key");
+        log.Enqueue(new Received("waha-send", request.Method, request.Path, null, keyed,
+            FileName: (string?)body?["file"]?["filename"], Text: (string?)body?["text"] ?? (string?)body?["caption"]) { ChatId = (string?)body?["chatId"] });
+        return keyed
+            ? Results.Json(new { key = new { remoteJid = (string?)body?["chatId"], fromMe = true, id = $"STUB{Interlocked.Increment(ref wahaSent)}" }, status = "PENDING" }, statusCode: 201)
+            : Results.Json(new { error = "no api key" }, statusCode: 401);
+    });
+}
+
+app.MapGet("/api/files/{session}/{file}", (string session, string file, HttpRequest request) =>
+{
+    log.Enqueue(Received.From(request, "waha-file", file) with { AuthorizationPresent = request.Headers.ContainsKey("X-Api-Key") });
+    if (!request.Headers.ContainsKey("X-Api-Key"))
+    {
+        return Results.StatusCode(401);
+    }
+
+    return files.TryGetValue(Path.GetFileNameWithoutExtension(file), out var f) ? Results.File(f.Bytes, f.MimeType) : Results.NotFound();
+});
+
+// A LID known to the stub: E2E…@lid is the number that follows E2E (hazem-e2e's test numbers only).
+app.MapGet("/api/{session}/lids/{lid}", (string session, string lid, HttpRequest request) =>
+{
+    log.Enqueue(Received.From(request, "waha-lid", lid) with { AuthorizationPresent = request.Headers.ContainsKey("X-Api-Key") });
+    var number = lid.StartsWith("E2E", StringComparison.Ordinal) ? lid[3..].Split('@')[0] : null;
+    return Results.Json(new { lid, pn = number is { Length: >= 8 } ? number + "@c.us" : null });
+});
+
 app.MapGet("/_log", () => Results.Json(log.ToArray()));
 app.MapPost("/_log/reset", () =>
 {
@@ -281,6 +318,9 @@ internal sealed record Received(
     string? Text = null,
     bool? Strict = null)
 {
+    /// <summary>TASK 02b: the WAHA chat a message went to (a test number only).</summary>
+    public string? ChatId { get; init; }
+
     public static Received From(HttpRequest r, string kind, string? mediaId) =>
         new(kind, r.Method, r.Path, mediaId, r.Headers.ContainsKey("Authorization"));
 }
