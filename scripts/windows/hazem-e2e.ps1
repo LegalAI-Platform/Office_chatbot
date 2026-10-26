@@ -230,6 +230,18 @@ try {
     Step @('hazem06-say', '4', 'عايز أحجز') | Out-Null
     Forward
     Check 'check-hazem06-offer'
+    Write-Host "==== 17. TASK 02b: the WAHA test channel: in by webhook, out as a numbered list, «١» back as the press"
+    Step @('hazem02b-setup') | Out-Null
+    Check 'check-hazem02b-auth'
+    Step @('hazem02b-say', '1', 'السلام عليكم') | Out-Null
+    Check 'check-hazem02b-welcome'
+    Step @('hazem02b-say', '2', 'محمد أحمد علي حسن') | Out-Null
+    Check 'check-hazem02b-offer'
+    Step @('hazem02b-say', '3', '١') | Out-Null
+    Check 'check-hazem02b-press'
+    Step @('hazem02b-meta-again') | Out-Null
+    Step @('hazem02b-say', '9', 'مرحبا') | Out-Null
+    Check 'check-hazem02b-off'
     Remove-Item env:E2E_PANEL_PASSWORD -ErrorAction SilentlyContinue
 } catch {
     Write-Host "FAIL  $_"; $script:failed = $true

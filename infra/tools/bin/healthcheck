@@ -361,7 +361,24 @@ else
   echo "SKIP  the edge is not running (no tunnel up): its checks run when the tunnel is up"
 fi
 
+echo "== The WAHA test channel (TASK 02b, DECISIONS v1.19 T-03)"
+provider="$(psql_super office -c "SELECT value FROM app.settings WHERE key = 'whatsapp.provider'")"
+check "the WhatsApp channel is meta or waha" test "$provider" = meta -o "$provider" = waha
+check "WAHA's address is inside the Docker network (waha.base_url)" \
+  sql_equals office "SELECT value FROM app.settings WHERE key = 'waha.base_url'" "http://waha:3000"
+if [[ "$provider" == waha ]]; then
+  warn "the WhatsApp channel is WAHA (the test channel, a spare number only): switch back to meta before any real client (docs/runbooks/waha.md)"
+  if [[ -n "${WAHA_API_KEY:-}" ]]; then
+    state="$(curl -s -m 5 -H @<(printf 'X-Api-Key: %s\n' "$WAHA_API_KEY") http://waha:3000/api/sessions/default 2>/dev/null | jq -r '.status // "none"' 2>/dev/null || echo none)"
+    [[ "$state" == WORKING ]] || warn "WAHA's session is '${state:-none}', not WORKING: nothing reaches WhatsApp (tools waha-session, scan the QR code)"
+  else
+    warn "the channel is WAHA but WAHA_API_KEY is empty in .env: nothing can be sent"
+  fi
+fi
+
 echo "== Migrations"
+check "migration 0021 (the WAHA test channel) is applied" \
+  sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0021'" "1"
 check "migration 0018 (the prices and the office's questions) is applied" \
   sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0018'" "1"
 check "migration 0017 (the reminders) is applied" \

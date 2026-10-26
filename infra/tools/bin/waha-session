@@ -1,0 +1,49 @@
+#!/bin/bash
+# TASK 02b (DECISIONS v1.19): the WAHA test channel's one session ("default"), for the SPARE number only.
+# Creates or updates it with its webhook to n8n (signed with X-Waha-Token) and NOWEB's store (WAHA needs it to turn a
+# sender that comes as a LID into the phone number), starts it, and prints its state. Then scan the QR code on the
+# dashboard: http://127.0.0.1:3010 (user "office", WAHA_DASHBOARD_PASSWORD). docs/runbooks/waha.md.
+# The keys travel in files and on stdin, never on a command line.
+set -euo pipefail
+source /usr/local/bin/_lib
+
+[[ -n "${WAHA_API_KEY:-}" && -n "${WAHA_WEBHOOK_TOKEN:-}" ]] \
+  || die "WAHA_API_KEY / WAHA_WEBHOOK_TOKEN are empty: run gen-secrets and copy the three WAHA lines into .env"
+BASE="http://waha:3000"
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+printf 'X-Api-Key: %s\nContent-Type: application/json\n' "$WAHA_API_KEY" > "$tmp/headers"
+waha() { curl -s -H @"$tmp/headers" "$@"; }
+
+waha -o /dev/null -w '%{http_code}' "$BASE/ping" | grep -q 200 \
+  || die "WAHA does not answer at $BASE: start it with: docker compose --profile waha up -d waha"
+
+jq -nc --arg token "$WAHA_WEBHOOK_TOKEN" '{
+  name: "default", start: true,
+  config: {
+    noweb: { store: { enabled: true, fullSync: false } },
+    webhooks: [{ url: "http://n8n:5678/webhook/waha-inbound", events: ["message", "message.ack"],
+                 customHeaders: [{ name: "X-Waha-Token", value: $token }] }]
+  }
+}' > "$tmp/session.json"
+
+if [[ "$(waha -o /dev/null -w '%{http_code}' "$BASE/api/sessions/default")" == 200 ]]; then
+  waha -o /dev/null -X PUT --data @"$tmp/session.json" "$BASE/api/sessions/default"
+  waha -o /dev/null -X POST "$BASE/api/sessions/default/start" || true
+  echo "session default updated"
+else
+  waha -o /dev/null -X POST --data @"$tmp/session.json" "$BASE/api/sessions"
+  echo "session default created"
+fi
+
+for _ in $(seq 1 20); do
+  status="$(waha "$BASE/api/sessions/default" | jq -r '.status // "UNKNOWN"')"
+  [[ "$status" == STARTING ]] || break
+  sleep 1
+done
+echo "session default: $status"
+case "$status" in
+  WORKING) echo "connected. Switch the channel: UPDATE app.settings SET value = 'waha' WHERE key = 'whatsapp.provider' (docs/runbooks/waha.md)" ;;
+  SCAN_QR_CODE) echo "open http://127.0.0.1:3010 (user office, WAHA_DASHBOARD_PASSWORD) and scan the QR code with the SPARE number's WhatsApp" ;;
+  *) echo "see: docker compose logs waha" ;;
+esac

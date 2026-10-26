@@ -48,6 +48,8 @@ plan="$(node -e '
 echo "$plan" | while read -r action id extra; do
   [ -n "${action:-}" ] || continue
   if [ "$action" = skip ]; then
+    # TASK 02b: never left listening from an earlier import (e.g. WAHA-INBOUND after its keys were removed).
+    n8n unpublish:workflow --id="$id" >/dev/null 2>&1 || true
     echo "not published $id ($extra): some of its credentials are missing"
   elif n8n publish:workflow --id="$id" >/dev/null 2>&1; then
     echo "published $id"

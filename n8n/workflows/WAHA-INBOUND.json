@@ -1,0 +1,530 @@
+{
+  "name": "WAHA-INBOUND",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## WAHA-INBOUND (TASK 02b)\nThe WAHA test channel's webhook (`message`, `message.ack`), signed with `X-Waha-Token` (`waha-webhook`). Heard only while `whatsapp.provider` = `waha` and for its own session. A sender that comes as a LID (`…@lid`) is turned into the phone number by WAHA (`/api/{session}/lids/{lid}`); unknown → dropped. `app.waha_event` makes it Meta's event (a reply «1» to a numbered list = that button), then the same steps as META-WA-INBOUND: process, media, quiet period, forward turns.",
+        "height": 260,
+        "width": 720
+      },
+      "id": "cbf69d15-3f1a-58eb-ab20-595bc1783dc8",
+      "name": "Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        160,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "waha-inbound",
+        "authentication": "headerAuth",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "8cca477e-253b-5e9a-a8ed-6327e436ed28",
+      "name": "WAHA webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        360
+      ],
+      "webhookId": "c6c57294-5eab-5488-9dee-dd58163f9938",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CRED:waha-webhook",
+          "name": "waha-webhook"
+        }
+      }
+    },
+    {
+      "id": "e2479428-ca1e-50d1-9c4f-5944271c51bf",
+      "name": "Settings",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        480,
+        360
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COALESCE(max(value) FILTER (WHERE key = 'whatsapp.provider'), 'meta') AS provider, max(value) FILTER (WHERE key = 'waha.base_url') AS base_url, max(value) FILTER (WHERE key = 'waha.session') AS session FROM app.settings WHERE key IN ('whatsapp.provider', 'waha.base_url', 'waha.session')",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "CRED:office-postgres-app",
+          "name": "office-postgres-app"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "eba12571-07b3-5c9b-a159-4f13b3e595d6",
+              "leftValue": "={{ $json.provider === 'waha' && ($('WAHA webhook').first().json.body || {}).session === $json.session }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "a67220bd-81c2-5d3d-b886-bbe0f31cace4",
+      "name": "WAHA on?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        720,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c5401de5-f06e-5e89-b104-a72927f6005f",
+              "leftValue": "={{ ($('WAHA webhook').first().json.body || {}).event === 'message' && String((($('WAHA webhook').first().json.body || {}).payload || {}).from || '').endsWith('@lid') }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "2e648e22-21cd-5dc1-aec5-587a49d54f2d",
+      "name": "LID?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        960,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ String($('Settings').first().json.base_url || '').replace(/\\/+$/, '') }}/api/{{ encodeURIComponent($('Settings').first().json.session) }}/lids/{{ encodeURIComponent($('WAHA webhook').first().json.body.payload.from) }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "c76d5646-f2fd-5cbb-9707-b07f635a00da",
+      "name": "Find the number",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1200,
+        240
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CRED:waha-api",
+          "name": "waha-api"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "8ffebc29-fb11-5436-bbbc-d912aa6b3582",
+      "name": "Meta event",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1440,
+        360
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT app.waha_event($1::jsonb, NULLIF($2, '')) AS r",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify($('WAHA webhook').first().json.body), $('Find the number').isExecuted ? String((($('Find the number').first().json.body) || {}).pn || '') : '' ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "CRED:office-postgres-app",
+          "name": "office-postgres-app"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "5f53616f-16dc-58de-b51b-2150e179b913",
+              "leftValue": "={{ !!($json.r && $json.r.event) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "7bc20785-7cae-52d2-b2f3-2af34a6a6d7a",
+      "name": "An event?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1680,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: $input.first().json.r.event }];"
+      },
+      "id": "955c664c-7007-5181-9bc3-a9f63bc88460",
+      "name": "Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        360
+      ]
+    },
+    {
+      "id": "1eee9a1d-509b-59d0-b0d7-1727063ad50e",
+      "name": "Process event",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.4,
+      "position": [
+        2160,
+        360
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "WaProcEvent00001",
+          "mode": "id",
+          "cachedResultName": "META-WA-PROCESS-EVENT"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "f634f4e2-8ac6-50c3-892b-0c5b36c77dd0",
+      "name": "Fetch media",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.4,
+      "position": [
+        2160,
+        560
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "WaMediaFetch0001",
+          "mode": "id",
+          "cachedResultName": "WA-MEDIA-FETCH"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT app.wa_setting_int('whatsapp.group_quiet_seconds', 8) + 1 AS wait_seconds",
+        "options": {}
+      },
+      "id": "c5961e2d-9edf-55bd-9f88-a55034619259",
+      "name": "Quiet period",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        2400,
+        360
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "CRED:office-postgres-app",
+          "name": "office-postgres-app"
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "amount": "={{ $json.wait_seconds }}",
+        "unit": "seconds"
+      },
+      "id": "4e592051-59b0-5562-9449-f4a5fa0fcb9d",
+      "name": "Wait quiet period",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2640,
+        360
+      ],
+      "webhookId": "6fec6ba6-0f70-5cbd-844d-c13280f68872"
+    },
+    {
+      "id": "a10e7df4-bc82-5961-b0d7-c966563d6d05",
+      "name": "Forward turns",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.4,
+      "position": [
+        2880,
+        360
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "WaFwdTurn0000001",
+          "mode": "id",
+          "cachedResultName": "WA-FORWARD-TURN"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    }
+  ],
+  "connections": {
+    "WAHA webhook": {
+      "main": [
+        [
+          {
+            "node": "Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Settings": {
+      "main": [
+        [
+          {
+            "node": "WAHA on?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WAHA on?": {
+      "main": [
+        [
+          {
+            "node": "LID?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "LID?": {
+      "main": [
+        [
+          {
+            "node": "Find the number",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Meta event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find the number": {
+      "main": [
+        [
+          {
+            "node": "Meta event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Meta event": {
+      "main": [
+        [
+          {
+            "node": "An event?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "An event?": {
+      "main": [
+        [
+          {
+            "node": "Event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Event": {
+      "main": [
+        [
+          {
+            "node": "Process event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process event": {
+      "main": [
+        [
+          {
+            "node": "Fetch media",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch media": {
+      "main": [
+        [
+          {
+            "node": "Quiet period",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Quiet period": {
+      "main": [
+        [
+          {
+            "node": "Wait quiet period",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait quiet period": {
+      "main": [
+        [
+          {
+            "node": "Forward turns",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Cairo",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "WaErrHandler0001"
+  },
+  "pinData": {},
+  "id": "WahaInbound00001",
+  "tags": []
+}

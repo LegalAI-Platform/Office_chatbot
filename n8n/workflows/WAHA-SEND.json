@@ -1,0 +1,213 @@
+{
+  "name": "WAHA-SEND",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## WAHA-SEND (TASK 02b)\nCalled by META-WA-SEND-MESSAGE only after `app.wa_outbound_prepare` allowed the send (test recipients, 24 hours, idempotency) and only while `whatsapp.provider` = `waha`. Meta's payload → WAHA: a text (`/api/sendText`), buttons or a list as **a numbered list** in the text (kept in `app.waha_menus`, so a reply «1» comes back as that press), a document (`/api/sendFile`, from the signed storage link). `app.waha_sent` answers in Meta's shape for Record result.",
+        "height": 240,
+        "width": 640
+      },
+      "id": "a0df063b-92b7-521c-99b8-207d42fec630",
+      "name": "Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        160,
+        40
+      ]
+    },
+    {
+      "id": "36e5fd02-1264-5572-861e-86844d1fc7ad",
+      "name": "Start",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        240,
+        360
+      ],
+      "parameters": {
+        "inputSource": "passthrough"
+      }
+    },
+    {
+      "id": "6e660294-3930-575a-9bef-ae27ebd5c905",
+      "name": "Settings",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        480,
+        360
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT max(value) FILTER (WHERE key = 'waha.base_url') AS base_url, max(value) FILTER (WHERE key = 'waha.session') AS session FROM app.settings WHERE key IN ('waha.base_url', 'waha.session')",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "CRED:office-postgres-app",
+          "name": "office-postgres-app"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Meta's payload (built in META-WA-SEND-MESSAGE) as WAHA's request. Only approved texts and system values (titles) go out.\nconst s = $input.first().json;\nconst start = $('Start').first().json;\nconst p = typeof start.payload === 'string' ? JSON.parse(start.payload) : start.payload;\nconst chatId = `${p.to}@c.us`;\nlet path = '/api/sendText';\nlet kind = 'text';\nlet choices = null;\nlet body;\nif (p.type === 'text') {\n  body = { session: s.session, chatId, text: p.text.body, linkPreview: false };\n} else if (p.type === 'interactive') {\n  const i = p.interactive;\n  const rows = i.type === 'list' ? i.action.sections.flatMap((x) => x.rows) : i.action.buttons.map((b) => b.reply);\n  choices = rows.map((r, n) => ({ n: n + 1, id: r.id, title: r.title }));\n  kind = i.type === 'list' ? 'list' : 'buttons';\n  body = { session: s.session, chatId, text: `${i.body.text}\\n\\n${choices.map((c) => `${c.n}) ${c.title}`).join('\\n')}`, linkPreview: false };\n} else if (p.type === 'document') {\n  const ext = String(p.document.filename || '').split('.').pop().toLowerCase();\n  const types = { pdf: 'application/pdf', doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png' };\n  path = '/api/sendFile';\n  kind = 'document';\n  body = { session: s.session, chatId, caption: p.document.caption, file: { url: p.document.link, filename: p.document.filename, mimetype: types[ext] || 'application/octet-stream' } };\n} else {\n  throw new Error(`WAHA-SEND: no WAHA request for a ${p.type} message`);\n}\nreturn [{ json: { url: String(s.base_url || '').replace(/\\/+$/, '') + path, body, kind, choices, outbound_id: start.r.outbound_id, wa_id: p.to } }];"
+      },
+      "id": "5ccdefb6-8c09-5325-b106-5c38f7e8f67a",
+      "name": "Build request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.url }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}"
+      },
+      "id": "945d8f00-b299-5597-a363-933633757fb6",
+      "name": "Send to WAHA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        960,
+        360
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CRED:waha-api",
+          "name": "waha-api"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": false
+    },
+    {
+      "id": "eeef92de-3319-5996-bc37-40b77bc23adf",
+      "name": "Result",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        1200,
+        360
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT app.waha_sent($1::uuid, $2, $3, $4::jsonb, $5::int, $6::jsonb) AS r",
+        "options": {
+          "queryReplacement": "={{ [ $('Build request').first().json.outbound_id, $('Build request').first().json.wa_id, $('Build request').first().json.kind, JSON.stringify($('Build request').first().json.choices), $json.statusCode || 0, JSON.stringify($json.body ?? null) ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "CRED:office-postgres-app",
+          "name": "office-postgres-app"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify($json.r) }}",
+        "options": {}
+      },
+      "id": "2f764ee4-211c-571b-a884-2696f8932780",
+      "name": "Output",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1440,
+        360
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Settings": {
+      "main": [
+        [
+          {
+            "node": "Build request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build request": {
+      "main": [
+        [
+          {
+            "node": "Send to WAHA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send to WAHA": {
+      "main": [
+        [
+          {
+            "node": "Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Result": {
+      "main": [
+        [
+          {
+            "node": "Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Cairo",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "WaErrHandler0001"
+  },
+  "pinData": {},
+  "id": "WahaSend00000001",
+  "tags": []
+}

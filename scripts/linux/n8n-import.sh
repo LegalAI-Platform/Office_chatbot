@@ -12,8 +12,10 @@ export N8N_INTERNAL_SEND_TOKEN="$(env_value N8N_INTERNAL_SEND_TOKEN)"
 export S3_N8N_ACCESS_KEY_ID="$(env_value S3_N8N_ACCESS_KEY_ID)"
 export S3_N8N_SECRET_ACCESS_KEY="$(env_value S3_N8N_SECRET_ACCESS_KEY)"
 export S3_REGION="$(env_value S3_REGION)"
+export WAHA_API_KEY="$(env_value WAHA_API_KEY)"           # TASK 02b, may be empty
+export WAHA_WEBHOOK_TOKEN="$(env_value WAHA_WEBHOOK_TOKEN)"
 docker compose exec -T -e OFFICE_APP_PASSWORD -e HAZEM_API_TOKEN -e N8N_INTERNAL_SEND_TOKEN \
-  -e S3_N8N_ACCESS_KEY_ID -e S3_N8N_SECRET_ACCESS_KEY -e S3_REGION \
+  -e S3_N8N_ACCESS_KEY_ID -e S3_N8N_SECRET_ACCESS_KEY -e S3_REGION -e WAHA_API_KEY -e WAHA_WEBHOOK_TOKEN \
   -e N8N_RUNNERS_BROKER_PORT=5698 n8n sh /opt/office/n8n/scripts/create-local-credentials.sh
 out="$(docker compose exec -T -e N8N_RUNNERS_BROKER_PORT=5698 n8n sh /opt/office/n8n/scripts/import-workflows.sh)"
 echo "$out" | grep -v '^RESTART_N8N$' || true

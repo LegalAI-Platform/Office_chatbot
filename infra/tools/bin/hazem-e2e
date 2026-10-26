@@ -20,7 +20,10 @@ L=201000000071   # TASK 08: books from the buttons; the panel closes days
 M=201000000072   # TASK 10: a document review from the request to the delivered file
 N=201000000073   # TASK 11: an Urfi marriage contract from the questions to the lawyer's approval; TASK 12: its reminders
 P=201000000074   # TASK 06: the office's address from the panel, a price changed in the panel and quoted
-ALL="'$A','$B','$C','$D','$E','$F','$G','$H','$I','$K','$L','$M','$N','$P'"
+Q=201000000075   # TASK 02b: the WAHA test channel (webhook in, numbered list out, «١» back as the press)
+ALL="'$A','$B','$C','$D','$E','$F','$G','$H','$I','$K','$L','$M','$N','$P','$Q'"
+# TASK 02b: the token of WAHA's webhook to n8n: the owner's (when .env has one, the credential is theirs) or the test one.
+WTOKEN="${WAHA_WEBHOOK_TOKEN:-e2e-waha-webhook-token-not-a-real-one-0000}"
 STUB=http://meta-stub:8080
 
 passed=0; failed=0
@@ -184,6 +187,7 @@ case "${1:-}" in
       DELETE FROM app.wa_inbound_messages WHERE wa_id IN ($ALL);
       DELETE FROM app.wa_turns WHERE wa_id IN ($ALL);
       DELETE FROM app.wa_contact_windows WHERE wa_id IN ($ALL);
+      DELETE FROM app.waha_menus WHERE wa_id IN ($ALL);
       DELETE FROM app.wa_webhook_events WHERE payload->'contacts'->0->>'wa_id' IN ($ALL);
       DELETE FROM hazem.turns WHERE wa_id IN ($ALL);
       UPDATE app.settings s SET value = b.value, updated_by = 'hazem-e2e'
@@ -198,7 +202,7 @@ case "${1:-}" in
   setup)
     "$0" cleanup >/dev/null
     backup_set whatsapp.dry_run true
-    backup_set whatsapp.test_recipients "$A,$B,$C,$D,$E,$F,$G,$H,$I,$K,$L,$M,$N,$P"   # 0006: only test numbers get sends
+    backup_set whatsapp.test_recipients "$A,$B,$C,$D,$E,$F,$G,$H,$I,$K,$L,$M,$N,$P,$Q"   # 0006: only test numbers get sends
     backup_set whatsapp.graph_base_url "$STUB"
     backup_set ai.openai_base_url "$STUB/v1"
     if [[ -z "$(q "SELECT value FROM app.settings WHERE key = 'whatsapp.graph_api_version'")" ]]; then
@@ -218,9 +222,11 @@ case "${1:-}" in
     # Only the fixed test ids AND names created by n8n/scripts/e2e-credentials.sh add.
     psql_super n8n -c "
       DELETE FROM shared_credentials WHERE \"credentialsId\" IN
-        (SELECT id FROM credentials_entity WHERE (id, name) IN (('TestMetaToken001', 'meta-whatsapp-token'), ('TestOpenAiKey001', 'openai-transcription')));
-      DELETE FROM credentials_entity WHERE (id, name) IN (('TestMetaToken001', 'meta-whatsapp-token'), ('TestOpenAiKey001', 'openai-transcription'));" >/dev/null
-    echo "test credentials removed: $(psql_super n8n -c "SELECT count(*) FROM credentials_entity WHERE id IN ('TestMetaToken001', 'TestOpenAiKey001')") left"
+        (SELECT id FROM credentials_entity WHERE (id, name) IN (('TestMetaToken001', 'meta-whatsapp-token'), ('TestOpenAiKey001', 'openai-transcription'),
+                                                               ('TestWahaApi00001', 'waha-api'), ('TestWahaHook0001', 'waha-webhook')));
+      DELETE FROM credentials_entity WHERE (id, name) IN (('TestMetaToken001', 'meta-whatsapp-token'), ('TestOpenAiKey001', 'openai-transcription'),
+                                                          ('TestWahaApi00001', 'waha-api'), ('TestWahaHook0001', 'waha-webhook'));" >/dev/null
+    echo "test credentials removed: $(psql_super n8n -c "SELECT count(*) FROM credentials_entity WHERE id IN ('TestMetaToken001', 'TestOpenAiKey001', 'TestWahaApi00001', 'TestWahaHook0001')") left"
     ;;
 
   check-loop)
@@ -1061,6 +1067,73 @@ SQL
     finish
     ;;
 
+  # ---------- TASK 02b: the WAHA test channel (whatsapp.provider = waha, WAHA = the stub) ----------
+  hazem02b-setup)
+    hazem_backup_set hazem.recipients "$Q"
+    backup_set whatsapp.provider waha
+    backup_set waha.base_url "$STUB"
+    backup_set whatsapp.dry_run false   # WAHA (the stub) answers; Meta is never called on this channel
+    curl -s -X POST "$STUB/_log/reset" >/dev/null
+    echo "the channel is WAHA (the stub), dry run off, $Q may be answered"
+    ;;
+
+  hazem02b-say)  # hazem02b-say WAMID_SUFFIX TEXT [FROM]: WAHA's webhook, as WAHA posts it
+    body="$(jq -nc --arg id "false_${4:-$Q@c.us}_E2E-Q$2" --arg from "${4:-$Q@c.us}" --arg text "$3" \
+      '{event: "message", session: "default", payload: {id: $id, timestamp: (now | floor), from: $from, fromMe: false, body: $text, hasMedia: false, _data: {pushName: "E2E"}}}')"
+    code="$(curl -s -o /dev/null -w '%{http_code}' -X POST http://n8n:5678/webhook/waha-inbound \
+      -H 'Content-Type: application/json' -H "X-Waha-Token: $WTOKEN" -d "$body")"
+    [[ "$code" == 200 ]] || die "WAHA-INBOUND answered $code"
+    echo "$Q writes «$3» (WAHA)"
+    ;;
+
+  check-hazem02b-auth)
+    code="$(curl -s -o /dev/null -w '%{http_code}' -X POST http://n8n:5678/webhook/waha-inbound -H 'Content-Type: application/json' \
+      -d '{"event":"message","session":"default","payload":{"id":"false_x_E2E-Q-NOAUTH","from":"'"$Q"'@c.us","body":"x"}}')"
+    assert_eq "WAHA-INBOUND refuses a call without X-Waha-Token" "$([[ "$code" == 401 || "$code" == 403 ]] && echo refused || echo "$code")" "refused"
+    finish
+    ;;
+
+  check-hazem02b-welcome)
+    wait_eq "WAHA's message became Meta's event (wamid waha.…, phone_number_id waha) and a turn" \
+      "SELECT phone_number_id || '/' || message_type || '/' || processing_status FROM app.wa_inbound_messages WHERE wamid = 'waha.false_$Q@c.us_E2E-Q1'" "waha/text/processed"
+    wait_eq "Hazem's replies went out through WAHA (the stub) and were recorded as sent, every one" \
+      "SELECT count(*) > 0 AND bool_and(status = 'sent' AND wamid LIKE 'waha.true_$Q@c.us_STUB%') FROM app.wa_outbound_messages WHERE wa_id = '$Q'" "t"
+    assert_eq "the stub got each one with X-Api-Key, for $Q@c.us only" \
+      "$(stub_log | jq -r '[.[] | select(.kind == "waha-send")] | (length > 0) and all(.authorizationPresent and .chatId == "'"$Q"'@c.us")')" "true"
+    finish
+    ;;
+
+  check-hazem02b-offer)
+    wait_eq "the two buttons went as a numbered list in one text, kept for $Q" \
+      "SELECT kind || '/' || jsonb_array_length(choices) FROM app.waha_menus WHERE wa_id = '$Q'" "buttons/2"
+    assert_eq "the offer's text ends with «1) …» and «2) …» (the approved button titles)" \
+      "$(stub_log | jq -r '[.[] | select(.kind == "waha-send") | .text | test("\n1\\) .+\n2\\) .+$")] | any')" "true"
+    finish
+    ;;
+
+  check-hazem02b-press)
+    wait_eq "«١» came back as the press of the first button (no AI), and Hazem answered with the times" \
+      "SELECT m.message_type || '/' || (m.raw->'interactive'->'button_reply'->>'id') || '/' ||
+              (SELECT count(*) FROM hazem.classifications c WHERE c.turn_id = m.turn_id)
+         FROM app.wa_inbound_messages m WHERE m.wamid = 'waha.false_$Q@c.us_E2E-Q3'" "interactive/bk:m:pv/0"
+    wait_eq "the times went as a numbered list too (a list of rows)" \
+      "SELECT kind FROM app.waha_menus WHERE wa_id = '$Q'" "list"
+    finish
+    ;;
+
+  hazem02b-meta-again)
+    q "UPDATE app.settings SET value = 'meta' WHERE key = 'whatsapp.provider';
+       UPDATE app.settings SET value = 'true' WHERE key = 'whatsapp.dry_run'" >/dev/null   # never the real Graph API
+    echo "the channel is Meta again (dry run)"
+    ;;
+
+  check-hazem02b-off)
+    sleep 12   # past the quiet period: had it been heard, its row would be there by now
+    assert_eq "with the channel back on Meta, WAHA's webhook is not heard (no row for its message)" \
+      "$(q "SELECT count(*) FROM app.wa_inbound_messages WHERE wamid = 'waha.false_$Q@c.us_E2E-Q9'")" "0"
+    finish
+    ;;
+
   check-restored)
     assert_eq "settings back to normal: dry run off, stale 300, real Graph and OpenAI URLs, no backups left" \
       "$(q "SELECT string_agg(key || '=' || value, ',' ORDER BY key) FROM app.settings WHERE key IN ('whatsapp.dry_run','whatsapp.turn_stale_seconds','whatsapp.graph_base_url','ai.openai_base_url') OR key LIKE 'e2e.backup.%'")" \
@@ -1076,7 +1149,11 @@ SQL
     assert_eq "no test number left in the API's tables" \
       "$(q "SELECT count(*) FROM hazem.persons WHERE wa_id IN ($ALL)")" "0"
     assert_eq "no test credential left in n8n" \
-      "$(psql_super n8n -c "SELECT count(*) FROM credentials_entity WHERE id IN ('TestMetaToken001', 'TestOpenAiKey001')")" "0"
+      "$(psql_super n8n -c "SELECT count(*) FROM credentials_entity WHERE id IN ('TestMetaToken001', 'TestOpenAiKey001', 'TestWahaApi00001', 'TestWahaHook0001')")" "0"
+    assert_eq "TASK 02b: the channel and WAHA's address as before (never the stub), no list left for a test number" \
+      "$(q "SELECT (SELECT value IN ('meta', 'waha') FROM app.settings WHERE key = 'whatsapp.provider') || '/'
+                   || (SELECT value <> '$STUB' FROM app.settings WHERE key = 'waha.base_url')
+                   || '/' || (SELECT count(*) FROM app.waha_menus WHERE wa_id IN ($ALL))")" "true/true/0"
     finish
     ;;
 

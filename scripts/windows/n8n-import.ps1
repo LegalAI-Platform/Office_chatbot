@@ -6,11 +6,11 @@
 Assert-EnvFile
 # Passed by name only (-e NAME), so the values never appear on a command line.
 foreach ($v in 'OFFICE_APP_PASSWORD', 'HAZEM_API_TOKEN', 'N8N_INTERNAL_SEND_TOKEN',
-              'S3_N8N_ACCESS_KEY_ID', 'S3_N8N_SECRET_ACCESS_KEY', 'S3_REGION') {
+              'S3_N8N_ACCESS_KEY_ID', 'S3_N8N_SECRET_ACCESS_KEY', 'S3_REGION', 'WAHA_API_KEY', 'WAHA_WEBHOOK_TOKEN') {
     Set-Item -Path "env:$v" -Value (Get-EnvValue $v)
 }
 Invoke-Compose exec -T -e OFFICE_APP_PASSWORD -e HAZEM_API_TOKEN -e N8N_INTERNAL_SEND_TOKEN `
-    -e S3_N8N_ACCESS_KEY_ID -e S3_N8N_SECRET_ACCESS_KEY -e S3_REGION `
+    -e S3_N8N_ACCESS_KEY_ID -e S3_N8N_SECRET_ACCESS_KEY -e S3_REGION -e WAHA_API_KEY -e WAHA_WEBHOOK_TOKEN `
     -e N8N_RUNNERS_BROKER_PORT=5698 n8n sh /opt/office/n8n/scripts/create-local-credentials.sh
 $out = @(& docker compose exec -T -e N8N_RUNNERS_BROKER_PORT=5698 n8n sh /opt/office/n8n/scripts/import-workflows.sh)
 if ($LASTEXITCODE -ne 0) { $out | Write-Host; exit $LASTEXITCODE }

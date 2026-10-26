@@ -41,6 +41,9 @@ contains `CHANGE_ME`, or has the wrong format.
 | `SMTP_USERNAME`, `SMTP_PASSWORD` | api (`Mail__Username`, `Mail__Password`) | **yes** (password) | from the provider. Never printed or logged | v1.9 |
 | `SMTP_FROM`, `SMTP_FROM_NAME` | api (`Mail__From`, `Mail__FromName`) | no | e.g. `no-reply@<domain>`; empty name = the office's name | v1.9 |
 | `S3_API_ACCESS_KEY_ID`, `S3_API_SECRET_ACCESS_KEY` | api (`S3__*`); storage-init | **yes** | `GK` + 24 hex / 64 hex (`gen-secrets`): read-only on `office-media` and `office-sensitive`, nothing on backups. The panel opens client files with it | 07c |
+| `WAHA_API_KEY` | waha (`WAHA_API_KEY`), n8n credential `waha-api` (X-Api-Key) | no | **TASK 02b, the WAHA test channel only** (docs/runbooks/waha.md); empty = WAHA unused. ≥ 32 letters, digits, `_` or `-` (`gen-secrets`) | 02b |
+| `WAHA_WEBHOOK_TOKEN` | the WAHA session's webhook header, n8n credential `waha-webhook` (X-Waha-Token) | no | same; set on the session by `tools waha-session`. Without it `WAHA-INBOUND` is never published | 02b |
+| `WAHA_DASHBOARD_PASSWORD` | waha (`WAHA_DASHBOARD_PASSWORD`, user `office`) | no | the dashboard on `127.0.0.1:3010` where the QR code is scanned; ≥ 16 characters | 02b |
 | `PANEL_MANAGERS_NEED_2FA` | api (`Panel__ManagersNeedTwoFactor`) | no | empty / `false` = the authenticator is optional for everyone (v1.16, the owner's decision); `true` = a manager must turn it on before anything else works (v1.9) | 12 |
 | `PANEL_URL` | api (`Panel__PublicUrl`) | no | empty = `http://127.0.0.1:8080`: the link in alert e-mails | 07c |
 | `CHATWOOT_SECRET_KEY_BASE`, `CHATWOOT_DB_PASSWORD`, `CHATWOOT_REDIS_PASSWORD` | chatwoot, chatwoot-sidekiq, chatwoot-db, chatwoot-redis | **yes** | from `gen-secrets` (TASK 07b) | 07b |
