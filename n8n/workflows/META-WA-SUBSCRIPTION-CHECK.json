@@ -176,7 +176,7 @@
           "conditions": [
             {
               "id": "141d776b-3109-52bb-a84d-1b50d10f031d",
-              "leftValue": "={{ $json.statusCode === 200 && (!$json.body.data || $json.body.data.length === 0) }}",
+              "leftValue": "={{ $json.statusCode === 200 && !($json.body.data || []).some(a => String((a.whatsapp_business_api_data || {}).id) === String($('Get config').first().json.cfg['whatsapp.app_id'])) }}",
               "rightValue": "",
               "operator": {
                 "type": "boolean",
@@ -261,7 +261,7 @@
             {
               "id": "4c2462f4-5b69-5a0c-9050-30a8ebcbf9fd",
               "name": "waba_subscribed_now",
-              "value": "={{ $('WABA missing app?').first().json.statusCode === 200 && ($('WABA subscribed apps').first().json.body.data || []).length === 0 }}",
+              "value": "={{ $('Subscribe WABA').isExecuted && $('Subscribe WABA').first().json.statusCode === 200 }}",
               "type": "boolean"
             }
           ]
