@@ -25,7 +25,7 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
     {
         await db.ExecAsync("""
             TRUNCATE hazem.panel_audit; DELETE FROM hazem.panel_users;
-            TRUNCATE hazem.panel_alerts, hazem.panel_alert_reads, hazem.ops_runs; DELETE FROM app.workflow_errors;
+            TRUNCATE hazem.panel_alerts, hazem.panel_alert_reads, hazem.ops_runs; DELETE FROM app.workflow_errors; DELETE FROM app.wa_turns WHERE wa_id LIKE '2010000009%';
             TRUNCATE hazem.turns, hazem.send_results, hazem.turn_replies, hazem.classifications, hazem.panel_alerts, hazem.panel_alert_reads, hazem.staff_tasks, hazem.list_entries;
             DELETE FROM hazem.staff; DELETE FROM hazem.intakes; DELETE FROM hazem.conversations; DELETE FROM hazem.persons;
             UPDATE hazem.settings SET value = to_char((now() - interval '1 hour') AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
@@ -191,6 +191,26 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal((0, 0), await RunAlerts()); // one a day
         Assert.StartsWith("النسخة الاحتياطية فشلت |", Assert.Single(_factory.Mail.Sent).Subject);
         Assert.StartsWith("missed:", await db.ScalarAsync<string>("SELECT system_ref FROM hazem.panel_alerts WHERE kind = 'system'"));
+    }
+
+    [Fact]
+    public async Task A_client_turn_set_aside_after_too_many_tries_alerts_the_managers_once_with_no_client_data()
+    {
+        // Migration 0020: a turn the API failed on 5 times is failed with TOO_MANY_ATTEMPTS by wa_turns_claim.
+        await db.ExecAsync("""
+            INSERT INTO app.wa_turns (turn_id, wa_id, status, attempts, last_error) VALUES
+              ('wt:00000000-0000-4000-8000-000000000901', '201000000901', 'failed', 5, '{"code":"TOO_MANY_ATTEMPTS"}'),
+              ('wt:00000000-0000-4000-8000-000000000902', '201000000902', 'failed', 1, '{"code":"BAD_INPUT"}');
+            """);
+
+        Assert.Equal((1, 1), await RunAlerts()); // only the one set aside, not an ordinary failure
+        Assert.Equal((0, 0), await RunAlerts()); // once
+        var mail = Assert.Single(_factory.Mail.Sent);
+        Assert.StartsWith("رسالة عميل وقفت بعد محاولات كتير |", mail.Subject);
+        Assert.DoesNotContain("2010", mail.Text);
+        Assert.Equal("turn:wt:00000000-0000-4000-8000-000000000901",
+            await db.ScalarAsync<string>("SELECT system_ref FROM hazem.panel_alerts WHERE system_what = 'turn'"));
+        Assert.Equal(0, (int)(await (await SignIn("yasmin")).GetFromJsonAsync<JsonNode>("/api/panel/alerts", Ct))!["unread"]!);
     }
 
     [Fact]

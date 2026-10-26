@@ -192,6 +192,7 @@ export const SYSTEM_WHAT: Record<string, string> = {
   drill: "تجربة استرجاع النسخة الاحتياطية فشلت",
   log_scan: "السجلات فيها مفتاح أو رقم كامل",
   n8n: "فيه حاجات في n8n فشلت",
+  turn: "رسالة عميل وقفت بعد محاولات كتير",
 };
 
 /** B-14: the office's lists. */

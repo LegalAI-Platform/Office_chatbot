@@ -9,7 +9,7 @@ n8n is the WhatsApp layer; the .NET API is the brain ([hazem-internal-api.md](ha
 flowchart LR
     META[Meta WhatsApp Cloud API<br/>TASK 02] -. HTTPS webhook .-> CF[cloudflared<br/>profile: tunnel]
     CF -->|http://edge:8081 only| EDGE[edge nginx<br/>Meta's webhook only, TASK 13]
-    EDGE -->|one path| N8N[n8n 2.43.8<br/>Regular mode]
+    EDGE -->|one path| N8N[n8n 2.44.7<br/>Regular mode]
 
     subgraph office_net [Docker network office_net — all host ports on 127.0.0.1]
         N8N -->|n8n_user| PGN[(PostgreSQL 16<br/>db: n8n)]

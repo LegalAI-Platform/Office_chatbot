@@ -46,6 +46,12 @@ public sealed class PanelAlertStore(HazemDbContext db) : IPanelAlertStore
               FROM hazem.n8n_error_hours({Since}) h
             ON CONFLICT (system_ref) DO NOTHING
             """, ct);
+        // A client's turn set aside after too many failed tries (migration 0020): one alert each, no number, no text.
+        var turns = await db.Database.ExecuteSqlRawAsync($"""
+            INSERT INTO hazem.panel_alerts (kind, system_what, system_ref)
+            SELECT 'system', 'turn', 'turn:' || f.turn_id FROM hazem.failed_turns({Since}) f
+            ON CONFLICT (system_ref) DO NOTHING
+            """, ct);
         // A night with no backup at all (the PC or Docker off at 03:00, the scheduled task gone, a run killed half way):
         // once a backup has ever run, 26 hours with none that finished is an alert, one a day (a failed one has its own).
         var missed = await db.Database.ExecuteSqlRawAsync("""
@@ -55,7 +61,7 @@ public sealed class PanelAlertStore(HazemDbContext db) : IPanelAlertStore
                AND NOT EXISTS (SELECT 1 FROM hazem.ops_runs WHERE kind = 'backup' AND finished_at IS NOT NULL AND started_at > now() - interval '26 hours')
             ON CONFLICT (system_ref) DO NOTHING
             """, ct);
-        return failed + n8n + missed;
+        return failed + n8n + turns + missed;
     }
 
     public async Task<IReadOnlyList<string>> ManagersAsync(CancellationToken ct) =>

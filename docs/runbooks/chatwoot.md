@@ -1,6 +1,6 @@
 # Runbook: Chatwoot, the staff's conversations (TASK 07b)
 
-Chatwoot Community Edition `v4.18.0-ce` at http://127.0.0.1:3000 (this machine only until
+Chatwoot Community Edition `v4.19.1-ce` at http://127.0.0.1:3000 (this machine only until
 TASK 14). DECISIONS v1.10 T-24. It is linked to the .NET API by an **API inbox** and never to
 WhatsApp or Meta: every reply goes Chatwoot → api → n8n → Meta, with every guard.
 

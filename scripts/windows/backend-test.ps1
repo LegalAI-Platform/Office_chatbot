@@ -8,7 +8,7 @@ param([switch]$Docker)
 . (Join-Path $PSScriptRoot '_common.ps1')
 Assert-EnvFile
 
-$sdkImage = 'mcr.microsoft.com/dotnet/sdk:10.0.401-alpine3.23'
+$sdkImage = 'mcr.microsoft.com/dotnet/sdk:10.0.403-alpine3.24'
 $vars = 'POSTGRES_SUPERUSER', 'POSTGRES_SUPERUSER_PASSWORD', 'OFFICE_MIGRATOR_PASSWORD', 'OFFICE_APP_PASSWORD', 'OFFICE_API_PASSWORD'
 foreach ($v in $vars) { Set-Item -Path "env:$v" -Value (Get-EnvValue $v) }
 

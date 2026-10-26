@@ -23,6 +23,8 @@ public static class SystemWhat
     public const string Drill = "drill";
     public const string LogScan = "log_scan";
     public const string N8n = "n8n";
+    /// <summary>A client's turn the API failed on too many times (migration 0020): set aside, the client unblocked.</summary>
+    public const string Turn = "turn";
 }
 
 /// <summary>An alert as the bell shows it. A system alert has no task (<see cref="SystemWhat"/> instead).</summary>
