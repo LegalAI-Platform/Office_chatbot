@@ -3,6 +3,7 @@ using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Office.Application.Panel;
 
@@ -19,12 +20,18 @@ public static class PanelAuth
     public const string CsrfHeader = "X-CSRF-TOKEN";
     public const string StampClaim = "hazem:stamp";
     public const string LoginLimiter = "panel-login";
+    public const string SensitiveLimiter = "panel-sensitive";
+    public const string StartedClaim = "hazem:started";
     public const string AntiforgeryFailedHeader = "X-Antiforgery-Failed";
 
     /// <summary>The account behind the request, loaded and checked once per request.</summary>
     public const string UserItem = "panel.user";
 
-    public static readonly TimeSpan IdleTimeout = TimeSpan.FromHours(12);
+    /// <summary>An hour without a request ends the session (the panel also signs out after an hour without use).</summary>
+    public static readonly TimeSpan IdleTimeout = TimeSpan.FromHours(1);
+
+    /// <summary>However active, a session ends after this long from its sign-in (a copied cookie does not live forever).</summary>
+    public static readonly TimeSpan MaxSessionAge = TimeSpan.FromHours(12);
 
     /// <summary>How long the right password waits for the authenticator code.</summary>
     public static readonly TimeSpan SecondStepFor = TimeSpan.FromMinutes(5);
@@ -35,6 +42,15 @@ public static class PanelAuth
     {
         // Plain http is allowed only on the test machine (127.0.0.1); everywhere else HTTPS only.
         var secure = env.IsEnvironment("test") ? CookieSecurePolicy.SameAsRequest : CookieSecurePolicy.Always;
+
+        // The keys that sign the session cookie, the antiforgery token and the 2FA ticket. Kept on a
+        // volume (Panel:KeysPath): inside the container they were new after every rebuild, which
+        // signed everyone out. No path (the tests) = the default per-process keys.
+        var keys = services.AddDataProtection().SetApplicationName("hazem-panel");
+        if (config["Panel:KeysPath"] is { Length: > 0 } keysPath)
+        {
+            keys.PersistKeysToFileSystem(new DirectoryInfo(keysPath));
+        }
 
         services.AddAuthentication(Scheme).AddCookie(Scheme, o =>
         {
@@ -53,7 +69,10 @@ public static class PanelAuth
             o.Events.OnValidatePrincipal = async ctx =>
             {
                 var accounts = ctx.HttpContext.RequestServices.GetRequiredService<PanelAccounts>();
-                var user = Guid.TryParse(ctx.Principal?.FindFirstValue(ClaimTypes.NameIdentifier), out var id)
+                var now = ctx.HttpContext.RequestServices.GetRequiredService<TimeProvider>().GetUtcNow();
+                var fresh = long.TryParse(ctx.Principal?.FindFirstValue(StartedClaim), out var started)
+                    && now - DateTimeOffset.FromUnixTimeSeconds(started) < MaxSessionAge;
+                var user = fresh && Guid.TryParse(ctx.Principal?.FindFirstValue(ClaimTypes.NameIdentifier), out var id)
                     ? await accounts.ValidateSessionAsync(id, ctx.Principal!.FindFirstValue(StampClaim), ctx.HttpContext.RequestAborted)
                     : null;
                 if (user is null)
@@ -98,6 +117,12 @@ public static class PanelAuth
             o.AddPolicy(LoginLimiter, ctx => RateLimitPartition.GetFixedWindowLimiter(
                 ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
                 _ => new FixedWindowRateLimiterOptions { PermitLimit = perMinute, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+            // What proves the person again inside a session (the current password, an authenticator code): ten
+            // tries in 15 minutes per account, so a session left open cannot be used to guess either.
+            var sensitive = config.GetValue("Panel:SensitivePer15Minutes", 10);
+            o.AddPolicy(SensitiveLimiter, ctx => RateLimitPartition.GetFixedWindowLimiter(
+                ctx.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                _ => new FixedWindowRateLimiterOptions { PermitLimit = sensitive, Window = TimeSpan.FromMinutes(15), QueueLimit = 0 }));
         });
 
         // The panel reaches the API through nginx in the web container (office_net only; the API
@@ -113,16 +138,18 @@ public static class PanelAuth
         return services;
     }
 
-    public static ClaimsPrincipal Principal(PanelUser user) => new(new ClaimsIdentity(
+    public static ClaimsPrincipal Principal(PanelUser user, DateTimeOffset started) => new(new ClaimsIdentity(
     [
         new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
         new Claim(ClaimTypes.Name, user.Username),
         new Claim(ClaimTypes.Role, user.Role),
         new Claim(StampClaim, user.SecurityStamp),
+        new Claim(StartedClaim, started.ToUnixTimeSeconds().ToString(System.Globalization.CultureInfo.InvariantCulture)),
     ], Scheme));
 
     public static Task SignInAsync(HttpContext ctx, PanelUser user) =>
-        ctx.SignInAsync(Scheme, Principal(user), new AuthenticationProperties { IsPersistent = false, AllowRefresh = true });
+        ctx.SignInAsync(Scheme, Principal(user, ctx.RequestServices.GetRequiredService<TimeProvider>().GetUtcNow()),
+            new AuthenticationProperties { IsPersistent = false, AllowRefresh = true });
 
     /// <summary>
     /// v1.9 (T-23): an account that manages accounts (the manager) must have the authenticator on, only when

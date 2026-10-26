@@ -151,6 +151,8 @@ public sealed partial class PanelAccounts(IPanelUserStore store, IPanelSecrets s
         {
             if (!secrets.Verify(user.PasswordHash, password).Ok)
             {
+                // counted like any account, so a password cannot be guessed while the account waits for approval
+                await CountFailureAsync(user, "login.failed", ct);
                 return new(PanelOutcome.Forbidden, Error: InvalidCredentials);
             }
 
@@ -209,7 +211,10 @@ public sealed partial class PanelAccounts(IPanelUserStore store, IPanelSecrets s
     }
 
     /// <summary>A wrong second-step code counts like a wrong password (five lock the account).</summary>
-    public async Task FailedSecondStepAsync(PanelUser user, CancellationToken ct)
+    public Task FailedSecondStepAsync(PanelUser user, CancellationToken ct) => CountFailureAsync(user, "login.code_failed", ct);
+
+    /// <summary>One more wrong password or code; the fifth locks the account for <see cref="LockoutFor"/>.</summary>
+    private async Task CountFailureAsync(PanelUser user, string audit, CancellationToken ct)
     {
         user.FailedLogins++;
         var locked = user.FailedLogins >= MaxFailedLogins;
@@ -220,7 +225,7 @@ public sealed partial class PanelAccounts(IPanelUserStore store, IPanelSecrets s
         }
 
         await store.UpdateAsync(user, ct);
-        await store.AuditAsync(user.Id, locked ? "login.locked" : "login.code_failed", user.Id, Empty, ct);
+        await store.AuditAsync(user.Id, locked ? "login.locked" : audit, user.Id, Empty, ct);
     }
 
     /// <summary>The account behind a session, if the session is still valid (same stamp, still active).</summary>
@@ -238,9 +243,16 @@ public sealed partial class PanelAccounts(IPanelUserStore store, IPanelSecrets s
             return new(PanelOutcome.NotFound);
         }
 
-        if (string.IsNullOrEmpty(current) || !secrets.Verify(user.PasswordHash, current).Ok)
+        // A wrong current password counts towards the lockout like a wrong sign-in, and a locked account is not
+        // checked at all: an open session cannot be used to guess the password.
+        if (user.IsLocked(clock.GetUtcNow()) || string.IsNullOrEmpty(current) || !secrets.Verify(user.PasswordHash, current).Ok)
         {
             await store.AuditAsync(user.Id, "password.change_refused", user.Id, Empty, ct);
+            if (!user.IsLocked(clock.GetUtcNow()))
+            {
+                await CountFailureAsync(user, "password.change_failed", ct);
+            }
+
             return new(PanelOutcome.Invalid, Error: WrongCurrentPassword);
         }
 

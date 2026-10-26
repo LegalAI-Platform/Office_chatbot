@@ -47,6 +47,13 @@ public static class PanelBookingEndpoints
             }
 
             var me = ctx.CurrentUser();
+            // The lawyer's calendar receives every appointment (names, numbers): only office.manage may point it elsewhere.
+            if (!Permissions.Has(me.Role, Permissions.OfficeManage)
+                && !string.Equals((body.CalendarId ?? "").Trim(), (await b.SettingsAsync(ct)).CalendarId ?? "", StringComparison.Ordinal))
+            {
+                return Results.Json(new { error = "calendar_id_forbidden" }, statusCode: StatusCodes.Status403Forbidden);
+            }
+
             return await b.SaveSettingsAsync(me.Id, me.Username, body, ct) is { } error ? Results.BadRequest(new { error }) : Results.NoContent();
         });
 

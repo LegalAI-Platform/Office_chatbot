@@ -327,6 +327,12 @@ public sealed class Task08ApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal(HttpStatusCode.BadRequest, (await staff.PutAsJsonAsync("/api/panel/booking/settings", settings, Ct)).StatusCode);
         settings["slot_step_minutes"] = 30;
         Assert.Equal(HttpStatusCode.NoContent, (await staff.PutAsJsonAsync("/api/panel/booking/settings", settings, Ct)).StatusCode);
+        // the lawyer's calendar receives every appointment: a staff member cannot point it elsewhere
+        var moved = settings.DeepClone().AsObject();
+        moved["calendar_id"] = "somewhere-else@example.test";
+        var refused = await staff.PutAsJsonAsync("/api/panel/booking/settings", moved, Ct);
+        Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+        Assert.Equal("calendar_id_forbidden", (string?)(await refused.Content.ReadFromJsonAsync<JsonNode>(Ct))!["error"]);
         var preview = await staff.GetFromJsonAsync<JsonNode>("/api/panel/booking/preview?day=2026-11-21&service=pv", Ct);
         Assert.Equal(["18:00", "18:30", "19:00", "19:30"], preview!["slots"]!.AsArray()
             .Select(s => TimeZoneInfo.ConvertTime(DateTimeOffset.Parse((string)s!), Office.Domain.Tasks.OfficeHours.Cairo).ToString("HH:mm")));

@@ -68,6 +68,57 @@ public sealed class PanelSignupApiTests(TestDatabase db) : IAsyncLifetime
         return c;
     }
 
+    // ---------- a session cannot be used to guess, and does not live forever ----------
+
+    [Fact]
+    public async Task Wrong_current_passwords_lock_the_account_like_wrong_sign_ins()
+    {
+        var boss = await SignIn("boss");
+        for (var i = 0; i < 5; i++)
+        {
+            Assert.Equal(HttpStatusCode.BadRequest, (await Post(boss, "/auth/change-password",
+                new { current_password = "not the password at all", new_password = "a brand new long password" })).StatusCode);
+        }
+
+        // locked: even the right current password is not checked now, and signing in elsewhere is refused
+        Assert.Equal(HttpStatusCode.BadRequest, (await Post(boss, "/auth/change-password",
+            new { current_password = Password, new_password = "a brand new long password" })).StatusCode);
+        var other = await Anonymous();
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Post(other, "/auth/login", new { username = "boss", password = Password })).StatusCode);
+    }
+
+    [Fact]
+    public async Task Proving_yourself_again_is_limited_per_account()
+    {
+        await using var strict = new ApiFactory(db, _clock) { SensitivePer15Minutes = 2 };
+        var c = strict.CreateClient();
+        await Token(c);
+        Assert.Equal(HttpStatusCode.OK, (await Post(c, "/auth/login", new { username = "boss", password = Password })).StatusCode);
+        await Token(c);
+        for (var i = 0; i < 2; i++)
+        {
+            Assert.Equal(HttpStatusCode.BadRequest, (await Post(c, "/auth/change-password",
+                new { current_password = "not the password at all", new_password = "a brand new long password" })).StatusCode);
+        }
+
+        Assert.Equal(HttpStatusCode.TooManyRequests, (await Post(c, "/auth/change-password",
+            new { current_password = Password, new_password = "a brand new long password" })).StatusCode);
+    }
+
+    [Fact]
+    public async Task A_session_ends_twelve_hours_after_sign_in_even_when_used()
+    {
+        var boss = await SignIn("boss");
+        for (var i = 0; i < 14; i++) // 14 × 50 minutes = 11h40, used all along
+        {
+            _clock.Advance(TimeSpan.FromMinutes(50));
+            Assert.Equal(HttpStatusCode.OK, (await boss.GetAsync("/api/panel/auth/me", Ct)).StatusCode);
+        }
+
+        _clock.Advance(TimeSpan.FromMinutes(30));
+        Assert.Equal(HttpStatusCode.Unauthorized, (await boss.GetAsync("/api/panel/auth/me", Ct)).StatusCode);
+    }
+
     private async Task<HttpResponseMessage> Register(HttpClient c, string user, string email, string password = Password) =>
         await Post(c, "/auth/register", new { username = user, display_name = "منى علي", email, password });
 
