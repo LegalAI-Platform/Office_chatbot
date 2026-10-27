@@ -121,8 +121,11 @@ public sealed record UrfAnswer(string Step, string Value)
     }
 }
 
-/// <summary>v1.20 (B-11.1): the client's last age refusal and how many closing texts followed it.</summary>
-public sealed record AgeRefusal(DateTimeOffset At, int ClosingReplies);
+/// <summary>
+/// v1.20 (B-11.1): the client's last age refusal, how many closing texts followed it, and whether Hazem has answered
+/// anything else since (the client moved on: thanks, a booking, another matter…).
+/// </summary>
+public sealed record AgeRefusal(DateTimeOffset At, int ClosingReplies, bool MovedOn = false);
 
 public static class UrfRules
 {
@@ -135,21 +138,25 @@ public static class UrfRules
     public const int MaxClosingReplies = 2;
 
     /// <summary>
-    /// v1.20 (B-11.1): a message after an age refusal that is about the same marriage: «ليه», a question or a new request
-    /// for it, an offer or a price asked for it. Another matter (a divorce, an inheritance…), a person, the office's
-    /// details or thanks go on as usual.
+    /// v1.20 (B-11.1): a message after an age refusal that is about the same marriage: a question or a new request named
+    /// as a marriage (or an Urfi one) for 24 hours; a message with no topic at all («ليه», «طب عايز استشارة») only while
+    /// the client has not moved on, so «موعد صلاة الظهر» after a thanks is answered as any message. Another matter (a
+    /// divorce, an inheritance…), a person, the office's details or thanks go on as usual.
     /// </summary>
-    public static bool FollowsAgeRefusal(Classification c) =>
-        c.Intent is Intent.Other or Intent.LegalQuestion or Intent.DescribeMatter or Intent.ConsultationRequest
-            or Intent.PriceQuestion or Intent.ServiceByName
-        && c.Service is null or Service.UrfMarriage or Service.UrfUnclear
-        && c.Matter switch
+    public static bool FollowsAgeRefusal(Classification c, AgeRefusal r)
+    {
+        if (c.Intent is not (Intent.Other or Intent.LegalQuestion or Intent.DescribeMatter or Intent.ConsultationRequest
+            or Intent.PriceQuestion or Intent.ServiceByName))
         {
-            null => true,
-            MatterType.Urfi => c.Subtype is null or MatterSubtype.UrfMarriage,
-            MatterType.PersonalStatus => c.Subtype is null or MatterSubtype.Marriage,
-            _ => false,
-        };
+            return false;
+        }
+
+        var named = c.Service is Service.UrfMarriage or Service.UrfUnclear
+                    || c.Matter == MatterType.Urfi && c.Subtype is null or MatterSubtype.UrfMarriage
+                    || c.Matter == MatterType.PersonalStatus && c.Subtype == MatterSubtype.Marriage;
+        var vague = c.Service is null && (c.Matter is null || c.Matter == MatterType.PersonalStatus && c.Subtype is null);
+        return named || vague && !r.MovedOn;
+    }
 
     public const int MinAge = 18;
 
