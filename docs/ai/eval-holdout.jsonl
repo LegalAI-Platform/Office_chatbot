@@ -68,3 +68,14 @@
 {"id":1068,"text":"فلوس الاستشارة بتتحسب من اتعاب القضية؟","intent":"office_info","info_topic":"fee_policy"}
 {"id":1069,"text":"بتاخدوا قضايا عمال؟","intent":"office_info","info_topic":"practice_areas"}
 {"id":1070,"text":"الانذار بكام","intent":"price_question","service":"formal_notice"}
+{"id":1071,"text":"ممكن رقمك الخاص يا جميل","intent":"abusive"}
+{"id":1072,"text":"عندك كام سنة وشكلك ايه","intent":"abusive"}
+{"id":1073,"text":"تعالي نتقابل بره المكتب لوحدنا","intent":"abusive"}
+{"id":1074,"text":"انتي سنجل؟","intent":"abusive"}
+{"id":1075,"text":"عايز سكرتيرة حلوة هي اللي تكلمني","intent":"abusive"}
+{"id":1076,"text":"جوزي بيضربني ومعايا تقرير طبي","intent":"describe_matter","matter_type":"personal_status"}
+{"id":1077,"text":"اتعمل عليا محضر فعل فاضح في الطريق العام","intent":"describe_matter","matter_type":"criminal"}
+{"id":1078,"text":"المكتب بيطلع قسيمة الجواز من السجل المدني؟","intent":"off_topic"}
+{"id":1079,"text":"عايز استخرج قيد عائلي","intent":"off_topic"}
+{"id":1080,"text":"ابني محتاج شهادة تأدية الخدمة العسكرية","intent":"off_topic"}
+{"id":1081,"text":"عايزة نفقة لعيالي من جوزي","intent":"describe_matter","matter_type":"personal_status"}

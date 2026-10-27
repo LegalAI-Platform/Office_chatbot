@@ -35,9 +35,9 @@ fields. It never writes a word the client sees: every reply is an approved text
 
 - OpenAI Chat Completions, **Structured Outputs** (`response_format: json_schema`, `strict: true`,
   `additionalProperties: false`, every field required, enums = the lists above), `temperature: 0`.
-- Prompt: `backend/src/Office.Infrastructure/Ai/prompts/classify-v8.md` (v1..v7 kept as history), embedded in the build.
-  Its version (`classify-v8`) is saved with every classification. **Change the prompt = a new
-  file (`classify-v9.md` next) and a new `PromptVersion`**, then run `classify-eval` again.
+- Prompt: `backend/src/Office.Infrastructure/Ai/prompts/classify-v9.md` (v1..v8 kept as history), embedded in the build.
+  Its version (`classify-v9`) is saved with every classification. **Change the prompt = a new
+  file (`classify-v10.md` next) and a new `PromptVersion`**, then run `classify-eval` again.
 - Model: `OPENAI_MODEL`. Empty = `gpt-4.1-mini`, **a starting point only**. The final model is
   chosen by the owner after `classify-eval` (T-08).
 - Key: `HAZEM_OPENAI_API_KEY` in `.env` — the .NET key, separate from n8n's voice key. It may be
@@ -191,3 +191,24 @@ so in the off_topic definition and rule 12. **All 15 new samples are right in bo
 34, 192, 222 (booking vs office_info), 81, 163, 183 (vendor spam → off_topic), 134 / 138 (off_topic → other: the same
 polite «not clear» answer). The hold-out misses 1023 «اسعاركم» and 1035 «ابعتلي اللوكيشن» are right by rule 9 / B-20
 (office_info): their labels are older than office_info and stay as written (never tune on the hold-out set).
+
+### v1.23: flirting is abusive, government papers are off_topic (`classify-v9`, 2026-10-28)
+
+The owner: Hazem is a law office's chatbot only. A real-key check first: explicit sexual messages were already
+`abusive`, flirting and innuendo were not («ابعتيلي صورتك» → other, «عايز اتكلم مع بنت حلوة» → **human_request**).
+v9 states the rule as a principle (the writer treats the assistant or a staff member as someone to court, date or
+look at), keeps the client's own matters about sex or a relationship as ordinary work, and makes government,
+civil-registry and traffic papers off_topic. Samples: set 238–245 (flirting, two real matters) and 246–251
+(papers, one khula case); hold-out 1071–1077 (flirting written after the first v9 draft failed on them: the first
+draft had only examples and caught none of them) and 1078–1081 (papers, alimony); a third batch of 9 never in any
+file was used only to check that the principle generalizes. Sample 230 «بحبك» is now labelled abusive (flirting).
+
+| Prompt | Samples | Intent | Service | Matter | Sender role | Info topic |
+|---|---|---|---|---|---|---|
+| **`classify-v9`** (in use) | 251 | **96.0%** (96.4% with 230 relabelled) | **100%** | 97.3% | 88.9% | 96.2% |
+| **`classify-v9`** | hold-out 81 | **93.8%** | **100%** | **100%** | **100%** | **100%** |
+| `classify-v9` | unseen batch of 9 | 88.9% (8/9; flirting 5/5) | | | | |
+
+Every government-paper sample is right in both sets, and 4 of the 5 hold-out flirting messages (1072 «عندك كام سنة
+وشكلك ايه» → office_info is left). Other misses are the borderline ones of v8 plus 179 (a colleague's existing case →
+legal_question), 1056 (a complaint → describe_matter) and 1081 (alimony → service_by_name: the same offer either way).
