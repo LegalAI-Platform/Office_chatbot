@@ -213,17 +213,33 @@ public sealed class HazemResponder(
             else
             {
                 var aiText = AiInput.Build(turn);
-                if (aiText is not null)
+                // v1.21 (B-01.6): the greeting answered in kind (by code). A goodbye alone, past the first message, is
+                // answered alone: no AI, nothing else. The first message still gets the welcome and the name (B-01.1).
+                var courtesy = Courtesy.Read(aiText);
+                var greet = courtesy.TextKey is { } gk && texts.TryGetValue(gk, out var gt) && gt.Active ? gk : null;
+                if (greet is not null && courtesy.EndsTheChat && !firstContact)
                 {
-                    classification = Classification.From(await classifier.ClassifyAsync(aiText, settings, ct), settings);
+                    plan.Say(greet);
                 }
+                else
+                {
+                    if (aiText is not null)
+                    {
+                        classification = Classification.From(await classifier.ClassifyAsync(aiText, settings, ct), settings);
+                    }
 
-                var office = classification is { Intent: Intent.OfficeInfo } asked
-                    ? await OfficeDetailsAsync(settings, asked.Topic == InfoTopic.Hours, now, ct)
-                    : null;
-                flow = new Flow(turn, state, list, classification, plan, settings.Flag(HandoffEnabledKey), bookingOn ? bookingSettings : null,
-                    servicesOn, urfOn, urfOpen, office, ageRefusal);
-                flow.Respond(firstContact);
+                    var office = classification is { Intent: Intent.OfficeInfo } asked
+                        ? await OfficeDetailsAsync(settings, asked.Topic == InfoTopic.Hours, now, ct)
+                        : null;
+                    flow = new Flow(turn, state, list, classification, plan, settings.Flag(HandoffEnabledKey), bookingOn ? bookingSettings : null,
+                        servicesOn, urfOn, urfOpen, office, ageRefusal);
+                    if (greet is not null && classification?.Intent != Intent.Abusive)
+                    {
+                        plan.Say(greet); // first, so it opens Hazem's answer
+                    }
+
+                    flow.Respond(firstContact);
+                }
             }
 
             if (flow.HasBookingWork)
