@@ -864,7 +864,7 @@ public sealed class HazemResponder(
             answering = turnClass;
             // v1.20 (B-11.1): after the age refusal, the same marriage gets the closing text (no offer, no price, no
             // buttons), twice at most, then silence. Any other matter goes on below.
-            if (ageRefusal is not null && UrfRules.FollowsAgeRefusal(turnClass))
+            if (ageRefusal is not null && UrfRules.FollowsAgeRefusal(turnClass, ageRefusal))
             {
                 if (ageRefusal.ClosingReplies < UrfRules.MaxClosingReplies)
                 {
