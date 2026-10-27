@@ -13,29 +13,44 @@ type Item = { to: string; text: string; short: string; icon: OwnerImage | "home"
 
 /**
  * The shell of the owner's mockups («الرئيسية», light and dark): the black side bar with the seal,
- * the eight sections and the scales at the bottom; the top bar with the Cairo date, the bell, the
- * search and the person. On a phone: a top bar and a tab bar.
+ * the sections under their headings, «الإعدادات» at the bottom and the scales behind; the top bar
+ * with the Cairo date, the bell, the search and the person. On a phone: a top bar and a tab bar.
  */
 export function Layout() {
   const { data: dash } = useDashboard();
   const late = dash?.overdue ?? 0;
 
-  const items: Item[] = [
-    { to: "/", text: "الرئيسية", short: "الرئيسية", icon: "home", end: true },
-    { to: "/clients", text: "الشركات / العملاء", short: "العملاء", icon: "nav_clients" },
-    { to: "/tasks", text: "الطلبات / المهام", short: "المهام", icon: "nav_tasks", dot: late > 0 },
-    { to: "/appointments", text: "المواعيد", short: "المواعيد", icon: "nav_appointments" },
-    { to: "/receipts", text: "الإيصالات والمدفوعات", short: "الإيصالات", icon: "receipt" },
-    { to: "/services", text: "طلبات الخدمات", short: "الخدمات", icon: "document" },
-    { to: "/urf", text: "حالات العرفي", short: "العرفي", icon: "nav_documents" },
-    { to: "/chats", text: "المحادثات", short: "المحادثات", icon: "chat" },
-    { to: "/documents", text: "المستندات", short: "المستندات", icon: "nav_documents" },
-    { to: "/reports", text: "التقارير", short: "التقارير", icon: "nav_reports" },
-    { to: "/settings", text: "الإعدادات", short: "الإعدادات", icon: "nav_settings" },
+  const home: Item = { to: "/", text: "الرئيسية", short: "الرئيسية", icon: "home", end: true };
+  const settings: Item = { to: "/settings", text: "الإعدادات", short: "الإعدادات", icon: "nav_settings" };
+  // The side bar in sections, like the owner's second mockup; «الإعدادات» sits alone at the bottom.
+  const groups: { title: string; items: Item[] }[] = [
+    {
+      title: "الشغل اليومي",
+      items: [
+        { to: "/tasks", text: "الطلبات / المهام", short: "المهام", icon: "nav_tasks", dot: late > 0 },
+        { to: "/appointments", text: "المواعيد", short: "المواعيد", icon: "nav_appointments" },
+        { to: "/chats", text: "المحادثات", short: "المحادثات", icon: "chat" },
+        { to: "/clients", text: "الشركات / العملاء", short: "العملاء", icon: "nav_clients" },
+      ],
+    },
+    {
+      title: "الفلوس والخدمات",
+      items: [
+        { to: "/receipts", text: "الإيصالات والمدفوعات", short: "الإيصالات", icon: "receipt" },
+        { to: "/services", text: "طلبات الخدمات", short: "الخدمات", icon: "document" },
+        { to: "/urf", text: "حالات العرفي", short: "العرفي", icon: "nav_documents" },
+        { to: "/documents", text: "المستندات", short: "المستندات", icon: "nav_documents" },
+      ],
+    },
+    { title: "الإدارة", items: [{ to: "/reports", text: "التقارير", short: "التقارير", icon: "nav_reports" }] },
   ];
-  // TASK 07c: the reports are for the manager and the lawyer; the others never see the entry.
+  // TASK 07c: the reports are for the manager and the lawyer; the others never see the entry
+  // (nor the «الإدارة» heading, left empty without it).
   const { data: me } = useMe();
-  const shownItems = items.filter((i) => i.to !== "/reports" || can(me, "reports.view"));
+  const shownGroups = groups
+    .map((g) => ({ ...g, items: g.items.filter((i) => i.to !== "/reports" || can(me, "reports.view")) }))
+    .filter((g) => g.items.length > 0);
+  const items = [home, ...groups.flatMap((g) => g.items), settings];
   const phoneTabs = items.filter((i) => ["/", "/tasks", "/appointments", "/chats", "/settings"].includes(i.to));
 
   return (
@@ -51,19 +66,22 @@ export function Layout() {
           <p className="mt-1 text-[16px] leading-tight font-bold text-white">مكتب سعد فتحي سعد</p>
           <p className="text-[12px] text-side-ink/80">للمحاماة والاستشارات القانونية</p>
         </div>
-        <nav aria-label="التنقل" className="relative z-10 grid gap-1.5 px-2.5">
-          {shownItems.map((i) => (
-            <NavLink key={i.to} to={i.to} end={i.end}
-              className={({ isActive }) => `flex min-h-[3.1rem] items-center gap-3.5 whitespace-nowrap rounded-[10px] px-4 text-[15px] transition ${isActive ? "nav-active font-bold" : "text-side-ink hover:bg-white/5"}`}>
-              <NavIcon icon={i.icon} />
-              <span className="flex-1">{i.text}</span>
-              {i.badge ? <span className="grid size-6 place-items-center rounded-full bg-red text-[12px] font-bold text-white">{i.badge}</span> : null}
-              {i.dot ? <span className="size-2 rounded-full bg-red" aria-label="فيه مهام متأخرة" role="img" /> : null}
-            </NavLink>
-          ))}
+        <nav aria-label="التنقل" className="relative z-10 flex min-h-0 flex-1 flex-col px-2.5 pb-3">
+          <div className="grid min-h-0 content-start gap-1 overflow-y-auto">
+            <SideLink item={home} />
+            {shownGroups.map((g) => (
+              <section key={g.title} aria-label={g.title} className="mt-2.5 grid gap-1">
+                <h2 className="px-4 pb-0.5 text-[12px] font-semibold text-side-ink/60">{g.title}</h2>
+                {g.items.map((i) => <SideLink key={i.to} item={i} />)}
+              </section>
+            ))}
+          </div>
+          <div className="mt-auto border-t border-white/10 pt-2.5">
+            <SideLink item={settings} />
+          </div>
         </nav>
-        {/* the scales and the law books, fading into the bar */}
-        <div className="pointer-events-none relative mt-auto min-h-0 flex-1" aria-hidden>
+        {/* the scales and the law books, fading into the bar, behind the links */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[45%]" aria-hidden>
           <OwnerImg name="sidebar_art" className="fade-top absolute bottom-0 left-0 w-full max-w-none" />
         </div>
       </aside>
@@ -89,6 +107,18 @@ export function Layout() {
         </nav>
       </div>
     </div>
+  );
+}
+
+function SideLink({ item: i }: { item: Item }) {
+  return (
+    <NavLink to={i.to} end={i.end}
+      className={({ isActive }) => `flex min-h-[2.75rem] items-center gap-3.5 whitespace-nowrap rounded-[10px] px-4 text-[15px] transition ${isActive ? "nav-active font-bold" : "text-side-ink hover:bg-white/5"}`}>
+      <NavIcon icon={i.icon} />
+      <span className="flex-1">{i.text}</span>
+      {i.badge ? <span className="grid size-6 place-items-center rounded-full bg-red text-[12px] font-bold text-white">{i.badge}</span> : null}
+      {i.dot ? <span className="size-2 rounded-full bg-red" aria-label="فيه مهام متأخرة" role="img" /> : null}
+    </NavLink>
   );
 }
 
