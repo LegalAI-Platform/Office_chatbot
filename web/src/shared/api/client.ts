@@ -160,6 +160,8 @@ export async function api<T>(method: Method, path: string, body?: unknown): Prom
   }
 
   if (!res.ok) throw await toError(res);
-  if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
+  // A success with no body (204, or 202 «accepted» as /auth/forgot answers) is no error: reading it as JSON
+  // threw and the page said «مش قادرين نوصل للسيرفر» although the code was sent.
+  const text = res.status === 204 ? "" : await res.text();
+  return (text ? JSON.parse(text) : undefined) as T;
 }
