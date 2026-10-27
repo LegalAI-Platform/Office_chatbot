@@ -377,6 +377,8 @@ if [[ "$provider" == waha ]]; then
 fi
 
 echo "== Migrations"
+check "migration 0025 (forget one test number) is applied" \
+  sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0025'" "1"
 check "migration 0024 (off-topic, who is who, one specific service) is applied" \
   sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0024'" "1"
 check "migration 0023 (the greetings answered in kind) is applied" \
