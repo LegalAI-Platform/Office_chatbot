@@ -20,7 +20,7 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
 {
     public const string HttpClientName = "openai";
     /// <summary>The prompt in use: Ai/prompts/{PromptVersion}.md. Older versions stay in the folder as history.</summary>
-    public const string PromptVersion = "classify-v8";
+    public const string PromptVersion = "classify-v9";
     public const string StubEnabledKey = "ai.stub_enabled";
     public const string StubBaseUrlKey = "ai.stub_base_url";
 
