@@ -298,6 +298,45 @@ public sealed class BookingFlowTests
 
     private Task<TurnDecision> Say(string text) => Send(new IncomingMessage($"wamid.{++_turn}", MessageType.Text, text, null, null));
 
+    /// <summary>Several messages grouped into one turn (the 8 seconds of TASK 03).</summary>
+    private Task<TurnDecision> Together(params IncomingMessage[] messages) => Send(new Turn($"wt:{++_turn}", Number, null, messages));
+
+    private IncomingMessage Typed(string text) => new($"wamid.{++_turn}", MessageType.Text, text, null, null);
+
+    private IncomingMessage Pressed(string id) =>
+        new($"wamid.{++_turn}", MessageType.Interactive, null, null, null, Interactive: new Interactive("list_reply", id, "x"));
+
+    // ---------- v1.22 (B-08, B-25) ----------
+
+    [Fact]
+    public async Task The_office_pressed_then_a_phone_time_in_the_same_turn_offers_the_office_times_and_holds_nothing()
+    {
+        await ToTheOffer();
+        await Press(BookingChoice.Mode(BookingService.PhoneVideo));
+        var d = await Together(Pressed(BookingChoice.Mode(BookingService.Office)),
+            Pressed(BookingChoice.Pick(BookingService.PhoneVideo, AvailabilityTests.At(19, 14))));
+        Assert.Empty(_booking.Appointments);
+        var officePick = BookingChoice.Pick(BookingService.Office, AvailabilityTests.At(19, 14));
+        var prefix = officePick[..(officePick.LastIndexOf(':') + 1)];
+        Assert.All(Assert.Single(d.Actions).Interactive!.Choices.SkipLast(1), c => Assert.StartsWith(prefix, c.Id));
+    }
+
+    [Fact]
+    public async Task Words_typed_with_a_time_record_their_topic_on_the_booking()
+    {
+        _script["السلام عليكم"] = new("greeting", null, "unknown", null, 0.9);
+        _script["محمد أحمد علي حسن"] = new("provide_name", null, "unknown", "محمد أحمد علي حسن", 0.95);
+        _script["عايز استشارة"] = new("consultation_request", null, "unknown", null, 0.9);
+        _script["أخويا عنده قضية قتل"] = new("describe_matter", null, "unknown", null, 0.9, "criminal");
+        await Say("السلام عليكم");
+        await Say("محمد أحمد علي حسن");
+        await Say("عايز استشارة");
+        await Press(BookingChoice.Mode(BookingService.PhoneVideo));
+        var d = await Together(Typed("أخويا عنده قضية قتل"), Pressed(BookingChoice.Pick(BookingService.PhoneVideo, AvailabilityTests.At(19, 14))));
+        Assert.Equal("criminal", Assert.Single(_booking.Appointments).MatterType);
+        Assert.Equal(TextKeys.BookingHold, Keys(d)[0]); // the press is still answered by code
+    }
+
     private Task<TurnDecision> Press(string id) =>
         Send(new IncomingMessage($"wamid.{++_turn}", MessageType.Interactive, null, null, null, Interactive: new Interactive("list_reply", id, "x")));
 
@@ -776,6 +815,32 @@ public sealed class BookingFlowTests
         _script[ages] = new("other", null, "unknown", null, 0.9);
         Assert.Equal([TextKeys.UrfAskWifePast], Keys(await Say(ages)));
         Assert.Equal([TextKeys.UrfAskGuardian], Keys(await Answer(Office.Application.Urf.UrfStep.WifePast, past)));
+    }
+
+    [Theory]
+    [InlineData("الاتنين 20", 20, 20)]
+    [InlineData("الإتنين ٢٥", 25, 25)]
+    [InlineData("كل واحد 30", 30, 30)]
+    [InlineData("الزوج 20 و الزوجة 35", 20, 35)]
+    public void Urf_one_age_said_for_both_is_both_ages(string text, int husband, int wife) =>
+        Assert.Equal((husband, wife), Office.Application.Urf.UrfAges.Parse(text));
+
+    [Fact]
+    public void Urf_one_age_without_a_word_for_both_is_still_not_read() =>
+        Assert.Null(Office.Application.Urf.UrfAges.Parse("الزوج 20"));
+
+    /// <summary>v1.22: the owner's test, a question while the Urfi times were on the screen opened a second offer.</summary>
+    [Fact]
+    public async Task Urf_a_question_while_its_times_wait_gets_the_later_text_and_no_second_offer()
+    {
+        await ToTheGuardian();
+        await Answer(Office.Application.Urf.UrfStep.Guardian, "father");
+        Assert.Equal([TextKeys.UrfChooseSlot], Keys(await Answer(Office.Application.Urf.UrfStep.Witnesses, "office")));
+        _texts[TextKeys.UrfQuestionLater] = new ApprovedText(TextKeys.UrfQuestionLater, 1, "T:later", 300, true);
+        _script["هل الشهود هيتكتمو على الزواج"] = new("legal_question", null, "unknown", null, 0.9, "urfi", "urf_marriage");
+        var d = await Say("هل الشهود هيتكتمو على الزواج");
+        Assert.Equal([TextKeys.UrfQuestionLater], Keys(d));
+        Assert.DoesNotContain(d.Actions, a => a.Type == ActionType.SendInteractive);
     }
 
     [Fact]

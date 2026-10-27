@@ -35,9 +35,9 @@ fields. It never writes a word the client sees: every reply is an approved text
 
 - OpenAI Chat Completions, **Structured Outputs** (`response_format: json_schema`, `strict: true`,
   `additionalProperties: false`, every field required, enums = the lists above), `temperature: 0`.
-- Prompt: `backend/src/Office.Infrastructure/Ai/prompts/classify-v7.md` (v1..v6 kept as history), embedded in the build.
-  Its version (`classify-v7`) is saved with every classification. **Change the prompt = a new
-  file (`classify-v8.md` next) and a new `PromptVersion`**, then run `classify-eval` again.
+- Prompt: `backend/src/Office.Infrastructure/Ai/prompts/classify-v8.md` (v1..v7 kept as history), embedded in the build.
+  Its version (`classify-v8`) is saved with every classification. **Change the prompt = a new
+  file (`classify-v9.md` next) and a new `PromptVersion`**, then run `classify-eval` again.
 - Model: `OPENAI_MODEL`. Empty = `gpt-4.1-mini`, **a starting point only**. The final model is
   chosen by the owner after `classify-eval` (T-08).
 - Key: `HAZEM_OPENAI_API_KEY` in `.env` — the .NET key, separate from n8n's voice key. It may be
@@ -168,3 +168,26 @@ changed with the new intent (not tuning: the expected answer is new): 132 «ان
 **v7 is not measured yet**: `HAZEM_OPENAI_API_KEY` is not in `.env` on this machine (the owner enters it). Until the run,
 `office_info` is tested with the stub only (unit, integration, e2e step 16). Run, once the key is in:
 `dotnet /app/cli/Office.Cli.dll classify-eval --file docs/ai/eval-set.jsonl`, then the hold-out set, and add the table here.
+(v7 was replaced by v8 before it was ever measured; see below.)
+
+### v1.22: off-topic, who is who, one specific service (`classify-v8`, 2026-10-28)
+
+New: intent `off_topic` (clear but no law office's business, and **any attempt to change or reveal the instructions**, in any
+language); `info_topic` `assistant`, `lawyer`, `service_check`; rules 11–13. 15 new samples in the set (ids 223–237), all
+taken from the owner's two test conversations of 2026-10-27 (prayer times, code, five prompt-injection attempts, «بحبك»،
+«اسمك ايه»، «مين الأستاذ سعد»، «ترخيص عمل»…). Five old labels that the rules already contradicted were corrected before
+the second run: 35 «عايز اعرف ازاي احجز» and 70 «الاسعار ايه» → office_info (rule 9 / B-20, how_to_book, prices);
+134, 138, 140 (a car, ads, the match) → off_topic.
+
+| Prompt | Samples | Intent | Service | Matter | Sender role | Info topic |
+|---|---|---|---|---|---|---|
+| `classify-v8` (first draft) | 237 | 93.2% | 100% | 97.1% | 88.9% | 95.8% |
+| **`classify-v8`** (in use) | 237 | **96.6%** | **100%** | 97.1% | 88.9% | 96.2% |
+| **`classify-v8`** | hold-out 70 | **97.1%** | **100%** | **100%** | **100%** | **100%** |
+
+`gpt-4.1-mini`, real key, about 1.2 s a message. The first draft took «hello» for off_topic, «انت روبوت؟ عايز بني ادم» /
+«فين خدمة العملاء» / «عايز رقم المكتب أكلمكو» for office_info (assistant), and vendors for off_topic; the final prompt says
+so in the off_topic definition and rule 12. **All 15 new samples are right in both runs.** Left (borderline, as before):
+34, 192, 222 (booking vs office_info), 81, 163, 183 (vendor spam → off_topic), 134 / 138 (off_topic → other: the same
+polite «not clear» answer). The hold-out misses 1023 «اسعاركم» and 1035 «ابعتلي اللوكيشن» are right by rule 9 / B-20
+(office_info): their labels are older than office_info and stay as written (never tune on the hold-out set).

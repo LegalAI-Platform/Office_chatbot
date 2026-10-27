@@ -31,6 +31,12 @@ public enum Intent
 
     /// <summary>TASK 06 (B-20, 1.17): a question about the office itself; <see cref="InfoTopic"/> says which.</summary>
     OfficeInfo,
+
+    /// <summary>
+    /// v1.22 (B-20): clear, but nothing a law office does (prayer times, code, chit-chat, a request to change or
+    /// reveal the assistant's instructions): the polite off-topic text, never an office task.
+    /// </summary>
+    OffTopic,
 }
 
 /// <summary>B-20 (1.17): what the client asks about the office (with intent office_info).</summary>
@@ -45,6 +51,15 @@ public enum InfoTopic
     Prices,
     FeePolicy,
     PracticeAreas,
+
+    /// <summary>v1.22: who or what Hazem is (his name, a bot or not, whether he remembers the client).</summary>
+    Assistant,
+
+    /// <summary>v1.22: who the lawyer is, his experience (the approved short text from the owner's words).</summary>
+    Lawyer,
+
+    /// <summary>v1.22: whether the office does one specific thing (a licence, a registration…): the office answers.</summary>
+    ServiceCheck,
 }
 
 /// <summary>B-25: the topic of the request (for the office only, never told to the client).</summary>

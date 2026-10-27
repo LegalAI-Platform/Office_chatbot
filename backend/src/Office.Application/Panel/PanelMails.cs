@@ -131,6 +131,7 @@ public static class PanelMails
         "lawyer_direct_message" => "رسالة لقايمة الأستاذ",
         "external_contact" => "زميل أو صحافة أو مورّد",
         "unclear_message" => "رسالة مش واضحة",
+        "service_question" => "سؤال عن خدمة معيّنة",
         "urgent_request" => "طلب عاجل",
         "service_request" => "طلب خدمة",
         "reschedule_or_cancel" => "تغيير أو إلغاء ميعاد",

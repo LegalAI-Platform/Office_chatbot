@@ -68,6 +68,7 @@ public sealed record PendingTask(string Kind, DateTimeOffset DueAt, Guid? StaffI
     public const string UrfDocumentsMissing = "urf_documents_missing"; // TASK 11: 24 hours left, no document yet
     public const string UrfHelp = "urf_help";                 // TASK 11: the ages could not be read twice
     public const string OfficeInfoMissing = "office_info_missing"; // TASK 06: an office question whose answer is not written in the panel yet
+    public const string ServiceQuestion = "service_question"; // v1.22: does the office do one specific thing? the office answers
     public const string ReminderFailed = "reminder_failed";   // TASK 12: a reminder could not be sent, the office reminds by phone
 }
 
