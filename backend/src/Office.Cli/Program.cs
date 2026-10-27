@@ -38,6 +38,10 @@ using Office.Infrastructure.Lists;
 //                                         made and deleted at once) the lawyer's Google Calendar? (the key in
 //                                         .env, the calendar of booking.calendar_id or --calendar shared with
 //                                         the service account). Prints the account's e-mail, never the key
+//   forget-number --wa <number>           TEST ENVIRONMENT ONLY: Hazem forgets one number (hazem.forget_wa_id, migration
+//                                         0025) and its bookings' events are deleted at Google; the number stays allowed.
+//                                         01012345678, +20 10… or 2010… all work. scripts/*/forget-number also clears
+//                                         Chatwoot and Redis and takes a backup first.
 // Panel accounts (TASK 07a, T-23): the first manager and emergencies only; the manager manages
 // every other account from the panel. Passwords are typed in the terminal (twice, hidden) or, for
 // scripts, read from stdin; never an argument, never printed.
@@ -80,10 +84,11 @@ try
         "unlock-user" => await UnlockUser(),
         "reset-2fa" => await ResetTwoFactor(),
         "list-users" => await ListUsers(),
+        "forget-number" => await ForgetNumber(),
         _ => new JsonObject
         {
             ["ok"] = false,
-            ["usage"] = "send-test --to WA_ID [--text TEXT] | classify-eval [--file F] [--model M] [--limit N] [--input-price USD --output-price USD] | import-lists --kind K --file CSV [--replace] | tasks-overdue | unmute --to WA_ID | create-user --name N --display D --email E --role R [--staff S] | reset-password --name N | unlock-user --name N | reset-2fa --name N | list-users",
+            ["usage"] = "send-test --to WA_ID [--text TEXT] | classify-eval [--file F] [--model M] [--limit N] [--input-price USD --output-price USD] | import-lists --kind K --file CSV [--replace] | tasks-overdue | unmute --to WA_ID | create-user --name N --display D --email E --role R [--staff S] | reset-password --name N | unlock-user --name N | reset-2fa --name N | list-users | forget-number --wa NUMBER (test only)",
         },
     };
 
@@ -181,6 +186,53 @@ async Task<JsonNode> Unmute()
     var to = Option("--to") ?? throw new ArgumentException("--to <wa_id> is required");
     var (outcome, error) = await sp.GetRequiredService<StaffEvents>().UnmuteAsync(to, ct);
     return new JsonObject { ["ok"] = outcome == StaffEvents.Outcome.Done, ["wa_id"] = LogMask.Phone(to), ["result"] = outcome.ToString(), ["error"] = error };
+}
+
+// The owner's «انسى الرقم ده» (migration 0025): test environment only, never on the office's server.
+async Task<JsonNode> ForgetNumber()
+{
+    var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT") ?? "";
+    if (!environment.Equals("test", StringComparison.OrdinalIgnoreCase))
+    {
+        return new JsonObject { ["ok"] = false, ["error"] = "forget-number runs in the test environment only (ENVIRONMENT=test)" };
+    }
+
+    if (!Office.Domain.Common.PhoneNumbers.TryToWaId(Option("--wa") ?? Option("--to"), out var wa))
+    {
+        return new JsonObject { ["ok"] = false, ["error"] = "--wa <number> is required: 01012345678, +20 10 1234 5678 or 201012345678" };
+    }
+
+    var db = sp.GetRequiredService<Office.Infrastructure.Persistence.HazemDbContext>();
+    var json = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.SingleAsync(
+        Microsoft.EntityFrameworkCore.RelationalDatabaseFacadeExtensions.SqlQuery<string>(
+            db.Database, $"""SELECT hazem.forget_wa_id({wa})::text AS "Value" """), ct);
+    var result = JsonNode.Parse(json)!.AsObject();
+
+    // Its bookings' events at Google: the database rows are gone, so a leftover event would block that time for good.
+    var google = sp.GetRequiredService<Office.Infrastructure.Booking.GoogleCalendar>();
+    var settings = new HazemSettings((await sp.GetRequiredService<ISettingsReader>().GetAsync(ct)).Values.ToDictionary(kv => kv.Key, kv => kv.Value));
+    var eventsDeleted = 0;
+    var deleteByHand = new JsonArray();
+    foreach (var e in result["calendar_events"]!.AsArray())
+    {
+        if (await google.DeleteEventAsync(settings, (string)e!["event_id"]!, ct))
+        {
+            eventsDeleted++;
+        }
+        else
+        {
+            deleteByHand.Add(e["starts_at"]!.DeepClone());
+        }
+    }
+
+    return new JsonObject
+    {
+        ["ok"] = true,
+        ["wa_id"] = LogMask.Phone(wa),
+        ["deleted"] = result["deleted"]!.DeepClone(),
+        ["calendar_events_deleted"] = eventsDeleted,
+        ["calendar_events_to_delete_by_hand"] = deleteByHand,
+    };
 }
 
 async Task<JsonNode> ClassifyEval()

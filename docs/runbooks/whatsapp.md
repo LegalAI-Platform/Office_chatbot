@@ -182,6 +182,27 @@ COMMIT;
 (B-21). A text with a part-5 placeholder such as `{{OFFICE_ADDRESS}}` or a `[…]` slot is never
 sent (the healthcheck fails while one is active). Then run `healthcheck`.
 
+## Forget one number (test only)
+
+To test a conversation from the start with the same phone («انسى الرقم ده»):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\windowsorget-number.ps1 01012345678
+```
+
+(`scripts/linux/forget-number.sh 01012345678` on Linux; `+20 10…` and `2010…` work too.) It refuses unless
+`ENVIRONMENT=test`, then:
+1. backs up `office` and Chatwoot to `exports/manual/` (git-ignored), and stops if either fails;
+2. `Office.Cli forget-number`: `hazem.forget_wa_id` (migration 0025) deletes every row of the number in one
+   transaction (person, conversation, intakes, tasks, turns, bookings, payments and receipts, service orders, Urfi
+   cases, Chatwoot links, messages, the 24-hour window, raw events), then its bookings' **Google Calendar events**
+   are deleted at Google (any that fail are printed with their time, to delete by hand);
+3. Chatwoot deletes the contact and its conversations;
+4. Redis keys with the number are deleted.
+
+The number stays in `whatsapp.test_recipients` / `hazem.recipients`. Files in storage (a receipt image) are not
+deleted; nothing points at them any more.
+
 ## End-to-end test without Meta
 
 `hazem-e2e`: message → n8n → API → reply (dry run) → result back; same turn twice; API down and

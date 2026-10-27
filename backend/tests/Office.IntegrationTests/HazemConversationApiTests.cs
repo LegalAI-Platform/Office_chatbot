@@ -210,6 +210,38 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
             """));
     }
 
+    // ---------- migration 0025: «انسى الرقم ده» (test environment) ----------
+
+    [Fact]
+    public async Task Forget_wa_id_deletes_every_row_of_the_number_and_hazem_starts_again()
+    {
+        await Say("السلام عليكم");
+        await Say("محمد أحمد علي حسن");
+        await Say("عايز أحجز استشارة");
+        var counts = $"""
+            SELECT (SELECT count(*) FROM hazem.persons WHERE wa_id = '{Client}') || '|' ||
+                   (SELECT count(*) FROM hazem.turns WHERE wa_id = '{Client}') || '|' ||
+                   (SELECT count(*) FROM hazem.turn_replies r JOIN hazem.turns t USING (turn_id) WHERE t.wa_id = '{Client}') || '|' ||
+                   (SELECT count(*) FROM hazem.intakes i JOIN hazem.persons p ON p.id = i.person_id WHERE p.wa_id = '{Client}')
+            """;
+        Assert.Equal("1|3|", (await db.ScalarAsync<string>(counts))![..4]);
+
+        var result = await db.ScalarAsync<string>($"SELECT hazem.forget_wa_id('{Client}')::text");
+        Assert.Contains("\"persons\": 1", result, StringComparison.Ordinal);
+        Assert.Contains("\"calendar_events\": []", result, StringComparison.Ordinal);
+        Assert.Equal("0|0|0|0", await db.ScalarAsync<string>(counts));
+
+        // From the start again: the welcome and the name, as a new number.
+        Assert.Equal(["وعليكم السلام ورحمة الله وبركاته", Welcome], Texts(await Say("السلام عليكم")));
+    }
+
+    [Fact]
+    public async Task Forget_wa_id_refuses_anything_but_digits()
+    {
+        var error = await Assert.ThrowsAnyAsync<Exception>(() => db.ScalarAsync<string>("SELECT hazem.forget_wa_id('201%')::text"));
+        Assert.Contains("digits only", error.Message, StringComparison.Ordinal);
+    }
+
     // ---------- migration 0005 ----------
 
     [Fact]
