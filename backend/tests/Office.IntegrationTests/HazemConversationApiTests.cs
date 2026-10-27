@@ -68,7 +68,8 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
     [Fact]
     public async Task Booking_request_then_the_name_gets_the_offer_without_asking_again()
     {
-        Assert.Equal([Welcome], Texts(await Say("السلام عليكم عايز أحجز استشارة")));
+        // v1.21 (B-01.6): the salam is returned first, then the welcome.
+        Assert.Equal(["وعليكم السلام ورحمة الله وبركاته", Welcome], Texts(await Say("السلام عليكم عايز أحجز استشارة")));
         Assert.Equal([Offer, AskTopic], Texts(await Say("محمد أحمد علي حسن"))); // B-25: the topic is still unknown
 
         Assert.Equal("محمد أحمد علي حسن|true|bot_active|offer_sent|new_client|", await db.ScalarAsync<string>($"""
@@ -76,7 +77,7 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
               FROM hazem.persons p JOIN hazem.conversations c ON c.person_id = p.id JOIN hazem.intakes i ON i.person_id = p.id
              WHERE p.wa_id = '{Client}'
             """));
-        Assert.Equal("welcome_ask_name:1,consultation_offer:2,ask_topic:1", await db.ScalarAsync<string>(
+        Assert.Equal("greet_salam:1,welcome_ask_name:1,consultation_offer:2,ask_topic:1", await db.ScalarAsync<string>(
             "SELECT string_agg(text_key || ':' || text_version, ',' ORDER BY created_at, idempotency_key) FROM hazem.turn_replies"));
     }
 
@@ -202,7 +203,8 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
         };
         var results = await Task.WhenAll(Enumerable.Range(0, 6).Select(_ => _n8n.PostAsJsonAsync("/api/hazem/turns", turn, Ct)));
         Assert.All(results, r => Assert.Equal(HttpStatusCode.OK, r.StatusCode));
-        Assert.Equal("1|1|1|1", await db.ScalarAsync<string>("""
+        // one turn, one person, its two replies (v1.21: the salam returned, then the welcome) once, one name ask
+        Assert.Equal("1|1|2|1", await db.ScalarAsync<string>("""
             SELECT (SELECT count(*) FROM hazem.turns) || '|' || (SELECT count(*) FROM hazem.persons) || '|' ||
                    (SELECT count(*) FROM hazem.turn_replies) || '|' || (SELECT name_asks FROM hazem.intakes)
             """));
