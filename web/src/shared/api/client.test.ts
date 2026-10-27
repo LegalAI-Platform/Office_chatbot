@@ -57,6 +57,13 @@ describe("api client", () => {
     expect(errorMessage(error)).toBe("اسم المستخدم ده موجود قبل كده.");
   });
 
+  it("takes a success with no body (202 from /auth/forgot, 204) as done, not as a lost connection", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (url) =>
+      String(url).endsWith("/auth/csrf") ? json(200, { token: "t-1" }) : new Response(null, { status: 202 }),
+    );
+    await expect(api("POST", "/auth/forgot", { login: "x" })).resolves.toBeUndefined();
+  });
+
   it("has a clear message for every common status and for no connection", () => {
     expect(errorMessage(new ApiError(401, "x"))).toContain("سجّل دخول");
     expect(errorMessage(new ApiError(403, "x"))).toContain("مش مسموح");
