@@ -1,6 +1,7 @@
 using System.Globalization;
 using Office.Application.Booking;
 using Office.Application.Services;
+using Office.Application.Understanding;
 
 namespace Office.Application.Urf;
 
@@ -120,10 +121,35 @@ public sealed record UrfAnswer(string Step, string Value)
     }
 }
 
+/// <summary>v1.20 (B-11.1): the client's last age refusal and how many closing texts followed it.</summary>
+public sealed record AgeRefusal(DateTimeOffset At, int ClosingReplies);
+
 public static class UrfRules
 {
     /// <summary>B-11: every decision that refuses a client (the age, the guardian) or the lawyer's is kept with this.</summary>
     public const string PolicyVersion = "B-11 v1.15";
+
+    /// <summary>v1.20 (B-11.1): how long after an age refusal the same matter gets the closing text, and how often.</summary>
+    public static readonly TimeSpan AgeRefusalWindow = TimeSpan.FromHours(24);
+
+    public const int MaxClosingReplies = 2;
+
+    /// <summary>
+    /// v1.20 (B-11.1): a message after an age refusal that is about the same marriage: «ليه», a question or a new request
+    /// for it, an offer or a price asked for it. Another matter (a divorce, an inheritance…), a person, the office's
+    /// details or thanks go on as usual.
+    /// </summary>
+    public static bool FollowsAgeRefusal(Classification c) =>
+        c.Intent is Intent.Other or Intent.LegalQuestion or Intent.DescribeMatter or Intent.ConsultationRequest
+            or Intent.PriceQuestion or Intent.ServiceByName
+        && c.Service is null or Service.UrfMarriage or Service.UrfUnclear
+        && c.Matter switch
+        {
+            null => true,
+            MatterType.Urfi => c.Subtype is null or MatterSubtype.UrfMarriage,
+            MatterType.PersonalStatus => c.Subtype is null or MatterSubtype.Marriage,
+            _ => false,
+        };
 
     public const int MinAge = 18;
 
@@ -220,6 +246,9 @@ public interface IUrfStore
 
     Task SaveAsync(UrfCase c, Guid? intakeId, CancellationToken ct);
 
+    /// <summary>v1.20 (B-11.1): the client's newest age refusal since <paramref name="since"/>, with the closing texts sent after it.</summary>
+    Task<AgeRefusal?> AgeRefusalAsync(Guid personId, DateTimeOffset since, CancellationToken ct);
+
     /// <summary>hazem.add_urf_file: a document for the case waiting for them.</summary>
     Task<AddFileOutcome> AddFileAsync(Guid personId, StoredFile file, CancellationToken ct);
 }
@@ -230,6 +259,9 @@ public sealed class UrfDesk(IUrfStore store)
     public Task<IReadOnlyList<UrfCase>> OpenAsync(Guid personId, CancellationToken ct) => store.OpenAsync(personId, ct);
 
     public Task SaveAsync(UrfCase c, Guid? intakeId, CancellationToken ct) => store.SaveAsync(c, intakeId, ct);
+
+    public Task<AgeRefusal?> AgeRefusalAsync(Guid personId, DateTimeOffset now, CancellationToken ct) =>
+        store.AgeRefusalAsync(personId, now - UrfRules.AgeRefusalWindow, ct);
 
     /// <summary>Every stored file of the turn. First when any of them was the case's first.</summary>
     public async Task<AddFileOutcome> AddFilesAsync(Guid personId, IEnumerable<StoredFile> files, CancellationToken ct)

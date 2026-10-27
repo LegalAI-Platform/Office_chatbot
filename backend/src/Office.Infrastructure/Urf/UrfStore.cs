@@ -29,6 +29,31 @@ public sealed class UrfStore(HazemDbContext db) : IUrfStore
              WHERE hazem.urf_cases.state IN ('collecting', 'documents_pending', 'booked')
             """, ct);
 
+    public async Task<AgeRefusal?> AgeRefusalAsync(Guid personId, DateTimeOffset since, CancellationToken ct)
+    {
+        // The case's updated_at is the moment it became rejected_age (a refused case is never written again);
+        // the closing texts are the turn replies of this client after it.
+        var json = await db.Database.SqlQuery<string?>($"""
+            SELECT json_build_object('at', c.updated_at,
+                     'replies', (SELECT count(*) FROM hazem.turn_replies r
+                                   JOIN hazem.turns t ON t.turn_id = r.turn_id
+                                   JOIN hazem.persons p ON p.wa_id = t.wa_id
+                                  WHERE p.id = c.person_id AND r.text_key = 'urf_age_closed' AND r.created_at > c.updated_at))::text AS "Value"
+              FROM hazem.urf_cases c
+             WHERE c.person_id = {personId} AND c.state = 'rejected_age' AND c.updated_at > {since}
+             ORDER BY c.updated_at DESC
+             LIMIT 1
+            """).SingleOrDefaultAsync(ct);
+        if (json is null)
+        {
+            return null;
+        }
+
+        using var doc = JsonDocument.Parse(json);
+        var r = doc.RootElement;
+        return new AgeRefusal(r.GetProperty("at").GetDateTimeOffset(), r.GetProperty("replies").GetInt32());
+    }
+
     public async Task<AddFileOutcome> AddFileAsync(Guid personId, StoredFile f, CancellationToken ct)
     {
         using var doc = JsonDocument.Parse(await db.Database.SqlQuery<string>($"""

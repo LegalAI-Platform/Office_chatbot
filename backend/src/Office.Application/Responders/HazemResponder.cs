@@ -138,8 +138,12 @@ public sealed class HazemResponder(
             var urfOn = urf is not null && bookingOn && UrfTextKeys.All(k => texts.TryGetValue(k, out var t) && t.Active);
             IReadOnlyList<UrfCase> urfOpen = urfOn ? await urf!.OpenAsync(state.Person.Id, ct) : [];
             var urfCase = urfOpen.FirstOrDefault();
+            // v1.20 (B-11.1): an age refusal in the last 24 hours, when its closing text is approved.
+            var ageRefusal = urfOn && texts.TryGetValue(TextKeys.UrfAgeClosed, out var closing) && closing.Active
+                ? await urf!.AgeRefusalAsync(state.Person.Id, now, ct)
+                : null;
             var flow = new Flow(turn, state, list, null, plan, settings.Flag(HandoffEnabledKey), bookingOn ? bookingSettings : null, servicesOn,
-                urfOn, urfOpen);
+                urfOn, urfOpen, ageRefusal: ageRefusal);
             // TASK 08: a button or a list row Hazem sent is read without the AI. TASK 12: a reminder's two buttons
             // whenever the reminders run (an appointment booked before the booking was switched off still gets them).
             var pressed = ChoiceIn(turn);
@@ -218,7 +222,7 @@ public sealed class HazemResponder(
                     ? await OfficeDetailsAsync(settings, asked.Topic == InfoTopic.Hours, now, ct)
                     : null;
                 flow = new Flow(turn, state, list, classification, plan, settings.Flag(HandoffEnabledKey), bookingOn ? bookingSettings : null,
-                    servicesOn, urfOn, urfOpen, office);
+                    servicesOn, urfOn, urfOpen, office, ageRefusal);
                 flow.Respond(firstContact);
             }
 
@@ -354,7 +358,7 @@ public sealed class HazemResponder(
     /// <summary>The decisions for one turn. Changes the state in memory; the store saves it with the turn.</summary>
     private sealed class Flow(Turn turn, ClientState state, ListMatch list, Classification? c, Plan plan, bool handoffEnabled,
         BookingSettings? booking, bool servicesOn, bool urfOn = false, IReadOnlyList<UrfCase>? urfOpen = null,
-        IReadOnlyDictionary<string, string>? office = null)
+        IReadOnlyDictionary<string, string>? office = null, AgeRefusal? ageRefusal = null)
     {
         /// <summary>TASK 11: the client's Urfi case (B-11) this turn is about (the newest running one), as the turn leaves it.</summary>
         public UrfCase? Urf { get; private set; } = urfOpen?.FirstOrDefault();
@@ -858,6 +862,18 @@ public sealed class HazemResponder(
         private void Answer(Classification turnClass)
         {
             answering = turnClass;
+            // v1.20 (B-11.1): after the age refusal, the same marriage gets the closing text (no offer, no price, no
+            // buttons), twice at most, then silence. Any other matter goes on below.
+            if (ageRefusal is not null && UrfRules.FollowsAgeRefusal(turnClass))
+            {
+                if (ageRefusal.ClosingReplies < UrfRules.MaxClosingReplies)
+                {
+                    plan.Say(TextKeys.UrfAgeClosed);
+                }
+
+                return;
+            }
+
             Intake.CountUnclear(turnClass.Intent == Intent.Other);
             switch (turnClass.Intent)
             {
