@@ -118,6 +118,7 @@ public static class TextKeys
     // TASK 11 (v1.15, B-11): the Urfi questions (word for word from DECISIONS) and the proposed texts and buttons.
     public const string UrfAskAges = "urf_ask_ages";
     public const string UrfUnderAge = "urf_under_age";
+    public const string UrfAgeClosed = "urf_age_closed";                    // v1.20 (B-11.1): the same matter after the age refusal
     public const string UrfAskWifePast = "urf_ask_wife_past";
     public const string UrfAskGuardian = "urf_ask_guardian";
     public const string UrfNoGuardian = "urf_no_guardian";

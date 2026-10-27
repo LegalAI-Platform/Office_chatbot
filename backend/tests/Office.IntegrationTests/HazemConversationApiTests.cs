@@ -213,9 +213,11 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
     [Fact]
     public async Task Every_active_text_is_word_for_word_in_decisions()
     {
-        // v1.12 for the texts of 1.4 (booking_confirmed is still active, not sent), v1.16 for B-11 (TASK 11) and B-18 (TASK 12).
+        // v1.12 for the texts of 1.4 (booking_confirmed is still active, not sent), v1.16 for B-11 (TASK 11) and B-18 (TASK 12),
+        // v1.20 for B-11.1's closing text after the age refusal.
         var decisions = await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.12.md"), Ct)
-                        + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.16.md"), Ct);
+                        + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.16.md"), Ct)
+                        + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.20.md"), Ct);
         await using var c = new NpgsqlConnection(db.ApiConnectionString);
         await c.OpenAsync(Ct);
         await using var cmd = new NpgsqlCommand("SELECT key, text FROM hazem.approved_texts WHERE active AND source LIKE 'DECISIONS%'", c);
@@ -240,7 +242,7 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
             Assert.True(decisions.Contains(text, StringComparison.Ordinal), $"{r.GetString(0)} is not word for word in DECISIONS");
         }
 
-        Assert.Equal(25, count); // 8 (TASK 04) + B-04 question + the two B-25 texts (TASK 05a) + B-08 and B-22 (TASK 08) + B-11 (TASK 11) + B-18 (TASK 12)
+        Assert.Equal(26, count); // 8 (TASK 04) + B-04 question + the two B-25 texts (TASK 05a) + B-08 and B-22 (TASK 08) + B-11 (TASK 11) + B-18 (TASK 12) + B-11.1 (v1.20)
     }
 
     [Fact]

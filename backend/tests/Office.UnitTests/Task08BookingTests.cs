@@ -277,7 +277,7 @@ public sealed class BookingFlowTests
 
     private HazemResponder Hazem => new(new Store(_rows), new Scripted(_script), new Texts(_texts), new NoLists(), new Clock(_now),
         new BookingDesk(_booking, _calendar), new Office.Application.Services.ServiceDesk(_booking),
-        new Office.Application.Urf.UrfDesk(new MemoryUrf(_booking)));
+        new Office.Application.Urf.UrfDesk(new MemoryUrf(_booking, () => _now)));
 
     private Task<TurnDecision> Send(IncomingMessage m) => Send(new Turn($"wt:{++_turn}", Number, null, [m]));
 
@@ -287,6 +287,8 @@ public sealed class BookingFlowTests
         if (d.Effects is { } e)
         {
             _rows[Number] = e.State;
+            // as hazem.turn_replies: the closing texts sent after the age refusal (v1.20)
+            _booking.AgeClosingReplies += e.Replies.Count(r => r.Key == TextKeys.UrfAgeClosed);
         }
 
         return d;
@@ -787,6 +789,63 @@ public sealed class BookingFlowTests
         Assert.Empty(_booking.Appointments);
     }
 
+    /// <summary>v1.20 (B-11.1): the owner's test of 2026-10-27, refused for the wife's age, then «why».</summary>
+    private async Task RefusedForTheAge()
+    {
+        UrfOn();
+        _texts[TextKeys.UrfAgeClosed] = new ApprovedText(TextKeys.UrfAgeClosed, 1, "T:closed", 300, true);
+        _script["ليه"] = new("other", null, "unknown", null, 0.9);
+        _script["ليه المكتب مش بيعمل عقود زواج للبنات الصغيره"] = new("legal_question", null, "unknown", null, 0.9, "personal_status", "marriage");
+        _script["طب عايز أحجز استشارة"] = new("consultation_request", null, "unknown", null, 0.9);
+        _script["عايز استشارة في ميراث"] = new("consultation_request", null, "unknown", null, 0.9, "inheritance");
+        await ToTheOffer();
+        await Say("عايز أعمل جواز عرفي");
+        Assert.Equal([TextKeys.UrfUnderAge], Keys(await Say("الزوج 22 والزوجه 16")));
+    }
+
+    [Fact]
+    public async Task Urf_after_the_age_refusal_the_same_marriage_gets_the_closing_text_twice_then_silence()
+    {
+        await RefusedForTheAge();
+        Assert.Equal([TextKeys.UrfAgeClosed], Keys(await Say("ليه")));
+        Assert.Equal([TextKeys.UrfAgeClosed], Keys(await Say("ليه المكتب مش بيعمل عقود زواج للبنات الصغيره"))); // no B-20 offer
+        var third = await Say("طب عايز أحجز استشارة");
+        Assert.Empty(Keys(third));
+        Assert.Empty(third.Actions); // no buttons either
+        Assert.Empty(TaskKinds(third));
+        Assert.Empty(_booking.Appointments);
+    }
+
+    [Fact]
+    public async Task Urf_after_the_age_refusal_a_new_request_for_the_same_marriage_is_not_asked_again()
+    {
+        await RefusedForTheAge();
+        Assert.Equal([TextKeys.UrfAgeClosed], Keys(await Say("عايز أعمل جواز عرفي"))); // not the ages again
+    }
+
+    [Fact]
+    public async Task Urf_after_the_age_refusal_another_matter_gets_the_offer()
+    {
+        await RefusedForTheAge();
+        Assert.Equal([TextKeys.ConsultationOffer], Keys(await Say("عايز استشارة في ميراث")));
+    }
+
+    [Fact]
+    public async Task Urf_the_age_refusal_closes_the_matter_for_24_hours()
+    {
+        await RefusedForTheAge();
+        _now = _now.AddHours(25);
+        Assert.DoesNotContain(TextKeys.UrfAgeClosed, Keys(await Say("ليه المكتب مش بيعمل عقود زواج للبنات الصغيره")));
+    }
+
+    [Fact]
+    public async Task Urf_without_the_closing_text_approved_the_refusal_is_followed_as_before()
+    {
+        await RefusedForTheAge();
+        _texts[TextKeys.UrfAgeClosed] = _texts[TextKeys.UrfAgeClosed] with { Active = false };
+        Assert.DoesNotContain(TextKeys.UrfAgeClosed, Keys(await Say("ليه المكتب مش بيعمل عقود زواج للبنات الصغيره")));
+    }
+
     [Theory]
     [InlineData("brother", "الأخ")] // the father passed away, the brother is there
     [InlineData("uncle", "العم")]   // no father, no brother, the uncle is there
@@ -1137,8 +1196,13 @@ public sealed class BookingFlowTests
         Assert.Empty(_booking.Attending);
     }
 
-    private sealed class MemoryUrf(MemoryBooking booking) : Office.Application.Urf.IUrfStore
+    private sealed class MemoryUrf(MemoryBooking booking, Func<DateTimeOffset> now) : Office.Application.Urf.IUrfStore
     {
+        public Task<Office.Application.Urf.AgeRefusal?> AgeRefusalAsync(Guid personId, DateTimeOffset since, CancellationToken ct) =>
+            Task.FromResult(booking.AgeRefusedAt is { } at && at > since
+                ? new Office.Application.Urf.AgeRefusal(at, booking.AgeClosingReplies)
+                : null);
+
         public Task<IReadOnlyList<Office.Application.Urf.UrfCase>> OpenAsync(Guid personId, CancellationToken ct) =>
             Task.FromResult<IReadOnlyList<Office.Application.Urf.UrfCase>>(booking.UrfCases.Where(c => c.PersonId == personId
                 && c.State is Office.Application.Urf.UrfCase.Collecting or Office.Application.Urf.UrfCase.DocumentsPending or Office.Application.Urf.UrfCase.Booked)
@@ -1148,6 +1212,11 @@ public sealed class BookingFlowTests
         {
             // In place (the store keeps a case's creation order); a new case is the newest.
             var i = booking.UrfCases.FindIndex(x => x.Id == c.Id);
+            if (c.State == Office.Application.Urf.UrfCase.RejectedAge && (i < 0 || booking.UrfCases[i].State != c.State))
+            {
+                booking.AgeRefusedAt = now(); // updated_at when the case became rejected_age
+            }
+
             if (i >= 0)
             {
                 booking.UrfCases[i] = c;
@@ -1400,6 +1469,10 @@ public sealed class BookingFlowTests
         public List<Order> Orders { get; } = [];
 
         public List<Office.Application.Urf.UrfCase> UrfCases { get; } = [];
+
+        public DateTimeOffset? AgeRefusedAt { get; set; }
+
+        public int AgeClosingReplies { get; set; }
 
         public Dictionary<Guid, int> UrfFiles { get; } = [];
 
