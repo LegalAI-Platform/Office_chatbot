@@ -45,6 +45,17 @@ public static class TextKeys
     public const string UnclearAgain = "unclear_again";
     public const string Greeting = "greeting";
     public const string Thanks = "thanks";
+
+    // v1.21 (B-01.6): the client's greeting answered in kind, before Hazem's answer (read by code, Courtesy).
+    public const string GreetSalam = "greet_salam";
+    public const string GreetRamadan = "greet_ramadan";
+    public const string GreetJumua = "greet_jumua";
+    public const string GreetOccasion = "greet_occasion";
+    public const string GreetMorning = "greet_morning";
+    public const string GreetEvening = "greet_evening";
+    public const string GreetHowAreYou = "greet_how_are_you";
+    public const string GreetGoodNight = "greet_good_night";
+    public const string GreetGoodbye = "greet_goodbye";
     public const string HumanRequest = "human_request";
     public const string ExistingMatter = "existing_matter";
     public const string RescheduleOrCancel = "reschedule_or_cancel";

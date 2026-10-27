@@ -170,8 +170,63 @@ public sealed class HazemFlowTests
         Activate(typeof(TextKeys).GetFields().Select(f => (string)f.GetValue(null)!).Where(k => !Approved.ContainsKey(k)).ToArray());
         await Known();
         var (_, d) = await Say(text);
-        var first = d.Effects!.Replies[0];
+        // v1.21: a greeting's answer in kind (greet_*) may open the reply; the intent's text follows it.
+        var first = d.Effects!.Replies.First(r => !r.Key.StartsWith("greet_", StringComparison.Ordinal));
         Assert.Equal((key, 1, (string?)null), (first.Key, first.Version, first.InsteadOf));
+    }
+
+    // ---------- v1.21 (B-01.6): greetings answered in kind ----------
+
+    private static readonly string[] GreetKeys =
+    [
+        TextKeys.GreetSalam, TextKeys.GreetRamadan, TextKeys.GreetJumua, TextKeys.GreetOccasion, TextKeys.GreetMorning,
+        TextKeys.GreetEvening, TextKeys.GreetHowAreYou, TextKeys.GreetGoodNight, TextKeys.GreetGoodbye,
+    ];
+
+    [Fact]
+    public async Task The_first_salam_is_returned_before_the_welcome()
+    {
+        Activate(GreetKeys);
+        var (keys, d) = await Say("السلام عليكم");
+        Assert.Equal([TextKeys.GreetSalam, TextKeys.WelcomeAskName], keys);
+        Assert.Equal("PROPOSED " + TextKeys.GreetSalam, d.Actions[0].Text);
+    }
+
+    [Fact]
+    public async Task A_known_client_s_good_morning_gets_good_morning_then_the_answer()
+    {
+        Activate(GreetKeys);
+        await Known();
+        var (keys, _) = await Say("صباح الخير");
+        Assert.Equal(TextKeys.GreetMorning, keys[0]);
+        Assert.True(keys.Count > 1); // Hazem's answer follows
+    }
+
+    [Fact]
+    public async Task A_goodbye_alone_is_answered_alone_without_the_ai()
+    {
+        Activate(GreetKeys);
+        await Known();
+        var asked = _ai.Texts.Count;
+        var (keys, d) = await Say("مع السلامة");
+        Assert.Equal([TextKeys.GreetGoodbye], keys);
+        Assert.Equal(asked, _ai.Texts.Count);
+        Assert.Null(d.Effects!.Classification);
+    }
+
+    [Fact]
+    public async Task A_goodbye_as_the_first_message_still_gets_the_welcome()
+    {
+        Activate(GreetKeys);
+        var (keys, _) = await Say("مع السلامة");
+        Assert.Equal([TextKeys.GreetGoodbye, TextKeys.WelcomeAskName], keys);
+    }
+
+    [Fact]
+    public async Task No_greeting_is_answered_while_its_text_is_not_approved()
+    {
+        var (keys, _) = await Say("السلام عليكم");
+        Assert.Equal([TextKeys.WelcomeAskName], keys);
     }
 
     [Fact]
