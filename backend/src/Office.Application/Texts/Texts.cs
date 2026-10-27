@@ -46,6 +46,14 @@ public static class TextKeys
     public const string Greeting = "greeting";
     public const string Thanks = "thanks";
 
+    // v1.22 (B-20): off-topic, who Hazem is, who the lawyer is, a specific service asked about, a question while an Urfi
+    // time is being picked.
+    public const string OffTopic = "off_topic";
+    public const string AboutHazem = "about_hazem";
+    public const string AboutLawyer = "about_lawyer";
+    public const string ServiceCheck = "service_check";
+    public const string UrfQuestionLater = "urf_question_later";
+
     // v1.21 (B-01.6): the client's greeting answered in kind, before Hazem's answer (read by code, Courtesy).
     public const string GreetSalam = "greet_salam";
     public const string GreetRamadan = "greet_ramadan";

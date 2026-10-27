@@ -27,6 +27,7 @@ export const TASK_TYPES: Record<string, string> = {
   urf_help: "عرفي: محتاج مساعدة في الأسئلة",
   reminder_failed: "تذكير ما وصلش: فكّر العميل بالتليفون",
   office_info_missing: "عميل سأل عن المكتب ومعلومته مش مكتوبة: اكتب العنوان والخريطة وأرقام الدفع (المواعيد ← بيانات المكتب) أو أيام الاستشارات",
+  service_question: "عميل بيسأل المكتب بيعمل خدمة معيّنة ولا لأ: رد عليه",
 };
 
 /** TASK 12 (B-18): the reminders before a confirmed appointment. */

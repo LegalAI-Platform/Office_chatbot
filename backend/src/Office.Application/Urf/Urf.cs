@@ -242,8 +242,17 @@ public static class UrfAges
             }
         }
 
+        // v1.22: one age said for both («الاتنين 20»، «كل واحد 25»، «زي بعض 30»).
+        if (numbers is [var both] && BothWords.Any(w => $" {Courtesy.Normalize(text)} ".Contains(w, StringComparison.Ordinal)))
+        {
+            numbers.Add(both);
+        }
+
         return numbers is [var h, var w] && h is >= 1 and <= 120 && w is >= 1 and <= 120 ? (h, w) : null;
     }
+
+    /// <summary>On the normalized text (Courtesy.Normalize), with the spaces around.</summary>
+    private static readonly string[] BothWords = [" الاتنين ", " الاثنين ", " التنين ", " كلهم ", " كل واحد ", " زي بعض ", " نفس السن ", " both "];
 }
 
 public interface IUrfStore

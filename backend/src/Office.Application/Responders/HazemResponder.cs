@@ -188,6 +188,15 @@ public sealed class HazemResponder(
 
             if (choice is not null)
             {
+                // v1.22 (B-25): words typed with the press («أخويا عنده قضية قتل» + a time): the AI reads their topic only,
+                // for the booking and the lawyer's calendar; the press is still answered by code, never by the AI.
+                if (AiInput.Build(turn with { Messages = [.. turn.Messages.Where(m => m.Interactive is null && m.Button is null)] })
+                    is { } withPress && withPress.Any(char.IsLetter)) // the press's own title is no words of the client
+                {
+                    classification = Classification.From(await classifier.ClassifyAsync(withPress, settings, ct), settings);
+                    flow.NoteTopic(classification);
+                }
+
                 flow.RespondToChoice(choice);
             }
             else if (urfAnswer is not null || urfAges)
@@ -308,7 +317,20 @@ public sealed class HazemResponder(
     private static BookingChoice? ChoiceIn(Turn turn)
     {
         var last = turn.Messages.LastOrDefault(m => m.Interactive?.Id is not null || m.Button?.Payload is not null);
-        return BookingChoice.Parse(last?.Interactive?.Id ?? last?.Button?.Payload);
+        var choice = BookingChoice.Parse(last?.Interactive?.Id ?? last?.Button?.Payload);
+        // v1.22: «🏢 مقابلة في المكتب» and then, in the same turn, a time from the phone list: the client changed his mind
+        // on the way; the kind he pressed wins and its own times are offered, rather than holding the other kind.
+        if (choice is { Kind: 's' })
+        {
+            var mode = turn.Messages.Select(m => BookingChoice.Parse(m.Interactive?.Id ?? m.Button?.Payload))
+                .LastOrDefault(p => p is { Kind: 'm' });
+            if (mode is not null && mode.Service != choice.Service)
+            {
+                return mode;
+            }
+        }
+
+        return choice;
     }
 
     /// <summary>
@@ -399,6 +421,14 @@ public sealed class HazemResponder(
         private Classification? answering;
 
         public bool HasBookingWork => work is not null;
+
+        /// <summary>v1.22: the Urfi case has its price and its times sent, and the client has not picked one yet.</summary>
+        private bool UrfWaitsForTime => Urf is { State: UrfCase.DocumentsPending, AppointmentId: null };
+
+        /// <summary>v1.22 (B-25): the topic of words typed together with a press, recorded for the booking.</summary>
+        public void NoteTopic(Classification typed) =>
+            Intake.RecordMatter(typed.Matter is { } m ? Classification.Code(m) : null,
+                typed.Subtype is { } st ? Classification.Code(st) : null);
 
         /// <summary>A new or current client past the name question; never the lists' lawyer or the roles (B-14).</summary>
         public bool MayOrder =>
@@ -815,7 +845,7 @@ public sealed class HazemResponder(
                     State = State with { Intake = fresh };
                     Answer(turnClass);
                     break;
-                case Intent.HumanRequest or Intent.RescheduleOrCancel or Intent.ThanksOrClosing:
+                case Intent.HumanRequest or Intent.RescheduleOrCancel or Intent.ThanksOrClosing or Intent.OffTopic:
                     Answer(turnClass);
                     break;
                 case Intent.OfficeInfo:
@@ -896,9 +926,18 @@ public sealed class HazemResponder(
                 case Intent.ConsultationRequest:
                     Offer();
                     break;
+                case Intent.LegalQuestion when UrfWaitsForTime:
+                case Intent.Other when UrfWaitsForTime:
+                    // v1.22: a question while the Urfi times are on the screen: the lawyer explains it at that
+                    // appointment; no second offer (its buttons would replace the Urfi times).
+                    plan.Say(TextKeys.UrfQuestionLater);
+                    break;
                 case Intent.LegalQuestion:
                     plan.Say(TextKeys.LegalQuestion); // B-20, then the offer
                     Offer();
+                    break;
+                case Intent.OffTopic:
+                    plan.Say(TextKeys.OffTopic); // v1.22: no office task, no offer
                     break;
                 case Intent.DescribeMatter:
                     // B-25: the client told the topic. After the question: «تمام، وصلت ✅» only.
@@ -1024,6 +1063,21 @@ public sealed class HazemResponder(
         /// </summary>
         private void AnswerOffice(InfoTopic? topic, bool existingClient = false)
         {
+            // v1.22: who Hazem is (alone), and whether the office does one specific thing (the office answers: a task,
+            // never a guess). Neither depends on a matter, so no offer after them.
+            if (topic == InfoTopic.Assistant)
+            {
+                plan.Say(TextKeys.AboutHazem);
+                return;
+            }
+
+            if (topic == InfoTopic.ServiceCheck)
+            {
+                plan.Say(TextKeys.ServiceCheck);
+                plan.Task(PendingTask.ServiceQuestion);
+                return;
+            }
+
             (string Key, string[] Needs)? answer = topic switch
             {
                 InfoTopic.Address => (TextKeys.OfficeAddress, ["address", "map"]),
@@ -1034,6 +1088,7 @@ public sealed class HazemResponder(
                 InfoTopic.Prices => (TextKeys.OfficePrices, []),
                 InfoTopic.FeePolicy => (TextKeys.OfficeFeePolicy, []),
                 InfoTopic.PracticeAreas => (TextKeys.OfficePracticeAreas, []),
+                InfoTopic.Lawyer => (TextKeys.AboutLawyer, []), // v1.22: the owner's words, shortened (B-21)
                 _ => null, // mode: the offer itself says both ways and their prices
             };
             var answered = false;
@@ -1108,6 +1163,11 @@ public sealed class HazemResponder(
         /// </summary>
         private void Offer(bool askTopic = true)
         {
+            if (UrfWaitsForTime)
+            {
+                return; // v1.22: the Urfi times are waiting for a pick; a consultation offer would replace them
+            }
+
             var known = MayBook ? KindAsked() : null;
             if (MayBook && known is null)
             {
