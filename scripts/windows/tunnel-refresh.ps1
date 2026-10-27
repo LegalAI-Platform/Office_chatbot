@@ -23,6 +23,20 @@ if (-not $url) { Fail "could not read the tunnel URL (docker compose --profile t
 $expected = "$url/webhook/$InboundWebhookId/webhook"
 Write-Host "      $url"
 
+# A new Quick Tunnel hostname takes a little while to answer. Meta checks the callback the moment
+# n8n registers it, and a failed check is not retried by n8n, so wait until the link answers twice.
+Write-Host "      waiting for the link to answer..."
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+$ok = 0
+for ($i = 0; $i -lt 40 -and $ok -lt 2; $i++) {
+    try {
+        $r = Invoke-WebRequest -Uri "$url/healthz" -UseBasicParsing -TimeoutSec 10
+        if ($r.StatusCode -eq 200) { $ok++ } else { $ok = 0 }
+    } catch { $ok = 0 }
+    if ($ok -lt 2) { Start-Sleep -Seconds 3 }
+}
+if ($ok -lt 2) { Fail "the tunnel URL does not answer yet ($url/healthz); run tunnel-refresh again in a minute" }
+
 $current = Get-MetaCallbackUrl
 if ($current -eq $expected -and (Get-EnvValue 'WEBHOOK_URL') -eq "$url/") {
     Write-Host "Meta already points at $expected. Nothing to do."
@@ -53,5 +67,5 @@ if ($now -eq $expected) {
     Write-Host "OK  Meta webhook -> $now"
     Write-Host "Send a WhatsApp message to the test number and check app.wa_inbound_messages."
 } else {
-    Fail "Meta callback is '$now', expected '$expected'"
+    Fail "Meta callback is '$now', expected '$expected'. n8n does not retry a refused registration: run n8n-import, then tunnel-refresh again"
 }

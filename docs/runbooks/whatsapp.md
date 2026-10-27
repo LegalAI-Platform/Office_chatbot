@@ -14,8 +14,14 @@ Windows form shown (`scripts\windows\*.ps1`); Linux has the same names in `scrip
 Symptom: messages to the test number never reach `app.wa_webhook_events`.
 1. Run `tunnel-refresh`. It deletes the old subscription, points `WEBHOOK_URL` at the new URL,
    republishes `META-WA-INBOUND` (the trigger registers the new URL on start-up) and checks Meta.
-2. If step 7 fails: open n8n → `META-WA-INBOUND` → check it is published and has no errors;
-   run `META-WA-SUBSCRIPTION-CHECK` by hand and read `callback_url`.
+   Since 2026-10-27, step 3 waits until the new link answers (`/healthz` twice, up to about two
+   minutes), because Meta checks the callback the moment the trigger registers it.
+2. If step 7 fails (`Meta callback is ''`): Meta refused the registration, usually because the link did
+   not answer yet. n8n records it in `workflow_publication_outbox` («"WhatsApp Trigger": Bad request -
+   please check your parameters») and **does not retry**, not even after a restart or a re-publish of
+   the same version. Run `n8n-import` (new versions), then `tunnel-refresh` again. Otherwise: open
+   n8n → `META-WA-INBOUND` → check it is published and has no errors; run `META-WA-SUBSCRIPTION-CHECK`
+   by hand and read `callback_url`.
 
 ## After a `reset` (all data wiped)
 

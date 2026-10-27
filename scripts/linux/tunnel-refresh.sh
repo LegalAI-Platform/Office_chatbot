@@ -23,6 +23,20 @@ for _ in $(seq 1 30); do url="$(tunnel_url_from_logs)"; [[ -n "$url" ]] && break
 expected="$url/webhook/$INBOUND_WEBHOOK_ID/webhook"
 echo "      $url"
 
+# A new Quick Tunnel hostname takes a little while to answer. Meta checks the callback the moment
+# n8n registers it, and a failed check is not retried by n8n, so wait until the link answers twice.
+echo "      waiting for the link to answer..."
+ok=0
+for _ in $(seq 1 40); do
+  if [[ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$url/healthz" || true)" == "200" ]]; then
+    ok=$((ok + 1)); [[ $ok -ge 2 ]] && break
+  else
+    ok=0
+  fi
+  sleep 3
+done
+[[ $ok -ge 2 ]] || die "the tunnel URL does not answer yet ($url/healthz); run tunnel-refresh again in a minute"
+
 current="$(run_workflow WaSubCheck000001 | grep -oE '"callback_url": *"[^"]*"' | sed -E 's/.*"([^"]*)"$/\1/' || true)"
 if [[ "$current" == "$expected" && "$(env_value WEBHOOK_URL)" == "$url/" ]]; then
   echo "Meta already points at $expected. Nothing to do."
@@ -52,5 +66,5 @@ if [[ "$now_url" == "$expected" ]]; then
   echo "OK  Meta webhook -> $now_url"
   echo "Send a WhatsApp message to the test number and check app.wa_inbound_messages."
 else
-  die "Meta callback is '$now_url', expected '$expected'"
+  die "Meta callback is '$now_url', expected '$expected'. n8n does not retry a refused registration: run n8n-import, then tunnel-refresh again"
 fi
