@@ -124,6 +124,7 @@ Every script below exists in two versions: `scripts\windows\<name>.ps1` and
 | `chatwoot-setup` | Chatwoot's account, inbox, «حازم (النظام)» and Platform App from the `CHATWOOT_*` tokens; safe to run again (TASK 07b) |
 | `restore ...` | Restore a dump into a new database and verify it |
 | `reset` | **Deletes all data.** Only with `ENVIRONMENT=test` and after typing `RESET` |
+| `forget-number <number>` | **Test only.** Hazem forgets one number (backup first): its data, its bookings' Google Calendar events, its Chatwoot contact and Redis keys; it stays allowed ([docs/runbooks/whatsapp.md](docs/runbooks/whatsapp.md#forget-one-number-test-only)) |
 | `gen-secrets` | Print fresh random secrets (never edits `.env`) |
 
 ## Tunnel (HTTPS for the Meta webhook)
