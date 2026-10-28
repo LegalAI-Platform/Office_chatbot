@@ -255,7 +255,13 @@ Measure one provider with `classify-eval --provider anthropic` (no fallback insi
 | **Anthropic `claude-opus-5-5`** | set 251 | **98.0%** | 99.6% | 100% | 100% | 100% | 100% | 2.2 s | ~$4 (cached prompt) |
 | **Anthropic `claude-opus-5-5`** | hold-out 81 | **97.5%** | 100% | 100% | 100% | 100% | 100% | 2.2 s | |
 | **Anthropic `claude-opus-5-5`** | scope 60 | **100%** | 100% | 100% | 100% | | 100% | 2.1 s | |
+| Anthropic `claude-haiku-5-5` | set / hold-out / scope | 96.4% / 93.8% / 100% | 99.6% / 100% / 100% | 100% / 93.8% | 100% / 94.1% | 100% | 96.2% / 100% | 1.4 s | ~$0.3 |
 | OpenAI `gpt-4.1-mini` (v1.24) | set / hold-out / scope | 95.6% / 93.8% / 100% | | | | | | 1.1 s | $2.35 |
+
+**The owner chose Opus 5.5** (2026-10-28, «نفضل على Opus»). Haiku 5.5 is close on the numbers and ~15× cheaper, but missed
+what costs the office most: an arrest told without «urgent» (197 «جوزي في الحجز من امبارح» → describe_matter), «msta3gel
+gedan» (57 → other) and a real alimony question in Franco-Arabic put outside (84 → off_topic, a client refused). Opus missed
+none of those. A conversation costs about $0.06–0.15 with Opus (the cache is written again after 5 quiet minutes).
 
 The set's misses: 48 and 192 (a service or a booking asked as a question → office_info), 67 (an Urfi price → the service),
 138 (an ad question → office_info) and 230 «بحبك» → off_topic (the pending abuse fix). The Anthropic key made on
