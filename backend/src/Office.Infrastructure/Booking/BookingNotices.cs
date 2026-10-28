@@ -19,6 +19,8 @@ namespace Office.Infrastructure.Booking;
 /// from WhatsApp is off.</item>
 /// <item>B-08.6 (1.13): the one reminder before a hold runs out, and the hold that ran out (hazem.booking_due).</item>
 /// <item>B-05 / B-22: partial, not received (an office person's review) and the refund done.</item>
+/// <item>1.25 (B-08): «تمام» on the transfer: «تم تأكيد…», with where the lawyer calls or where the office is; and an
+/// urgent task for a transfer nobody reviewed when its appointment is soon (the time stays the client's).</item>
 /// </list>
 /// A send that fails, outside the 24-hour window too (P5), becomes a task (booking_message_failed). Each is told once.
 /// </summary>
@@ -33,6 +35,7 @@ public sealed class BookingNotices(HazemDbContext db, BookingStore store, Bookin
         await db.Database.SqlQuery<string>($"""
             SELECT hazem.booking_due({HoldRules.ReminderBeforeMinutes}, {HoldRules.RemindedHold})::text AS "Value"
             """).SingleAsync(ct);
+        await AlertUnreviewedAsync(ct);
 
         var due = await (from a in db.Appointments.AsNoTracking()
                          join p in db.Persons.AsNoTracking() on a.PersonId equals p.Id
@@ -95,6 +98,7 @@ public sealed class BookingNotices(HazemDbContext db, BookingStore store, Bookin
                     ["rest"] = BookingWords.Money(pay.AmountDue - (pay.AmountReceived ?? 0)),
                 }, pay.ReviewedAt),
                 "payment_not_received" => (TextKeys.PaymentNotReceived, When(a, now), pay.ReviewedAt),
+                "payment_verified" => Confirmation(a, booking.Office, now, pay.ReviewedAt),
                 _ => (TextKeys.RefundCompleted, new Dictionary<string, string>
                 {
                     ["amount"] = BookingWords.Money(pay.RefundDue ?? 0),
@@ -127,7 +131,7 @@ public sealed class BookingNotices(HazemDbContext db, BookingStore store, Bookin
         var service = BookingService.ByCode(a.Service) ?? BookingService.PhoneVideo;
         var found = await desk.FindAsync(booking, settings, service, now, now, service.IsUrgent ? BookingDesk.Today(now) : null,
             booking.Rules.OfferCount, null, ct);
-        var rows = found.Slots.Select(s => new ReplyChoice(BookingChoice.Pick(service, s.Start), Title: BookingWords.Row(s.Start, now))).ToList();
+        var rows = found.Slots.Select(s => new ReplyChoice(BookingChoice.Pick(service, s.Start, a.CallApp), Title: BookingWords.Row(s.Start, now))).ToList();
         if (paid)
         {
             rows.Add(new ReplyChoice(BookingChoice.Refund(a.Id), TextKeys.BtnRefund));
@@ -137,6 +141,53 @@ public sealed class BookingNotices(HazemDbContext db, BookingStore store, Bookin
         return paid
             ? new ReplyStep(TextKeys.BookingCancelledByOffice, null, null, choices)
             : new ReplyStep(TextKeys.BookingOfficeUnpaid, null, When(a, now), choices);
+    }
+
+    /// <summary>
+    /// 1.25 (B-08): «تم تأكيد…» after «تمام»: a call says where the lawyer calls, the office (and an Urfi appointment) where it
+    /// is and its phone. A detail missing keeps the text from going: the office then gets booking_message_failed.
+    /// </summary>
+    private static (string Key, Dictionary<string, string> Fill, DateTimeOffset? At) Confirmation(AppointmentRow a, OfficeInfo office,
+        DateTimeOffset now, DateTimeOffset? at)
+    {
+        var fill = When(a, now);
+        var service = BookingService.ByCode(a.Service) ?? BookingService.PhoneVideo;
+        if (service.IsUrf || service.Code == BookingService.Office.Code)
+        {
+            Put(fill, "address", office.Address);
+            Put(fill, "map", office.MapUrl);
+            Put(fill, "office_phone", office.Phone);
+            return (TextKeys.BookingConfirmedOffice, fill, at);
+        }
+
+        Put(fill, "call_app", CallApp.Words(a.CallApp, office));
+        return (TextKeys.BookingConfirmedCall, fill, at);
+    }
+
+    private static void Put(Dictionary<string, string> fill, string slot, string? value)
+    {
+        if (value?.Trim() is { Length: > 0 } v)
+        {
+            fill[slot] = v;
+        }
+    }
+
+    /// <summary>1.25 (B-08): a confirmed appointment starting soon whose transfer is still waiting for its review.</summary>
+    private async Task AlertUnreviewedAsync(CancellationToken ct)
+    {
+        var now = clock.GetUtcNow();
+        var settings = await settingsReader.GetAsync(ct);
+        var minutes = int.TryParse(settings.Get(BookingSettings.ReviewAlertKey), out var m) && m > 0 ? m : BookingSettings.DefaultReviewAlertMinutes;
+        var soon = now.AddMinutes(minutes);
+        var late = await (from a in db.Appointments.AsNoTracking()
+                          join pay in db.Payments.AsNoTracking() on (Guid?)a.Id equals pay.AppointmentId
+                          where a.State == AppointmentInfo.Confirmed && a.StartsAt > now && a.StartsAt <= soon
+                                && (pay.State == PaymentInfo.ProofReceived || pay.State == PaymentInfo.DuplicateSuspected)
+                          select new { a.Id, a.PersonId }).Take(Batch).ToListAsync(ct);
+        foreach (var x in late)
+        {
+            await store.AddTaskAsync(x.PersonId, $"booking:{x.Id:N}:review", PendingTask.PaymentReviewDue, now, ct);
+        }
     }
 
     private static Dictionary<string, string> When(AppointmentRow a, DateTimeOffset now) => new()

@@ -10,6 +10,8 @@ export interface Appointment {
   calendar: string; hold_until: string | null; payment: string | null;
   /** TASK 12 (B-18): «هحضر ✅» for this time, and the reminders of this time. */
   attending: boolean; reminders: Reminder[];
+  /** 1.25 (B-23): where the lawyer calls (a phone or video consultation). */
+  call_app: "whatsapp" | "facetime" | "meet" | null;
 }
 export interface Reminder {
   kind: "day_before" | "two_hours"; state: "scheduled" | "sending" | "sent" | "failed" | "skipped" | "cancelled";
@@ -20,7 +22,11 @@ export interface Settings {
   calendar_id: string; calendar_key: boolean; texts_approved: boolean;
   hold_minutes: number; hold_short_minutes: number; hold_short_within_hours: number; hold_gap_minutes: number; urf_minutes: number;
 }
-export interface Office { instapay: string; wallet_number: string; wallet_provider: string; address: string; map_url: string }
+export interface Office {
+  instapay: string; wallet_number: string; wallet_provider: string; address: string; map_url: string;
+  /** 1.25: the lawyer's fixed Google Meet link, and the office's phone in the office confirmation. */
+  meet_link: string | null; phone: string | null;
+}
 export interface Change { id: number; at: string; what: string; by: string | null; undone: boolean }
 export interface Preview { calendar: "ok" | "unavailable" | "not_configured"; slots: string[] }
 export interface Done { cancelled: number }

@@ -28,6 +28,7 @@ export const TASK_TYPES: Record<string, string> = {
   reminder_failed: "تذكير ما وصلش: فكّر العميل بالتليفون",
   office_info_missing: "عميل سأل عن المكتب ومعلومته مش مكتوبة: اكتب العنوان والخريطة وأرقام الدفع (المواعيد ← بيانات المكتب) أو أيام الاستشارات",
   service_question: "عميل بيسأل المكتب بيعمل خدمة معيّنة ولا لأ: رد عليه",
+  payment_review_due: "الميعاد قرّب والتحويل لسه ما اتراجعش: راجعه دلوقتي (الإيصالات والمدفوعات)",
 };
 
 /** TASK 12 (B-18): the reminders before a confirmed appointment. */
@@ -70,6 +71,13 @@ export const BOOKING_SERVICES: Record<string, string> = {
   urf_marriage_own: "عقد عرفي (شهودهم)",
   urf_divorce_office: "طلاق عرفي (شهود المكتب)",
   urf_divorce_own: "طلاق عرفي (شهودهم)",
+};
+
+/** 1.25 (B-23): where the lawyer calls for a phone or video consultation. */
+export const CALL_APPS: Record<string, string> = {
+  whatsapp: "واتساب",
+  facetime: "FaceTime",
+  meet: "Google Meet",
 };
 
 export const APPOINTMENT_STATES: Record<string, string> = {

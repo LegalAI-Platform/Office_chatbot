@@ -14,7 +14,7 @@ const staff: Me = {
 const settings = { enabled: true, buffer_minutes: 10, min_notice_hours: 2, horizon_days: 14, max_per_day: null, slot_step_minutes: 15, offer_count: 4, calendar_id: "lawyer@example.test", calendar_key: true, texts_approved: true, hold_minutes: 120, hold_short_minutes: 60, hold_short_within_hours: 6, hold_gap_minutes: 15 };
 const day = (d: string, over: object = {}) => ({ day: d, status: "open", hours: [{ start: 600, end: 1440 }], bookings: 0, exceptions: [], ...over });
 const month = Array.from({ length: 30 }, (_, i) => day(`2026-11-${String(i + 1).padStart(2, "0")}`, i === 19 ? { bookings: 1 } : {}));
-const appointment = { id: "a1", service: "consultation_phone_video", start: "2026-11-20T10:00:00Z", end: "2026-11-20T10:15:00Z", state: "confirmed", name: "محمد أحمد علي حسن", wa_id: "201000000091", matter_type: null, reschedules: 0, calendar: "synced", hold_until: null, payment: "proof_received", attending: false, reminders: [] };
+const appointment = { id: "a1", service: "consultation_phone_video", start: "2026-11-20T10:00:00Z", end: "2026-11-20T10:15:00Z", state: "confirmed", name: "محمد أحمد علي حسن", wa_id: "201000000091", matter_type: null, reschedules: 0, calendar: "synced", hold_until: null, payment: "proof_received", attending: false, reminders: [], call_app: "facetime" };
 
 type Answer = { status?: number; body?: unknown };
 

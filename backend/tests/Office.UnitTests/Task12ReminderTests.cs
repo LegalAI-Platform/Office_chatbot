@@ -96,6 +96,23 @@ public sealed class ReminderRulesTests
     }
 
     [Fact]
+    public void The_call_says_where_the_lawyer_calls_and_meet_waits_for_its_link() // 1.25 (B-23)
+    {
+        var office = new OfficeInfo("", "", "", "", "", MeetLink: "https://meet.google.com/abc-defg-hij");
+        Assert.Equal("FaceTime على نفس الرقم ده", ReminderTexts.Details(BookingService.PhoneVideo, office, null, CallApp.FaceTime).Fill["call_app"]);
+        Assert.Equal("واتساب على نفس الرقم ده", ReminderTexts.Details(BookingService.Urgent, office, null, null).Fill["call_app"]);
+        Assert.Equal("لينك Google Meet ده: https://meet.google.com/abc-defg-hij",
+            ReminderTexts.Details(BookingService.PhoneVideo, office, null, CallApp.Meet).Fill["call_app"]);
+        Assert.False(ReminderTexts.Details(BookingService.PhoneVideo, office with { MeetLink = "" }, null, CallApp.Meet).Fill.ContainsKey("call_app"));
+
+        var pick = BookingChoice.Pick(BookingService.PhoneVideo, At(20, 12), CallApp.Meet);
+        Assert.Equal(('s', CallApp.Meet), (BookingChoice.Parse(pick)!.Kind, BookingChoice.Parse(pick)!.App));
+        Assert.Equal(CallApp.FaceTime, BookingChoice.Parse("bk:v:ft")!.App);
+        Assert.Null(BookingChoice.Parse("bk:v:zz"));
+        Assert.Null(BookingChoice.Parse(BookingChoice.Pick(BookingService.PhoneVideo, At(20, 12)))!.App); // a list from before 1.25
+    }
+
+    [Fact]
     public void The_calendar_event_shows_i_will_come_for_the_current_time_only()
     {
         var a = new Office.Infrastructure.Persistence.AppointmentRow

@@ -67,6 +67,8 @@ public sealed class HazemResponder(
         TextKeys.BookingHoldOne, TextKeys.BookingHoldCancelled, TextKeys.BookingOfficeUnpaid, TextKeys.ReceiptSendImage,
         TextKeys.ProofReceivedAgain, TextKeys.PaymentPartial, TextKeys.PaymentNotReceived, TextKeys.RefundFull, TextKeys.RefundNone,
         TextKeys.RefundCompleted,
+        TextKeys.AskCallApp, TextKeys.BtnAppWhatsApp, TextKeys.BtnAppFaceTime, TextKeys.BtnAppMeet, // 1.25 (B-23)
+        TextKeys.BookingConfirmedCall, TextKeys.BookingConfirmedOffice,
     ];
 
     public const string ResponderName = "hazem";
@@ -447,9 +449,11 @@ public sealed class HazemResponder(
             WordsToOffice();
             work = choice.Kind switch
             {
+                'm' when choice.Service == BookingService.PhoneVideo => new AskCallApp(), // 1.25 (B-23): where the lawyer calls
                 'm' => new OfferTimes(choice.Service!, null, TextKeys.BookingChooseSlot, null),
-                's' => new PickTime(choice.Service!, choice.At!.Value),
-                'n' => new OfferTimes(choice.Service!, choice.At, TextKeys.BookingChooseSlot, null),
+                'v' => new OfferTimes(BookingService.PhoneVideo, null, TextKeys.BookingChooseSlot, null, App: choice.App),
+                's' => new PickTime(choice.Service!, choice.At!.Value, choice.App),
+                'n' => new OfferTimes(choice.Service!, choice.At, TextKeys.BookingChooseSlot, null, App: choice.App),
                 'r' => new StartChange(choice.AppointmentId!.Value),
                 't' => new ChangeTo(choice.AppointmentId!.Value, choice.At!.Value),
                 'u' => new MoreChanges(choice.AppointmentId!.Value, choice.At!.Value),
@@ -1190,7 +1194,8 @@ public sealed class HazemResponder(
 
             if (known is not null)
             {
-                work = new OfferTimes(known, null, TextKeys.BookingChooseSlot, null);
+                // 1.25 (B-23): a phone or video consultation first asks where the lawyer calls.
+                work = known == BookingService.PhoneVideo ? new AskCallApp() : new OfferTimes(known, null, TextKeys.BookingChooseSlot, null);
             }
 
             Check(Intake.MoveTo(IntakeState.OfferSent));
@@ -1226,11 +1231,14 @@ public sealed class HazemResponder(
 
             switch (work)
             {
+                case AskCallApp:
+                    AskApp(b);
+                    break;
                 case OfferTimes o:
-                    await OfferTimesAsync(desk, b, settings, o.Service, o.After ?? plan.Now, o.IntroKey, o.Moving, ct, o.Fill);
+                    await OfferTimesAsync(desk, b, settings, o.Service, o.After ?? plan.Now, o.IntroKey, o.Moving, ct, o.Fill, o.App);
                     break;
                 case PickTime p:
-                    await PickAsync(desk, b, settings, p.Service, p.At, ct);
+                    await PickAsync(desk, b, settings, p.Service, p.At, ct, p.App);
                     break;
                 case ShowExisting s:
                     await ShowExistingAsync(desk, s.Id, ct);
@@ -1286,6 +1294,10 @@ public sealed class HazemResponder(
 
             switch (outcome.Status)
             {
+                case ReceiptStatus.Exists when a.State == AppointmentInfo.Confirmed
+                                               && await desk.PaymentAsync(a.Id, ct) is { State: PaymentInfo.Verified }:
+                    plan.Say(TextKeys.ProofReceivedAgain); // 1.25: already confirmed after the review, not «waiting» again
+                    break;
                 case ReceiptStatus.Confirmed or ReceiptStatus.ConfirmedLate:
                 case ReceiptStatus.Exists when a.State == AppointmentInfo.Confirmed:
                     plan.Say(TextKeys.BookingPaid, Fill: Describe(a));
@@ -1297,7 +1309,7 @@ public sealed class HazemResponder(
 
                     break;
                 case ReceiptStatus.LateTaken:
-                    await OfferTimesAsync(desk, b, settings, ServiceOf(a), plan.Now, TextKeys.BookingHoldLate, null, ct, Describe(a));
+                    await OfferTimesAsync(desk, b, settings, ServiceOf(a), plan.Now, TextKeys.BookingHoldLate, null, ct, Describe(a), a.CallApp);
                     break;
                 default:
                     plan.Say(TextKeys.ProofReceivedAgain);
@@ -1310,7 +1322,8 @@ public sealed class HazemResponder(
         /// offered (B-24) and the office gets a task. Urgent with nothing today → tomorrow (B-09.4).
         /// </summary>
         private async Task OfferTimesAsync(BookingDesk desk, BookingSettings b, HazemSettings settings, BookingService service,
-            DateTimeOffset after, string introKey, Guid? moving, CancellationToken ct, IReadOnlyDictionary<string, string>? fill = null)
+            DateTimeOffset after, string introKey, Guid? moving, CancellationToken ct, IReadOnlyDictionary<string, string>? fill = null,
+            string? app = null)
         {
             var now = plan.Now;
             var count = b.Rules.OfferCount;
@@ -1338,15 +1351,31 @@ public sealed class HazemResponder(
             }
 
             var rows = slots.Select(s => new ReplyChoice(
-                moving is { } m ? BookingChoice.MoveTo(m, s.Start) : BookingChoice.Pick(service, s.Start),
+                moving is { } m ? BookingChoice.MoveTo(m, s.Start) : BookingChoice.Pick(service, s.Start, app),
                 Title: BookingWords.Row(s.Start, now))).ToList();
             if (slots.Count == count && !service.IsUrgent)
             {
                 var last = slots[^1].Start;
-                rows.Add(new ReplyChoice(moving is { } m ? BookingChoice.MoreMoves(m, last) : BookingChoice.More(service, last), TextKeys.BtnMoreSlots));
+                rows.Add(new ReplyChoice(moving is { } m ? BookingChoice.MoreMoves(m, last) : BookingChoice.More(service, last, app), TextKeys.BtnMoreSlots));
             }
 
             plan.Ask(introKey, new ReplyChoices(InteractivePayload.List, rows, TextKeys.BtnSlotsList), Fill: fill);
+        }
+
+        /// <summary>1.25 (B-23): «تحب المكالمة تبقى على إيه؟» — Google Meet only once «بيانات المكتب» has its link.</summary>
+        private void AskApp(BookingSettings b)
+        {
+            List<ReplyChoice> apps =
+            [
+                new(BookingChoice.Call(CallApp.WhatsApp), TextKeys.BtnAppWhatsApp),
+                new(BookingChoice.Call(CallApp.FaceTime), TextKeys.BtnAppFaceTime),
+            ];
+            if (b.Office.MeetLink.Trim().Length > 0)
+            {
+                apps.Add(new(BookingChoice.Call(CallApp.Meet), TextKeys.BtnAppMeet));
+            }
+
+            plan.Ask(TextKeys.AskCallApp, new ReplyChoices(InteractivePayload.Buttons, apps));
         }
 
         /// <summary>
@@ -1354,10 +1383,12 @@ public sealed class HazemResponder(
         /// sent pays for it), or why not.
         /// </summary>
         private async Task PickAsync(BookingDesk desk, BookingSettings b, HazemSettings settings, BookingService service, DateTimeOffset at,
-            CancellationToken ct)
+            CancellationToken ct, string? app = null)
         {
+            // 1.25 (B-23): a call is WhatsApp unless the client picked another app (the urgent call always).
+            var callApp = service == BookingService.PhoneVideo ? app ?? CallApp.WhatsApp : service.IsUrgent ? CallApp.WhatsApp : null;
             var request = new BookRequest(Guid.NewGuid(), State.Person.Id, Intake.Id, service, at, turn.TurnId, b.Rules.BufferMinutes,
-                Intake.MatterType, b.Hold.Until(plan.Now, at));
+                Intake.MatterType, b.Hold.Until(plan.Now, at), callApp);
             var outcome = await desk.BookAsync(b, settings, request, plan.Now, ct);
             var a = outcome?.AppointmentId is { } id ? await OwnAsync(desk, id, ct) : null;
             if (service.IsUrf && a is { State: AppointmentInfo.PendingPayment or AppointmentInfo.Confirmed } && a.Service == service.Code
@@ -1386,7 +1417,7 @@ public sealed class HazemResponder(
                     await ShowExistingAsync(desk, outcome.AppointmentId, ct);
                     break;
                 default:
-                    await OfferTimesAsync(desk, b, settings, service, plan.Now, TextKeys.BookingSlotTaken, null, ct);
+                    await OfferTimesAsync(desk, b, settings, service, plan.Now, TextKeys.BookingSlotTaken, null, ct, app: app);
                     break;
             }
         }
@@ -1443,7 +1474,7 @@ public sealed class HazemResponder(
             if (a.State == AppointmentInfo.PendingPayment)
             {
                 // B-15 (1.13): a hold is not moved, it is replaced by the time he picks; not counted as the free change.
-                await OfferTimesAsync(desk, b, settings, ServiceOf(a), plan.Now, TextKeys.BookingChooseSlot, null, ct);
+                await OfferTimesAsync(desk, b, settings, ServiceOf(a), plan.Now, TextKeys.BookingChooseSlot, null, ct, app: a.CallApp);
                 return;
             }
 
@@ -1708,9 +1739,12 @@ public sealed class HazemResponder(
     private abstract record BookingWork;
 
     private sealed record OfferTimes(BookingService Service, DateTimeOffset? After, string IntroKey, Guid? Moving,
-        IReadOnlyDictionary<string, string>? Fill = null) : BookingWork;
+        IReadOnlyDictionary<string, string>? Fill = null, string? App = null) : BookingWork;
 
-    private sealed record PickTime(BookingService Service, DateTimeOffset At) : BookingWork;
+    private sealed record PickTime(BookingService Service, DateTimeOffset At, string? App = null) : BookingWork;
+
+    /// <summary>1.25 (B-23): «تحب المكالمة تبقى على إيه؟» before the times of a phone or video consultation.</summary>
+    private sealed record AskCallApp : BookingWork;
 
     private sealed record ShowExisting(Guid? Id) : BookingWork;
 

@@ -109,8 +109,12 @@ public static class ReminderTexts
 
     public static string TextKey(string kind) => kind == ReminderKinds.DayBefore ? TextKeys.ReminderDayBefore : TextKeys.Reminder2hBefore;
 
-    /// <summary>The details line: the office's address and map, the lawyer's call, or who comes to an Urfi appointment.</summary>
-    public static (string Key, Dictionary<string, string> Fill) Details(BookingService service, OfficeInfo office, string? urfAttendees)
+    /// <summary>
+    /// The details line: the office's address and map, the lawyer's call and where (1.25: WhatsApp, FaceTime or the Meet
+    /// link), or who comes to an Urfi appointment.
+    /// </summary>
+    public static (string Key, Dictionary<string, string> Fill) Details(BookingService service, OfficeInfo office, string? urfAttendees,
+        string? callApp = null)
     {
         var place = new Dictionary<string, string>();
         if (office.Address.Trim().Length > 0)
@@ -133,6 +137,17 @@ public static class ReminderTexts
             return (TextKeys.ReminderDetailsUrf, place);
         }
 
-        return service.Code == BookingService.Office.Code ? (TextKeys.ReminderDetailsOffice, place) : (TextKeys.ReminderDetailsPhone, []);
+        if (service.Code == BookingService.Office.Code)
+        {
+            return (TextKeys.ReminderDetailsOffice, place);
+        }
+
+        var call = new Dictionary<string, string>();
+        if (CallApp.Words(callApp, office) is { } words)
+        {
+            call["call_app"] = words;
+        }
+
+        return (TextKeys.ReminderDetailsPhone, call);
     }
 }

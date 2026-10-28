@@ -108,7 +108,13 @@ public static class TextKeys
     // Proposed in TASK 09 (DECISIONS v1.13: the hold until the receipt; inactive until approved).
     public const string BookingHold = "booking_hold";                       // B-08.4
     public const string BookingHoldReminder = "booking_hold_reminder";      // B-08.6, the worker
-    public const string BookingPaid = "booking_paid";                       // B-08.5: the receipt confirmed it
+    public const string BookingPaid = "booking_paid";                       // B-08.5: the receipt keeps the time (1.25: until the review)
+    public const string BookingConfirmedCall = "booking_confirmed_call";     // 1.25: «تمام» on the transfer, a phone or video call (the worker)
+    public const string BookingConfirmedOffice = "booking_confirmed_office"; // 1.25: «تمام» on the transfer, a meeting at the office
+    public const string AskCallApp = "ask_call_app";                        // 1.25 (B-23): WhatsApp, FaceTime or Google Meet
+    public const string BtnAppWhatsApp = "btn_app_whatsapp";
+    public const string BtnAppFaceTime = "btn_app_facetime";
+    public const string BtnAppMeet = "btn_app_meet";
     public const string BookingHoldExpired = "booking_hold_expired";        // B-08.6, the worker
     public const string BookingHoldLate = "booking_hold_late";              // B-05: receipt after the time, taken
     public const string BookingHoldOne = "booking_hold_one";                // P3
