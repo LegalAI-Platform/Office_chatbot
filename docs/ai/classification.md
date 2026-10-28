@@ -35,9 +35,9 @@ fields. It never writes a word the client sees: every reply is an approved text
 
 - OpenAI Chat Completions, **Structured Outputs** (`response_format: json_schema`, `strict: true`,
   `additionalProperties: false`, every field required, enums = the lists above), `temperature: 0`.
-- Prompt: `backend/src/Office.Infrastructure/Ai/prompts/classify-v9.md` (v1..v8 kept as history), embedded in the build.
-  Its version (`classify-v9`) is saved with every classification. **Change the prompt = a new
-  file (`classify-v10.md` next) and a new `PromptVersion`**, then run `classify-eval` again.
+- Prompt: `backend/src/Office.Infrastructure/Ai/prompts/classify-v10.md` (v1..v9 kept as history), embedded in the build.
+  Its version (`classify-v10`) is saved with every classification. **Change the prompt = a new
+  file (`classify-v11.md` next) and a new `PromptVersion`**, then run `classify-eval` again.
 - Model: `OPENAI_MODEL`. Empty = `gpt-4.1-mini`, **a starting point only**. The final model is
   chosen by the owner after `classify-eval` (T-08).
 - Key: `HAZEM_OPENAI_API_KEY` in `.env` — the .NET key, separate from n8n's voice key. It may be
@@ -212,3 +212,31 @@ file was used only to check that the principle generalizes. Sample 230 «بحب�
 Every government-paper sample is right in both sets, and 4 of the 5 hold-out flirting messages (1072 «عندك كام سنة
 وشكلك ايه» → office_info is left). Other misses are the borderline ones of v8 plus 179 (a colleague's existing case →
 legal_question), 1056 (a complaint → describe_matter) and 1081 (alimony → service_by_name: the same offer either way).
+
+### v1.24: the subject and the scope come first (`classify-v10`, 2026-10-28)
+
+A test message «عايز أحجز كشف عند دكتور» got a consultation offer (consultation_request, 0.90). The owner: not a fix for
+this one case. The answer now starts with `subject` (a few English words: what the turn is about and who is asked to do
+it; never read or kept) and `scope` (`office` / `outside`), before the intent. `Classification.From` turns a client's
+`outside` into off_topic whatever the intent (not abusive, not a colleague, the press or a vendor); a missing or
+unknown scope is `office`. The prompt states principles, not a list of professions: words like «أحجز»، «كشف»، «بكام» are
+not the subject; the one who does the service is the one the client names; the office sells and rents nothing; a legal
+problem about any field is office; when in doubt, office. A probe showed why v10's first draft still failed: its subject
+read «دكتور» as the lawyer; the "one the client names" rule fixed that.
+
+`docs/ai/eval-scope.jsonl` is new: 2001–2040 (25 outside, 15 legal messages that mention a doctor, a bank, a school…),
+written before any v10 draft and none in the prompt; 3001–3020 were written after the last prompt change and run once.
+`scope` accuracy is scored on every sample but abuse (outside exactly for off_topic samples).
+
+| Prompt | Samples | Intent | Scope | Service | Matter | Sender role | Info topic |
+|---|---|---|---|---|---|---|---|
+| `classify-v9` | scope 2001–2040 | 77.5% (9 outside missed, 4 of them got an offer or a price) | | | | | |
+| **`classify-v10`** (in use) | scope 2001–2040 | **100%** | **100%** | 100% | 100% | | |
+| **`classify-v10`** | scope 3001–3020 (run once) | **100%** | **100%** | | | | |
+| **`classify-v10`** | set 251 | 95.6% (v9 96.0%) | 99.2% | **100%** | 97.3% | **100%** | 96.2% |
+| **`classify-v10`** | hold-out 81 | **93.8%** (= v9) | **100%** | **100%** | **100%** | **100%** | **100%** |
+
+About 2.35 USD per 1000 turns with gpt-4.1-mini, ~1.1 s each. The set's misses are the borderline ones of v9 plus 92, 98
+(existing matters) and 138/183 (ads: one asked, one offered). An earlier draft put the press and vendors outside (the
+set's 180–183, hold-out 1055): the scope now names anyone writing TO the office as office, and the code guard never
+turns a colleague, the press or a vendor away.

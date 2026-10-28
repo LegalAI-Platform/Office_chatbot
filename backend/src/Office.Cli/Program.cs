@@ -257,7 +257,7 @@ async Task<JsonNode> ClassifyEval()
     var confusion = new SortedDictionary<string, SortedDictionary<string, int>>(StringComparer.Ordinal);
     var failures = new SortedDictionary<string, int>(StringComparer.Ordinal);
     int total = 0, correct = 0, serviceChecked = 0, serviceCorrect = 0, matterChecked = 0, matterCorrect = 0, roleChecked = 0, roleCorrect = 0,
-        topicChecked = 0, topicCorrect = 0;
+        topicChecked = 0, topicCorrect = 0, scopeChecked = 0, scopeCorrect = 0;
     var otherMistakes = new JsonArray();
     long latency = 0, inputTokens = 0, outputTokens = 0;
     var mistakes = new JsonArray();
@@ -308,6 +308,21 @@ async Task<JsonNode> ClassifyEval()
             else
             {
                 otherMistakes.Add(new JsonObject { ["id"] = sample["id"]?.DeepClone(), ["field"] = "matter_type", ["expected"] = matter, ["got"] = gotMatter });
+            }
+        }
+
+        // v1.24: the scope the model gave, on every sample but abuse: outside exactly for off_topic samples.
+        if (expected != "abusive" && outcome.Answer is { } answer)
+        {
+            scopeChecked++;
+            var scope = expected == "off_topic" ? "outside" : "office";
+            if (answer.Scope == scope)
+            {
+                scopeCorrect++;
+            }
+            else
+            {
+                otherMistakes.Add(new JsonObject { ["id"] = sample["id"]?.DeepClone(), ["field"] = "scope", ["expected"] = scope, ["got"] = answer.Scope });
             }
         }
 
@@ -381,6 +396,7 @@ async Task<JsonNode> ClassifyEval()
         ["matter_accuracy"] = matterChecked == 0 ? null : Math.Round((double)matterCorrect / matterChecked, 3),
         ["sender_role_accuracy"] = roleChecked == 0 ? null : Math.Round((double)roleCorrect / roleChecked, 3),
         ["info_topic_accuracy"] = topicChecked == 0 ? null : Math.Round((double)topicCorrect / topicChecked, 3),
+        ["scope_accuracy"] = scopeChecked == 0 ? null : Math.Round((double)scopeCorrect / scopeChecked, 3),
         ["other_mistakes"] = otherMistakes,
     };
     if (double.TryParse(Option("--input-price"), System.Globalization.CultureInfo.InvariantCulture, out var inPrice)

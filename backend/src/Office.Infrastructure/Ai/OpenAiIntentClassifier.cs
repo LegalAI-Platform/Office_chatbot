@@ -20,7 +20,7 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
 {
     public const string HttpClientName = "openai";
     /// <summary>The prompt in use: Ai/prompts/{PromptVersion}.md. Older versions stay in the folder as history.</summary>
-    public const string PromptVersion = "classify-v9";
+    public const string PromptVersion = "classify-v10";
     public const string StubEnabledKey = "ai.stub_enabled";
     public const string StubBaseUrlKey = "ai.stub_base_url";
 
@@ -123,7 +123,8 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
                 StringOrNull(o["matter_type"]),
                 StringOrNull(o["matter_subtype"]),
                 StringOrNull(o["sender_role"]),
-                StringOrNull(o["info_topic"])), null);
+                StringOrNull(o["info_topic"]),
+                StringOrNull(o["scope"])), null);
         }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException)
         {
@@ -178,10 +179,14 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
         {
             ["type"] = "object",
             ["additionalProperties"] = false,
-            ["required"] = new JsonArray("intent", "service", "consultation_mode", "full_name", "confidence",
+            ["required"] = new JsonArray("subject", "scope", "intent", "service", "consultation_mode", "full_name", "confidence",
                 "matter_type", "matter_subtype", "sender_role", "info_topic"),
+            // v1.24: subject and scope come first, so the model names what the turn is about before it picks an
+            // intent. The subject is a few words for that only: it is never read, kept or logged.
             ["properties"] = new JsonObject
             {
+                ["subject"] = new JsonObject { ["type"] = "string" },
+                ["scope"] = new JsonObject { ["type"] = "string", ["enum"] = Codes<Scope>(false) },
                 ["intent"] = new JsonObject { ["type"] = "string", ["enum"] = Codes<Intent>(false) },
                 ["service"] = new JsonObject { ["type"] = new JsonArray("string", "null"), ["enum"] = Codes<Service>(true) },
                 ["consultation_mode"] = new JsonObject { ["type"] = "string", ["enum"] = Codes<ConsultationMode>(false) },

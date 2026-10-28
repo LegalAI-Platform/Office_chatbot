@@ -1,0 +1,60 @@
+{"id":2001,"text":"عايز أحجز كشف عند دكتور","intent":"off_topic"}
+{"id":2002,"text":"محتاج دكتور أسنان شاطر","intent":"off_topic"}
+{"id":2003,"text":"عايز أعمل تحاليل دم فين","intent":"off_topic"}
+{"id":2004,"text":"الصيدلية بتاعتكم فيها دوا الضغط؟","intent":"off_topic"}
+{"id":2005,"text":"عربيتي عطلانة محتاج ميكانيكي","intent":"off_topic"}
+{"id":2006,"text":"عايز سباك ييجي البيت النهارده","intent":"off_topic"}
+{"id":2007,"text":"ممكن أحجز ترابيزة لأربعة الساعة 9","intent":"off_topic"}
+{"id":2008,"text":"عايز أحجز أوضة في فندق في شرم","intent":"off_topic"}
+{"id":2009,"text":"عايز أقدم لابني في مدرسة لغات","intent":"off_topic"}
+{"id":2010,"text":"إزاي آخد قرض من البنك؟","intent":"off_topic"}
+{"id":2011,"text":"عايز أشحن كارت فودافون","intent":"off_topic"}
+{"id":2012,"text":"عندكم شقق للبيع في التجمع؟","intent":"off_topic"}
+{"id":2013,"text":"عايز أشترك في الجيم","intent":"off_topic"}
+{"id":2014,"text":"محتاج مدرس رياضة لبنتي","intent":"off_topic"}
+{"id":2015,"text":"عايز أحجز قاعة فرح","intent":"off_topic"}
+{"id":2016,"text":"ممكن أطلب بيتزا","intent":"off_topic"}
+{"id":2017,"text":"سعر الآيفون الجديد كام؟","intent":"off_topic"}
+{"id":2018,"text":"عايز أأجر عربية يومين","intent":"off_topic"}
+{"id":2019,"text":"محتاج كهربائي يصلح النور","intent":"off_topic"}
+{"id":2020,"text":"عايز أعمل عملية تجميل","intent":"off_topic"}
+{"id":2021,"text":"الكشف عند الدكتور بكام؟","intent":"off_topic"}
+{"id":2022,"text":"عايز ميعاد عند دكتور العظام","intent":"off_topic"}
+{"id":2023,"text":"محتاج مهندس يصمملي فيلا","intent":"off_topic"}
+{"id":2024,"text":"عايز أحجز في الكوافير","intent":"off_topic"}
+{"id":2025,"text":"ممكن تحجزلي تذكرة ماتش الأهلي","intent":"off_topic"}
+{"id":2026,"text":"عايز أحجز كشف","intent":"consultation_request"}
+{"id":2027,"text":"الكشف عندكم بكام؟","intent":"price_question"}
+{"id":2028,"text":"عايز ميعاد مع الأستاذ","intent":"consultation_request"}
+{"id":2029,"text":"ممكن أحجز بكرة؟","intent":"consultation_request"}
+{"id":2030,"text":"الدكتور غلط في العملية وعايز أرفع عليه قضية","intent":"service_by_name","service":"case_representation"}
+{"id":2031,"text":"عملت حادثة بالعربية والتأمين مش راضي يدفع","intent":"describe_matter","matter_type":"civil_compensation"}
+{"id":2032,"text":"البنك بيطالبني بفلوس مش عليا وعايز أعرف حقي إيه","intent":"legal_question"}
+{"id":2033,"text":"الميكانيكي خد الفلوس وما صلحش العربية وعايز أشتكيه","intent":"describe_matter","matter_type":"civil_compensation"}
+{"id":2034,"text":"عايز حد يراجعلي عقد شقة قبل ما أشتريها","intent":"service_by_name","service":"document_review","matter_type":"real_estate"}
+{"id":2035,"text":"صاحب الشركة فصلني من غير سبب","intent":"describe_matter","matter_type":"labor"}
+{"id":2036,"text":"محتاج تقرير طبي للقضية بتاعتي ولا لأ؟","intent":"legal_question"}
+{"id":2037,"text":"المدرسة رافضة ترجعلي المصاريف وعايز أرفع قضية","intent":"service_by_name","service":"case_representation"}
+{"id":2038,"text":"بكرة الساعة 5","intent":"other"}
+{"id":2039,"text":"أيوه","intent":"other"}
+{"id":2040,"text":"السمسار نصب عليا في شقة","intent":"describe_matter","matter_type":"real_estate"}
+{"id":3001,"text":"محتاج دكتورة نسا كويسة في المعادي","intent":"off_topic"}
+{"id":3002,"text":"عايز أعمل أشعة رنين","intent":"off_topic"}
+{"id":3003,"text":"ممكن ميعاد مع دكتور نفسي","intent":"off_topic"}
+{"id":3004,"text":"التكييف بتاعي بيسرّب مية محتاج فني","intent":"off_topic"}
+{"id":3005,"text":"عايز أحجز رحلة الغردقة","intent":"off_topic"}
+{"id":3006,"text":"فين أقرب بنزينة","intent":"off_topic"}
+{"id":3007,"text":"عندكم لابتوب مستعمل؟","intent":"off_topic"}
+{"id":3008,"text":"عايز أسجل في كورس انجليزي","intent":"off_topic"}
+{"id":3009,"text":"محتاج نجار يعملي دولاب","intent":"off_topic"}
+{"id":3010,"text":"ممكن تعملي سيرة ذاتية","intent":"off_topic"}
+{"id":3011,"text":"عايز أحجز ميعاد","intent":"consultation_request"}
+{"id":3012,"text":"المستشفى رفضت تستقبل أبويا ومات","intent":"describe_matter"}
+{"id":3013,"text":"الدكتور اللي عمل العملية ساب شاش جوه بطني عايز أعرف حقي","intent":"legal_question"}
+{"id":3014,"text":"شركة الطيران ضيعت الشنطة ومش راضيين يعوضوني","intent":"describe_matter","matter_type":"civil_compensation"}
+{"id":3015,"text":"عايز عقد إيجار للمحل","intent":"service_by_name","service":"contract_drafting","matter_type":"rent"}
+{"id":3016,"text":"الكشف بالتليفون ولا لازم أجي؟","intent":"office_info","info_topic":"mode"}
+{"id":3017,"text":"جاري بنى على أرضي","intent":"describe_matter","matter_type":"real_estate"}
+{"id":3018,"text":"المقاول خد الفلوس وهرب","intent":"describe_matter"}
+{"id":3019,"text":"عايز أكتب وصية","intent":"service_by_name"}
+{"id":3020,"text":"تمام موافق","intent":"thanks_or_closing"}
