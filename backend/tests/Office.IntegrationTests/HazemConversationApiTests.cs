@@ -86,7 +86,9 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
     {
         await Say("السلام عليكم");
         await Say("محمد أحمد علي حسن");
-        Assert.Equal(["الأستاذ هو اللي هيجاوب حضرتك على ده في الاستشارة.", Offer], Texts(await Say("ينفع أطلق؟")));
+        // v1.30: the services list came after the name (not the offer), so the topic question follows the offer here
+        Assert.Equal(["الأستاذ هو اللي هيجاوب حضرتك على ده في الاستشارة.", Offer, "ولو تحب، قولّي باختصار الموضوع عن إيه عشان الأستاذ يبقى عارفه."],
+            Texts(await Say("ينفع أطلق؟")));
     }
 
     [Fact]

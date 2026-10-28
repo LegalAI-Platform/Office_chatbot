@@ -141,9 +141,9 @@ public sealed class Task08ApiTests(TestDatabase db) : IAsyncLifetime
     {
         await BookingOn();
         var offer = await UpToTheOffer();
-        var buttons = offer.Single(a => (string?)a!["type"] == "send_interactive")!;
-        Assert.Equal("buttons", (string?)buttons["interactive"]!["kind"]);
-        Assert.Equal("bk:m:pv", (string?)buttons["interactive"]!["choices"]![0]!["id"]);
+        var menu = offer.Single(a => (string?)a!["type"] == "send_interactive")!; // v1.30: the services list after the name
+        Assert.Equal("list", (string?)menu["interactive"]!["kind"]);
+        Assert.Equal(("bk:m:pv", "ربع ساعة · 500 جنيه"), ((string?)menu["interactive"]!["choices"]![1]!["id"], (string?)menu["interactive"]!["choices"]![1]!["description"]));
 
         Assert.Equal("buttons", (string?)(await Press("bk:m:pv")).Single()!["interactive"]!["kind"]); // 1.25: where the lawyer calls
         var times = (await Press("bk:v:wa")).Single()!;
@@ -186,7 +186,8 @@ public sealed class Task08ApiTests(TestDatabase db) : IAsyncLifetime
     public async Task Without_the_switch_the_offer_is_the_old_text_and_nothing_is_booked()
     {
         var offer = await UpToTheOffer();
-        Assert.DoesNotContain(offer, a => (string?)a!["type"] == "send_interactive");
+        Assert.DoesNotContain(offer.Where(a => (string?)a!["type"] == "send_interactive").SelectMany(a => a!["interactive"]!["choices"]!.AsArray()),
+            c => ((string?)c!["id"])!.StartsWith("bk:", StringComparison.Ordinal)); // v1.30: the services list, without the booking's buttons
         Assert.Equal(0L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.appointments"));
     }
 

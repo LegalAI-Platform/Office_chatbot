@@ -154,7 +154,8 @@ public sealed class Task09ApiTests(TestDatabase db) : IAsyncLifetime
         await db.ExecAsync("UPDATE hazem.approved_texts SET active = false WHERE source = 'proposal TASK 09'");
         await Say("السلام عليكم");
         var offer = await Say("محمد أحمد علي حسن");
-        Assert.DoesNotContain(offer, a => (string?)a!["type"] == "send_interactive"); // the old text offer, nothing held
+        Assert.DoesNotContain(offer.Where(a => (string?)a!["type"] == "send_interactive").SelectMany(a => a!["interactive"]!["choices"]!.AsArray()),
+            c => ((string?)c!["id"])!.StartsWith("bk:", StringComparison.Ordinal)); // v1.30: the services list, without the booking's buttons
         var staff = await SignIn("yasmin", Permissions.Staff, "ياسمين");
         Assert.False((bool)(await staff.GetFromJsonAsync<JsonNode>("/api/panel/booking/settings", Ct))!["texts_approved"]!);
     }
