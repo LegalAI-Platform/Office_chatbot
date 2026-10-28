@@ -252,7 +252,8 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
         var decisions = await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.12.md"), Ct)
                         + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.16.md"), Ct)
                         + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.22.md"), Ct)
-                        + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.25.md"), Ct); // B-08 / B-23 / B-18 of 1.25
+                        + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.25.md"), Ct) // B-08 / B-23 / B-18 of 1.25
+                        + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.28.md"), Ct); // B-23's case offer of 1.28
         await using var c = new NpgsqlConnection(db.ApiConnectionString);
         await c.OpenAsync(Ct);
         await using var cmd = new NpgsqlCommand("SELECT key, text FROM hazem.approved_texts WHERE active AND source LIKE 'DECISIONS%'", c);
@@ -280,7 +281,7 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
             Assert.True(decisions.Contains(text, StringComparison.Ordinal), $"{r.GetString(0)} is not word for word in DECISIONS");
         }
 
-        Assert.Equal(48, count); // 8 (TASK 04) + B-04 question + the two B-25 texts (TASK 05a) + B-08 and B-22 (TASK 08) + B-11 (TASK 11) + B-18 (TASK 12) + B-11.1 (v1.20) + 9 greetings B-01.6 (v1.21) + 5 of v1.22 + 8 of v1.25
+        Assert.Equal(51, count); // 8 (TASK 04) + B-04 question + the two B-25 texts (TASK 05a) + B-08 and B-22 (TASK 08) + B-11 (TASK 11) + B-18 (TASK 12) + B-11.1 (v1.20) + 9 greetings B-01.6 (v1.21) + 5 of v1.22 + 8 of v1.25 + 3 of v1.28
     }
 
     [Fact]
