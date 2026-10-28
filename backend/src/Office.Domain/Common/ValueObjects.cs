@@ -53,10 +53,10 @@ public sealed partial record PersonName
     public bool IsFull => Parts >= FullNameParts;
 
     /// <summary>
-    /// A name is letters and spaces only (Arabic or Latin), 2 to 8 words. Anything else (digits,
-    /// a question, a sentence) is not taken as a name.
+    /// A name is letters and spaces only (Arabic or Latin), 2 to 8 words (v1.29: 1 to 8 when the AI extracted it as the
+    /// client's name). Anything else (digits, a question, a sentence) is not taken as a name.
     /// </summary>
-    public static bool TryParse(string? text, out PersonName name)
+    public static bool TryParse(string? text, out PersonName name, int minWords = 2)
     {
         name = new PersonName("", "", 0);
         if (string.IsNullOrWhiteSpace(text) || text.Length > MaxLength)
@@ -71,7 +71,7 @@ public sealed partial record PersonName
         }
 
         var words = normalized.Split(' ');
-        if (words.Length is < 2 or > 8)
+        if (words.Length < minWords || words.Length > 8)
         {
             return false;
         }

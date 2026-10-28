@@ -57,16 +57,15 @@ public sealed class Person
         (Source, SourceRaw, FirstSeenAt) = (source, raw, at);
     }
 
-    /// <summary>Records the name; true when it is a full (four-part) name.</summary>
+    /// <summary>
+    /// Records the name. v1.29 (the owner: «ثنائي رباعي براحته»): any name the client gives settles it, however many parts;
+    /// <see cref="FullNameProvided"/> keeps saying whether it is four-part (for the office).
+    /// </summary>
     public bool GiveName(PersonName name)
     {
         Name = name;
-        if (name.IsFull)
-        {
-            FullNameProvided = true;
-        }
-
-        return name.IsFull;
+        FullNameProvided = name.IsFull;
+        return true;
     }
 
     /// <summary>B-02: after the one extra ask, carry on with whatever name there is.</summary>

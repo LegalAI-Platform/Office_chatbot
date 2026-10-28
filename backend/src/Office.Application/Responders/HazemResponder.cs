@@ -102,7 +102,7 @@ public sealed class HazemResponder(
         {
             var person = Person.New(WaId.From(turn.WaId));
             // B-01.5: a listed existing client with a full name is a known number: no name question.
-            if (list.ExistingClient?.Name is { } listed && PersonName.TryParse(listed, out var name) && name.IsFull)
+            if (list.ExistingClient?.Name is { } listed && PersonName.TryParse(listed, out var name)) // v1.29: any listed name
             {
                 person.GiveName(name);
             }
@@ -877,11 +877,11 @@ public sealed class HazemResponder(
             i is Intent.ConsultationRequest or Intent.ServiceByName or Intent.PriceQuestion
                 or Intent.LegalQuestion or Intent.DescribeMatter;
 
-        /// <summary>B-02. True when Hazem can carry on (a full name, or the one extra ask is used up).</summary>
+        /// <summary>B-02. True when Hazem can carry on (v1.29: any name, or the one extra ask is used up).</summary>
         private bool HandleName(Classification turnClass)
         {
             PersonName? name = null;
-            if (turnClass.FullName is { } extracted && PersonName.TryParse(extracted, out var fromAi))
+            if (turnClass.FullName is { } extracted && PersonName.TryParse(extracted, out var fromAi, minWords: 1)) // v1.29: one name too
             {
                 name = fromAi;
             }
