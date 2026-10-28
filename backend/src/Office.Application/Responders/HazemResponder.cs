@@ -188,7 +188,23 @@ public sealed class HazemResponder(
                 }
             }
 
-            if (choice is not null)
+            // v1.30 (B-01.3): a row of the services list, read without the AI: the service's own flow (or «احكي مشكلتي»).
+            var servicePress = choice is null && urfButton is null && !urfAges && receipt is null && !askImage && documents is null
+                               && urfDocuments is null && flow.MayOrder ? ServiceRow.In(turn) : null;
+            if (servicePress is { } row)
+            {
+                if (row.IsTell)
+                {
+                    plan.Say(TextKeys.ServicesTell);
+                }
+                else
+                {
+                    flow = new Flow(turn, state, list, row.AsClassification, plan, settings.Flag(HandoffEnabledKey),
+                        bookingOn ? bookingSettings : null, servicesOn, urfOn, urfOpen, null, ageRefusal);
+                    flow.Respond(firstContact);
+                }
+            }
+            else if (choice is not null)
             {
                 // v1.22 (B-25): words typed with the press («أخويا عنده قضية قتل» + a time): the AI reads their topic only,
                 // for the booking and the lawyer's calendar; the press is still answered by code, never by the AI.
@@ -745,7 +761,7 @@ public sealed class HazemResponder(
                 }
                 else
                 {
-                    Offer(); // B-01.3: a new client gets the consultation offer
+                    ServicesMenu(); // B-01.3 (1.30): the office's services; the consultation offer when they cannot be ordered
                 }
 
                 AnswerMediaProblems();
@@ -1206,6 +1222,41 @@ public sealed class HazemResponder(
                 work = known == BookingService.PhoneVideo ? new AskCallApp() : new OfferTimes(known, null, TextKeys.BookingChooseSlot, null);
             }
 
+            Check(Intake.MoveTo(IntakeState.OfferSent));
+        }
+
+        /// <summary>
+        /// v1.30 (B-01.3): «اختار الخدمة… أو احكيلي الموضوع» with the office's services as a list. The two consultations are the
+        /// booking's own buttons (their times follow); the others start their flow without the AI (<see cref="ServiceRow"/>).
+        /// Without the booking the consultations ask the consultation offer; a sender who cannot order gets the offer alone.
+        /// </summary>
+        private void ServicesMenu()
+        {
+            if (!MayOrder)
+            {
+                Offer();
+                return;
+            }
+
+            List<ReplyChoice> rows = MayBook
+                ?
+                [
+                    new(BookingChoice.Mode(BookingService.PhoneVideo), TextKeys.RowConsultPhone),
+                    new(BookingChoice.Mode(BookingService.Office), TextKeys.RowConsultOffice),
+                ]
+                : [new(ServiceRow.Id(ServiceRow.Consult), TextKeys.RowConsultPhone)];
+            rows.AddRange(
+            [
+                new(ServiceRow.Id(ServiceRow.Case), TextKeys.RowCase),
+                new(ServiceRow.Id(ServiceRow.Review), TextKeys.RowReview),
+                new(ServiceRow.Id(ServiceRow.Drafting), TextKeys.RowDrafting),
+                new(ServiceRow.Id(ServiceRow.Notice), TextKeys.RowNotice),
+                new(ServiceRow.Id(ServiceRow.Opinion), TextKeys.RowOpinion),
+                new(ServiceRow.Id(ServiceRow.Urf), TextKeys.RowUrf),
+                new(ServiceRow.Id(ServiceRow.Tell), TextKeys.RowTell),
+            ]);
+            plan.Ask(TextKeys.ServicesMenu, new ReplyChoices(InteractivePayload.List, rows, TextKeys.BtnServicesList),
+                fallback: TextKeys.ConsultationOffer);
             Check(Intake.MoveTo(IntakeState.OfferSent));
         }
 

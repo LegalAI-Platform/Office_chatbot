@@ -1,5 +1,7 @@
 using Office.Application.Prices;
 using Office.Application.Responders;
+using Office.Application.Turns;
+using Office.Application.Understanding;
 using Office.Domain.Booking;
 using Office.Domain.Tasks;
 
@@ -493,6 +495,56 @@ public sealed record BookingChoice(char Kind, BookingService? Service, Guid? App
             _ => null,
         };
     }
+}
+
+/// <summary>
+/// v1.30 (B-01.3): a row of the services list («sv:case»…), read without the AI. Each is the classification the AI would
+/// have given the service's name, so the service's own flow answers it; «sv:tell» asks the client to tell his matter.
+/// </summary>
+public sealed record ServiceRow(string Code, Classification? AsClassification)
+{
+    public const string Prefix = "sv:";
+    public const string Consult = "consult";
+    public const string Case = "case";
+    public const string Review = "review";
+    public const string Drafting = "draft";
+    public const string Notice = "notice";
+    public const string Opinion = "opinion";
+    public const string Urf = "urf";
+    public const string Tell = "tell";
+
+    public bool IsTell => Code == Tell;
+
+    public static string Id(string code) => Prefix + code;
+
+    public static ServiceRow? Parse(string? id)
+    {
+        if (id is null || !id.StartsWith(Prefix, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        static Classification As(Intent intent, Service? service) =>
+            new(intent, service, ConsultationMode.Unknown, null, 1, null, null);
+        var code = id[Prefix.Length..];
+        Classification? c = code switch
+        {
+            Consult => As(Intent.ConsultationRequest, null),
+            Case => As(Intent.ServiceByName, Service.CaseRepresentation),
+            Review => As(Intent.ServiceByName, Service.DocumentReview),
+            Drafting => As(Intent.ServiceByName, Service.ContractDrafting),
+            Notice => As(Intent.ServiceByName, Service.FormalNotice),
+            Opinion => As(Intent.ServiceByName, Service.WrittenOpinion),
+            Urf => As(Intent.ServiceByName, Service.UrfUnclear),
+            Tell => null,
+            _ => null,
+        };
+        return c is null && code != Tell ? null : new ServiceRow(code, c);
+    }
+
+    /// <summary>The last row pressed in the turn, if it is one of the services list.</summary>
+    public static ServiceRow? In(Turn turn) =>
+        Parse(turn.Messages.LastOrDefault(m => m.Interactive?.Id is not null)?.Interactive?.Id);
 }
 
 /// <summary>Days and times as Hazem writes them (the API has no culture data: written here).</summary>

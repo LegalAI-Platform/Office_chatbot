@@ -268,6 +268,16 @@ public sealed class BookingFlowTests
             [TextKeys.BookingHoldOne] = "عندك مبدئي {{day}} {{time}} لحد {{deadline}}",
             [TextKeys.BookingHoldLate] = "اتحجز {{day}} {{time}}",
         };
+        foreach (var k in new[]
+                 {
+                     TextKeys.ServicesMenu, TextKeys.BtnServicesList, TextKeys.ServicesTell, TextKeys.RowConsultPhone, TextKeys.RowConsultOffice,
+                     TextKeys.RowCase, TextKeys.RowReview, TextKeys.RowDrafting, TextKeys.RowNotice, TextKeys.RowOpinion, TextKeys.RowUrf,
+                     TextKeys.RowTell, TextKeys.CaseOffer,
+                 })
+        {
+            _texts[k] = new ApprovedText(k, 1, "T:" + k[..Math.Min(k.Length, 16)], k.StartsWith("row_", StringComparison.Ordinal) ? 24 : 300, true);
+        }
+
         foreach (var k in HazemResponder.BookingTextKeys)
         {
             var max = k.StartsWith("btn_", StringComparison.Ordinal) ? 20 : k == TextKeys.BookingHold ? 600 : 300;
@@ -305,6 +315,30 @@ public sealed class BookingFlowTests
 
     private IncomingMessage Pressed(string id) =>
         new($"wamid.{++_turn}", MessageType.Interactive, null, null, null, Interactive: new Interactive("list_reply", id, "x"));
+
+    // ---------- v1.30 (B-01.3): the services list after the name ----------
+
+    [Fact]
+    public async Task After_the_name_the_services_list_and_each_row_starts_its_flow_without_the_ai()
+    {
+        _script["السلام عليكم"] = new("greeting", null, "unknown", null, 0.9);
+        _script["محمد أحمد"] = new("provide_name", null, "unknown", "محمد أحمد", 0.95);
+        await Say("السلام عليكم");
+        var menu = Assert.Single((await Say("محمد أحمد")).Actions);
+        Assert.Equal("T:services_menu", menu.Text);
+        Assert.Equal(InteractivePayload.List, menu.Interactive!.Kind);
+        Assert.Equal([BookingChoice.Mode(BookingService.PhoneVideo), BookingChoice.Mode(BookingService.Office), "sv:case", "sv:review", "sv:draft",
+            "sv:notice", "sv:opinion", "sv:urf", "sv:tell"], menu.Interactive.Choices.Select(c => c.Id));
+
+        var tell = await Press("sv:tell");
+        Assert.Null(tell.Effects!.Classification); // read by code
+        Assert.Equal([TextKeys.ServicesTell], Keys(tell));
+        Assert.Equal([TextKeys.CaseOffer], Keys(await Press("sv:case")).Take(1));
+        Assert.Equal([BookingChoice.Mode(BookingService.PhoneVideo), BookingChoice.Mode(BookingService.Office)],
+            Assert.Single((await Press("sv:case")).Actions).Interactive!.Choices.Select(c => c.Id)); // the case offer's buttons
+        // the drafting flow chose its text (not approved in this test, so the offer went in its place)
+        Assert.Equal(TextKeys.ContractDraftingRequest, (await Press("sv:draft")).Effects!.Replies[0].InsteadOf);
+    }
 
     // ---------- v1.22 (B-08, B-25) ----------
 

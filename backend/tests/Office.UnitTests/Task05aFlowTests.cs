@@ -226,11 +226,11 @@ public sealed class Task05aFlowTests
     }
 
     [Fact]
-    public async Task After_the_question_the_told_topic_gets_only_the_acknowledgement()
+    public async Task After_the_services_list_the_told_topic_gets_the_offer() // v1.30: the list came, not the offer
     {
         await NewClientWithName();
         var (keys, _) = await Say("مراتي عايزة خلع وواخدة العيال", R("describe_matter", "personal_status", "khula"));
-        Assert.Equal([TextKeys.TopicReceived], keys);
+        Assert.Equal([TextKeys.ConsultationOffer], keys); // the topic is known: no topic question
         Assert.Equal(("personal_status", "khula"), (S.Intake.MatterType, S.Intake.MatterSubtype));
     }
 

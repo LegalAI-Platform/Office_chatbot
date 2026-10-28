@@ -31,6 +31,20 @@ public static class TextKeys
     public const string ExistingOrNew = "existing_or_new";   // B-04 (TASK 05a)
     public const string AskTopic = "ask_topic";              // B-25
     public const string CaseOffer = "case_offer";            // v1.28 (B-23): the offer to a client who wants a case filed
+
+    // v1.30 (B-01.3): the office's services as a list after the name, when the client has not said what he wants.
+    public const string ServicesMenu = "services_menu";
+    public const string BtnServicesList = "btn_services_list";
+    public const string ServicesTell = "services_tell";      // the row «احكي مشكلتي»
+    public const string RowConsultPhone = "row_consult_phone";
+    public const string RowConsultOffice = "row_consult_office";
+    public const string RowCase = "row_case";
+    public const string RowReview = "row_review";
+    public const string RowDrafting = "row_drafting";
+    public const string RowNotice = "row_notice";
+    public const string RowOpinion = "row_opinion";
+    public const string RowUrf = "row_urf";
+    public const string RowTell = "row_tell";
     public const string TopicReceived = "topic_received";    // B-25
 
     // Proposed in TASK 05a (inactive until approved).
