@@ -1238,21 +1238,23 @@ public sealed class HazemResponder(
                 return;
             }
 
-            List<ReplyChoice> rows = MayBook
+            // The price under every row (the owner: the client knows it before he picks); the urgent one first.
+            List<ReplyChoice> rows = [new(ServiceRow.Id(ServiceRow.Urgent), TextKeys.RowUrgent, DescriptionKey: TextKeys.RowUrgentDesc)];
+            rows.AddRange(MayBook
                 ?
                 [
-                    new(BookingChoice.Mode(BookingService.PhoneVideo), TextKeys.RowConsultPhone),
-                    new(BookingChoice.Mode(BookingService.Office), TextKeys.RowConsultOffice),
+                    new(BookingChoice.Mode(BookingService.PhoneVideo), TextKeys.RowConsultPhone, DescriptionKey: TextKeys.RowConsultPhoneDesc),
+                    new(BookingChoice.Mode(BookingService.Office), TextKeys.RowConsultOffice, DescriptionKey: TextKeys.RowConsultOfficeDesc),
                 ]
-                : [new(ServiceRow.Id(ServiceRow.Consult), TextKeys.RowConsultPhone)];
+                : [new(ServiceRow.Id(ServiceRow.Consult), TextKeys.RowConsultPhone, DescriptionKey: TextKeys.RowConsultPhoneDesc)]);
             rows.AddRange(
             [
-                new(ServiceRow.Id(ServiceRow.Case), TextKeys.RowCase),
-                new(ServiceRow.Id(ServiceRow.Review), TextKeys.RowReview),
-                new(ServiceRow.Id(ServiceRow.Drafting), TextKeys.RowDrafting),
-                new(ServiceRow.Id(ServiceRow.Notice), TextKeys.RowNotice),
-                new(ServiceRow.Id(ServiceRow.Opinion), TextKeys.RowOpinion),
-                new(ServiceRow.Id(ServiceRow.Urf), TextKeys.RowUrf),
+                new(ServiceRow.Id(ServiceRow.Case), TextKeys.RowCase, DescriptionKey: TextKeys.RowCaseDesc),
+                new(ServiceRow.Id(ServiceRow.Review), TextKeys.RowReview, DescriptionKey: TextKeys.RowReviewDesc),
+                new(ServiceRow.Id(ServiceRow.Drafting), TextKeys.RowDrafting, DescriptionKey: TextKeys.RowDraftingDesc),
+                new(ServiceRow.Id(ServiceRow.Notice), TextKeys.RowNotice, DescriptionKey: TextKeys.RowNoticeDesc),
+                new(ServiceRow.Id(ServiceRow.Opinion), TextKeys.RowOpinion, DescriptionKey: TextKeys.RowOpinionDesc),
+                new(ServiceRow.Id(ServiceRow.Urf), TextKeys.RowUrf, DescriptionKey: TextKeys.RowUrfDesc),
                 new(ServiceRow.Id(ServiceRow.Tell), TextKeys.RowTell),
             ]);
             plan.Ask(TextKeys.ServicesMenu, new ReplyChoices(InteractivePayload.List, rows, TextKeys.BtnServicesList),

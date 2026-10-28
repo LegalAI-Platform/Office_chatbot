@@ -272,11 +272,14 @@ public sealed class BookingFlowTests
                  {
                      TextKeys.ServicesMenu, TextKeys.BtnServicesList, TextKeys.ServicesTell, TextKeys.RowConsultPhone, TextKeys.RowConsultOffice,
                      TextKeys.RowCase, TextKeys.RowReview, TextKeys.RowDrafting, TextKeys.RowNotice, TextKeys.RowOpinion, TextKeys.RowUrf,
-                     TextKeys.RowTell, TextKeys.CaseOffer,
+                     TextKeys.RowTell, TextKeys.CaseOffer, TextKeys.RowUrgent,
                  })
         {
             _texts[k] = new ApprovedText(k, 1, "T:" + k[..Math.Min(k.Length, 16)], k.StartsWith("row_", StringComparison.Ordinal) ? 24 : 300, true);
         }
+
+        _texts[TextKeys.RowConsultPhoneDesc] = new ApprovedText(TextKeys.RowConsultPhoneDesc, 1, "ربع ساعة · 500 جنيه", 300, true);
+        _texts[TextKeys.RowNoticeDesc] = new ApprovedText(TextKeys.RowNoticeDesc, 1, new string('x', 73), 300, true); // too long: left out
 
         foreach (var k in HazemResponder.BookingTextKeys)
         {
@@ -327,8 +330,12 @@ public sealed class BookingFlowTests
         var menu = Assert.Single((await Say("محمد أحمد")).Actions);
         Assert.Equal("T:services_menu", menu.Text);
         Assert.Equal(InteractivePayload.List, menu.Interactive!.Kind);
-        Assert.Equal([BookingChoice.Mode(BookingService.PhoneVideo), BookingChoice.Mode(BookingService.Office), "sv:case", "sv:review", "sv:draft",
-            "sv:notice", "sv:opinion", "sv:urf", "sv:tell"], menu.Interactive.Choices.Select(c => c.Id));
+        Assert.Equal(["sv:urgent", BookingChoice.Mode(BookingService.PhoneVideo), BookingChoice.Mode(BookingService.Office), "sv:case", "sv:review",
+            "sv:draft", "sv:notice", "sv:opinion", "sv:urf", "sv:tell"], menu.Interactive.Choices.Select(c => c.Id));
+        // the price under a row; a line that cannot be sent (too long, or not approved) is left out, never the row
+        Assert.Equal("ربع ساعة · 500 جنيه", menu.Interactive.Choices[1].Description);
+        Assert.Null(menu.Interactive.Choices[6].Description);
+        Assert.Null(menu.Interactive.Choices[0].Description);
 
         var tell = await Press("sv:tell");
         Assert.Null(tell.Effects!.Classification); // read by code
@@ -338,6 +345,8 @@ public sealed class BookingFlowTests
             Assert.Single((await Press("sv:case")).Actions).Interactive!.Choices.Select(c => c.Id)); // the case offer's buttons
         // the drafting flow chose its text (not approved in this test, so the offer went in its place)
         Assert.Equal(TextKeys.ContractDraftingRequest, (await Press("sv:draft")).Effects!.Replies[0].InsteadOf);
+        var urgent = await Press("sv:urgent"); // the urgent path: its price, a task, today's times
+        Assert.Contains(PendingTask.UrgentRequest, TaskKinds(urgent));
     }
 
     // ---------- v1.22 (B-08, B-25) ----------

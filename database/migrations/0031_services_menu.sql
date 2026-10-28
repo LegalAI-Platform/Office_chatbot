@@ -15,7 +15,18 @@ INSERT INTO hazem.approved_texts (key, version, text, max_chars, active, source,
   ('row_notice', 1, '📨 إنذار رسمي', 24, true, 'DECISIONS v1.30 B-01', 'owner approval 2026-10-28'),
   ('row_opinion', 1, '📝 رأي قانوني مكتوب', 24, true, 'DECISIONS v1.30 B-01', 'owner approval 2026-10-28'),
   ('row_urf', 1, '💍 جواز أو طلاق عرفي', 24, true, 'DECISIONS v1.30 B-01', 'owner approval 2026-10-28'),
-  ('row_tell', 1, '💬 أحكي مشكلتي', 24, true, 'DECISIONS v1.30 B-01', 'owner approval 2026-10-28')
+  ('row_tell', 1, '💬 أحكي مشكلتي', 24, true, 'DECISIONS v1.30 B-01', 'owner approval 2026-10-28'),
+  ('row_urgent', 1, '🚨 استشارة عاجلة', 24, true, 'DECISIONS v1.30 B-01', 'owner approval 2026-10-28'),
+  -- the price under each row (the owner: before he picks), from the panel's price list
+  ('row_urgent_desc', 1, 'النهارده · ربع ساعة · {{price_urgent}} جنيه', 300, true, 'DECISIONS v1.30 B-01', 'owner approval 2026-10-28'),
+  ('row_consult_phone_desc', 1, 'ربع ساعة · {{price_phone}} جنيه', 300, true, 'DECISIONS v1.30 B-01', 'owner approval 2026-10-28'),
+  ('row_consult_office_desc', 1, 'نص ساعة · {{price_office}} جنيه', 300, true, 'DECISIONS v1.30 B-01', 'owner approval 2026-10-28'),
+  ('row_case_desc', 1, 'الأتعاب بعد الاستشارة', 300, true, 'DECISIONS v1.30 B-01', 'owner approval 2026-10-28'),
+  ('row_review_desc', 1, 'من {{price_review_min}} لـ {{price_review_max}} جنيه', 300, true, 'DECISIONS v1.30 B-01', 'owner approval 2026-10-28'),
+  ('row_drafting_desc', 1, 'من {{price_drafting_from}} جنيه', 300, true, 'DECISIONS v1.30 B-01', 'owner approval 2026-10-28'),
+  ('row_notice_desc', 1, '{{price_notice}} جنيه', 300, true, 'DECISIONS v1.30 B-01', 'owner approval 2026-10-28'),
+  ('row_opinion_desc', 1, 'الاستشارة + {{price_opinion}} جنيه', 300, true, 'DECISIONS v1.30 B-01', 'owner approval 2026-10-28'),
+  ('row_urf_desc', 1, 'من {{price_urf_own}} جنيه', 300, true, 'DECISIONS v1.30 B-01', 'owner approval 2026-10-28')
 ON CONFLICT (key, version) DO NOTHING;
 
 -- migrate:down

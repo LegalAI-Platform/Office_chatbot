@@ -505,6 +505,7 @@ public sealed record ServiceRow(string Code, Classification? AsClassification)
 {
     public const string Prefix = "sv:";
     public const string Consult = "consult";
+    public const string Urgent = "urgent";
     public const string Case = "case";
     public const string Review = "review";
     public const string Drafting = "draft";
@@ -530,6 +531,7 @@ public sealed record ServiceRow(string Code, Classification? AsClassification)
         Classification? c = code switch
         {
             Consult => As(Intent.ConsultationRequest, null),
+            Urgent => As(Intent.ServiceByName, Service.ConsultationUrgent),
             Case => As(Intent.ServiceByName, Service.CaseRepresentation),
             Review => As(Intent.ServiceByName, Service.DocumentReview),
             Drafting => As(Intent.ServiceByName, Service.ContractDrafting),
