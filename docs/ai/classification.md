@@ -240,3 +240,29 @@ About 2.35 USD per 1000 turns with gpt-4.1-mini, ~1.1 s each. The set's misses a
 (existing matters) and 138/183 (ads: one asked, one offered). An earlier draft put the press and vendors outside (the
 set's 180–183, hold-out 1055): the scope now names anyone writing TO the office as office, and the code guard never
 turns a colleague, the press or a vendor away.
+
+### v1.26: Anthropic as a second provider (`classify-v10`, Claude Opus 5.5, 2026-10-28)
+
+OpenAI's credits ran out; the owner wanted Anthropic now and both kept. `hazem.settings ai.provider` (`openai` | `anthropic`)
+picks who is asked first; when it gives no answer (no key, no credits, an error, an invalid output) the other one is asked
+in the same turn (a timeout is not asked again). Anthropic gets the same prompt and schema through structured outputs
+(nullable lists written as `anyOf`, which Anthropic requires), the prompt cached, effort low, no sampling parameters.
+Keys: `HAZEM_OPENAI_API_KEY`, `HAZEM_ANTHROPIC_API_KEY`; models: `OPENAI_MODEL`, `ANTHROPIC_MODEL` (default `claude-opus-5-5`).
+Measure one provider with `classify-eval --provider anthropic` (no fallback inside the eval).
+
+| Provider / model | Samples | Intent | Scope | Service | Matter | Sender role | Info topic | Latency | Cost / 1000 turns |
+|---|---|---|---|---|---|---|---|---|---|
+| **Anthropic `claude-opus-5-5`** | set 251 | **98.0%** | 99.6% | 100% | 100% | 100% | 100% | 2.2 s | ~$4 (cached prompt) |
+| **Anthropic `claude-opus-5-5`** | hold-out 81 | **97.5%** | 100% | 100% | 100% | 100% | 100% | 2.2 s | |
+| **Anthropic `claude-opus-5-5`** | scope 60 | **100%** | 100% | 100% | 100% | | 100% | 2.1 s | |
+| Anthropic `claude-haiku-5-5` | set / hold-out / scope | 96.4% / 93.8% / 100% | 99.6% / 100% / 100% | 100% / 93.8% | 100% / 94.1% | 100% | 96.2% / 100% | 1.4 s | ~$0.3 |
+| OpenAI `gpt-4.1-mini` (v1.24) | set / hold-out / scope | 95.6% / 93.8% / 100% | | | | | | 1.1 s | $2.35 |
+
+**The owner chose Opus 5.5** (2026-10-28, «نفضل على Opus»). Haiku 5.5 is close on the numbers and ~15× cheaper, but missed
+what costs the office most: an arrest told without «urgent» (197 «جوزي في الحجز من امبارح» → describe_matter), «msta3gel
+gedan» (57 → other) and a real alimony question in Franco-Arabic put outside (84 → off_topic, a client refused). Opus missed
+none of those. A conversation costs about $0.06–0.15 with Opus (the cache is written again after 5 quiet minutes).
+
+The set's misses: 48 and 192 (a service or a booking asked as a question → office_info), 67 (an Urfi price → the service),
+138 (an ad question → office_info) and 230 «بحبك» → off_topic (the pending abuse fix). The Anthropic key made on
+2026-10-28 expires on 2026-11-27.

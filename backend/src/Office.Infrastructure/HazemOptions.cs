@@ -33,6 +33,15 @@ public sealed class HazemOptions
     public string OpenAiBaseUrl { get; set; } = DefaultOpenAiBaseUrl;
 
     /// <summary>
+    /// v1.26: HAZEM_ANTHROPIC_API_KEY, the second classifier's key (hazem.settings ai.provider picks the first one; the other
+    /// answers when it fails). Entered by the owner; may be empty.
+    /// </summary>
+    public string AnthropicApiKey { get; set; } = "";
+
+    /// <summary>ANTHROPIC_MODEL, chosen by the owner after classify-eval --provider anthropic.</summary>
+    public string AnthropicModel { get; set; } = DefaultAnthropicModel;
+
+    /// <summary>
     /// GOOGLE_SERVICE_ACCOUNT_JSON (TASK 08, P2): the Google Cloud service account's key file, as
     /// base64. Entered by the owner only; may be empty (booking then offers no times).
     /// </summary>
@@ -40,6 +49,7 @@ public sealed class HazemOptions
 
     public const string DefaultOpenAiModel = "gpt-4.1-mini";
     public const string DefaultOpenAiBaseUrl = "https://api.openai.com/v1";
+    public const string DefaultAnthropicModel = "claude-opus-5-5";
 }
 
 public sealed class HazemOptionsValidator : IValidateOptions<HazemOptions>
@@ -70,6 +80,11 @@ public sealed class HazemOptionsValidator : IValidateOptions<HazemOptions>
         if (!Uri.TryCreate(o.OpenAiBaseUrl, UriKind.Absolute, out var ai) || ai.Scheme is not ("http" or "https"))
         {
             errors.Add("Hazem:OpenAiBaseUrl (OPENAI_BASE_URL) must be an absolute http(s) URL.");
+        }
+
+        if (string.IsNullOrWhiteSpace(o.AnthropicModel))
+        {
+            errors.Add("Hazem:AnthropicModel (ANTHROPIC_MODEL) must not be empty.");
         }
 
         if (string.IsNullOrWhiteSpace(o.OpenAiModel))

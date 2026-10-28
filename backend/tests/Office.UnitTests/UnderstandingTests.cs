@@ -158,6 +158,75 @@ public sealed class UnderstandingTests
         Assert.Contains("scope", OpenAiIntentClassifier.Schema["required"]!.AsArray().Select(n => (string?)n));
     }
 
+    // ---------- v1.26: two providers ----------
+
+    private sealed class Canned(params ClassifierOutcome[] outcomes) : IIntentClassifier
+    {
+        public int Calls { get; private set; }
+
+        public Task<ClassifierOutcome> ClassifyAsync(string text, HazemSettings settings, CancellationToken ct) =>
+            Task.FromResult(outcomes[Math.Min(Calls++, outcomes.Length - 1)]);
+    }
+
+    private static ClassifierOutcome Failed(string reason, string model) => new(null, reason, model, "classify-v10", 300);
+
+    private static ClassifierOutcome Answered(string model) =>
+        new(new RawClassification("greeting", null, "unknown", null, 0.9), null, model, "classify-v10", 200);
+
+    [Theory]
+    [InlineData(null, "gpt")]          // the default
+    [InlineData("openai", "gpt")]
+    [InlineData("anthropic", "claude")]
+    public async Task Ai_provider_picks_who_answers_first(string? provider, string model)
+    {
+        var (openAi, anthropic) = (new Canned(Answered("gpt")), new Canned(Answered("claude")));
+        var settings = new HazemSettings(provider is null ? new Dictionary<string, string>() : new Dictionary<string, string> { [RoutingIntentClassifier.ProviderKey] = provider });
+        var outcome = await new RoutingIntentClassifier(openAi, anthropic).ClassifyAsync("أهلا", settings, CancellationToken.None);
+        Assert.Equal(model, outcome.Model);
+        Assert.Equal(1, openAi.Calls + anthropic.Calls); // the other one is not asked
+    }
+
+    [Theory]
+    [InlineData(ClassifierOutcome.NoKey)]
+    [InlineData(ClassifierOutcome.Error)]          // no credits left, a 5xx
+    [InlineData(ClassifierOutcome.InvalidOutput)]
+    public async Task When_the_first_fails_the_other_answers_in_the_same_turn(string reason)
+    {
+        var (openAi, anthropic) = (new Canned(Failed(reason, "gpt")), new Canned(Answered("claude")));
+        var outcome = await new RoutingIntentClassifier(openAi, anthropic).ClassifyAsync("أهلا", Settings, CancellationToken.None);
+        Assert.Equal(("claude", 500), (outcome.Model, outcome.LatencyMs)); // both calls' time
+    }
+
+    [Fact]
+    public async Task A_timeout_is_not_asked_twice_and_two_failures_keep_the_first_reason()
+    {
+        var (openAi, anthropic) = (new Canned(Failed(ClassifierOutcome.Timeout, "gpt")), new Canned(Answered("claude")));
+        Assert.Equal(ClassifierOutcome.Timeout,
+            (await new RoutingIntentClassifier(openAi, anthropic).ClassifyAsync("أهلا", Settings, CancellationToken.None)).FailureReason);
+        Assert.Equal(0, anthropic.Calls);
+
+        var both = new RoutingIntentClassifier(new Canned(Failed(ClassifierOutcome.Error, "gpt")), new Canned(Failed(ClassifierOutcome.NoKey, "claude")));
+        Assert.Equal(ClassifierOutcome.Error, (await both.ClassifyAsync("أهلا", Settings, CancellationToken.None)).FailureReason);
+    }
+
+    [Fact]
+    public void Anthropic_gets_every_nullable_list_as_any_of_string_or_null()
+    {
+        var schema = AnthropicIntentClassifier.BuildSchema();
+        var service = schema["properties"].GetProperty("service").GetProperty("anyOf");
+        Assert.Equal(Enum.GetValues<Service>().Select(Classification.Code), service[0].GetProperty("enum").EnumerateArray().Select(e => e.GetString()));
+        Assert.Equal("null", service[1].GetProperty("type").GetString());
+        Assert.Equal("string", schema["properties"].GetProperty("full_name").GetProperty("anyOf")[0].GetProperty("type").GetString());
+        Assert.Equal("string", schema["properties"].GetProperty("intent").GetProperty("type").GetString()); // not nullable: as it was
+    }
+
+    [Fact]
+    public async Task Anthropic_without_a_key_makes_no_call()
+    {
+        var anthropic = new AnthropicIntentClassifier(Options.Create(new HazemOptions()), TimeProvider.System);
+        Assert.Equal(ClassifierOutcome.NoKey, (await anthropic.ClassifyAsync("أهلا", Settings, CancellationToken.None)).FailureReason);
+    }
+
     // ---------- the OpenAI call (faked HTTP) ----------
 
     private sealed class FakeOpenAi(Func<int, HttpRequestMessage, Task<HttpResponseMessage>> answer) : HttpMessageHandler

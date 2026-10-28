@@ -64,9 +64,13 @@ public static class DependencyInjection
         services.AddScoped<ISendResultStore, SendResultStore>();
         // T-08: the classifier. One call within 15 s and one retry are handled inside it; the
         // client has no loggers because the Authorization header carries the key.
-        services.AddHttpClient<IIntentClassifier, OpenAiIntentClassifier>(OpenAiIntentClassifier.HttpClientName,
+        services.AddHttpClient<OpenAiIntentClassifier>(OpenAiIntentClassifier.HttpClientName,
                 c => c.Timeout = Timeout.InfiniteTimeSpan)
             .RemoveAllLoggers();
+        // v1.26: Anthropic beside it (one client, its connections reused); ai.provider picks who answers first.
+        services.AddSingleton<AnthropicIntentClassifier>();
+        services.AddTransient<IIntentClassifier>(sp => new RoutingIntentClassifier(
+            sp.GetRequiredService<OpenAiIntentClassifier>(), sp.GetRequiredService<AnthropicIntentClassifier>()));
 
         services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<IConversationStore, ConversationStore>();
