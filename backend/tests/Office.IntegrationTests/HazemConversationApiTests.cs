@@ -14,7 +14,7 @@ namespace Office.IntegrationTests;
 public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
 {
     private const string Client = "201000000071";
-    private const string Welcome = "أهلًا بحضرتك في مكتب الأستاذ سعد فتحي سعد للمحاماة، معاك حازم. ممكن اسم حضرتك رباعي؟";
+    private const string Welcome = "أهلًا بحضرتك في مكتب الأستاذ سعد فتحي سعد للمحاماة، معاك حازم. ممكن اسم حضرتك؟"; // v1.29: no «رباعي»
     private const string Offer = "الأستاذ يقدر يشوف الموضوع مع حضرتك في استشارة: بالتليفون بـ500 أو في المكتب بـ1,000.";
     private const string AskTopic = "ولو تحب، قولّي باختصار الموضوع عن إيه عشان الأستاذ يبقى عارفه.";
     private ApiFactory _factory = null!;
@@ -77,7 +77,7 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
               FROM hazem.persons p JOIN hazem.conversations c ON c.person_id = p.id JOIN hazem.intakes i ON i.person_id = p.id
              WHERE p.wa_id = '{Client}'
             """));
-        Assert.Equal("greet_salam:1,welcome_ask_name:1,consultation_offer:2,ask_topic:1", await db.ScalarAsync<string>(
+        Assert.Equal("greet_salam:1,welcome_ask_name:2,consultation_offer:2,ask_topic:1", await db.ScalarAsync<string>(
             "SELECT string_agg(text_key || ':' || text_version, ',' ORDER BY created_at, idempotency_key) FROM hazem.turn_replies"));
     }
 
@@ -253,7 +253,8 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
                         + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.16.md"), Ct)
                         + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.22.md"), Ct)
                         + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.25.md"), Ct) // B-08 / B-23 / B-18 of 1.25
-                        + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.28.md"), Ct); // B-23's case offer of 1.28
+                        + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.28.md"), Ct) // B-23's case offer of 1.28
+                        + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.29.md"), Ct); // B-01 / B-02 of 1.29
         await using var c = new NpgsqlConnection(db.ApiConnectionString);
         await c.OpenAsync(Ct);
         await using var cmd = new NpgsqlCommand("SELECT key, text FROM hazem.approved_texts WHERE active AND source LIKE 'DECISIONS%'", c);
@@ -281,7 +282,7 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
             Assert.True(decisions.Contains(text, StringComparison.Ordinal), $"{r.GetString(0)} is not word for word in DECISIONS");
         }
 
-        Assert.Equal(51, count); // 8 (TASK 04) + B-04 question + the two B-25 texts (TASK 05a) + B-08 and B-22 (TASK 08) + B-11 (TASK 11) + B-18 (TASK 12) + B-11.1 (v1.20) + 9 greetings B-01.6 (v1.21) + 5 of v1.22 + 8 of v1.25 + 3 of v1.28
+        Assert.Equal(52, count); // 8 (TASK 04) + B-04 question + the two B-25 texts (TASK 05a) + B-08 and B-22 (TASK 08) + B-11 (TASK 11) + B-18 (TASK 12) + B-11.1 (v1.20) + 9 greetings B-01.6 (v1.21) + 5 of v1.22 + 8 of v1.25 + 3 of v1.28 + ask_name_again of v1.29 (welcome_ask_name's v2 replaced its v1)
     }
 
     [Fact]

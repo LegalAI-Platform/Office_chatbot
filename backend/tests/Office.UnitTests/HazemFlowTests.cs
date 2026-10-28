@@ -16,7 +16,7 @@ public sealed class HazemFlowTests
     /// <summary>The active texts of migration 0005 (DECISIONS word for word).</summary>
     public static readonly IReadOnlyDictionary<string, string> Approved = new Dictionary<string, string>
     {
-        [TextKeys.WelcomeAskName] = "أهلًا بحضرتك في مكتب الأستاذ سعد فتحي سعد للمحاماة، معاك حازم. ممكن اسم حضرتك رباعي؟",
+        [TextKeys.WelcomeAskName] = "أهلًا بحضرتك في مكتب الأستاذ سعد فتحي سعد للمحاماة، معاك حازم. ممكن اسم حضرتك؟",
         [TextKeys.ConsultationOffer] = "الأستاذ يقدر يشوف الموضوع مع حضرتك في استشارة: بالتليفون بـ500 أو في المكتب بـ1,000.",
         [TextKeys.LegalQuestion] = "الأستاذ هو اللي هيجاوب حضرتك على ده في الاستشارة.",
         [TextKeys.UrgentPrice] = "الاستشارة العاجلة بالتليفون ربع ساعة بـ1,000 جنيه.",
@@ -97,17 +97,24 @@ public sealed class HazemFlowTests
     }
 
     [Fact]
-    public async Task Short_name_is_asked_once_more_then_hazem_carries_on()
+    public async Task A_short_name_is_taken_at_once() // v1.29: «ثنائي رباعي براحته»
     {
         await Say("السلام عليكم");
-        var (again, d) = await Say("محمد أحمد");
-        Assert.Equal([TextKeys.WelcomeAskName], again); // ask_name_again is not approved yet → B-01 text
-        Assert.Equal(TextKeys.AskNameAgain, Assert.Single(d.Effects!.Replies).InsteadOf);
-
         Assert.Equal([TextKeys.ConsultationOffer], (await Say("محمد أحمد")).Keys);
         var s = _store.Rows[Number];
-        Assert.Equal(false, s.Person.FullNameProvided);
+        Assert.Equal(false, s.Person.FullNameProvided); // not four-part, still told to the office
+        Assert.True(s.Person.NameSettled);
         Assert.Equal("محمد أحمد", s.Person.Name?.Raw);
+    }
+
+    [Fact]
+    public async Task No_name_at_all_is_asked_once_more_then_hazem_carries_on()
+    {
+        await Say("السلام عليكم");
+        var (again, d) = await Say("ههههه");
+        Assert.Equal([TextKeys.WelcomeAskName], again); // ask_name_again is not approved yet → B-01 text
+        Assert.Equal(TextKeys.AskNameAgain, Assert.Single(d.Effects!.Replies).InsteadOf);
+        Assert.Null(_store.Rows[Number].Person.Name);
     }
 
     [Fact]
@@ -338,8 +345,8 @@ public sealed class HazemFlowTests
         await Say("السلام عليكم");
         Assert.Equal([TextKeys.WelcomeAskName], (await Send(Image())).Keys); // asked again, not counted
         Assert.Equal(1, _store.Rows[Number].Intake.NameAsks);
-        Assert.Equal([TextKeys.WelcomeAskName], (await Say("محمد أحمد")).Keys); // still the one extra ask
-        Assert.Null(_store.Rows[Number].Person.FullNameProvided);
+        Assert.Equal([TextKeys.ConsultationOffer], (await Say("محمد أحمد")).Keys); // v1.29: the name after the photo is taken
+        Assert.Equal(false, _store.Rows[Number].Person.FullNameProvided);
     }
 
     [Fact]
