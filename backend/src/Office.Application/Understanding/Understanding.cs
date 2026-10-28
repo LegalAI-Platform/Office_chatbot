@@ -39,6 +39,16 @@ public enum Intent
     OffTopic,
 }
 
+/// <summary>
+/// v1.24 (B-20): the subject of the turn, decided by the AI before the intent. Outside means clearly neither law nor
+/// this office (another profession, a shop, a trip…): the code answers off_topic whatever intent came with it.
+/// </summary>
+public enum Scope
+{
+    Office,
+    Outside,
+}
+
 /// <summary>B-20 (1.17): what the client asks about the office (with intent office_info).</summary>
 public enum InfoTopic
 {
@@ -135,7 +145,8 @@ public sealed record RawClassification(
     string? MatterType = null,
     string? MatterSubtype = null,
     string? SenderRole = null,
-    string? InfoTopic = null);
+    string? InfoTopic = null,
+    string? Scope = null);
 
 /// <summary>One call to the classifier: the answer, or why there is none, plus what it cost.</summary>
 public sealed record ClassifierOutcome(
@@ -171,7 +182,8 @@ public sealed record Classification(
     MatterType? Matter = null,
     MatterSubtype? Subtype = null,
     SenderRole Role = SenderRole.Client,
-    InfoTopic? Topic = null)
+    InfoTopic? Topic = null,
+    Scope Scope = Scope.Office)
 {
     public const string UnknownValue = "unknown_value";
     public const string LowConfidence = "low_confidence";
@@ -215,6 +227,16 @@ public sealed record Classification(
         MatterSubtype? subtype = TryEnum<MatterSubtype>(a.MatterSubtype, out var ms) ? ms : null;
         var role = TryEnum<SenderRole>(a.SenderRole, out var sr) ? sr : SenderRole.Client;
         InfoTopic? topic = TryEnum<InfoTopic>(a.InfoTopic, out var it) ? it : null;
+        // v1.24: a missing or unknown scope is the office's (refusing a real client costs more than one offer too many).
+        var scope = TryEnum<Scope>(a.Scope, out var sc) ? sc : Scope.Office;
+        // The guard: a client's subject outside law and the office is off_topic, whatever the intent. Abuse keeps its
+        // warning; a colleague, the press or a vendor writing to the office is the office's to decide (B-14.4).
+        if (scope == Scope.Outside && intent != Intent.Abusive && role == SenderRole.Client)
+        {
+            intent = Intent.OffTopic;
+            service = null;
+        }
+
         // An office question without a topic it can be answered by is no office question (the offer, as for other).
         if (intent == Intent.OfficeInfo && topic is null)
         {
@@ -222,7 +244,7 @@ public sealed record Classification(
         }
 
         return new(intent, service, mode, string.IsNullOrWhiteSpace(a.FullName) ? null : a.FullName.Trim(), a.Confidence.Value, null, call,
-            matter, subtype, role, intent == Intent.OfficeInfo ? topic : null);
+            matter, subtype, role, intent == Intent.OfficeInfo ? topic : null, scope);
     }
 
     public static string Code<T>(T value)

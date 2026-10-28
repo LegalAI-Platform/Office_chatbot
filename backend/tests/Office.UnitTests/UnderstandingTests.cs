@@ -108,6 +108,56 @@ public sealed class UnderstandingTests
     public void Min_confidence_comes_from_the_settings() =>
         Assert.False(Classification.From(Answer("greeting", 0.5), new HazemSettings(new Dictionary<string, string> { [Classification.MinConfidenceKey] = "0.4" })).IsFallback);
 
+    // ---------- v1.24: the scope guard ----------
+
+    private static ClassifierOutcome Scoped(string intent, string? scope, string? service = null) =>
+        new(new RawClassification(intent, service, "unknown", null, 0.9, Scope: scope), null, "m", "classify-v10", 10);
+
+    [Theory]
+    [InlineData("consultation_request", null)]
+    [InlineData("service_by_name", "case_representation")]
+    [InlineData("price_question", "consultation_phone_video")]
+    [InlineData("office_info", null)] // no topic: off_topic, not the unclear answer
+    public void A_subject_outside_law_and_the_office_is_off_topic_whatever_the_intent(string intent, string? service)
+    {
+        var c = Classification.From(Scoped(intent, "outside", service), Settings);
+        Assert.False(c.IsFallback);
+        Assert.Equal((Intent.OffTopic, (Service?)null, Scope.Outside), (c.Intent, c.Service, c.Scope));
+    }
+
+    [Theory]
+    [InlineData("press")]
+    [InlineData("vendor")]
+    [InlineData("lawyer_colleague")]
+    public void Someone_writing_to_the_office_is_never_turned_away_by_the_guard(string role)
+    {
+        var raw = new RawClassification("other", null, "unknown", null, 0.9, SenderRole: role, Scope: "outside");
+        Assert.Equal(Intent.Other, Classification.From(new(raw, null, "m", "classify-v10", 10), Settings).Intent);
+    }
+
+    [Fact]
+    public void Abuse_outside_the_office_keeps_its_warning() =>
+        Assert.Equal(Intent.Abusive, Classification.From(Scoped("abusive", "outside"), Settings).Intent);
+
+    [Theory]
+    [InlineData("office")]
+    [InlineData(null)]       // an older stub or a missing field
+    [InlineData("medical")]  // outside the list: never a reason to refuse a client
+    public void Anything_but_outside_keeps_the_intent(string? scope)
+    {
+        var c = Classification.From(Scoped("consultation_request", scope), Settings);
+        Assert.Equal((Intent.ConsultationRequest, Scope.Office), (c.Intent, c.Scope));
+    }
+
+    [Fact]
+    public void The_schema_asks_for_the_subject_and_the_scope_before_the_intent()
+    {
+        var properties = OpenAiIntentClassifier.Schema["properties"]!.AsObject();
+        Assert.Equal(["subject", "scope", "intent"], properties.Take(3).Select(p => p.Key));
+        Assert.Equal(["office", "outside"], properties["scope"]!["enum"]!.AsArray().Select(n => (string?)n));
+        Assert.Contains("scope", OpenAiIntentClassifier.Schema["required"]!.AsArray().Select(n => (string?)n));
+    }
+
     // ---------- the OpenAI call (faked HTTP) ----------
 
     private sealed class FakeOpenAi(Func<int, HttpRequestMessage, Task<HttpResponseMessage>> answer) : HttpMessageHandler

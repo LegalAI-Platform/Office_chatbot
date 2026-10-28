@@ -89,7 +89,8 @@ public sealed record ClassificationRecord(
     string? MatterType = null,
     string? MatterSubtype = null,
     string? SenderRole = null,
-    string? InfoTopic = null)
+    string? InfoTopic = null,
+    string? Scope = null)
 {
     public static ClassificationRecord From(string turnId, Classification c) => new(
         turnId,
@@ -107,7 +108,8 @@ public sealed record ClassificationRecord(
         c.Matter is { } m ? Classification.Code(m) : null,
         c.Subtype is { } st ? Classification.Code(st) : null,
         Classification.Code(c.Role),
-        c.Topic is { } t ? Classification.Code(t) : null);
+        c.Topic is { } t ? Classification.Code(t) : null,
+        c.Call?.Answer?.Scope); // what the model said (the guard turns outside into off_topic)
 }
 
 /// <summary>Everything a Hazem turn changes, saved in the same transaction as the turn itself.</summary>

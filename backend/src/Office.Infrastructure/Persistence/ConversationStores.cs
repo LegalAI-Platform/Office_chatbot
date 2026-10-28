@@ -94,10 +94,10 @@ public sealed class ConversationStore(HazemDbContext db) : IConversationStore
             await db.Database.ExecuteSqlInterpolatedAsync($"""
                 INSERT INTO hazem.classifications (turn_id, intent, confidence, service, consultation_mode, full_name_present,
                                                    model, prompt_version, latency_ms, input_tokens, output_tokens, fallback_reason,
-                                                   matter_type, matter_subtype, sender_role, info_topic)
+                                                   matter_type, matter_subtype, sender_role, info_topic, scope)
                 VALUES ({c.TurnId}, {c.Intent}, {(decimal)Math.Round(c.Confidence, 3)}, {c.Service}, {c.ConsultationMode}, {c.FullNamePresent},
                         {c.Model}, {c.PromptVersion}, {c.LatencyMs}, {c.InputTokens}, {c.OutputTokens}, {c.FallbackReason},
-                        {c.MatterType}, {c.MatterSubtype}, {c.SenderRole}, {c.InfoTopic})
+                        {c.MatterType}, {c.MatterSubtype}, {c.SenderRole}, {c.InfoTopic}, {c.Scope})
                 ON CONFLICT (turn_id) DO NOTHING
                 """, ct);
         }
