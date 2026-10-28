@@ -99,6 +99,7 @@ public sealed record InteractivePayload(string Kind, string? Button, IReadOnlyLi
     public const int MaxRows = 10;
     public const int MaxButtonTitle = 20;
     public const int MaxRowTitle = 24;
+    public const int MaxRowDescription = 72; // v1.30: the line under a list row (the services list's prices)
     public const int MaxBody = 1024;
 }
 

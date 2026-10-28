@@ -31,6 +31,31 @@ public static class TextKeys
     public const string ExistingOrNew = "existing_or_new";   // B-04 (TASK 05a)
     public const string AskTopic = "ask_topic";              // B-25
     public const string CaseOffer = "case_offer";            // v1.28 (B-23): the offer to a client who wants a case filed
+
+    // v1.30 (B-01.3): the office's services as a list after the name, when the client has not said what he wants.
+    public const string ServicesMenu = "services_menu";
+    public const string BtnServicesList = "btn_services_list";
+    public const string ServicesTell = "services_tell";      // the row «احكي مشكلتي»
+    public const string RowConsultPhone = "row_consult_phone";
+    public const string RowConsultOffice = "row_consult_office";
+    public const string RowCase = "row_case";
+    public const string RowReview = "row_review";
+    public const string RowDrafting = "row_drafting";
+    public const string RowNotice = "row_notice";
+    public const string RowOpinion = "row_opinion";
+    public const string RowUrf = "row_urf";
+    public const string RowTell = "row_tell";
+    public const string RowUrgent = "row_urgent";
+    // the lines under the rows: the price, filled from the panel's price list
+    public const string RowUrgentDesc = "row_urgent_desc";
+    public const string RowConsultPhoneDesc = "row_consult_phone_desc";
+    public const string RowConsultOfficeDesc = "row_consult_office_desc";
+    public const string RowCaseDesc = "row_case_desc";
+    public const string RowReviewDesc = "row_review_desc";
+    public const string RowDraftingDesc = "row_drafting_desc";
+    public const string RowNoticeDesc = "row_notice_desc";
+    public const string RowOpinionDesc = "row_opinion_desc";
+    public const string RowUrfDesc = "row_urf_desc";
     public const string TopicReceived = "topic_received";    // B-25
 
     // Proposed in TASK 05a (inactive until approved).
@@ -204,8 +229,12 @@ public sealed record ReplyStep(string Key, string? Fallback = null, IReadOnlyDic
 /// <summary>Buttons or a list. <see cref="ButtonKey"/>: the text of the list's button (a list only).</summary>
 public sealed record ReplyChoices(string Kind, IReadOnlyList<ReplyChoice> Items, string? ButtonKey = null);
 
-/// <summary>One button or row: its title is an approved text (<see cref="TitleKey"/>) or a value of the system (<see cref="Title"/>).</summary>
-public sealed record ReplyChoice(string Id, string? TitleKey = null, string? Title = null);
+/// <summary>
+/// One button or row: its title is an approved text (<see cref="TitleKey"/>) or a value of the system (<see cref="Title"/>).
+/// v1.30: a list row may have a line under it, an approved text too (<see cref="DescriptionKey"/>, the prices filled from the
+/// panel); a line that cannot be sent is left out, never the row.
+/// </summary>
+public sealed record ReplyChoice(string Id, string? TitleKey = null, string? Title = null, string? DescriptionKey = null);
 
 /// <summary>Which approved text (key and version) went out under which idempotency key, or why another one did.</summary>
 public sealed record ReplyRecord(string IdempotencyKey, string Key, int Version, int Part, string? InsteadOf, string? Reason);
@@ -396,7 +425,14 @@ public static class ReplyComposer
                 return (null, new SkippedText(item.TitleKey ?? item.Id, TitleTooLong));
             }
 
-            items.Add(new InteractiveChoice(item.Id, title));
+            string? description = null;
+            if (isList && item.DescriptionKey is { } dk && Resolve(dk, null, texts) is ({ }, { } line, _)
+                && line.Trim() is { Length: > 0 and <= InteractivePayload.MaxRowDescription } d)
+            {
+                description = d;
+            }
+
+            items.Add(new InteractiveChoice(item.Id, title, description));
         }
 
         return (new InteractivePayload(choices.Kind, button, items), null);
