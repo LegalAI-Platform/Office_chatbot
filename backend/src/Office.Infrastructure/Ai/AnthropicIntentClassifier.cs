@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Anthropic;
 using Anthropic.Exceptions;
 using Anthropic.Models.Messages;
@@ -24,8 +25,34 @@ public sealed class AnthropicIntentClassifier(IOptions<HazemOptions> options, Ti
     /// <summary>Total time for the call and its one retry, as for OpenAI.</summary>
     public TimeSpan Budget { get; init; } = OpenAiIntentClassifier.DefaultBudget;
 
-    private static readonly Dictionary<string, JsonElement> Schema =
-        OpenAiIntentClassifier.Schema.ToDictionary(kv => kv.Key, kv => JsonSerializer.SerializeToElement(kv.Value));
+    private static readonly Dictionary<string, JsonElement> Schema = BuildSchema();
+
+    /// <summary>
+    /// OpenAI's schema, with every nullable field («type: [string, null]», with or without its closed list) written as
+    /// «anyOf: [string (the list), null]»: Anthropic refuses an enum under a type array.
+    /// </summary>
+    public static Dictionary<string, JsonElement> BuildSchema()
+    {
+        var schema = (JsonObject)OpenAiIntentClassifier.Schema.DeepClone();
+        var properties = (JsonObject)schema["properties"]!;
+        foreach (var name in properties.Select(p => p.Key).ToList())
+        {
+            if (properties[name] is not JsonObject { } field || field["type"] is not JsonArray)
+            {
+                continue;
+            }
+
+            var text = new JsonObject { ["type"] = "string" };
+            if (field["enum"] is JsonArray values)
+            {
+                text["enum"] = new JsonArray(values.Where(v => v is not null).Select(v => v!.DeepClone()).ToArray());
+            }
+
+            properties[name] = new JsonObject { ["anyOf"] = new JsonArray(text, new JsonObject { ["type"] = "null" }) };
+        }
+
+        return schema.ToDictionary(kv => kv.Key, kv => JsonSerializer.SerializeToElement(kv.Value));
+    }
 
     private AnthropicClient? _client;
     private string? _clientKey;

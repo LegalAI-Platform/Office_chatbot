@@ -210,6 +210,17 @@ public sealed class UnderstandingTests
     }
 
     [Fact]
+    public void Anthropic_gets_every_nullable_list_as_any_of_string_or_null()
+    {
+        var schema = AnthropicIntentClassifier.BuildSchema();
+        var service = schema["properties"].GetProperty("service").GetProperty("anyOf");
+        Assert.Equal(Enum.GetValues<Service>().Select(Classification.Code), service[0].GetProperty("enum").EnumerateArray().Select(e => e.GetString()));
+        Assert.Equal("null", service[1].GetProperty("type").GetString());
+        Assert.Equal("string", schema["properties"].GetProperty("full_name").GetProperty("anyOf")[0].GetProperty("type").GetString());
+        Assert.Equal("string", schema["properties"].GetProperty("intent").GetProperty("type").GetString()); // not nullable: as it was
+    }
+
+    [Fact]
     public async Task Anthropic_without_a_key_makes_no_call()
     {
         var anthropic = new AnthropicIntentClassifier(Options.Create(new HazemOptions()), TimeProvider.System);
