@@ -22,6 +22,8 @@ export interface ServiceOrder {
   closed_reason: string | null;
   appointment_id: string | null;
   notice: "pending" | "sent" | "failed" | null;
+  /** v1.28: the failed send's code (OUTSIDE_24H_WINDOW, META_ERROR, …). */
+  notice_error: string | null;
 }
 
 export interface Upload { url: string; key: string; content_type: string }

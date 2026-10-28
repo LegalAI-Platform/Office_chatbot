@@ -13,7 +13,7 @@
         0
       ],
       "parameters": {
-        "content": "## META-WA-SEND-MESSAGE\nInput: `wa_id`, `text`, `idempotency_key`, `requested_by`, optional `context_wamid`, optional `document` (TASK 10: `{ link, filename }`, a short signed storage link Meta reads; `text` is its caption, ≤ 1024), optional `interactive` (TASK 08: `{ kind: buttons|list, button?, choices: [{id, title}] }`; buttons ≤ 3 with titles ≤ 20, a list ≤ 10 rows with titles ≤ 24; `text` is its body, ≤ 1024). The words all come from the API; this only builds Meta's JSON.\nOutput: `{ ok, outbound_id, wamid, status, error_code, error_message }`.\nNever sends twice for the same idempotency key. Refuses (OUTSIDE_24H_WINDOW) without calling Meta when the client has not written in the last 24 hours: use META-WA-SEND-TEMPLATE.\nRetries: one retry after 3 s only for HTTP 429/502/503/504. No retry after a timeout or HTTP 500 (Meta may already have sent it): the result is NETWORK_OR_UNKNOWN / META_ERROR and the caller decides.\nDry run (`whatsapp.dry_run = true`, tests only): recorded as sent with wamid.DRYRUN-<outbound_id>, Meta is never called.",
+        "content": "## META-WA-SEND-MESSAGE\nInput: `wa_id`, `text`, `idempotency_key`, `requested_by`, optional `context_wamid`, optional `document` (TASK 10: `{ link, filename }`, a short signed storage link; `text` is its caption, ≤ 1024. v1.28: n8n reads the file from the link inside office_net, uploads it to Meta (/media) and sends it by its media id, so storage is never public; when the upload fails the link itself is sent, as before), optional `interactive` (TASK 08: `{ kind: buttons|list, button?, choices: [{id, title}] }`; buttons ≤ 3 with titles ≤ 20, a list ≤ 10 rows with titles ≤ 24; `text` is its body, ≤ 1024). The words all come from the API; this only builds Meta's JSON.\nOutput: `{ ok, outbound_id, wamid, status, error_code, error_message }`.\nNever sends twice for the same idempotency key. Refuses (OUTSIDE_24H_WINDOW) without calling Meta when the client has not written in the last 24 hours: use META-WA-SEND-TEMPLATE.\nRetries: one retry after 3 s only for HTTP 429/502/503/504. No retry after a timeout or HTTP 500 (Meta may already have sent it): the result is NETWORK_OR_UNKNOWN / META_ERROR and the caller decides.\nDry run (`whatsapp.dry_run = true`, tests only): recorded as sent with wamid.DRYRUN-<outbound_id>, Meta is never called.",
         "height": 220,
         "width": 520
       }
@@ -302,7 +302,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($('Prepare').first().json.payload) }}"
+        "jsonBody": "={{ JSON.stringify((() => { const p = $('Prepare').first().json.payload; if (p.type !== 'document') return p; const up = $('Upload to Meta').isExecuted ? $('Upload to Meta').first().json : null; const id = up && up.statusCode >= 200 && up.statusCode < 300 && up.body && up.body.id; return id ? Object.assign({}, p, { document: { id: String(id), filename: p.document.filename, caption: p.document.caption } }) : p; })()) }}"
       },
       "credentials": {
         "httpHeaderAuth": {
@@ -390,7 +390,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($('Prepare').first().json.payload) }}"
+        "jsonBody": "={{ JSON.stringify((() => { const p = $('Prepare').first().json.payload; if (p.type !== 'document') return p; const up = $('Upload to Meta').isExecuted ? $('Upload to Meta').first().json : null; const id = up && up.statusCode >= 200 && up.statusCode < 300 && up.body && up.body.id; return id ? Object.assign({}, p, { document: { id: String(id), filename: p.document.filename, caption: p.document.caption } }) : p; })()) }}"
       },
       "credentials": {
         "httpHeaderAuth": {
@@ -641,6 +641,119 @@
           "waitForSubWorkflow": true
         }
       }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "316e9691-5543-5bfc-9d85-415a63108e03",
+              "leftValue": "={{ $('Prepare').first().json.payload.type === 'document' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "0f161c27-e073-551b-86da-5b437d67b83b",
+      "name": "Document?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2040,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Prepare').first().json.payload.document.link }}",
+        "options": {
+          "timeout": 60000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          }
+        }
+      },
+      "id": "51e83d3f-d537-5caa-8748-00c9b2cc856c",
+      "name": "Read the file",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2160,
+        0
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/{{ $('Get config').first().json.cfg['whatsapp.graph_api_version'] }}/{{ $('Get config').first().json.cfg['whatsapp.phone_number_id'] }}/media",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "messaging_product",
+              "value": "whatsapp"
+            },
+            {
+              "name": "type",
+              "value": "={{ $binary.data ? $binary.data.mimeType : 'application/octet-stream' }}"
+            },
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "d402d4bc-ebbe-59a3-bba3-d6b88209f388",
+      "name": "Upload to Meta",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2280,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CRED:meta-whatsapp-token",
+          "name": "meta-whatsapp-token"
+        }
+      },
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -717,7 +830,7 @@
       "main": [
         [
           {
-            "node": "Send to Meta",
+            "node": "Document?",
             "type": "main",
             "index": 0
           }
@@ -856,6 +969,46 @@
         [
           {
             "node": "Record result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Document?": {
+      "main": [
+        [
+          {
+            "node": "Read the file",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send to Meta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read the file": {
+      "main": [
+        [
+          {
+            "node": "Upload to Meta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload to Meta": {
+      "main": [
+        [
+          {
+            "node": "Send to Meta",
             "type": "main",
             "index": 0
           }

@@ -15,7 +15,7 @@ const me = (role: "staff" | "lawyer"): Me => ({
 const order = (over: object = {}) => ({
   id: "o1", kind: "document_review", state: "awaiting_price", name: "محمد أحمد علي حسن", wa_id: "201000000093",
   created_at: "2026-11-19T10:00:00Z", files: 2, price: null, price_exception: false, due_on: null, delivery: null, price_until: null,
-  payment: null, file_name: null, delivered_at: null, closed_reason: null, appointment_id: null, notice: null, ...over,
+  payment: null, file_name: null, delivered_at: null, closed_reason: null, appointment_id: null, notice: null, notice_error: null, ...over,
 });
 
 // TASK 06: the pricing form waits for the panel's price list (its ranges).
@@ -81,12 +81,12 @@ describe("TASK 10 service orders", () => {
     const calls = serve({
       "GET /auth/me": me("staff"),
       "GET /services?show=open": [],
-      "GET /services?show=done": [order({ state: "delivered", delivery: "file", file_name: "مراجعة.pdf", delivered_at: "2026-11-20T10:00:00Z", notice: "failed" })],
+      "GET /services?show=done": [order({ state: "delivered", delivery: "file", file_name: "مراجعة.pdf", delivered_at: "2026-11-20T10:00:00Z", notice: "failed", notice_error: "META_ERROR" })],
     });
     renderAt("/services");
     fireEvent.click(await screen.findByRole("tab", { name: "اتسلّمت أو اتقفلت" }));
     const card = (await screen.findByText(/محمد أحمد علي حسن/)).closest("li")!;
-    expect(within(card).getByText(/آخر رسالة ما وصلتش للعميل/)).toBeTruthy();
+    expect(within(card).getByText(/آخر رسالة ما وصلتش للعميل: واتساب رفضها \(META_ERROR\)/)).toBeTruthy(); // v1.28: the real reason
     fireEvent.click(within(card).getByRole("button", { name: /ابعت الملف تاني/ }));
     await vi.waitFor(() => expect(calls.some((c) => c.path === "/services/o1/resend")).toBe(true));
   });

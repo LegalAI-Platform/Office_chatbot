@@ -15,7 +15,7 @@ namespace Office.Infrastructure.Services;
 
 public sealed record ServiceOrderView(Guid Id, string Kind, string State, string? Name, string WaId, DateTimeOffset CreatedAt, int Files,
     int? Price, bool PriceException, DateOnly? DueOn, string? Delivery, DateTimeOffset? PriceUntil, string? Payment, string? FileName,
-    DateTimeOffset? DeliveredAt, string? ClosedReason, Guid? AppointmentId, string? Notice);
+    DateTimeOffset? DeliveredAt, string? ClosedReason, Guid? AppointmentId, string? Notice, string? NoticeError = null);
 
 public sealed class PanelServices(HazemDbContext db, BookingStore store, IDeliverables deliverables, TimeProvider clock)
 {
@@ -47,7 +47,7 @@ public sealed class PanelServices(HazemDbContext db, BookingStore store, IDelive
 
         var since = clock.GetUtcNow().AddDays(-60).ToUniversalTime();
         var open = show != "done";
-        return await (from o in db.ServiceOrders.AsNoTracking()
+        var list = await (from o in db.ServiceOrders.AsNoTracking()
                       join p in db.Persons.AsNoTracking() on o.PersonId equals p.Id
                       join pay in db.Payments.AsNoTracking() on (Guid?)o.Id equals pay.ServiceOrderId into pays
                       from pay in pays.DefaultIfEmpty()
@@ -56,6 +56,24 @@ public sealed class PanelServices(HazemDbContext db, BookingStore store, IDelive
                       select new ServiceOrderView(o.Id, o.Kind, o.State, p.NameRaw, p.WaId, o.CreatedAt, db.ServiceFiles.Count(f => f.OrderId == o.Id),
                           o.Price, o.PriceException, o.DueOn, o.Delivery, o.PriceUntil, pay == null ? null : pay.State, o.FileName, o.DeliveredAt,
                           o.ClosedReason, o.AppointmentId, o.ClientNotice)).Take(300).ToListAsync(ct);
+
+        // v1.28: why the last message did not go, from its send result (Meta refusing a file is not the 24 hours).
+        for (var i = 0; i < list.Count; i++)
+        {
+            if (list[i].Notice != "failed")
+            {
+                continue;
+            }
+
+            var prefix = $"hazem:service:{list[i].Id:N}:";
+            list[i] = list[i] with
+            {
+                NoticeError = await db.SendResults.AsNoTracking().Where(s => !s.Ok && s.IdempotencyKey.StartsWith(prefix))
+                    .OrderByDescending(s => s.CreatedAt).Select(s => s.ErrorCode).FirstOrDefaultAsync(ct),
+            };
+        }
+
+        return list;
     }
 
     /// <summary>The n-th document the client sent for the order (0 = the first), for the panel to show.</summary>

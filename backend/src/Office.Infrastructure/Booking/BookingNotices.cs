@@ -83,7 +83,7 @@ public sealed class BookingNotices(HazemDbContext db, BookingStore store, Bookin
             }
 
             await db.Database.ExecuteSqlInterpolatedAsync(
-                $"UPDATE hazem.appointments SET client_notice = {(told ? "sent" : "failed")} WHERE id = {a.Id} AND client_notice = 'pending'", ct);
+                $"UPDATE hazem.appointments SET client_notice = {(told ? "sent" : "failed")} WHERE id = {a.Id} AND client_notice = 'pending' AND notice_kind IS NOT DISTINCT FROM {a.NoticeKind}", ct); // v1.28: only the notice that went
         }
 
         foreach (var x in payments)
@@ -113,7 +113,7 @@ public sealed class BookingNotices(HazemDbContext db, BookingStore store, Bookin
             }
 
             await db.Database.ExecuteSqlInterpolatedAsync(
-                $"UPDATE hazem.payments SET client_notice = {(told ? "sent" : "failed")} WHERE id = {pay.Id} AND client_notice = 'pending'", ct);
+                $"UPDATE hazem.payments SET client_notice = {(told ? "sent" : "failed")} WHERE id = {pay.Id} AND client_notice = 'pending' AND notice_kind IS NOT DISTINCT FROM {pay.NoticeKind}", ct); // v1.28
         }
 
         return due.Count + payments.Count;

@@ -118,7 +118,8 @@ public sealed class ServiceNotices(HazemDbContext db, BookingStore store, ISetti
             }
 
             await db.Database.ExecuteSqlInterpolatedAsync(
-                $"UPDATE hazem.service_orders SET client_notice = {(told ? "sent" : "failed")} WHERE id = {o.Id} AND client_notice = 'pending'", ct);
+                // v1.28: only the notice that went; one written meanwhile (verified, then delivered a second later) waits its turn.
+                $"UPDATE hazem.service_orders SET client_notice = {(told ? "sent" : "failed")} WHERE id = {o.Id} AND client_notice = 'pending' AND notice_kind IS NOT DISTINCT FROM {o.NoticeKind} AND notice_attempt = {o.NoticeAttempt}", ct);
         }
 
         foreach (var x in payments)
@@ -146,7 +147,7 @@ public sealed class ServiceNotices(HazemDbContext db, BookingStore store, ISetti
             }
 
             await db.Database.ExecuteSqlInterpolatedAsync(
-                $"UPDATE hazem.payments SET client_notice = {(told ? "sent" : "failed")} WHERE id = {pay.Id} AND client_notice = 'pending'", ct);
+                $"UPDATE hazem.payments SET client_notice = {(told ? "sent" : "failed")} WHERE id = {pay.Id} AND client_notice = 'pending' AND notice_kind IS NOT DISTINCT FROM {pay.NoticeKind}", ct); // v1.28
         }
 
         return orders.Count + payments.Count;

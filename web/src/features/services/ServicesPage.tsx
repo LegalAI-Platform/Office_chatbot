@@ -89,7 +89,9 @@ function OrderCard({ o }: { o: ServiceOrder }) {
         {o.state === "in_progress" ? <Deliver o={o} onDone={done} /> : null}
         {o.notice === "failed" ? (
           <p className="text-sm text-bad" role="status">
-            آخر رسالة ما وصلتش للعميل (غالبًا عدّى 24 ساعة من آخر رسالة منه). هتتبعت تاني لوحدها أول ما يكتب، أو كلّموه.
+            {o.notice_error === "OUTSIDE_24H_WINDOW" || !o.notice_error
+              ? "آخر رسالة ما وصلتش للعميل (عدّى 24 ساعة من آخر رسالة منه). هتتبعت تاني لوحدها أول ما يكتب، أو كلّموه."
+              : `آخر رسالة ما وصلتش للعميل: واتساب رفضها (${o.notice_error}). جرّب «ابعت الملف تاني»، ولو اتكررت كلّموه.`}
           </p>
         ) : null}
         {o.state === "delivered" && o.file_name ? (
