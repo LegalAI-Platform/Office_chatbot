@@ -35,9 +35,9 @@ fields. It never writes a word the client sees: every reply is an approved text
 
 - OpenAI Chat Completions, **Structured Outputs** (`response_format: json_schema`, `strict: true`,
   `additionalProperties: false`, every field required, enums = the lists above), `temperature: 0`.
-- Prompt: `backend/src/Office.Infrastructure/Ai/prompts/classify-v10.md` (v1..v9 kept as history), embedded in the build.
-  Its version (`classify-v10`) is saved with every classification. **Change the prompt = a new
-  file (`classify-v11.md` next) and a new `PromptVersion`**, then run `classify-eval` again.
+- Prompt: `backend/src/Office.Infrastructure/Ai/prompts/classify-v11.md` (v1..v10 kept as history), embedded in the build.
+  Its version (`classify-v11`) is saved with every classification. **Change the prompt = a new
+  file (`classify-v12.md` next) and a new `PromptVersion`**, then run `classify-eval` again.
 - Model: `OPENAI_MODEL`. Empty = `gpt-4.1-mini`, **a starting point only**. The final model is
   chosen by the owner after `classify-eval` (T-08).
 - Key: `HAZEM_OPENAI_API_KEY` in `.env` — the .NET key, separate from n8n's voice key. It may be
@@ -266,3 +266,21 @@ none of those. A conversation costs about $0.06–0.15 with Opus (the cache is w
 The set's misses: 48 and 192 (a service or a booking asked as a question → office_info), 67 (an Urfi price → the service),
 138 (an ad question → office_info) and 230 «بحبك» → off_topic (the pending abuse fix). The Anthropic key made on
 2026-10-28 expires on 2026-11-27.
+
+### v1.27: abuse before the scope (`classify-v11`, Claude Opus 5.5, 2026-10-28)
+
+v10's scope pulled sexual requests without an explicit word («أنا محتاج واحدة أنام معاها»، «عايز بنت لليلة») to off_topic, and
+its off_topic examples still listed «بحبك» as harmless chit-chat although v1.23 made it flirting. v11 judges abuse first
+(a request for sex or a partner, sexual content, flirting, insults, threats, spam → abusive whatever the scope) and lists
+words of love to the assistant or staff with the flirting. Scope samples 3021–3024 are new (three requests, one real matter).
+
+| Prompt | Samples | Intent | Scope | Service | Matter | Sender role | Info topic |
+|---|---|---|---|---|---|---|---|
+| `classify-v10` | abuse probe of 7 | 3/7 (the three requests and «بحبك» → off_topic) | | | | | |
+| **`classify-v11`** (in use) | abuse probe of 7 | **7/7** | 7/7 | | | | |
+| **`classify-v11`** | scope 64 | **100%** | 100% | 100% | 100% | | 100% |
+| **`classify-v11`** | hold-out 81 | **97.5%** | 100% | 100% | 100% | 100% | 100% |
+| **`classify-v11`** | set 251 | **98.0%** | 99.6% | 100% | 100% | 100% | 100% |
+
+The set's misses: v1.26's minus 230 «بحبك» (now abusive), plus 167 «اتجوزت عرفي والراجل اختفى» → an Urfi service (the same
+Urfi offer either way).
