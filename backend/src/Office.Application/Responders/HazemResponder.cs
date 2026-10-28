@@ -943,6 +943,9 @@ public sealed class HazemResponder(
                 case Intent.OffTopic:
                     plan.Say(TextKeys.OffTopic); // v1.22: no office task, no offer
                     break;
+                case Intent.DescribeMatter when Intake.MatterAsked && turnClass.Service == Service.CaseRepresentation:
+                    Offer(askTopic: false); // v1.28: his story asks for a case: the case offer, not «وصلت» alone
+                    break;
                 case Intent.DescribeMatter:
                     // B-25: the client told the topic. After the question: «تمام، وصلت ✅» only.
                     if (Intake.MatterAsked)
@@ -1173,17 +1176,22 @@ public sealed class HazemResponder(
             }
 
             var known = MayBook ? KindAsked() : null;
+            // v1.28: a client who wants a case filed (the AI's service, from his words or his story) hears that the lawyer
+            // listens first and sets the fees, and that the consultation counts towards them. A price question keeps its own.
+            var offer = answering is { Service: Service.CaseRepresentation, Intent: not Intent.PriceQuestion }
+                ? TextKeys.CaseOffer
+                : TextKeys.ConsultationOffer;
             if (MayBook && known is null)
             {
-                plan.Ask(TextKeys.ConsultationOffer, new ReplyChoices(InteractivePayload.Buttons,
+                plan.Ask(offer, new ReplyChoices(InteractivePayload.Buttons,
                 [
                     new ReplyChoice(BookingChoice.Mode(BookingService.PhoneVideo), TextKeys.BtnBookPhoneVideo),
                     new ReplyChoice(BookingChoice.Mode(BookingService.Office), TextKeys.BtnBookOffice),
-                ]));
+                ]), fallback: TextKeys.ConsultationOffer);
             }
             else
             {
-                plan.Say(TextKeys.ConsultationOffer);
+                plan.Say(offer, TextKeys.ConsultationOffer);
             }
 
             if (askTopic && !Intake.MatterKnown && !Intake.MatterAsked)
@@ -1778,8 +1786,8 @@ public sealed class HazemResponder(
             Steps.Add(new ReplyStep(key, fallback, Fill));
 
         /// <summary>A text with buttons or a list under it (TASK 08).</summary>
-        public void Ask(string key, ReplyChoices choices, IReadOnlyDictionary<string, string>? Fill = null) =>
-            Steps.Add(new ReplyStep(key, null, Fill, choices));
+        public void Ask(string key, ReplyChoices choices, IReadOnlyDictionary<string, string>? Fill = null, string? fallback = null) =>
+            Steps.Add(new ReplyStep(key, fallback, Fill, choices));
 
         /// <summary>A staff task, due by the B-06 table.</summary>
         public void Task(string kind, Guid? staffId = null)

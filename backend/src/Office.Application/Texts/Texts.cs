@@ -30,6 +30,7 @@ public static class TextKeys
     public const string UrfProof = "urf_proof";
     public const string ExistingOrNew = "existing_or_new";   // B-04 (TASK 05a)
     public const string AskTopic = "ask_topic";              // B-25
+    public const string CaseOffer = "case_offer";            // v1.28 (B-23): the offer to a client who wants a case filed
     public const string TopicReceived = "topic_received";    // B-25
 
     // Proposed in TASK 05a (inactive until approved).

@@ -165,6 +165,8 @@ public sealed class HazemFlowTests
     [InlineData("عايز صياغة عقد", TextKeys.ContractDraftingRequest)]
     [InlineData("مراجعة العقد بكام", TextKeys.PriceDocumentReview)]
     [InlineData("القضية بكام", TextKeys.PriceCaseRepresentation)]
+    [InlineData("عايز أرفع قضية", TextKeys.CaseOffer)]                          // v1.28: a case asked for
+    [InlineData("جاري بنى على أرضي وعايز أرفع عليه", TextKeys.CaseOffer)]      // v1.28: understood from the story
     public async Task Proposed_texts_go_out_with_their_key_once_approved(string text, string key)
     {
         Activate(typeof(TextKeys).GetFields().Select(f => (string)f.GetValue(null)!).Where(k => !Approved.ContainsKey(k)).ToArray());
@@ -513,6 +515,8 @@ public sealed class HazemFlowTests
                 _ when t.Contains("مستعجل", StringComparison.Ordinal) => R("urgent"),
                 _ when t.Contains("بكام", StringComparison.Ordinal) => R("price_question",
                     t.Contains("مراجعة", StringComparison.Ordinal) ? "document_review" : t.Contains("القضية", StringComparison.Ordinal) ? "case_representation" : "consultation_phone_video"),
+                _ when t.Contains("أرفع قضية", StringComparison.Ordinal) => R("service_by_name", "case_representation"),
+                _ when t.Contains("أرفع عليه", StringComparison.Ordinal) => R("describe_matter", "case_representation"), // v1.28: from his story
                 _ when t.Contains("القضية", StringComparison.Ordinal) => R("existing_matter"),
                 _ when t.Contains("موظف", StringComparison.Ordinal) => R("human_request"),
                 _ when t.Contains("ألغي", StringComparison.Ordinal) => R("reschedule_or_cancel"),
