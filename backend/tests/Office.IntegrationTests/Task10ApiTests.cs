@@ -27,7 +27,7 @@ public sealed class Task10ApiTests(TestDatabase db) : IAsyncLifetime
         DELETE FROM hazem.service_files; DELETE FROM hazem.payment_receipts; DELETE FROM hazem.payments;
         DELETE FROM hazem.service_orders; DELETE FROM hazem.appointments;
         UPDATE hazem.settings SET value = '' WHERE key IN ('office.instapay', 'office.wallet_number', 'office.wallet_provider');
-        UPDATE hazem.approved_texts SET active = true WHERE source IN ('proposal TASK 08', 'proposal TASK 09', 'proposal TASK 10');
+        UPDATE hazem.approved_texts SET active = true WHERE source IN ('proposal TASK 08', 'proposal TASK 09', 'proposal TASK 10') AND version = (SELECT max(m.version) FROM hazem.approved_texts m WHERE m.key = approved_texts.key);
         TRUNCATE hazem.panel_audit; DELETE FROM hazem.panel_users;
         TRUNCATE hazem.turns, hazem.send_results, hazem.turn_replies, hazem.classifications, hazem.panel_alerts, hazem.panel_alert_reads, hazem.staff_tasks, hazem.list_entries;
         DELETE FROM hazem.staff; DELETE FROM hazem.intakes; DELETE FROM hazem.conversations; DELETE FROM hazem.persons;
@@ -52,7 +52,7 @@ public sealed class Task10ApiTests(TestDatabase db) : IAsyncLifetime
 
     /// <summary>TASK 10's texts (approved, active since 0015) and the office's payment details.</summary>
     private Task ServicesOn() => db.ExecAsync("""
-        UPDATE hazem.approved_texts SET active = true WHERE source = 'proposal TASK 10';
+        UPDATE hazem.approved_texts SET active = true WHERE source = 'proposal TASK 10' AND version = (SELECT max(m.version) FROM hazem.approved_texts m WHERE m.key = approved_texts.key);
         UPDATE hazem.settings SET value = 'office@instapay' WHERE key = 'office.instapay';
         UPDATE hazem.settings SET value = '01000000000' WHERE key = 'office.wallet_number';
         UPDATE hazem.settings SET value = 'فودافون كاش' WHERE key = 'office.wallet_provider';

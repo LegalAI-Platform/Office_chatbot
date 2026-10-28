@@ -18,7 +18,7 @@ member, and Hazem uses the change at once.
 | The hours of every week | **المواعيد الثابتة**: each day one or more ranges, or none (إجازة) → احفظ الأسبوع |
 | Buffer, notice, furthest day, a daily limit, every how many minutes, how many times Hazem offers | **إعدادات الحجز** |
 | Switch booking from WhatsApp on or off | **إعدادات الحجز** → «حازم يحجز من واتساب» |
-| InstaPay, the wallet, the address (manager and lawyer only) | **بيانات المكتب** |
+| InstaPay, the wallet, the address, the map, **(1.25)** the Google Meet link and the office's phone (manager and lawyer only) | **بيانات المكتب** |
 
 - Every day shows **«حازم هيعرض إيه»**: the exact times Hazem would offer that day, now.
 - **«تراجع»** (top of the page) puts back the last change. Appointments already cancelled stay

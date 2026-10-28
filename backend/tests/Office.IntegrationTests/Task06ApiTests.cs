@@ -34,7 +34,7 @@ public sealed class Task06ApiTests(TestDatabase db) : IAsyncLifetime
         UPDATE hazem.settings SET value = '1000' WHERE key = 'price.office';
         UPDATE hazem.settings SET value = '3000' WHERE key = 'price.review_max';
         UPDATE hazem.approved_texts SET active = true
-         WHERE source IN ('proposal TASK 08', 'proposal TASK 09', 'proposal TASK 06');
+         WHERE source IN ('proposal TASK 08', 'proposal TASK 09', 'proposal TASK 06') AND version = (SELECT max(m.version) FROM hazem.approved_texts m WHERE m.key = approved_texts.key);
         TRUNCATE hazem.panel_audit; DELETE FROM hazem.panel_users;
         TRUNCATE hazem.turns, hazem.send_results, hazem.turn_replies, hazem.classifications, hazem.panel_alerts, hazem.panel_alert_reads, hazem.staff_tasks, hazem.list_entries;
         DELETE FROM hazem.staff; DELETE FROM hazem.intakes; DELETE FROM hazem.conversations; DELETE FROM hazem.persons;
@@ -58,7 +58,7 @@ public sealed class Task06ApiTests(TestDatabase db) : IAsyncLifetime
     }
 
     private Task BookingOn() => db.ExecAsync("""
-        UPDATE hazem.approved_texts SET active = true WHERE source IN ('proposal TASK 08', 'proposal TASK 09');
+        UPDATE hazem.approved_texts SET active = true WHERE source IN ('proposal TASK 08', 'proposal TASK 09') AND version = (SELECT max(m.version) FROM hazem.approved_texts m WHERE m.key = approved_texts.key);
         UPDATE hazem.settings SET value = 'true' WHERE key = 'booking.enabled';
         UPDATE hazem.settings SET value = 'lawyer@example.test' WHERE key = 'booking.calendar_id';
         UPDATE hazem.settings SET value = 'office@instapay' WHERE key = 'office.instapay';
@@ -214,7 +214,7 @@ public sealed class Task06ApiTests(TestDatabase db) : IAsyncLifetime
     [Fact]
     public async Task The_address_is_answered_from_the_panel_and_a_missing_one_gives_the_office_a_task()
     {
-        await db.ExecAsync("UPDATE hazem.approved_texts SET active = true WHERE source = 'proposal TASK 06'");
+        await db.ExecAsync("UPDATE hazem.approved_texts SET active = true WHERE source = 'proposal TASK 06' AND version = (SELECT max(m.version) FROM hazem.approved_texts m WHERE m.key = approved_texts.key)");
         await Named(First);
         var none = await Say(First, "المكتب فين؟");
         Assert.StartsWith("الأستاذ يقدر يشوف الموضوع", Text(none)); // never half a message: the offer alone
@@ -240,7 +240,7 @@ public sealed class Task06ApiTests(TestDatabase db) : IAsyncLifetime
     public async Task The_price_list_answer_quotes_the_panel_s_prices()
     {
         await db.ExecAsync("""
-            UPDATE hazem.approved_texts SET active = true WHERE source = 'proposal TASK 06';
+            UPDATE hazem.approved_texts SET active = true WHERE source = 'proposal TASK 06' AND version = (SELECT max(m.version) FROM hazem.approved_texts m WHERE m.key = approved_texts.key);
             UPDATE hazem.settings SET value = '700' WHERE key = 'price.phone_video';
             """);
         await Named(First);

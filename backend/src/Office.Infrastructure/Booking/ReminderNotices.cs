@@ -83,7 +83,7 @@ public sealed class ReminderNotices(HazemDbContext db, BookingStore store, ISett
                          join p in db.Persons.AsNoTracking() on a.PersonId equals p.Id
                          where r.State == "scheduled" && r.DueAt <= now && a.State == AppointmentInfo.Confirmed && a.StartsAt == r.StartsAt
                          orderby r.DueAt
-                         select new { r.Id, r.Kind, a.PersonId, AppointmentId = a.Id, a.Service, a.StartsAt, p.WaId }).Take(Batch).ToListAsync(ct);
+                         select new { r.Id, r.Kind, a.PersonId, AppointmentId = a.Id, a.Service, a.StartsAt, p.WaId, a.CallApp }).Take(Batch).ToListAsync(ct);
         if (due.Count == 0)
         {
             return 0;
@@ -105,7 +105,7 @@ public sealed class ReminderNotices(HazemDbContext db, BookingStore store, ISett
                 ? await db.UrfCases.AsNoTracking().Where(c => c.AppointmentId == r.AppointmentId)
                     .Select(c => UrfCase.AttendeesFor(c.Kind, c.Witnesses)).FirstOrDefaultAsync(ct)
                 : null;
-            var (detailsKey, detailsFill) = ReminderTexts.Details(service, office, attendees);
+            var (detailsKey, detailsFill) = ReminderTexts.Details(service, office, attendees, r.CallApp);
             var details = active.TryGetValue(detailsKey, out var d) ? TextRenderer.Render(d, detailsFill).Text : null;
             var key = Key(r.AppointmentId, r.Kind, r.StartsAt);
 

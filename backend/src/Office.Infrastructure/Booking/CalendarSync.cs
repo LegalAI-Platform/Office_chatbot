@@ -169,7 +169,7 @@ public sealed class CalendarSync(HazemDbContext db, GoogleCalendar google, ISett
     /// has its receipt (1.13), so the event shows the office's review instead, and is updated with it.
     /// </summary>
     public static string Summary(AppointmentRow a, string? name, string waId, string? payment) =>
-        $"{BookingService.ByCode(a.Service)?.Name ?? a.Service} – {name ?? "من غير اسم"} – +{waId} – {MatterName(a.MatterType)} – {PaymentWords(payment)}"
+        $"{BookingService.ByCode(a.Service)?.Name ?? a.Service}{(a.CallApp is { } app ? $" ({CallApp.Name(app)})" : "")} – {name ?? "من غير اسم"} – +{waId} – {MatterName(a.MatterType)} – {PaymentWords(payment)}"
         + (a.AttendanceFor is { } at && at == a.StartsAt ? " – الحضور: ✅ أكّد" : ""); // TASK 12 (B-18): «هحضر ✅»
 
     public static string PaymentWords(string? state) => state switch

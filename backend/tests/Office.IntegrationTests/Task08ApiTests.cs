@@ -36,7 +36,7 @@ public sealed class Task08ApiTests(TestDatabase db) : IAsyncLifetime
           ELSE '' END
          WHERE key LIKE 'booking.%' OR key LIKE 'office.%';
         UPDATE hazem.settings SET value = 'false' WHERE key = 'booking.conflict_auto_message';
-        UPDATE hazem.approved_texts SET active = true WHERE source IN ('proposal TASK 08', 'proposal TASK 09');
+        UPDATE hazem.approved_texts SET active = true WHERE source IN ('proposal TASK 08', 'proposal TASK 09') AND version = (SELECT max(m.version) FROM hazem.approved_texts m WHERE m.key = approved_texts.key);
         TRUNCATE hazem.panel_audit; DELETE FROM hazem.panel_users;
         TRUNCATE hazem.turns, hazem.send_results, hazem.turn_replies, hazem.classifications, hazem.panel_alerts, hazem.panel_alert_reads, hazem.staff_tasks, hazem.list_entries;
         DELETE FROM hazem.staff; DELETE FROM hazem.intakes; DELETE FROM hazem.conversations; DELETE FROM hazem.persons;
@@ -64,7 +64,7 @@ public sealed class Task08ApiTests(TestDatabase db) : IAsyncLifetime
     /// the office's details and the calendar id.
     /// </summary>
     private Task BookingOn() => db.ExecAsync("""
-        UPDATE hazem.approved_texts SET active = true WHERE source = 'proposal TASK 09';
+        UPDATE hazem.approved_texts SET active = true WHERE source = 'proposal TASK 09' AND version = (SELECT max(m.version) FROM hazem.approved_texts m WHERE m.key = approved_texts.key);
         UPDATE hazem.settings SET value = 'true' WHERE key = 'booking.enabled';
         UPDATE hazem.settings SET value = 'lawyer@example.test' WHERE key = 'booking.calendar_id';
         UPDATE hazem.settings SET value = 'office@instapay' WHERE key = 'office.instapay';
@@ -145,7 +145,8 @@ public sealed class Task08ApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal("buttons", (string?)buttons["interactive"]!["kind"]);
         Assert.Equal("bk:m:pv", (string?)buttons["interactive"]!["choices"]![0]!["id"]);
 
-        var times = (await Press("bk:m:pv")).Single()!;
+        Assert.Equal("buttons", (string?)(await Press("bk:m:pv")).Single()!["interactive"]!["kind"]); // 1.25: where the lawyer calls
+        var times = (await Press("bk:v:wa")).Single()!;
         Assert.Equal("list", (string?)times["interactive"]!["kind"]);
         var first = times["interactive"]!["choices"]![0]!;
         Assert.Equal("النهارده 2:00 م", (string?)first["title"]); // 12:00 + the 2 hours' notice
@@ -160,7 +161,7 @@ public sealed class Task08ApiTests(TestDatabase db) : IAsyncLifetime
             Assert.Equal(0, await scope.ServiceProvider.GetRequiredService<CalendarSync>().SyncAsync(Ct)); // no event for a hold
         }
 
-        Assert.StartsWith("✅ وصلت صورة التحويل", (string?)(await Receipt()).Single()!["text"]);
+        Assert.StartsWith("وصلت صورة التحويل ✅، والميعاد محجوز لحضرتك", (string?)(await Receipt()).Single()!["text"]); // 1.25: until the review
         Assert.Equal("confirmed|create|proof_received", await db.ScalarAsync<string>(
             "SELECT a.state || '|' || a.calendar_state || '|' || p.state FROM hazem.appointments a JOIN hazem.payments p ON p.appointment_id = a.id"));
 
@@ -170,7 +171,7 @@ public sealed class Task08ApiTests(TestDatabase db) : IAsyncLifetime
         }
 
         var ev = Assert.Single(_factory.Google.Events.Values);
-        Assert.Equal("استشارة بالتليفون أو الفيديو – محمد أحمد علي حسن – +201000000091 – غير معروف – الدفع: مستني مراجعتك", ev.Summary);
+        Assert.Equal("استشارة بالتليفون أو الفيديو (واتساب) – محمد أحمد علي حسن – +201000000091 – غير معروف – الدفع: مستني مراجعتك", ev.Summary);
         Assert.Equal("synced", await db.ScalarAsync<string>("SELECT calendar_state FROM hazem.appointments"));
     }
 
@@ -358,7 +359,8 @@ public sealed class Task08ApiTests(TestDatabase db) : IAsyncLifetime
         await BookingOn();
         _factory.Google.Down = true;
         await UpToTheOffer();
-        var answer = (await Press("bk:m:pv")).Single()!;
+        await Press("bk:m:pv");
+        var answer = (await Press("bk:v:wa")).Single()!;
         Assert.Equal("send_text", (string?)answer["type"]);
         Assert.Equal("booking_unavailable", await db.ScalarAsync<string>("SELECT type FROM hazem.staff_tasks"));
         Assert.Equal(0L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.appointments"));

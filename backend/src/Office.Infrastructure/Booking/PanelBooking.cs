@@ -37,7 +37,7 @@ public sealed record ExceptionView(Guid Id, DateOnly Day, string Kind, int? Star
 
 public sealed record AppointmentView(Guid Id, string Service, DateTimeOffset Start, DateTimeOffset End, string State, string? Name, string WaId,
     string? MatterType, int Reschedules, string Calendar, DateTimeOffset? HoldUntil = null, string? Payment = null,
-    bool Attending = false, IReadOnlyList<ReminderView>? Reminders = null);
+    bool Attending = false, IReadOnlyList<ReminderView>? Reminders = null, string? CallApp = null);
 
 /// <summary>TASK 12 (B-18): one reminder of the appointment's current time, as «المواعيد» shows it.</summary>
 public sealed record ReminderView(string Kind, string State, DateTimeOffset? DueAt, DateTimeOffset? SentAt, string? Channel, string? SkipReason,
@@ -49,7 +49,8 @@ public sealed record ChangeView(long Id, DateTimeOffset At, string What, string?
 
 public sealed record PreviewView(string Calendar, IReadOnlyList<DateTimeOffset> Slots);
 
-public sealed record OfficeView(string Instapay, string WalletNumber, string WalletProvider, string Address, string MapUrl);
+public sealed record OfficeView(string Instapay, string WalletNumber, string WalletProvider, string Address, string MapUrl,
+    string? MeetLink = null, string? Phone = null);
 
 /// <summary>
 /// What a change did: Error null = done (<see cref="Cancelled"/> appointments cancelled by the office;
@@ -236,7 +237,7 @@ public sealed class PanelBooking(
     public async Task<OfficeView> OfficeAsync(CancellationToken ct)
     {
         var o = OfficeInfo.From(await settingsReader.GetAsync(ct));
-        return new OfficeView(o.InstaPay, o.WalletNumber, o.WalletProvider, o.Address, o.MapUrl);
+        return new OfficeView(o.InstaPay, o.WalletNumber, o.WalletProvider, o.Address, o.MapUrl, o.MeetLink, o.Phone);
     }
 
     public async Task<string?> SaveOfficeAsync(Guid by, string username, OfficeView body, CancellationToken ct)
@@ -248,10 +249,16 @@ public sealed class PanelBooking(
             [OfficeInfo.WalletProviderKey] = (body.WalletProvider ?? "").Trim(),
             [OfficeInfo.AddressKey] = (body.Address ?? "").Trim(),
             [OfficeInfo.MapUrlKey] = (body.MapUrl ?? "").Trim(),
+            [OfficeInfo.MeetLinkKey] = (body.MeetLink ?? "").Trim(),
+            [OfficeInfo.PhoneKey] = (body.Phone ?? "").Trim(),
         };
-        // The details go into Hazem's messages: plain values within B-21, no slots, a real map link.
+        // The details go into Hazem's messages: plain values within B-21, no slots, real https links (1.25: the Meet link
+        // is a meet.google.com one), a phone of digits.
         if (values.Values.Any(v => v.Length > 200 || TextRenderer.HasOpenSlot(v))
-            || values[OfficeInfo.MapUrlKey] is { Length: > 0 } map && !(Uri.TryCreate(map, UriKind.Absolute, out var u) && u.Scheme == "https"))
+            || values[OfficeInfo.MapUrlKey] is { Length: > 0 } map && !(Uri.TryCreate(map, UriKind.Absolute, out var u) && u.Scheme == "https")
+            || values[OfficeInfo.MeetLinkKey] is { Length: > 0 } meet
+               && !(Uri.TryCreate(meet, UriKind.Absolute, out var g) && g.Scheme == "https" && g.Host == "meet.google.com")
+            || values[OfficeInfo.PhoneKey] is { Length: > 0 } phone && !System.Text.RegularExpressions.Regex.IsMatch(phone, @"^\+?[0-9 -]{6,20}$"))
         {
             return ErrInvalid;
         }
@@ -384,7 +391,7 @@ public sealed class PanelBooking(
                           where a.StartsAt >= f && a.StartsAt < t
                           orderby a.StartsAt
                           select new AppointmentView(a.Id, a.Service, a.StartsAt, a.EndsAt, a.State, p.NameRaw, p.WaId, a.MatterType, a.Reschedules,
-                              a.CalendarState, a.HoldUntil, pay == null ? null : pay.State, a.AttendanceFor == a.StartsAt)).Take(500).ToListAsync(ct);
+                              a.CalendarState, a.HoldUntil, pay == null ? null : pay.State, a.AttendanceFor == a.StartsAt, null, a.CallApp)).Take(500).ToListAsync(ct);
 
         // TASK 12: the reminders of each appointment's current time (a moved appointment's old ones are cancelled).
         var ids = list.Select(a => a.Id).ToList();

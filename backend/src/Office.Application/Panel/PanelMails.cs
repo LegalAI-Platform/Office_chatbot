@@ -132,6 +132,7 @@ public static class PanelMails
         "external_contact" => "زميل أو صحافة أو مورّد",
         "unclear_message" => "رسالة مش واضحة",
         "service_question" => "سؤال عن خدمة معيّنة",
+        "payment_review_due" => "تحويل لسه ما اتراجعش والميعاد قرّب",
         "urgent_request" => "طلب عاجل",
         "service_request" => "طلب خدمة",
         "reschedule_or_cancel" => "تغيير أو إلغاء ميعاد",

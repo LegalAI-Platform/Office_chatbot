@@ -35,7 +35,7 @@ public sealed class Task12ApiTests(TestDatabase db) : IAsyncLifetime
         UPDATE hazem.settings SET value = 'false' WHERE key = 'booking.enabled';
         UPDATE hazem.settings SET value = '' WHERE key IN ('booking.calendar_id', 'office.instapay', 'office.wallet_number', 'office.wallet_provider',
           'office.address', 'office.map_url');
-        UPDATE hazem.approved_texts SET active = true WHERE source IN ('proposal TASK 08', 'proposal TASK 09', 'proposal TASK 12', 'DECISIONS v1.16 B-18');
+        UPDATE hazem.approved_texts SET active = true WHERE source IN ('proposal TASK 08', 'proposal TASK 09', 'proposal TASK 12', 'DECISIONS v1.16 B-18', 'DECISIONS v1.25 B-18') AND version = (SELECT max(m.version) FROM hazem.approved_texts m WHERE m.key = approved_texts.key);
         TRUNCATE hazem.panel_audit; DELETE FROM hazem.panel_users;
         TRUNCATE hazem.turns, hazem.send_results, hazem.turn_replies, hazem.classifications, hazem.panel_alerts, hazem.panel_alert_reads, hazem.staff_tasks, hazem.list_entries;
         DELETE FROM hazem.staff; DELETE FROM hazem.intakes; DELETE FROM hazem.conversations; DELETE FROM hazem.persons;
@@ -132,7 +132,8 @@ public sealed class Task12ApiTests(TestDatabase db) : IAsyncLifetime
     [Fact]
     public async Task Migration_0017_added_the_reminder_texts_active_within_their_limits()
     {
-        Assert.Equal("9|9", await db.ScalarAsync<string>("""
+        Assert.Equal("9|10", await db.ScalarAsync<string>( // 1.25: reminder_details_phone v2 (where the lawyer calls) replaced v1
+            """
             SELECT count(*) FILTER (WHERE active) || '|' || count(*) FROM hazem.approved_texts
              WHERE key IN ('reminder_day_before', 'reminder_2h_before', 'btn_reminder_attend', 'btn_reminder_change', 'reminder_attend_ok',
                            'reminder_details_office', 'reminder_details_phone', 'reminder_details_urf', 'reminder_old_button')
@@ -166,7 +167,7 @@ public sealed class Task12ApiTests(TestDatabase db) : IAsyncLifetime
         var text = (string)day["text"]!;
         Assert.Contains("بكرة الجمعة 20/11 الساعة 12:00 م", text);
         Assert.Contains("نوع الاستشارة: استشارة بالتليفون أو الفيديو", text);
-        Assert.Contains("الأستاذ هيكلم حضرتك على نفس الرقم ده في الميعاد", text);
+        Assert.Contains("الأستاذ هيكلم حضرتك على واتساب على نفس الرقم ده في الميعاد", text);
         Assert.DoesNotContain("{{", text);
         var buttons = day["interactive"]!["choices"]!.AsArray();
         Assert.Equal([ReminderButtons.Attend(id, Friday12), ReminderButtons.Change(id)], buttons.Select(b => (string)b!["id"]!));
@@ -198,7 +199,7 @@ public sealed class Task12ApiTests(TestDatabase db) : IAsyncLifetime
         var t = sent[1];
         Assert.Equal(("reminder_day_before", "ar"), ((string)t["template_name"]!, (string)t["language"]!));
         var parts = t["components"]!.AsArray();
-        Assert.Equal(["الجمعة 20/11", "12:00 م", "استشارة بالتليفون أو الفيديو", "الأستاذ هيكلم حضرتك على نفس الرقم ده في الميعاد"],
+        Assert.Equal(["الجمعة 20/11", "12:00 م", "استشارة بالتليفون أو الفيديو", "الأستاذ هيكلم حضرتك على واتساب على نفس الرقم ده في الميعاد"],
             parts[0]!["parameters"]!.AsArray().Select(p => (string)p!["text"]!));
         Assert.Equal([ReminderButtons.Attend(id, Friday12), ReminderButtons.Change(id)],
             parts.Skip(1).Select(p => (string)p!["parameters"]![0]!["payload"]!));

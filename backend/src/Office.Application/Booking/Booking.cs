@@ -40,6 +40,33 @@ public sealed record BookingService(string Code, string Short, int Minutes, int 
     public static BookingService? ByCode(string? code) => All.FirstOrDefault(s => s.Code == code || s.Short == code);
 }
 
+/// <summary>
+/// B-23 (1.25): where the lawyer calls for a phone or video consultation (hazem.appointments.call_app). The client picks it
+/// after «📞 تليفون أو فيديو»; an urgent call, and a booking from before 1.25, is WhatsApp.
+/// </summary>
+public static class CallApp
+{
+    public const string WhatsApp = "whatsapp";
+    public const string FaceTime = "facetime";
+    public const string Meet = "meet";
+
+    /// <summary>The code in a button id («bk:v:ft»).</summary>
+    public static string Short(string app) => app switch { FaceTime => "ft", Meet => "gm", _ => "wa" };
+
+    public static string? ByShort(string? s) => s switch { "wa" => WhatsApp, "ft" => FaceTime, "gm" => Meet, _ => null };
+
+    /// <summary>The words after «هيكلم حضرتك على» (like a service's name); null for Meet without its link (the text waits).</summary>
+    public static string? Words(string? app, OfficeInfo office) => app switch
+    {
+        FaceTime => "FaceTime على نفس الرقم ده",
+        Meet => office.MeetLink.Trim().Length > 0 ? $"لينك Google Meet ده: {office.MeetLink.Trim()}" : null,
+        _ => "واتساب على نفس الرقم ده",
+    };
+
+    /// <summary>The panel's and the calendar's name.</summary>
+    public static string Name(string? app) => app switch { FaceTime => "FaceTime", Meet => "Google Meet", _ => "واتساب" };
+}
+
 /// <summary>The booking.* and office.* settings, read in every turn (the panel's changes count at once).</summary>
 public sealed record BookingSettings(bool Enabled, BookingRules Rules, string CalendarId, OfficeInfo Office, HoldRules Hold, int UrfMinutes = 60,
     PriceList? PriceList = null)
@@ -49,6 +76,11 @@ public sealed record BookingSettings(bool Enabled, BookingRules Rules, string Ca
     public const string HoldShortWithinKey = "booking.hold_short_within_hours";
     public const string HoldGapKey = "booking.hold_gap_minutes";
     public const string UrfMinutesKey = "booking.urf_minutes";
+
+    /// <summary>1.25 (B-08): a transfer still not reviewed this many minutes before its appointment is an urgent task.</summary>
+    public const string ReviewAlertKey = "booking.review_alert_minutes";
+
+    public const int DefaultReviewAlertMinutes = 60;
 
     /// <summary>B-11 (1.15): the Urfi appointment in the office, 15 minutes to 8 hours.</summary>
     public static bool UrfMinutesValid(int minutes) => minutes is >= 15 and <= 480;
@@ -133,18 +165,21 @@ public sealed record HoldRules(int Minutes, int ShortMinutes, int ShortWithinHou
 }
 
 /// <summary>P1: the office's payment and address details, written from the panel.</summary>
-public sealed record OfficeInfo(string InstaPay, string WalletNumber, string WalletProvider, string Address, string MapUrl)
+public sealed record OfficeInfo(string InstaPay, string WalletNumber, string WalletProvider, string Address, string MapUrl,
+    string MeetLink = "", string Phone = "")
 {
     public const string InstaPayKey = "office.instapay";
     public const string WalletNumberKey = "office.wallet_number";
     public const string WalletProviderKey = "office.wallet_provider";
     public const string AddressKey = "office.address";
     public const string MapUrlKey = "office.map_url";
+    public const string MeetLinkKey = "office.meet_link"; // 1.25: the lawyer's fixed Google Meet link
+    public const string PhoneKey = "office.phone";        // 1.25: in the confirmation of a meeting at the office
 
-    public static IReadOnlyList<string> Keys { get; } = [InstaPayKey, WalletNumberKey, WalletProviderKey, AddressKey, MapUrlKey];
+    public static IReadOnlyList<string> Keys { get; } = [InstaPayKey, WalletNumberKey, WalletProviderKey, AddressKey, MapUrlKey, MeetLinkKey, PhoneKey];
 
     public static OfficeInfo From(HazemSettings s) =>
-        new(s.Get(InstaPayKey), s.Get(WalletNumberKey), s.Get(WalletProviderKey), s.Get(AddressKey), s.Get(MapUrlKey));
+        new(s.Get(InstaPayKey), s.Get(WalletNumberKey), s.Get(WalletProviderKey), s.Get(AddressKey), s.Get(MapUrlKey), s.Get(MeetLinkKey), s.Get(PhoneKey));
 
     /// <summary>B-08: the confirmation names both ways to pay; without them it is not sent.</summary>
     public bool HasPayment => InstaPay.Length > 0 && WalletNumber.Length > 0;
@@ -155,7 +190,7 @@ public sealed record OfficeInfo(string InstaPay, string WalletNumber, string Wal
 /// <summary>A row of hazem.appointments, as the flow and the panel need it.</summary>
 public sealed record AppointmentInfo(
     Guid Id, Guid PersonId, string Service, DateTimeOffset Start, DateTimeOffset End, string State, int Reschedules, int Amount,
-    string? MatterType, DateTimeOffset? HoldUntil = null)
+    string? MatterType, DateTimeOffset? HoldUntil = null, string? CallApp = null)
 {
     public const string PendingPayment = "pending_payment"; // 1.13: held until the receipt
     public const string Expired = "expired";                // 1.13: the hold's time ran out
@@ -223,7 +258,7 @@ public enum MoveStatus
 }
 
 public sealed record BookRequest(Guid Id, Guid PersonId, Guid? IntakeId, BookingService Service, DateTimeOffset Start, string TurnId,
-    int BufferMinutes, string? MatterType, DateTimeOffset HoldUntil);
+    int BufferMinutes, string? MatterType, DateTimeOffset HoldUntil, string? CallApp = null);
 
 public interface IBookingStore
 {
@@ -404,16 +439,21 @@ public sealed class BookingDesk(IBookingStore store, IBusyCalendar calendar)
 /// the AI: «bk:m:pv» the kind of consultation, «bk:s:pv:1793000000» a time, «bk:n:…» more times,
 /// «bk:r:id» change, «bk:t:id:…» the new time, «bk:u:id:…» more new times, «bk:c:id» cancel,
 /// «bk:f:id» refund. TASK 12 (B-18), the reminder's: «bk:a:id:start» I will come, «bk:e:id» change or cancel.
+/// 1.25 (B-23): «bk:v:ft» where the lawyer calls, carried on by the times of that list («bk:s:pv:1793000000:ft»).
 /// </summary>
-public sealed record BookingChoice(char Kind, BookingService? Service, Guid? AppointmentId, DateTimeOffset? At)
+public sealed record BookingChoice(char Kind, BookingService? Service, Guid? AppointmentId, DateTimeOffset? At, string? App = null)
 {
     public const string Prefix = "bk:";
 
     public static string Mode(BookingService s) => $"bk:m:{s.Short}";
 
-    public static string Pick(BookingService s, DateTimeOffset at) => $"bk:s:{s.Short}:{at.ToUnixTimeSeconds()}";
+    public static string Call(string app) => $"bk:v:{CallApp.Short(app)}";
 
-    public static string More(BookingService s, DateTimeOffset after) => $"bk:n:{s.Short}:{after.ToUnixTimeSeconds()}";
+    public static string Pick(BookingService s, DateTimeOffset at, string? app = null) => $"bk:s:{s.Short}:{at.ToUnixTimeSeconds()}{AppPart(app)}";
+
+    public static string More(BookingService s, DateTimeOffset after, string? app = null) => $"bk:n:{s.Short}:{after.ToUnixTimeSeconds()}{AppPart(app)}";
+
+    private static string AppPart(string? app) => app is null ? "" : ":" + CallApp.Short(app);
 
     public static string Change(Guid id) => $"bk:r:{id:N}";
 
@@ -444,7 +484,10 @@ public sealed record BookingChoice(char Kind, BookingService? Service, Guid? App
         return kind switch
         {
             'm' when p.Length == 3 && BookingService.ByCode(p[2]) is { } s => new(kind, s, null, null),
+            'v' when p.Length == 3 && CallApp.ByShort(p[2]) is { } app => new(kind, BookingService.PhoneVideo, null, null, app),
             's' or 'n' when p.Length == 4 && BookingService.ByCode(p[2]) is { } s && At(p[3]) is { } at => new(kind, s, null, at),
+            's' or 'n' when p.Length == 5 && BookingService.ByCode(p[2]) is { } s && At(p[3]) is { } at && CallApp.ByShort(p[4]) is { } app
+                => new(kind, s, null, at, app),
             'r' or 'c' or 'f' or 'e' when p.Length == 3 && Id(p[2]) is { } g => new(kind, null, g, null),
             't' or 'u' or 'a' when p.Length == 4 && Id(p[2]) is { } g && At(p[3]) is { } at => new(kind, null, g, at),
             _ => null,

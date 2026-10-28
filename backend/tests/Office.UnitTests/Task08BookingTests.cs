@@ -376,12 +376,43 @@ public sealed class BookingFlowTests
         Assert.Equal(HazemFlowTests.Approved[TextKeys.ConsultationOffer], offer.Text);
         Assert.Equal([BookingChoice.Mode(BookingService.PhoneVideo), BookingChoice.Mode(BookingService.Office)], offer.Interactive!.Choices.Select(c => c.Id));
 
-        var times = await Press(BookingChoice.Mode(BookingService.PhoneVideo));
-        Assert.Null(times.Effects!.Classification); // a button is read without the AI
+        // 1.25 (B-23): a phone or video consultation asks where the lawyer calls; no Meet without its link.
+        var apps = await Press(BookingChoice.Mode(BookingService.PhoneVideo));
+        Assert.Null(apps.Effects!.Classification); // a button is read without the AI
+        var ask = Assert.Single(apps.Actions);
+        Assert.Equal("T:ask_call_app", ask.Text);
+        Assert.Equal(InteractivePayload.Buttons, ask.Interactive!.Kind);
+        Assert.Equal([BookingChoice.Call(CallApp.WhatsApp), BookingChoice.Call(CallApp.FaceTime)], ask.Interactive.Choices.Select(c => c.Id));
+
+        var times = await Press(BookingChoice.Call(CallApp.FaceTime));
         var list = Assert.Single(times.Actions).Interactive!;
         Assert.Equal(InteractivePayload.List, list.Kind);
         Assert.Equal(["النهارده 2:00 م", "النهارده 2:15 م", "النهارده 2:30 م", "النهارده 2:45 م", "T:btn_more_slots"], list.Choices.Select(c => c.Title));
-        Assert.Equal(BookingChoice.Pick(BookingService.PhoneVideo, AvailabilityTests.At(19, 14)), list.Choices[0].Id);
+        Assert.Equal(BookingChoice.Pick(BookingService.PhoneVideo, AvailabilityTests.At(19, 14), CallApp.FaceTime), list.Choices[0].Id);
+        Assert.Equal(BookingChoice.More(BookingService.PhoneVideo, AvailabilityTests.At(19, 14, 45), CallApp.FaceTime), list.Choices[^1].Id);
+
+        await Press(list.Choices[0].Id);
+        Assert.Equal(CallApp.FaceTime, Assert.Single(_booking.Appointments).CallApp); // kept with the booking
+    }
+
+    [Fact]
+    public async Task Google_meet_is_offered_once_the_office_wrote_its_link_and_an_office_meeting_asks_nothing()
+    {
+        _settings[OfficeInfo.MeetLinkKey] = "https://meet.google.com/abc-defg-hij";
+        await ToTheOffer();
+        var ask = Assert.Single((await Press(BookingChoice.Mode(BookingService.PhoneVideo))).Actions).Interactive!;
+        Assert.Equal(BookingChoice.Call(CallApp.Meet), ask.Choices[^1].Id);
+
+        var office = Assert.Single((await Press(BookingChoice.Mode(BookingService.Office))).Actions).Interactive!;
+        Assert.Equal(InteractivePayload.List, office.Kind); // straight to the times
+    }
+
+    [Fact]
+    public async Task An_old_time_without_an_app_is_booked_as_whatsapp() // a list sent before 1.25
+    {
+        await ToTheOffer();
+        await Press(BookingChoice.Pick(BookingService.PhoneVideo, AvailabilityTests.At(19, 14)));
+        Assert.Equal(CallApp.WhatsApp, Assert.Single(_booking.Appointments).CallApp);
     }
 
     [Fact]
@@ -528,7 +559,7 @@ public sealed class BookingFlowTests
     {
         _calendar.Down = true;
         await ToTheOffer();
-        var d = await Press(BookingChoice.Mode(BookingService.PhoneVideo));
+        var d = await Press(BookingChoice.Call(CallApp.WhatsApp));
         Assert.Equal([TextKeys.BookingUnavailable], Keys(d));
         Assert.Equal([PendingTask.BookingUnavailable], TaskKinds(d));
     }
@@ -538,7 +569,7 @@ public sealed class BookingFlowTests
     {
         _booking.Schedule = new Schedule(AvailabilityTests.Every(600, 1440), [new DayException(new DateOnly(2026, 11, 19), ExceptionKind.ClosedDay, null)]);
         await ToTheOffer();
-        var list = Assert.Single((await Press(BookingChoice.Mode(BookingService.PhoneVideo))).Actions).Interactive!;
+        var list = Assert.Single((await Press(BookingChoice.Call(CallApp.WhatsApp))).Actions).Interactive!;
         Assert.Equal("بكرة 10:00 ص", list.Choices[0].Title);
     }
 
@@ -680,7 +711,7 @@ public sealed class BookingFlowTests
                 Interactive: new Interactive("button_reply", BookingChoice.Mode(BookingService.PhoneVideo), "x")),
             new IncomingMessage($"wamid.{++_turn}", MessageType.Text, "وممكن أجيب معايا أخويا؟", null, null),
         ]));
-        Assert.Equal(InteractivePayload.List, Assert.Single(d.Actions).Interactive!.Kind); // the press is answered
+        Assert.Equal(InteractivePayload.Buttons, Assert.Single(d.Actions).Interactive!.Kind); // the press is answered (1.25: the app)
         Assert.Contains(PendingTask.UnclearMessage, TaskKinds(d)); // and the words go to the office
 
         var alone = await Press(BookingChoice.Mode(BookingService.PhoneVideo));
@@ -1430,7 +1461,7 @@ public sealed class BookingFlowTests
                 .Select(a => a.Id).FirstOrDefault();
             var paid = credit != Guid.Empty;
             Appointments.Add(new AppointmentInfo(r.Id, r.PersonId, r.Service.Code, r.Start, r.Start.AddMinutes(r.Service.Minutes),
-                paid ? AppointmentInfo.Confirmed : AppointmentInfo.PendingPayment, 0, r.Service.Amount, r.MatterType, paid ? null : until));
+                paid ? AppointmentInfo.Confirmed : AppointmentInfo.PendingPayment, 0, r.Service.Amount, r.MatterType, paid ? null : until, r.CallApp));
             if (paid)
             {
                 Payments[r.Id] = Payments[credit];

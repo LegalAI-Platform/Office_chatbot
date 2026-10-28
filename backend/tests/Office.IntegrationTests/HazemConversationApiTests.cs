@@ -251,7 +251,8 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
         // v1.21 (it holds v1.20's B-11.1 closing text too) for B-01.6's greetings.
         var decisions = await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.12.md"), Ct)
                         + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.16.md"), Ct)
-                        + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.22.md"), Ct);
+                        + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.22.md"), Ct)
+                        + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.25.md"), Ct); // B-08 / B-23 / B-18 of 1.25
         await using var c = new NpgsqlConnection(db.ApiConnectionString);
         await c.OpenAsync(Ct);
         await using var cmd = new NpgsqlCommand("SELECT key, text FROM hazem.approved_texts WHERE active AND source LIKE 'DECISIONS%'", c);
@@ -263,6 +264,9 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
             ["{{instapay}}"] = "[العنوان]", ["{{wallet}}"] = "[الرقم]",
             ["{{attendees}}"] = "الزوج والزوجة والولي [والشاهدين]", // TASK 11: B-11.7, filled from the answers (a divorce: «الطرفين»)
             ["{{details}}"] = "[التفاصيل]", // TASK 12: B-18's details line (the office, the call, or who comes)
+            // 1.25: where the lawyer calls, and the office's details in the meeting's confirmation.
+            ["{{call_app}}"] = "[واتساب على نفس الرقم ده / FaceTime على نفس الرقم ده / لينك Google Meet ده: …]",
+            ["{{address}}"] = "[العنوان]", ["{{map}}"] = "[الخريطة]", ["{{office_phone}}"] = "[رقم تليفون المكتب]",
             // TASK 06: B-23's prices, filled from the panel's price list (its starting values are DECISIONS' numbers).
             ["{{price_phone}}"] = "500", ["{{price_office}}"] = "1,000", ["{{price_urgent}}"] = "1,000", ["{{price_review_min}}"] = "1,500",
             ["{{price_review_max}}"] = "3,000", ["{{price_drafting_from}}"] = "3,000", ["{{price_notice}}"] = "2,000",
@@ -276,7 +280,7 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
             Assert.True(decisions.Contains(text, StringComparison.Ordinal), $"{r.GetString(0)} is not word for word in DECISIONS");
         }
 
-        Assert.Equal(40, count); // 8 (TASK 04) + B-04 question + the two B-25 texts (TASK 05a) + B-08 and B-22 (TASK 08) + B-11 (TASK 11) + B-18 (TASK 12) + B-11.1 (v1.20) + 9 greetings B-01.6 (v1.21) + 5 of v1.22
+        Assert.Equal(48, count); // 8 (TASK 04) + B-04 question + the two B-25 texts (TASK 05a) + B-08 and B-22 (TASK 08) + B-11 (TASK 11) + B-18 (TASK 12) + B-11.1 (v1.20) + 9 greetings B-01.6 (v1.21) + 5 of v1.22 + 8 of v1.25
     }
 
     [Fact]

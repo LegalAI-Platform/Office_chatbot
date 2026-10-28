@@ -30,8 +30,10 @@ public sealed class Task09ApiTests(TestDatabase db) : IAsyncLifetime
         DELETE FROM hazem.payment_receipts; DELETE FROM hazem.payments; DELETE FROM hazem.appointments;
         DELETE FROM hazem.booking_exceptions; DELETE FROM hazem.booking_changes;
         UPDATE hazem.settings SET value = 'false' WHERE key = 'booking.enabled';
-        UPDATE hazem.settings SET value = '' WHERE key IN ('booking.calendar_id', 'office.instapay', 'office.wallet_number', 'office.wallet_provider');
-        UPDATE hazem.approved_texts SET active = true WHERE source IN ('proposal TASK 08', 'proposal TASK 09');
+        UPDATE hazem.settings SET value = '' WHERE key IN ('booking.calendar_id', 'office.instapay', 'office.wallet_number', 'office.wallet_provider',
+                                                          'office.address', 'office.map_url', 'office.phone', 'office.meet_link');
+        UPDATE hazem.settings SET value = '60' WHERE key = 'booking.review_alert_minutes';
+        UPDATE hazem.approved_texts SET active = true WHERE source IN ('proposal TASK 08', 'proposal TASK 09') AND version = (SELECT max(m.version) FROM hazem.approved_texts m WHERE m.key = approved_texts.key);
         TRUNCATE hazem.panel_audit; DELETE FROM hazem.panel_users;
         TRUNCATE hazem.turns, hazem.send_results, hazem.turn_replies, hazem.classifications, hazem.panel_alerts, hazem.panel_alert_reads, hazem.staff_tasks, hazem.list_entries;
         DELETE FROM hazem.staff; DELETE FROM hazem.intakes; DELETE FROM hazem.conversations; DELETE FROM hazem.persons;
@@ -56,7 +58,7 @@ public sealed class Task09ApiTests(TestDatabase db) : IAsyncLifetime
 
     /// <summary>Booking on: the texts (approved since 0013 and 0014), the office's details, the calendar id.</summary>
     private Task BookingOn() => db.ExecAsync("""
-        UPDATE hazem.approved_texts SET active = true WHERE source = 'proposal TASK 09';
+        UPDATE hazem.approved_texts SET active = true WHERE source = 'proposal TASK 09' AND version = (SELECT max(m.version) FROM hazem.approved_texts m WHERE m.key = approved_texts.key);
         UPDATE hazem.settings SET value = 'true' WHERE key = 'booking.enabled';
         UPDATE hazem.settings SET value = 'lawyer@example.test' WHERE key = 'booking.calendar_id';
         UPDATE hazem.settings SET value = 'office@instapay' WHERE key = 'office.instapay';
@@ -140,7 +142,8 @@ public sealed class Task09ApiTests(TestDatabase db) : IAsyncLifetime
     [Fact]
     public async Task Migration_0014_activated_the_15_texts_the_owner_approved_and_the_booking_needs_them_all()
     {
-        Assert.Equal("15|15", await db.ScalarAsync<string>("""
+        Assert.Equal("14|15", await db.ScalarAsync<string>( // 1.25: booking_paid v2 (the time kept until the review) replaced v1
+            """
             SELECT count(*) FILTER (WHERE active) || '|' || count(*) FROM hazem.approved_texts
              WHERE source = 'proposal TASK 09' AND updated_by = 'owner approval 2026-10-24'
             """));
@@ -211,6 +214,83 @@ public sealed class Task09ApiTests(TestDatabase db) : IAsyncLifetime
             SELECT a.service || '|' || a.state || '|' || p.state FROM hazem.appointments a JOIN hazem.payments p ON p.appointment_id = a.id
              WHERE p.state = 'duplicate_suspected'
             """));
+    }
+
+    // ---------- 1.25 (B-08, B-23): only the review confirms; where the lawyer calls; the late review ----------
+
+    [Fact]
+    public async Task Only_the_staff_review_confirms_and_says_where_the_lawyer_calls_once()
+    {
+        await BookingOn();
+        await Say("السلام عليكم");
+        await Say("محمد أحمد علي حسن");
+        var apps = (await Press("bk:m:pv")).Single()!["interactive"]!["choices"]!.AsArray();
+        Assert.Equal(["bk:v:wa", "bk:v:ft"], apps.Select(c => (string?)c!["id"])); // no Meet without its link
+        await Press("bk:v:ft");
+        await Press(Tomorrow12 + ":ft");
+        var id = await db.ScalarAsync<Guid>("SELECT id FROM hazem.appointments WHERE state = 'pending_payment' AND call_app = 'facetime'");
+
+        var kept = (string?)(await Receipt()).Single()!["text"];
+        Assert.StartsWith("وصلت صورة التحويل ✅، والميعاد محجوز لحضرتك", kept);
+        Assert.EndsWith("أول ما المكتب يراجع التحويل، هبعتلك التأكيد.", kept);
+        Assert.Equal(0, await Notices()); // nothing more before the review
+
+        var staff = await SignIn("yasmin", Permissions.Staff, "ياسمين");
+        Assert.Equal(HttpStatusCode.NoContent, (await staff.PostAsJsonAsync($"/api/panel/payments/{id}/review",
+            new { state = "verified", received = 500 }, Ct)).StatusCode);
+        var sends = _factory.N8n.Requests.Count;
+        Assert.Equal(1, await Notices());
+        var confirmed = Assert.Single(SentSince(sends));
+        Assert.StartsWith("تم تأكيد الاستشارة بكرة الساعة", confirmed);
+        Assert.EndsWith("✅، والأستاذ هيكلم حضرتك على FaceTime على نفس الرقم ده.", confirmed);
+
+        Assert.Equal(HttpStatusCode.NoContent, (await staff.PostAsJsonAsync($"/api/panel/payments/{id}/review",
+            new { state = "verified", received = 500 }, Ct)).StatusCode);
+        Assert.Equal(0, await Notices()); // the same «تمام» again tells nothing
+        Assert.Equal("استلمت الصورة ✅", (string?)(await Receipt(sha: "r2")).Single()!["text"]); // and a new image is not «waiting» again
+        Assert.Equal("facetime", (string?)(await staff.GetFromJsonAsync<JsonArray>("/api/panel/booking/appointments?from=2026-11-20&to=2026-11-20", Ct))!
+            .Single()!["call_app"]);
+    }
+
+    [Fact]
+    public async Task An_office_meeting_is_confirmed_with_the_address_the_map_and_the_phone()
+    {
+        await BookingOn();
+        await db.ExecAsync("""
+            UPDATE hazem.settings SET value = '١٢ شارع التحرير، الدقي' WHERE key = 'office.address';
+            UPDATE hazem.settings SET value = 'https://maps.example.test/office' WHERE key = 'office.map_url';
+            UPDATE hazem.settings SET value = '0233334444' WHERE key = 'office.phone';
+            UPDATE hazem.settings SET value = 'https://meet.google.com/abc-defg-hij' WHERE key = 'office.meet_link';
+            """);
+        await Say("السلام عليكم");
+        await Say("محمد أحمد علي حسن");
+        Assert.Equal("bk:v:gm", (string?)(await Press("bk:m:pv")).Single()!["interactive"]!["choices"]![2]!["id"]); // Meet, with its link
+        await Press("bk:s:of:" + new DateTimeOffset(2026, 11, 20, 12, 0, 0, TimeSpan.FromHours(2)).ToUnixTimeSeconds());
+        var id = await db.ScalarAsync<Guid>("SELECT id FROM hazem.appointments WHERE state = 'pending_payment' AND call_app IS NULL");
+        await Receipt();
+
+        var staff = await SignIn("yasmin", Permissions.Staff, "ياسمين");
+        Assert.Equal(HttpStatusCode.NoContent, (await staff.PostAsJsonAsync($"/api/panel/payments/{id}/review",
+            new { state = "verified", received = 1000 }, Ct)).StatusCode);
+        var sends = _factory.N8n.Requests.Count;
+        Assert.Equal(1, await Notices());
+        var confirmed = Assert.Single(SentSince(sends));
+        Assert.StartsWith("تم تأكيد المقابلة بكرة الساعة", confirmed);
+        Assert.EndsWith("✅، المكتب في ١٢ شارع التحرير، الدقي، وده اللوكيشن https://maps.example.test/office. لو احتجت حاجة كلمنا على 0233334444.", confirmed);
+    }
+
+    [Fact]
+    public async Task A_transfer_not_reviewed_before_its_appointment_is_an_urgent_task_and_the_time_stays()
+    {
+        await BookingOn();
+        await db.ExecAsync("UPDATE hazem.settings SET value = '2000' WHERE key = 'booking.review_alert_minutes'"); // tomorrow is «soon»
+        var id = await HeldTomorrow();
+        await Receipt();
+        await Notices();
+        await Notices();
+        Assert.Equal("payment_review_due|1", await db.ScalarAsync<string>(
+            "SELECT type || '|' || count(*) FROM hazem.staff_tasks WHERE type = 'payment_review_due' GROUP BY type")); // once
+        Assert.Equal("confirmed|whatsapp", await db.ScalarAsync<string>($"SELECT state || '|' || call_app FROM hazem.appointments WHERE id = '{id}'"));
     }
 
     // ---------- the review and the refund (P1, P2, P4) ----------
@@ -392,7 +472,7 @@ public sealed class Task09ApiTests(TestDatabase db) : IAsyncLifetime
         await Notices();
 
         var third = "bk:s:pv:" + new DateTimeOffset(2026, 11, 23, 12, 0, 0, TimeSpan.FromHours(2)).ToUnixTimeSeconds();
-        Assert.StartsWith("✅ وصلت صورة التحويل", (string?)(await Press(third)).Single()!["text"]); // the receipt he sent pays for it
+        Assert.StartsWith("وصلت صورة التحويل ✅", (string?)(await Press(third)).Single()!["text"]); // the receipt he sent pays for it
         Assert.Equal("confirmed|proof_received|1", await db.ScalarAsync<string>("""
             SELECT a.state || '|' || p.state || '|' || (SELECT count(*) FROM hazem.payment_receipts)
               FROM hazem.appointments a JOIN hazem.payments p ON p.appointment_id = a.id

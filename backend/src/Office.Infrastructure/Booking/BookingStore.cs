@@ -100,6 +100,12 @@ public sealed class BookingStore(HazemDbContext db) : IBookingStore
         using var doc = JsonDocument.Parse(json);
         var status = doc.RootElement.GetProperty("status").GetString();
         Guid? id = doc.RootElement.TryGetProperty("id", out var i) ? i.GetGuid() : null;
+        if (r.CallApp is { } app && status is "held" or "booked_paid")
+        {
+            // 1.25 (B-23): where the lawyer calls, on the new row only (an existing booking keeps its own).
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE hazem.appointments SET call_app = {app} WHERE id = {r.Id}", ct);
+        }
+
         return new BookOutcome(status switch
         {
             "held" => BookStatus.Held,
@@ -162,5 +168,5 @@ public sealed class BookingStore(HazemDbContext db) : IBookingStore
             """, ct);
 
     internal static AppointmentInfo ToInfo(AppointmentRow a) =>
-        new(a.Id, a.PersonId, a.Service, a.StartsAt, a.EndsAt, a.State, a.Reschedules, a.Amount, a.MatterType, a.HoldUntil);
+        new(a.Id, a.PersonId, a.Service, a.StartsAt, a.EndsAt, a.State, a.Reschedules, a.Amount, a.MatterType, a.HoldUntil, a.CallApp);
 }

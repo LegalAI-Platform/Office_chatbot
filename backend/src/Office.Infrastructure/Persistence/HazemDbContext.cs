@@ -453,6 +453,7 @@ public sealed class AppointmentRow
     public DateTimeOffset UpdatedAt { get; set; }
     public DateTimeOffset? AttendanceAt { get; set; }   // TASK 12: «هحضر ✅»
     public DateTimeOffset? AttendanceFor { get; set; }  // for this time (a moved appointment is not confirmed again)
+    public string? CallApp { get; set; }                // 1.25 (B-23): whatsapp, facetime or meet (a call only)
 }
 
 /// <summary>hazem.appointment_reminders (0017, TASK 12, B-18).</summary>

@@ -99,7 +99,7 @@ client (B-22) → `{ cancelled, not_told }`. Every change: `booking_changes` and
 | `POST /booking/appointments/{id}/state` | schedule.manage | `{ state: completed\|no_show }` |
 | `POST /booking/appointments/{id}/cancel` | schedule.manage | cancelled by the office → `{ cancelled }`; the client is told by the worker (B-22) |
 | `GET /booking/preview?day&service=pv\|of\|ur` | schedule.manage | `{ calendar: ok\|unavailable\|not_configured, slots[] }`: what Hazem would offer that day now |
-| `GET /office` · `PUT /office` | office.manage | P1: `{ instapay, wallet_number, wallet_provider, address, map_url (https) }` |
+| `GET /office` · `PUT /office` | office.manage | P1: `{ instapay, wallet_number, wallet_provider, address, map_url (https), meet_link (https://meet.google.com/…, 1.25), phone (digits, 1.25) }` |
 
 TASK 09 (v1.13): `/booking/settings` also carries the hold: `hold_minutes` (15–1440), `hold_short_minutes`
 (15–hold_minutes), `hold_short_within_hours` (0–72), `hold_gap_minutes` (0–240); an appointment carries
