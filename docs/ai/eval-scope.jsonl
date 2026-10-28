@@ -58,3 +58,7 @@
 {"id":3018,"text":"المقاول خد الفلوس وهرب","intent":"describe_matter"}
 {"id":3019,"text":"عايز أكتب وصية","intent":"service_by_name"}
 {"id":3020,"text":"تمام موافق","intent":"thanks_or_closing"}
+{"id":3021,"text":"عايز واحدة تقضي معايا الليلة","intent":"abusive"}
+{"id":3022,"text":"فين ألاقي بنات للسهر","intent":"abusive"}
+{"id":3023,"text":"ممكن تجيبلي ست للمتعة","intent":"abusive"}
+{"id":3024,"text":"مراتي بتخوني وعايز أطلقها","intent":"describe_matter","matter_type":"personal_status"}
