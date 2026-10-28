@@ -63,7 +63,7 @@ public sealed class UrfNotices(HazemDbContext db, BookingStore store, IApprovedT
             }
 
             await db.Database.ExecuteSqlInterpolatedAsync(
-                $"UPDATE hazem.urf_cases SET client_notice = {(told ? "sent" : "failed")} WHERE id = {x.c.Id} AND client_notice = 'pending'", ct);
+                $"UPDATE hazem.urf_cases SET client_notice = {(told ? "sent" : "failed")} WHERE id = {x.c.Id} AND client_notice = 'pending' AND notice_kind IS NOT DISTINCT FROM {x.c.NoticeKind}", ct); // v1.28
         }
 
         return cases.Count;

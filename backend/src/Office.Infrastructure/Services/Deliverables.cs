@@ -37,6 +37,7 @@ public sealed class S3Deliverables : IDeliverables, IDisposable
     private readonly AmazonS3Client? _s3;
     private readonly AmazonS3Client? _public;
     private readonly string _endpoint = "";
+    private readonly string _publicEndpoint = "";
 
     public S3Deliverables(IConfiguration config)
     {
@@ -58,7 +59,8 @@ public sealed class S3Deliverables : IDeliverables, IDisposable
             MaxErrorRetry = 2,
         });
         _s3 = Client(_endpoint);
-        _public = Client(config["S3:PublicEndpoint"] is { Length: > 0 } p ? p.TrimEnd('/') : _endpoint);
+        _publicEndpoint = config["S3:PublicEndpoint"] is { Length: > 0 } p ? p.TrimEnd('/') : _endpoint;
+        _public = Client(_publicEndpoint);
     }
 
     public bool Configured => _s3 is not null;
@@ -93,13 +95,17 @@ public sealed class S3Deliverables : IDeliverables, IDisposable
         }
     }
 
-    /// <summary>The name WhatsApp shows goes in the message itself (document.filename), not in the link.</summary>
+    /// <summary>
+    /// The name WhatsApp shows goes in the message itself (document.filename), not in the link. v1.28: signed for the
+    /// endpoint's own scheme (the SDK's default is https, and the local storage speaks http: n8n could not read it).
+    /// </summary>
     public string ReadLink(string key) => _public!.GetPreSignedURL(new GetPreSignedUrlRequest
     {
         BucketName = Bucket,
         Key = key,
         Verb = HttpVerb.GET,
         Expires = DateTime.UtcNow.AddHours(1),
+        Protocol = _publicEndpoint.StartsWith("https", StringComparison.Ordinal) ? Protocol.HTTPS : Protocol.HTTP,
     });
 
     public void Dispose()
