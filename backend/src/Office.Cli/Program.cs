@@ -21,9 +21,10 @@ using Office.Infrastructure.Lists;
 // Every command prints JSON and exits non-zero on failure.
 //   send-test --to <wa_id> [--text "…"]   send a text through n8n (API -> n8n -> Meta);
 //                                         only to numbers listed in hazem.settings echo.recipients
-//   classify-eval [--file F] [--model M] [--limit N] [--input-price USD --output-price USD]
+//   classify-eval [--provider openai|anthropic] [--file F] [--model M] [--limit N] [--input-price USD --output-price USD]
 //                                         reads docs/ai/eval-set.jsonl (--file, else stdin) and classifies
-//                                         every line with the REAL OpenAI key (HAZEM_OPENAI_API_KEY):
+//                                         every line with the REAL key of that provider (HAZEM_OPENAI_API_KEY,
+//                                         v1.26 HAZEM_ANTHROPIC_API_KEY), that provider only (no fallback):
 //                                         accuracy per intent, confusion matrix, latency, tokens,
 //                                         and the cost when prices (USD per 1M tokens) are given.
 //                                         The owner runs it (T-08); it never runs in the tests.
@@ -238,20 +239,34 @@ async Task<JsonNode> ForgetNumber()
 async Task<JsonNode> ClassifyEval()
 {
     var options = sp.GetRequiredService<IOptions<HazemOptions>>().Value;
-    if (string.IsNullOrWhiteSpace(options.OpenAiApiKey))
+    var anthropic = Option("--provider") == AnthropicIntentClassifier.Provider;
+    if (string.IsNullOrWhiteSpace(anthropic ? options.AnthropicApiKey : options.OpenAiApiKey))
     {
-        return new JsonObject { ["ok"] = false, ["error"] = "HAZEM_OPENAI_API_KEY is empty: classify-eval needs a real key (docs/ai/classification.md)" };
+        return new JsonObject
+        {
+            ["ok"] = false,
+            ["error"] = $"{(anthropic ? "HAZEM_ANTHROPIC_API_KEY" : "HAZEM_OPENAI_API_KEY")} is empty: classify-eval needs a real key (docs/ai/classification.md)",
+        };
     }
 
     if (Option("--model") is { Length: > 0 } model)
     {
-        options.OpenAiModel = model; // IOptions holds one instance: the classifier reads this value
+        // IOptions holds one instance: the classifier reads this value
+        if (anthropic)
+        {
+            options.AnthropicModel = model;
+        }
+        else
+        {
+            options.OpenAiModel = model;
+        }
     }
 
     // The real OpenAI, whatever hazem-e2e may have left in ai.stub_*.
     var db = await sp.GetRequiredService<ISettingsReader>().GetAsync(ct);
     var settings = new HazemSettings(new Dictionary<string, string>(db.Values) { ["ai.stub_enabled"] = "false", [Classification.MinConfidenceKey] = "0" });
-    var classifier = sp.GetRequiredService<IIntentClassifier>();
+    // One provider only: a fallback would hide which one answered.
+    IIntentClassifier classifier = anthropic ? sp.GetRequiredService<AnthropicIntentClassifier>() : sp.GetRequiredService<OpenAiIntentClassifier>();
     var limit = int.TryParse(Option("--limit"), out var l) ? l : int.MaxValue;
 
     var confusion = new SortedDictionary<string, SortedDictionary<string, int>>(StringComparer.Ordinal);
@@ -380,7 +395,7 @@ async Task<JsonNode> ClassifyEval()
     var result = new JsonObject
     {
         ["ok"] = total > 0,
-        ["model"] = options.OpenAiModel,
+        ["model"] = anthropic ? options.AnthropicModel : options.OpenAiModel,
         ["prompt_version"] = OpenAiIntentClassifier.PromptVersion,
         ["samples"] = total,
         ["accuracy"] = total == 0 ? 0 : Math.Round((double)correct / total, 3),

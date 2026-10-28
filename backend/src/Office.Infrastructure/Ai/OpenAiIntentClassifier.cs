@@ -42,6 +42,9 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
 
     public static JsonObject Schema { get; } = BuildSchema();
 
+    /// <summary>The prompt in use, for both providers (v1.26).</summary>
+    public static string PromptText => Prompt.Value;
+
     public async Task<ClassifierOutcome> ClassifyAsync(string text, HazemSettings settings, CancellationToken ct)
     {
         var o = options.Value;

@@ -266,6 +266,8 @@ services:
       Hazem__OpenAiApiKey: ${HAZEM_OPENAI_API_KEY:-}
       Hazem__OpenAiModel: ${OPENAI_MODEL:-gpt-4.1-mini}
       Hazem__OpenAiBaseUrl: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      Hazem__AnthropicApiKey: ${HAZEM_ANTHROPIC_API_KEY:-}
+      Hazem__AnthropicModel: ${ANTHROPIC_MODEL:-claude-opus-5-5}
       # v1.9 (T-23): sign-up, e-mail codes and the authenticator. Without PANEL_SECRET_KEY and
       # SMTP_HOST/SMTP_FROM the sign-up page says it is not available; sign-in still works.
       Panel__SecretKey: ${PANEL_SECRET_KEY:-}

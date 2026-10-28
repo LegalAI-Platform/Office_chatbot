@@ -27,5 +27,6 @@
     <PackageReference Include="EFCore.NamingConventions" />
     <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
     <PackageReference Include="AWSSDK.S3" />
+    <PackageReference Include="Anthropic" />
   </ItemGroup>
 </Project>
