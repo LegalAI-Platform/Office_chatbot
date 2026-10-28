@@ -77,7 +77,7 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
               FROM hazem.persons p JOIN hazem.conversations c ON c.person_id = p.id JOIN hazem.intakes i ON i.person_id = p.id
              WHERE p.wa_id = '{Client}'
             """));
-        Assert.Equal("greet_salam:1,welcome_ask_name:1,consultation_offer:2,ask_topic:1", await db.ScalarAsync<string>(
+        Assert.Equal("greet_salam:1,welcome_ask_name:2,consultation_offer:2,ask_topic:1", await db.ScalarAsync<string>(
             "SELECT string_agg(text_key || ':' || text_version, ',' ORDER BY created_at, idempotency_key) FROM hazem.turn_replies"));
     }
 
