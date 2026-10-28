@@ -41,9 +41,11 @@ How to decide:
   buy a flat, papers needed for a case.
 - **When in doubt, office.** Refusing a real client costs the office a case; offering a consultation to someone
   who did not need it costs nothing. Only a subject that is clearly outside is outside.
-- Spam and ads with links, insults, sexual content or flirting are intent abusive, whatever the scope.
+- **Abuse is checked before the scope decides anything.** Asking for sex or a sexual partner in any words
+  («a woman to sleep with», «a girl for the night»), any other sexual content, flirting, insults, threats, spam
+  and ads with links are intent abusive, whatever the scope — never off_topic.
 
-When scope is outside, the intent is off_topic (or abusive). When scope is office, the intent is never
+When scope is outside, the intent is off_topic, or abusive for anything abusive. When scope is office, the intent is never
 off_topic.
 
 ## intent (exactly one)
