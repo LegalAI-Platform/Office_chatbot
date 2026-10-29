@@ -9,6 +9,8 @@ contains `CHANGE_ME`, or has the wrong format.
 |---|---|---|---|---|
 | `ENVIRONMENT` | preflight, reset | no | `test` (or `staging`) | 01 |
 | `COMPOSE_PROJECT_NAME` | docker compose | no | `office` | 01 |
+| `OFFICE_API_IMAGE`, `OFFICE_WEB_IMAGE`, `OFFICE_TOOLS_IMAGE` | docker compose | no | empty = built here (`office-*:local`); on the server `ghcr.io/legalai-platform/office-api:sha-1a2b3c4` (published by the CI) | 14 |
+| `OFFICE_PULL_POLICY` | docker compose | no | empty = `build`; on the server `missing` (pull, never build) | 14 |
 | `POSTGRES_SUPERUSER` | postgres, tools | no | `postgres_admin` | 01 |
 | `POSTGRES_SUPERUSER_PASSWORD` | postgres, tools | **yes** | 48 hex chars | 01 |
 | `N8N_DB_PASSWORD` | postgres init, n8n | **yes** | 48 hex chars, URL-safe | 01 |

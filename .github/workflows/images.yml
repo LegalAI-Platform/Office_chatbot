@@ -1,0 +1,70 @@
+# Images: after every merge to main, the CI again (ci.yml) and, once it passes, the three images built here are
+# published to GitHub's registry. The server only pulls them (TASK 14): nothing is built there.
+#   ghcr.io/legalai-platform/office-api    the API and the CLI (backend/)
+#   ghcr.io/legalai-platform/office-web    the panel (web/)
+#   ghcr.io/legalai-platform/office-tools  backup, restore, healthcheck… (infra/tools/)
+# Each gets two tags: the commit (sha-1a2b3c4, to run or go back to exactly that version) and `main` (the latest).
+# No secret is in any image: they come from the server's .env when the containers start.
+name: Images
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: images-main
+  cancel-in-progress: false # a release that started finishes; the next waits its turn
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    name: Publish (${{ matrix.image }})
+    needs: ci
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: api
+            context: backend
+          - image: web
+            context: web
+          - image: tools
+            context: infra/tools
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Name and tags
+        id: tags
+        run: |
+          name="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/office-${{ matrix.image }}"
+          echo "list=$name:sha-${GITHUB_SHA::7},$name:main" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: ${{ matrix.context }}
+          platforms: linux/amd64 # the server (KVM 2) is x86
+          push: true
+          tags: ${{ steps.tags.outputs.list }}
+          # links the package to this repository on GitHub, with the commit it was built from
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}

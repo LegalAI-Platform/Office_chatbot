@@ -1,0 +1,23 @@
+# Secret scan for this public repo (CI: .github/workflows/ci.yml). Gitleaks' own rules, plus a full
+# Egyptian mobile number (010, 011, 012, 015): clients' numbers must never be committed. The tests use
+# made-up numbers (below); the office's own published numbers are pinned in .gitleaksignore.
+title = "Hazem"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "egypt-mobile-number"
+description = "A full Egyptian mobile number"
+regex = '''(?:^|[^0-9])((?:\+?20|0)1[0-25][0-9]{8})(?:[^0-9]|$)'''
+secretGroup = 1
+keywords = ["01", "201"]
+
+  [rules.allowlist]
+  description = "made-up numbers of the tests and fixtures"
+  regexTarget = "secret"
+  regexes = [
+    '''^(?:\+?20|0)1000000[0-9]{3}$''',          # 2010000000xx, 01000000xxx
+    '''^(?:\+?20|0)1[0-9](?:0{8}|1{8}|2{8}|3{8}|4{8}|5{8}|6{8}|7{8}|8{8}|9{8})$''',  # 01011111111 …
+    '''^(?:\+?20|0)(?:1001234567|1011112222|1012345678|1234567890)$''',
+  ]
