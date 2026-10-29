@@ -19,6 +19,14 @@ const urfCase = (over: object = {}) => ({
   appointment: "confirmed", payment: "proof_received", decided_by: null, decided_at: null, notice: null, ...over,
 });
 
+/** The panel's own «أكيد؟» (feedback.tsx): its question, then «yes». */
+async function confirmYes(): Promise<string> {
+  const dialog = await screen.findByRole("alertdialog");
+  const text = dialog.textContent ?? "";
+  fireEvent.click(within(dialog).getAllByRole("button").at(-1)!);
+  return text;
+}
+
 function serve(table: Record<string, unknown>) {
   const calls: { method: string; path: string; body: unknown }[] = [];
   vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
@@ -56,11 +64,11 @@ describe("TASK 11 Urfi cases", () => {
   });
 
   it("the lawyer refuses after confirming: the appointment is cancelled and paid back", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     const calls = serve({ "GET /auth/me": me("lawyer"), "GET /urf?show=open": [urfCase()] });
     renderAt("/urf");
     const card = (await screen.findByText(/محمد أحمد علي حسن/)).closest("li")!;
     fireEvent.click(within(card).getByRole("button", { name: /رفض/ }));
+    expect(await confirmYes()).toContain("الميعاد هيتلغي");
     await vi.waitFor(() => expect(calls.some((c) => c.method === "POST")).toBe(true));
     expect(calls.find((c) => c.method === "POST")).toMatchObject({ path: "/urf/c1/review", body: { decision: "rejected" } });
   });

@@ -13,10 +13,22 @@ export default defineConfig({
     // No inline scripts or data: fonts, so the Content-Security-Policy can stay "self" only.
     assetsInlineLimit: 0,
     sourcemap: false,
+    rolldownOptions: {
+      output: {
+        // React, the router and the query cache change far less often than the panel: their own file stays cached
+        // across releases, and each page is its own file (app/lazyPages.tsx). Idea from PR #14.
+        advancedChunks: {
+          groups: [{ name: "vendor", test: /node_modules[\\/](react|react-dom|scheduler|react-router|@tanstack)[\\/]/ }],
+        },
+      },
+    },
   },
   test: {
     environment: "jsdom",
     globals: true,
     css: false,
+    setupFiles: ["src/test-setup.ts"],
+    // Each test renders the whole app and, since the pages are split, loads its page on the way.
+    testTimeout: 15_000,
   },
 });

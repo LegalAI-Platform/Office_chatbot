@@ -56,6 +56,26 @@ describe("TASK 07c tools", () => {
     await vi.waitFor(() => expect(calls.find((c) => c.path === "/alerts/read")?.body).toEqual({ ids: [7] }));
   });
 
+  // Ctrl K (idea from PR #14): the pages a person may open, and a search in the tasks by what is typed.
+  it("Ctrl K opens the quick search: only allowed pages, Enter goes, and a typed name searches the tasks", async () => {
+    serve({ "GET /auth/me": { body: person({}) }, "GET /tasks": { body: { items: [], total: 0, page: 1, page_size: 20 } } });
+    const router = renderAt("/");
+    await screen.findByRole("heading", { level: 1, name: /يا/ });
+    fireEvent.keyDown(document, { key: "k", ctrlKey: true });
+    const dialog = await screen.findByRole("dialog", { name: "اختصارات وبحث" });
+    expect(within(dialog).queryByText("التقارير")).toBeNull(); // a staff member has no reports.view
+    const box = within(dialog).getByRole("textbox", { name: "دوّر أو اختار" });
+    fireEvent.change(box, { target: { value: "مهام" } });
+    fireEvent.keyDown(box, { key: "ArrowDown" }); // past «دوّر في المهام عن…» to the first page found
+    fireEvent.keyDown(box, { key: "Enter" });
+    expect(router.state.location.pathname).toBe("/tasks");
+    fireEvent.keyDown(document, { key: "k", ctrlKey: true });
+    const again = within(await screen.findByRole("dialog", { name: "اختصارات وبحث" })).getByRole("textbox", { name: "دوّر أو اختار" });
+    fireEvent.change(again, { target: { value: "سارة" } });
+    fireEvent.keyDown(again, { key: "Enter" });
+    expect(router.state.location.search).toBe(`?q=${encodeURIComponent("سارة")}`);
+  });
+
   it("hides the reports from a staff member and shows them to the lawyer", async () => {
     serve({ "GET /auth/me": { body: person({}) } });
     const router = renderAt("/reports");

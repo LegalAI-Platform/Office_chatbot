@@ -4,27 +4,10 @@ import { errorMessage } from "../shared/api/client";
 import { can, useMe } from "../shared/api/session";
 import type { Permission } from "../shared/api/types";
 import { ErrorState, Loading } from "../shared/ui/ui";
-import { AccountPage } from "../features/auth/AccountPage";
-import { ChangePasswordPage } from "../features/auth/ChangePasswordPage";
-import { ForgotPasswordPage } from "../features/auth/ForgotPasswordPage";
 import { LoginPage } from "../features/auth/LoginPage";
-import { RegisterPage } from "../features/auth/RegisterPage";
-import { SetupTwoFactorPage } from "../features/auth/SetupTwoFactorPage";
-import { VerifyEmailPage } from "../features/auth/VerifyEmailPage";
-import { TaskDetailPage } from "../features/tasks/TaskDetailPage";
-import { TasksPage } from "../features/tasks/TasksPage";
-import { UsersPage } from "../features/users/UsersPage";
-import { ChatsPage } from "../features/chats/ChatsPage";
-import { ListsPage } from "../features/lists/ListsPage";
-import { ReportsPage } from "../features/reports/ReportsPage";
-import { TextsPage } from "../features/texts/TextsPage";
 import { HomePage } from "../features/home/HomePage";
-import { BookingPage } from "../features/booking/BookingPage";
-import { PaymentsPage } from "../features/payments/PaymentsPage";
-import { ServicesPage } from "../features/services/ServicesPage";
-import { UrfPage } from "../features/urf/UrfPage";
+import { LazyPage } from "./lazyPages";
 import { Layout } from "./Layout";
-import { PricesPage } from "../features/prices/PricesPage";
 import { ComingSoon, SettingsPage } from "./Pages";
 
 export function makeQueryClient() {
@@ -58,57 +41,57 @@ export function RequirePermission({ permission }: { permission: Permission }) {
 export const routes = [
   { path: "/login", element: <LoginPage /> },
   // v1.9: anyone may ask for an account (the manager approves it), and a forgotten password by e-mail.
-  { path: "/register", element: <RegisterPage /> },
-  { path: "/verify-email", element: <VerifyEmailPage /> },
-  { path: "/forgot-password", element: <ForgotPasswordPage /> },
+  { path: "/register", element: <LazyPage path="/register" /> },
+  { path: "/verify-email", element: <LazyPage path="/verify-email" /> },
+  { path: "/forgot-password", element: <LazyPage path="/forgot-password" /> },
   {
     element: <RequireAuth />,
     children: [
-      { path: "/change-password", element: <ChangePasswordPage /> },
-      { path: "/setup-2fa", element: <SetupTwoFactorPage /> },
+      { path: "/change-password", element: <LazyPage path="/change-password" /> },
+      { path: "/setup-2fa", element: <LazyPage path="/setup-2fa" /> },
       {
         element: <Layout />,
         children: [
           { path: "/", element: <HomePage /> },
-          { path: "/tasks", element: <TasksPage /> },
-          { path: "/tasks/:id", element: <TaskDetailPage /> },
-          { path: "/account", element: <AccountPage /> },
+          { path: "/tasks", element: <LazyPage path="/tasks" /> },
+          { path: "/tasks/:id", element: <LazyPage path="/tasks/:id" /> },
+          { path: "/account", element: <LazyPage path="/account" /> },
           { path: "/settings", element: <SettingsPage /> },
-          { path: "/prices", element: <PricesPage /> },
+          { path: "/prices", element: <LazyPage path="/prices" /> },
           { path: "/clients", element: <ComingSoon title="العملاء / الشركات" icon="clients" what="ملف لكل عميل: بياناته، قضاياه، مواعيده ومستنداته في مكان واحد." when="بعد ربط المحادثات (TASK 07b)" /> },
           {
             element: <RequirePermission permission="schedule.manage" />,
-            children: [{ path: "/appointments", element: <BookingPage /> }],
+            children: [{ path: "/appointments", element: <LazyPage path="/appointments" /> }],
           },
-          { path: "/chats", element: <ChatsPage /> },
+          { path: "/chats", element: <LazyPage path="/chats" /> },
           { path: "/documents", element: <ComingSoon title="المستندات" icon="document" what="العقود والصور والمستندات اللي العملاء بعتوها، مرتبة على كل عميل." when="بعد المحادثات" /> },
           {
             element: <RequirePermission permission="reports.view" />,
-            children: [{ path: "/reports", element: <ReportsPage /> }],
+            children: [{ path: "/reports", element: <LazyPage path="/reports" /> }],
           },
           {
             element: <RequirePermission permission="lists.manage" />,
-            children: [{ path: "/lists", element: <ListsPage /> }],
+            children: [{ path: "/lists", element: <LazyPage path="/lists" /> }],
           },
           {
             element: <RequirePermission permission="texts.manage" />,
-            children: [{ path: "/texts", element: <TextsPage /> }],
+            children: [{ path: "/texts", element: <LazyPage path="/texts" /> }],
           },
           {
             element: <RequirePermission permission="schedule.manage" />,
-            children: [{ path: "/receipts", element: <PaymentsPage /> }],
+            children: [{ path: "/receipts", element: <LazyPage path="/receipts" /> }],
           },
           {
             element: <RequirePermission permission="services.manage" />,
-            children: [{ path: "/services", element: <ServicesPage /> }],
+            children: [{ path: "/services", element: <LazyPage path="/services" /> }],
           },
           {
             element: <RequirePermission permission="urf.manage" />,
-            children: [{ path: "/urf", element: <UrfPage /> }],
+            children: [{ path: "/urf", element: <LazyPage path="/urf" /> }],
           },
           {
             element: <RequirePermission permission="users.manage" />,
-            children: [{ path: "/users", element: <UsersPage /> }],
+            children: [{ path: "/users", element: <LazyPage path="/users" /> }],
           },
         ],
       },

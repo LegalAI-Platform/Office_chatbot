@@ -5,6 +5,7 @@ import { can, useMe } from "../../shared/api/session";
 import { APPOINTMENT_STATES, BOOKING_SERVICES, label, PAYMENT_STATES, REFUND_REASONS, SERVICE_KINDS, SERVICE_STATES } from "../../shared/lib/labels";
 import { cairoWhen } from "../../shared/lib/time";
 import { Icon } from "../../shared/ui/Icon";
+import { toast } from "../../shared/ui/feedback";
 import { Button, Card, Chip, Empty, ErrorState, Field, Loading } from "../../shared/ui/ui";
 import { payments, pounds, receiptUrl, type Payment, type Review, type Show } from "./api";
 
@@ -53,8 +54,11 @@ function PaymentCard({ p }: { p: Payment }) {
   const [method, setMethod] = useState("");
   const [note, setNote] = useState("");
   const done = () => { setAsk(null); void qc.invalidateQueries({ queryKey: ["payments"] }); void qc.invalidateQueries({ queryKey: ["booking"] }); };
-  const review = useMutation({ mutationFn: (s: Review) => payments.review(p.appointment_id, s, s === "not_received" ? undefined : Number(amount)), onSuccess: done });
-  const refunded = useMutation({ mutationFn: () => payments.refunded(p.appointment_id, method, note || undefined), onSuccess: done });
+  const review = useMutation({
+    mutationFn: (s: Review) => payments.review(p.appointment_id, s, s === "not_received" ? undefined : Number(amount)),
+    onSuccess: (_, s) => { done(); toast(s === "verified" ? "اتسجّل إن التحويل وصل ✅" : "اتسجّل، وحازم هيبلّغ العميل"); },
+  });
+  const refunded = useMutation({ mutationFn: () => payments.refunded(p.appointment_id, method, note || undefined), onSuccess: () => { done(); toast("الاسترداد اتسجّل، وحازم هيبلّغ العميل ✅"); } });
   const reviewable = can(me, "payments.verify") && ["proof_received", "duplicate_suspected", "verified", "partial", "not_received"].includes(p.state);
   const received = Number(amount);
   const what: Record<Review, string> = {
