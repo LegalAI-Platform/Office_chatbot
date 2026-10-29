@@ -4,6 +4,7 @@ import { api, ApiError, errorMessage } from "../../shared/api/client";
 import type { ApprovedText, TextVersion } from "../../shared/api/types";
 import { cairoWhen } from "../../shared/lib/time";
 import { Button, Card, Chip, ErrorState, Loading } from "../../shared/ui/ui";
+import { toast } from "../../shared/ui/feedback";
 
 const ERRORS: Record<string, string> = {
   too_long: "النص أطول من الحد المسموح للرسالة دي.",
@@ -42,7 +43,7 @@ function TextCard({ text }: { text: ApprovedText }) {
   const [history, setHistory] = useState(false);
   const save = useMutation({
     mutationFn: () => api<{ version: number }>("POST", `/texts/${text.key}`, { text: draft }),
-    onSuccess: () => { setDraft(null); void qc.invalidateQueries({ queryKey: ["texts"] }); void qc.invalidateQueries({ queryKey: ["text", text.key] }); },
+    onSuccess: () => { setDraft(null); void qc.invalidateQueries({ queryKey: ["texts"] }); void qc.invalidateQueries({ queryKey: ["text", text.key] }); toast("النص اتحفظ ✅"); },
   });
   const length = draft?.length ?? 0;
   const error = save.error instanceof ApiError && save.error.code ? ERRORS[save.error.code] ?? errorMessage(save.error) : undefined;
@@ -87,7 +88,7 @@ function History({ textKey }: { textKey: string }) {
   const versions = useQuery({ queryKey: ["text", textKey], queryFn: () => api<TextVersion[]>("GET", `/texts/${textKey}`) });
   const activate = useMutation({
     mutationFn: (version: number) => api<void>("POST", `/texts/${textKey}/versions/${version}/activate`),
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["texts"] }); void qc.invalidateQueries({ queryKey: ["text", textKey] }); },
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["texts"] }); void qc.invalidateQueries({ queryKey: ["text", textKey] }); toast("النسخة دي بقت الشغالة ✅"); },
   });
   if (versions.isPending) return <Loading />;
   if (versions.isError) return <ErrorState message={errorMessage(versions.error)} />;

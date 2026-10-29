@@ -5,6 +5,7 @@ import { can, useMe } from "../../shared/api/session";
 import { APPOINTMENT_STATES, label, PAYMENT_STATES, URF_ANSWERS, URF_KINDS, URF_STATES } from "../../shared/lib/labels";
 import { cairoWhen } from "../../shared/lib/time";
 import { Icon } from "../../shared/ui/Icon";
+import { confirmAction, toast } from "../../shared/ui/feedback";
 import { Button, Card, Chip, Empty, ErrorState, Loading } from "../../shared/ui/ui";
 import { fileUrl, urf, type Show, type UrfCase } from "./api";
 
@@ -48,7 +49,11 @@ function CaseCard({ c }: { c: UrfCase }) {
   const { data: me } = useMe();
   const review = useMutation({
     mutationFn: (d: "approved" | "rejected") => urf.review(c.id, d),
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["urf"] }); void qc.invalidateQueries({ queryKey: ["payments"] }); },
+    onSuccess: (_, d) => {
+      void qc.invalidateQueries({ queryKey: ["urf"] });
+      void qc.invalidateQueries({ queryKey: ["payments"] });
+      toast(d === "approved" ? "اتوافق على الحالة، وحازم هيبلّغ العميل ✅" : "الحالة اترفضت، وحازم هيبلّغ العميل");
+    },
   });
   const answers: [string, string][] = c.kind === "marriage"
     ? [
@@ -106,11 +111,15 @@ function CaseCard({ c }: { c: UrfCase }) {
         {c.state === "booked" && mayReview ? (
           <div className="flex flex-wrap gap-2 border-t border-line pt-3">
             <Button variant="primary" busy={review.isPending}
-              onClick={() => { if (window.confirm("موافق على الورق؟ حازم هيبعت للعميل تأكيد الميعاد ومين لازم يحضر.")) review.mutate("approved"); }}>
+              onClick={async () => {
+                if (await confirmAction({ title: "موافق على الورق؟", body: "حازم هيبعت للعميل تأكيد الميعاد ومين لازم يحضر.", yes: "موافق" })) review.mutate("approved");
+              }}>
               <Icon name="check-circle" className="size-4" />موافق
             </Button>
             <Button variant="ghost" busy={review.isPending}
-              onClick={() => { if (window.confirm("ترفض الحالة؟ الميعاد هيتلغي من المكتب، واللي اتدفع هيترد كامل، وحازم هيبلّغ العميل.")) review.mutate("rejected"); }}>
+              onClick={async () => {
+                if (await confirmAction({ title: "ترفض الحالة؟", body: "الميعاد هيتلغي من المكتب، واللي اتدفع هيترد كامل، وحازم هيبلّغ العميل.", yes: "ارفض", danger: true })) review.mutate("rejected");
+              }}>
               <Icon name="x" className="size-4" />رفض
             </Button>
             {review.isError ? <span className="text-sm text-bad" role="alert">{errorMessage(review.error)}</span> : null}

@@ -6,6 +6,7 @@ import { label, PAYMENT_STATES, SERVICE_KINDS, SERVICE_STATES } from "../../shar
 
 import { cairoDate, cairoWhen } from "../../shared/lib/time";
 import { Icon } from "../../shared/ui/Icon";
+import { confirmAction, toast } from "../../shared/ui/feedback";
 import { Button, Card, Chip, Empty, ErrorState, Field, Loading } from "../../shared/ui/ui";
 import { priceMap, usePrices } from "../../shared/api/prices";
 import { ACCEPT, deliverFile, fileUrl, inRange, services, startPrice, type ServiceOrder, type Show } from "./api";
@@ -47,8 +48,8 @@ function OrderCard({ o }: { o: ServiceOrder }) {
   const qc = useQueryClient();
   const { data: me } = useMe();
   const done = () => { void qc.invalidateQueries({ queryKey: ["services"] }); void qc.invalidateQueries({ queryKey: ["payments"] }); };
-  const close = useMutation({ mutationFn: () => services.close(o.id), onSuccess: done });
-  const resend = useMutation({ mutationFn: () => services.resend(o.id), onSuccess: done });
+  const close = useMutation({ mutationFn: () => services.close(o.id), onSuccess: () => { done(); toast("الطلب اتقفل"); } });
+  const resend = useMutation({ mutationFn: () => services.resend(o.id), onSuccess: () => { done(); toast("الملف هيتبعت للعميل تاني"); } });
   const open = o.state !== "delivered" && o.state !== "closed";
 
   return (
@@ -97,7 +98,7 @@ function OrderCard({ o }: { o: ServiceOrder }) {
         {o.state === "delivered" && o.file_name ? (
           <div>
             <Button variant="secondary" busy={resend.isPending} disabled={o.notice === "pending"}
-              onClick={() => { if (window.confirm(`حازم هيبعت «${o.file_name}» للعميل تاني. أكيد؟`)) resend.mutate(); }}>
+              onClick={async () => { if (await confirmAction({ title: "تبعت الملف تاني؟", body: `حازم هيبعت «${o.file_name}» للعميل تاني.`, yes: "ابعته" })) resend.mutate(); }}>
               <Icon name="document" className="size-4" />ابعت الملف تاني
             </Button>
             {resend.isError ? <span className="text-sm text-bad" role="alert"> {errorMessage(resend.error)}</span> : null}
@@ -107,7 +108,9 @@ function OrderCard({ o }: { o: ServiceOrder }) {
         {open ? (
           <div>
             <Button variant="ghost" busy={close.isPending}
-              onClick={() => { if (window.confirm("تقفل الطلب ده؟ لو كان اتدفع، هيتفتح استرداد وحازم هيبلّغ العميل.")) close.mutate(); }}>
+              onClick={async () => {
+                if (await confirmAction({ title: "تقفل الطلب ده؟", body: "لو كان اتدفع، هيتفتح استرداد وحازم هيبلّغ العميل.", yes: "اقفله", danger: true })) close.mutate();
+              }}>
               <Icon name="x" className="size-4" />اقفل الطلب
             </Button>
             {close.isError ? <span className="text-sm text-bad" role="alert"> {errorMessage(close.error)}</span> : null}
@@ -133,7 +136,7 @@ function PriceFields({ o, onDone, list }: { o: ServiceOrder; onDone: () => void;
   const [due, setDue] = useState(cairoDate(new Date(Date.now() + 3 * 86_400_000)));
   const [delivery, setDelivery] = useState<"file" | "call">("file");
   const [exception, setException] = useState(false);
-  const save = useMutation({ mutationFn: () => services.price(o.id, { price: Number(shown), exception, due_on: due, delivery }), onSuccess: onDone });
+  const save = useMutation({ mutationFn: () => services.price(o.id, { price: Number(shown), exception, due_on: due, delivery }), onSuccess: () => { onDone(); toast("السعر اتبعت للعميل ✅"); } });
   const out = !inRange(o.kind, Number(shown), list);
 
   return (
@@ -157,7 +160,9 @@ function PriceFields({ o, onDone, list }: { o: ServiceOrder; onDone: () => void;
       ) : null}
       <div>
         <Button variant="primary" busy={save.isPending} disabled={!(Number(shown) > 0) || !due || (out && !exception)}
-          onClick={() => { if (window.confirm(`حازم هيبعت للعميل: ${Number(shown).toLocaleString("en-US")} جنيه، والتسليم يوم ${due}. أكيد؟`)) save.mutate(); }}>
+          onClick={async () => {
+            if (await confirmAction({ title: "تبعت السعر للعميل؟", body: `حازم هيبعت للعميل: ${Number(shown).toLocaleString("en-US")} جنيه، والتسليم يوم ${due}.`, yes: "ابعت السعر" })) save.mutate();
+          }}>
           ابعت السعر للعميل
         </Button>
       </div>
@@ -170,7 +175,7 @@ function PriceFields({ o, onDone, list }: { o: ServiceOrder; onDone: () => void;
 function Deliver({ o, onDone }: { o: ServiceOrder; onDone: () => void }) {
   const input = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
-  const send = useMutation({ mutationFn: () => (o.delivery === "file" ? deliverFile(o.id, file!) : services.deliver(o.id)), onSuccess: onDone });
+  const send = useMutation({ mutationFn: () => (o.delivery === "file" ? deliverFile(o.id, file!) : services.deliver(o.id)), onSuccess: () => { onDone(); toast("اتسلّم للعميل ✅"); } });
 
   return (
     <div className="grid gap-2 border-t border-line pt-3">
@@ -180,7 +185,7 @@ function Deliver({ o, onDone }: { o: ServiceOrder; onDone: () => void }) {
           <input ref={input} type="file" accept={ACCEPT} aria-label="الملف" className="text-sm"
             onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
           <Button variant="primary" busy={send.isPending} disabled={!file || file.size > 20 * 1024 * 1024}
-            onClick={() => { if (window.confirm(`حازم هيبعت «${file!.name}» للعميل على واتساب. أكيد؟`)) send.mutate(); }}>
+            onClick={async () => { if (await confirmAction({ title: "تبعت الملف للعميل؟", body: `حازم هيبعت «${file!.name}» للعميل على واتساب.`, yes: "ابعت الملف" })) send.mutate(); }}>
             ابعت الملف للعميل
           </Button>
           {file && file.size > 20 * 1024 * 1024 ? <span className="text-sm text-bad">الملف أكبر من 20 ميجا.</span> : null}

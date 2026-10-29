@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Me } from "../shared/api/types";
@@ -52,13 +52,15 @@ describe("TASK 06 prices", () => {
   });
 
   it("the lawyer changes a price after confirming, and only that line is saved", async () => {
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     const calls = serve({ "GET /auth/me": me("lawyer"), "GET /prices": list, "GET /prices/changes": [] });
     renderAt("/prices");
     fireEvent.change(await screen.findByLabelText("استشارة بالتليفون أو الفيديو (ربع ساعة)"), { target: { value: "600" } });
     fireEvent.click(screen.getByRole("button", { name: "احفظ الأسعار" }));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog.textContent).toContain("للطلبات الجديدة بس");
+    fireEvent.click(within(dialog).getByRole("button", { name: "احفظ الأسعار" }));
     await vi.waitFor(() => expect(calls.some((c) => c.method === "PUT")).toBe(true));
-    expect(confirm.mock.calls[0]![0]).toContain("للطلبات الجديدة بس");
+    expect(await screen.findByText("الأسعار اتحفظت ✅")).toBeTruthy(); // the toast
     expect(calls.find((c) => c.method === "PUT")).toEqual({ method: "PUT", path: "/prices", body: { values: { "price.phone_video": 600 } } });
   });
 });

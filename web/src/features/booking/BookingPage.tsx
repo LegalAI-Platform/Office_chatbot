@@ -5,6 +5,7 @@ import { can, useMe } from "../../shared/api/session";
 import { APPOINTMENT_STATES, BOOKING_SERVICES, CALL_APPS, label, matterLabel, PAYMENT_STATES, REMINDER_KINDS, REMINDER_SKIPS } from "../../shared/lib/labels";
 import { cairoTime, cairoWhen } from "../../shared/lib/time";
 import { Icon } from "../../shared/ui/Icon";
+import { confirmAction, toast } from "../../shared/ui/feedback";
 import { Button, Card, Chip, Empty, ErrorState, Field, Loading } from "../../shared/ui/ui";
 import { booking, cairoDate, hhmm, monthOf, shiftMonth, TIMES, type Appointment, type Day, type Done, type Office, type Reminder, type Settings, type WeekDay } from "./api";
 
@@ -270,8 +271,8 @@ function Bookings() {
   const to = cairoDate(new Date(Date.now() + 30 * 86_400_000));
   const list = useQuery({ queryKey: ["booking", "appointments", today], queryFn: () => booking.appointments(today, to) });
   const refresh = () => void qc.invalidateQueries({ queryKey: ["booking"] });
-  const mark = useMutation({ mutationFn: ({ id, state }: { id: string; state: string }) => booking.mark(id, state), onSuccess: refresh });
-  const cancel = useMutation({ mutationFn: booking.cancel, onSuccess: refresh });
+  const mark = useMutation({ mutationFn: ({ id, state }: { id: string; state: string }) => booking.mark(id, state), onSuccess: () => { refresh(); toast("اتسجّل ✅"); } });
+  const cancel = useMutation({ mutationFn: booking.cancel, onSuccess: () => { refresh(); toast("الحجز اتلغى، وحازم هيبلّغ العميل"); } });
 
   if (list.isPending) return <Loading />;
   if (list.isError) return <ErrorState message={errorMessage(list.error)} onRetry={() => void list.refetch()} />;
@@ -313,7 +314,9 @@ function Bookings() {
                   </>
                 ) : null}
                 <Button variant="danger" busy={cancel.isPending && cancel.variables === a.id}
-                  onClick={() => { if (window.confirm("إلغاء الحجز ده؟ حازم هيبعت للعميل يختار ميعاد تاني، أو استرداد كامل لو كان دفع.")) cancel.mutate(a.id); }}>
+                  onClick={async () => {
+                    if (await confirmAction({ title: "تلغي الحجز ده؟", body: "حازم هيبعت للعميل يختار ميعاد تاني، أو استرداد كامل لو كان دفع.", yes: "أيوه، الغيه", danger: true })) cancel.mutate(a.id);
+                  }}>
                   إلغاء
                 </Button>
               </span>
@@ -375,7 +378,7 @@ function Week() {
   const days = draft ?? week.data;
   const save = useMutation({
     mutationFn: (confirm: boolean) => booking.saveWeek(days!, confirm),
-    onSuccess: () => { setDraft(null); setAffected(null); void qc.invalidateQueries({ queryKey: ["booking"] }); },
+    onSuccess: () => { setDraft(null); setAffected(null); void qc.invalidateQueries({ queryKey: ["booking"] }); toast("المواعيد الثابتة اتحفظت ✅"); },
     onError: (e) => { if (e instanceof ApiError && e.code === "has_bookings") setAffected(e.data?.appointments as Appointment[]); },
   });
   if (week.isPending) return <Loading />;
@@ -424,7 +427,7 @@ function SettingsForm() {
   const s = useQuery({ queryKey: ["booking", "settings"], queryFn: booking.settings });
   const [draft, setDraft] = useState<Settings | null>(null);
   const v = draft ?? s.data;
-  const save = useMutation({ mutationFn: booking.saveSettings, onSuccess: () => { setDraft(null); void qc.invalidateQueries({ queryKey: ["booking"] }); } });
+  const save = useMutation({ mutationFn: booking.saveSettings, onSuccess: () => { setDraft(null); void qc.invalidateQueries({ queryKey: ["booking"] }); toast("إعدادات الحجز اتحفظت ✅"); } });
   if (s.isPending) return <Loading />;
   if (s.isError || !v) return <ErrorState message={errorMessage(s.error)} onRetry={() => void s.refetch()} />;
   const num = (k: keyof Settings) => (e: { target: { value: string } }) => setDraft({ ...v, [k]: e.target.value === "" ? null : Number(e.target.value) });
@@ -477,7 +480,7 @@ function OfficeForm() {
   const o = useQuery({ queryKey: ["booking", "office"], queryFn: booking.office });
   const [draft, setDraft] = useState<Office | null>(null);
   const v = draft ?? o.data;
-  const save = useMutation({ mutationFn: booking.saveOffice, onSuccess: () => { setDraft(null); void qc.invalidateQueries({ queryKey: ["booking"] }); } });
+  const save = useMutation({ mutationFn: booking.saveOffice, onSuccess: () => { setDraft(null); void qc.invalidateQueries({ queryKey: ["booking"] }); toast("بيانات المكتب اتحفظت ✅"); } });
   if (o.isPending) return <Loading />;
   if (o.isError || !v) return <ErrorState message={errorMessage(o.error)} onRetry={() => void o.refetch()} />;
   const set = (k: keyof Office) => (e: { target: { value: string } }) => setDraft({ ...v, [k]: e.target.value });

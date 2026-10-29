@@ -7,6 +7,7 @@ import { ALERT_KINDS, label, ROLES, SYSTEM_WHAT, TASK_TYPES } from "../shared/li
 import { setTheme, useTheme } from "../shared/lib/theme";
 import { cairoLongDate, cairoTime, timeAgo } from "../shared/lib/time";
 import { Icon } from "../shared/ui/Icon";
+import { ConfirmHost, Toaster } from "../shared/ui/feedback";
 import { OwnerImg, type OwnerImage } from "../shared/ui/Owner";
 
 type Item = { to: string; text: string; short: string; icon: OwnerImage | "home" | "chat" | "receipt" | "document"; dot?: boolean; badge?: number; end?: boolean };
@@ -92,6 +93,8 @@ export function Layout() {
         <main id="main" className="w-full flex-1 px-4 pt-4 pb-28 lg:px-7 lg:pt-5 lg:pb-8">
           <Outlet />
         </main>
+        <Toaster />
+        <ConfirmHost />
 
         {/* phone: the tab bar */}
         <nav aria-label="التنقل" className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-5 border-t border-side-line bg-side px-1 pt-1 text-side-ink lg:hidden"
