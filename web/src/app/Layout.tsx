@@ -8,6 +8,7 @@ import { setTheme, useTheme } from "../shared/lib/theme";
 import { cairoLongDate, cairoTime, timeAgo } from "../shared/lib/time";
 import { Icon } from "../shared/ui/Icon";
 import { ConfirmHost, Toaster } from "../shared/ui/feedback";
+import { CommandPalette } from "./CommandPalette";
 import { OwnerImg, type OwnerImage } from "../shared/ui/Owner";
 
 type Item = { to: string; text: string; short: string; icon: OwnerImage | "home" | "chat" | "receipt" | "document"; dot?: boolean; badge?: number; end?: boolean };
@@ -306,15 +307,16 @@ function Clock() {
   );
 }
 
-/** Finds tasks by the client's name or the last digits of the number; Ctrl K jumps here. */
+/** Finds tasks by the client's name or the last digits of the number; Ctrl K opens the quick search (CommandPalette). */
 function Search() {
   const navigate = useNavigate();
   const input = useRef<HTMLInputElement>(null);
+  const [palette, setPalette] = useState(false);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        input.current?.focus();
+        setPalette(true);
       }
     };
     document.addEventListener("keydown", key);
@@ -331,7 +333,9 @@ function Search() {
       <OwnerImg name="top_search" className="size-6 shrink-0 object-contain" />
       <input ref={input} type="search" aria-label="بحث" placeholder="ابحث عن عميل، ميعاد، مهمة، أو رقم قضية..."
         className="min-h-10 min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-ink-soft" />
-      <kbd className="hidden shrink-0 rounded-md border border-line bg-card-2 px-2.5 py-0.5 font-sans text-sm text-ink-soft sm:block" dir="ltr">Ctrl K</kbd>
+      <button type="button" onClick={() => setPalette(true)} aria-label="اختصارات وبحث (Ctrl K)"
+        className="hidden shrink-0 rounded-md border border-line bg-card-2 px-2.5 py-0.5 font-sans text-sm text-ink-soft hover:border-gold-line sm:block" dir="ltr">Ctrl K</button>
+      <CommandPalette open={palette} onClose={() => setPalette(false)} />
     </form>
   );
 }
