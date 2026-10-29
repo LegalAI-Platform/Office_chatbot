@@ -1,16 +1,18 @@
-# Images: after every merge to main, the CI again (ci.yml) and, once it passes, the three images built here are
-# published to GitHub's registry. The server only pulls them (TASK 14): nothing is built there.
+# Images: after every merge to main, the CI again (ci.yml) and, once it passes, the three images are published to
+# GitHub's registry. The server only pulls them (TASK 14): nothing is built there.
 #   ghcr.io/legalai-platform/office-api    the API and the CLI (backend/)
 #   ghcr.io/legalai-platform/office-web    the panel (web/)
 #   ghcr.io/legalai-platform/office-tools  backup, restore, healthcheck… (infra/tools/)
-# Each gets two tags: the commit (sha-1a2b3c4, to run or go back to exactly that version) and `main` (the latest).
+# Every commit on main gets every image as sha-1a2b3c4 (to run or go back to exactly that version), and `main` is the
+# latest. An image whose folder did not change is not built again: its last version gets the new tag, which takes no
+# space. The packages are private and the free plan stores 500 MB, so only the last 5 versions of each are kept.
 # No secret is in any image: they come from the server's .env when the containers start.
 name: Images
 
 on:
   push:
     branches: [main]
-  workflow_dispatch:
+  workflow_dispatch: # by hand: builds all three again
 
 permissions:
   contents: read
@@ -44,6 +46,7 @@ jobs:
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
+          fetch-depth: 0 # to compare with main before this push
           persist-credentials: false
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
@@ -51,20 +54,69 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Name and tags
-        id: tags
+
+      # Built again when its folder changed since the commit the current `main` image was built from (its revision
+      # label: a push whose CI failed published nothing, so its changes are still counted), when run by hand, or
+      # when there is no `main` image yet; otherwise the last one is tagged with this commit too.
+      - name: Changed?
+        id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          CONTEXT: ${{ matrix.context }}
         run: |
           name="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/office-${{ matrix.image }}"
-          echo "list=$name:sha-${GITHUB_SHA::7},$name:main" >> "$GITHUB_OUTPUT"
-      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "tags=$name:sha-${GITHUB_SHA::7},$name:main" >> "$GITHUB_OUTPUT"
+          built_from="$(docker buildx imagetools inspect "$name:main" --format '{{json .Image}}' 2>/dev/null \
+            | jq -r '(.config.Labels // .["linux/amd64"].config.Labels // {})["org.opencontainers.image.revision"] // empty' || true)"
+          build=true
+          if [[ "$EVENT" == "push" && -n "$built_from" ]] \
+             && git cat-file -e "$built_from^{commit}" 2>/dev/null \
+             && git diff --quiet "$built_from" "$GITHUB_SHA" -- "$CONTEXT"; then
+            build=false
+          fi
+          echo "built from: ${built_from:-none}"
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+          echo "office-${{ matrix.image }}: $([[ $build == true ]] && echo "built" || echo "unchanged, tagged again")" >> "$GITHUB_STEP_SUMMARY"
+
+      - if: steps.plan.outputs.build == 'true'
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: ${{ matrix.context }}
           platforms: linux/amd64 # the server (KVM 2) is x86
           push: true
-          tags: ${{ steps.tags.outputs.list }}
+          tags: ${{ steps.plan.outputs.tags }}
+          # one manifest per version: no attestation beside it, so the cleanup below never cuts an image in half
+          provenance: false
+          sbom: false
           # links the package to this repository on GitHub, with the commit it was built from
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+
+      - if: steps.plan.outputs.build != 'true'
+        name: Tag the last version with this commit
+        env:
+          NAME: ${{ steps.plan.outputs.name }}
+        run: docker buildx imagetools create --tag "$NAME:sha-${GITHUB_SHA::7}" "$NAME:main"
+
+  cleanup:
+    name: Keep the last 5 (${{ matrix.image }})
+    needs: publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [api, web, tools]
+    steps:
+      # Older versions are deleted, with every tag on them; a server still running one keeps its own copy.
+      - uses: actions/delete-package-versions@e5bc658cc4c965c472efe991f8beea3981499c55 # v5
+        with:
+          package-name: office-${{ matrix.image }}
+          package-type: container
+          min-versions-to-keep: 5

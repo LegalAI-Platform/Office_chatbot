@@ -201,7 +201,8 @@ On GitHub's machines, never on the server (the repo is public):
   and a build of the three images. A red check means do not merge.
 - **Every merge to main** (`.github/workflows/images.yml`): the same CI, then the images published to GitHub's
   registry as `ghcr.io/legalai-platform/office-api`, `office-web` and `office-tools`, tagged `sha-<commit>` and
-  `main`. They hold no secret. The server names them in `.env` (`OFFICE_*_IMAGE`, `OFFICE_PULL_POLICY=missing`)
+  `main`. An image whose folder did not change is only tagged again (no new space), and only the last 5
+  versions of each are kept (the free plan stores 500 MB of private packages). They hold no secret. The server names them in `.env` (`OFFICE_*_IMAGE`, `OFFICE_PULL_POLICY=missing`)
   and only pulls them; this machine keeps building its own (`:local`) as before.
 
 ## Troubleshooting
