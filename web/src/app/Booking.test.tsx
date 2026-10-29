@@ -137,6 +137,38 @@ describe("TASK 08 booking", () => {
     expect(screen.getAllByText(/سارة محمد علي حسن/).filter((e) => e.closest("li"))).toHaveLength(1);
   });
 
+  // More of PR #14's ideas: the calendar opens on today with its bookings, «انسخ» next to the number, the week's hours.
+  it("the calendar opens on today with its bookings, the number copies, and the week shows its hours", async () => {
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Cairo" }).format(new Date());
+    const soon = new Date(Date.now() + 60 * 60_000).toISOString();
+    const write = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText: write }, configurable: true });
+    const week = [0, 1, 2, 3, 4, 5, 6].map((w) => ({ weekday: w, ranges: w === 5 ? [] : [{ start: 600, end: 1080 }] }));
+    serve({
+      "GET /auth/me": { body: staff },
+      "GET /booking/month": { body: [day(today, { bookings: 1 })] },
+      "GET /booking/appointments": { body: [{ ...appointment, start: soon, end: soon }] },
+      "GET /booking/week": { body: week },
+    });
+    renderAt("/appointments");
+    const list = await screen.findByRole("region", { name: "حجوزات اليوم" });
+    expect(within(list).getByText(/محمد أحمد علي حسن/)).toBeTruthy();
+    fireEvent.click(within(list).getByRole("button", { name: /انسخ الرقم/ }));
+    await vi.waitFor(() => expect(write).toHaveBeenCalledWith("+201000000091"));
+    expect(await screen.findByText("الرقم اتنسخ")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("tab", { name: "المواعيد الثابتة" }));
+    expect((await screen.findByText("في الأسبوع")).textContent).toContain("48 ساعة"); // 6 days × 8 hours
+    expect(within((await screen.findByText("السبت")).closest("li")!).getByText("8 ساعات")).toBeTruthy();
+  });
+
+  it("the page's tab and the bookings' filter live in the address", async () => {
+    serve({ "GET /auth/me": { body: staff }, "GET /booking/appointments": { body: [appointment] } });
+    renderAt("/appointments?tab=bookings&kind=office");
+    expect((await screen.findByRole("tab", { name: "الحجوزات" })).getAttribute("aria-selected")).toBe("true");
+    expect((await screen.findByRole("button", { name: "في المكتب" })).getAttribute("aria-pressed")).toBe("true");
+  });
+
   it("the office's payment details are not shown to a staff member", async () => {
     serve({ "GET /auth/me": { body: staff } });
     renderAt("/appointments");

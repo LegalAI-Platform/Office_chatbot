@@ -9,7 +9,7 @@ import { cairoLongDate, cairoTime, timeAgo } from "../shared/lib/time";
 import { Icon } from "../shared/ui/Icon";
 import { ConfirmHost, Toaster } from "../shared/ui/feedback";
 import { CommandPalette } from "./CommandPalette";
-import { prefetch, prefetchAll } from "./lazyPages";
+import { prefetchAll, usePrefetch } from "./lazyPages";
 import { OwnerImg, type OwnerImage } from "../shared/ui/Owner";
 
 type Item = { to: string; text: string; short: string; icon: OwnerImage | "home" | "chat" | "receipt" | "document"; dot?: boolean; badge?: number; end?: boolean };
@@ -57,6 +57,7 @@ export function Layout() {
   // Speed (idea from PR #14): every page's file once the browser is idle, so a click never waits.
   useEffect(() => { prefetchAll(items.map((i) => i.to)); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const phoneTabs = items.filter((i) => ["/", "/tasks", "/appointments", "/chats", "/settings"].includes(i.to));
+  const prefetch = usePrefetch();
 
   return (
     <div className="min-h-dvh lg:grid lg:grid-cols-[16.5rem_minmax(0,1fr)]">
@@ -118,6 +119,7 @@ export function Layout() {
 }
 
 function SideLink({ item: i }: { item: Item }) {
+  const prefetch = usePrefetch();
   return (
     <NavLink to={i.to} end={i.end} onMouseEnter={() => prefetch(i.to)} onFocus={() => prefetch(i.to)}
       className={({ isActive }) => `flex min-h-[2.75rem] items-center gap-3.5 whitespace-nowrap rounded-[10px] px-4 text-[15px] transition ${isActive ? "nav-active font-bold" : "text-side-ink hover:bg-white/5"}`}>

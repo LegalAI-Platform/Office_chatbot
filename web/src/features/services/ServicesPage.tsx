@@ -1,10 +1,12 @@
-import { useRef, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRef, useState, type ReactNode } from "react";
+import { queryOptions, useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { errorMessage } from "../../shared/api/client";
 import { can, useMe } from "../../shared/api/session";
 import { label, PAYMENT_STATES, SERVICE_KINDS, SERVICE_STATES } from "../../shared/lib/labels";
 
 import { cairoDate, cairoWhen } from "../../shared/lib/time";
+import { useUrlState } from "../../shared/lib/url";
+import { ActionBar, CaseCard, CaseHead, CaseNote, Facts, Files, Meta, Phone } from "../../shared/ui/caseCard";
 import { Icon } from "../../shared/ui/Icon";
 import { confirmAction, toast } from "../../shared/ui/feedback";
 import { Button, Card, Chip, Empty, ErrorState, Field, Loading } from "../../shared/ui/ui";
@@ -16,14 +18,22 @@ const TONE: Record<string, string> = {
 };
 const DELIVERY: Record<string, string> = { file: "ملف على واتساب", call: "مكالمة من الأستاذ" };
 
+const SHOWS: Show[] = ["open", "done"];
+const listQuery = (show: Show) => queryOptions({ queryKey: ["services", show], queryFn: () => services.list(show) });
+
+/** The open orders (the tab the page opens on), fetched while the pointer is still on the link (idea from PR #14). */
+export function prefetchData(qc: QueryClient) {
+  void qc.prefetchQuery(listQuery("open"));
+}
+
 /**
  * «طلبات الخدمات» (TASK 10, DECISIONS v1.14 B-16 / B-17): a written service from the client's documents to the
  * delivered file. The lawyer or the manager prices it; the work starts once a person found the money (الإيصالات);
  * the file goes from here to storage and Hazem sends it on WhatsApp.
  */
 export function ServicesPage() {
-  const [show, setShow] = useState<Show>("open");
-  const list = useQuery({ queryKey: ["services", show], queryFn: () => services.list(show) });
+  const [show, setShow] = useUrlState<Show>("show", "open", SHOWS);
+  const list = useQuery(listQuery(show));
   const tabs: [Show, string][] = [["open", "شغالة"], ["done", "اتسلّمت أو اتقفلت"]];
 
   return (
@@ -52,49 +62,37 @@ function OrderCard({ o }: { o: ServiceOrder }) {
   const resend = useMutation({ mutationFn: () => services.resend(o.id), onSuccess: () => { done(); toast("الملف هيتبعت للعميل تاني"); } });
   const open = o.state !== "delivered" && o.state !== "closed";
 
+  const facts: [string, ReactNode][] = [];
+  if (o.price != null) facts.push(["السعر", <><span className="tabular">{o.price.toLocaleString("en-US")}</span> جنيه{o.price_exception ? " (استثناء)" : ""}</>]);
+  if (o.due_on) facts.push(["التسليم", o.due_on]);
+  if (o.delivery) facts.push(["إزاي", DELIVERY[o.delivery]]);
+  if (o.payment) facts.push(["الدفع", label(PAYMENT_STATES, o.payment)]);
+
   return (
-    <li>
-      <Card>
-        <div className="flex flex-wrap items-start gap-3">
-          <span className="grid min-w-0 flex-1 gap-0.5">
-            <span className="font-semibold">{o.name ?? "من غير اسم"} · {label(SERVICE_KINDS, o.kind)}</span>
-            <span className="text-xs text-ink-soft">طلب {cairoWhen(o.created_at)} · <span dir="ltr">+{o.wa_id}</span></span>
-            {o.price != null ? (
-              <span className="text-sm">
-                السعر <b className="tabular">{o.price.toLocaleString("en-US")}</b> جنيه{o.price_exception ? " (استثناء)" : ""}
-                {o.due_on ? <> · التسليم {o.due_on}</> : null}{o.delivery ? <> · {DELIVERY[o.delivery]}</> : null}
-                {o.payment ? <> · الدفع: {label(PAYMENT_STATES, o.payment)}</> : null}
-              </span>
-            ) : null}
-            {o.state === "awaiting_payment" && o.price_until ? <span className="text-xs text-ink-soft">السعر صالح لحد {cairoWhen(o.price_until)}</span> : null}
-            {o.delivered_at ? <span className="text-xs text-ink-soft">اتسلّم {cairoWhen(o.delivered_at)}{o.file_name ? ` · ${o.file_name}` : ""}</span> : null}
-          </span>
-          <Chip tone={TONE[o.state] ?? "grey"}>{label(SERVICE_STATES, o.state)}</Chip>
-        </div>
+    <CaseCard tone={TONE[o.state] ?? "grey"} label={`${o.name ?? "من غير اسم"}: ${label(SERVICE_KINDS, o.kind)}`}>
+      <CaseHead title={o.name ?? "من غير اسم"} kind={label(SERVICE_KINDS, o.kind)}
+        meta={[
+          <Meta key="w" icon="clock">طلب {cairoWhen(o.created_at)}</Meta>,
+          <Phone key="p" wa={o.wa_id} />,
+          o.state === "awaiting_payment" && o.price_until ? <span key="u">السعر صالح لحد {cairoWhen(o.price_until)}</span> : null,
+          o.delivered_at ? <span key="d">اتسلّم {cairoWhen(o.delivered_at)}{o.file_name ? ` · ${o.file_name}` : ""}</span> : null,
+        ]}
+        status={<Chip tone={TONE[o.state] ?? "grey"}>{label(SERVICE_STATES, o.state)}</Chip>} />
+      {facts.length > 0 ? <Facts items={facts} /> : null}
+      <Files label="ورق العميل" count={o.files} href={(i) => fileUrl(o.id, i)} word="مستند" />
+      {o.files === 0 && o.state === "collecting" ? <CaseNote>مستنيين العميل يبعت الورق.</CaseNote> : null}
+      {o.state === "awaiting_payment" ? <CaseNote>حازم بعت السعر وبيانات الدفع. لما الإيصال يوصل، راجعه من «الإيصالات والمدفوعات».</CaseNote> : null}
+      {o.notice === "failed" ? (
+        <CaseNote tone="bad">
+          {o.notice_error === "OUTSIDE_24H_WINDOW" || !o.notice_error
+            ? "آخر رسالة ما وصلتش للعميل (عدّى 24 ساعة من آخر رسالة منه). هتتبعت تاني لوحدها أول ما يكتب، أو كلّموه."
+            : `آخر رسالة ما وصلتش للعميل: واتساب رفضها (${o.notice_error}). جرّب «ابعت الملف تاني»، ولو اتكررت كلّموه.`}
+        </CaseNote>
+      ) : null}
 
-        {o.files > 0 ? (
-          <ul className="flex flex-wrap gap-2" aria-label="ورق العميل">
-            {Array.from({ length: o.files }, (_, i) => (
-              <li key={i}>
-                <a href={fileUrl(o.id, i)} target="_blank" rel="noopener noreferrer"
-                  className="inline-flex min-h-10 items-center gap-1.5 rounded-[var(--radius-control)] border border-line px-3 text-sm hover:border-gold-line">
-                  <Icon name="document" className="size-4" />مستند {i + 1}
-                </a>
-              </li>
-            ))}
-          </ul>
-        ) : o.state === "collecting" ? <p className="text-sm text-ink-soft">مستنيين العميل يبعت الورق.</p> : null}
-
+      <ActionBar>
         {(o.state === "collecting" || o.state === "awaiting_price") && can(me, "services.price") ? <PriceForm o={o} onDone={done} /> : null}
-        {o.state === "awaiting_payment" ? <p className="text-sm text-ink-soft">حازم بعت السعر وبيانات الدفع. لما الإيصال يوصل، راجعه من «الإيصالات والمدفوعات».</p> : null}
         {o.state === "in_progress" ? <Deliver o={o} onDone={done} /> : null}
-        {o.notice === "failed" ? (
-          <p className="text-sm text-bad" role="status">
-            {o.notice_error === "OUTSIDE_24H_WINDOW" || !o.notice_error
-              ? "آخر رسالة ما وصلتش للعميل (عدّى 24 ساعة من آخر رسالة منه). هتتبعت تاني لوحدها أول ما يكتب، أو كلّموه."
-              : `آخر رسالة ما وصلتش للعميل: واتساب رفضها (${o.notice_error}). جرّب «ابعت الملف تاني»، ولو اتكررت كلّموه.`}
-          </p>
-        ) : null}
         {o.state === "delivered" && o.file_name ? (
           <div>
             <Button variant="secondary" busy={resend.isPending} disabled={o.notice === "pending"}
@@ -104,7 +102,6 @@ function OrderCard({ o }: { o: ServiceOrder }) {
             {resend.isError ? <span className="text-sm text-bad" role="alert"> {errorMessage(resend.error)}</span> : null}
           </div>
         ) : null}
-
         {open ? (
           <div>
             <Button variant="ghost" busy={close.isPending}
@@ -116,8 +113,8 @@ function OrderCard({ o }: { o: ServiceOrder }) {
             {close.isError ? <span className="text-sm text-bad" role="alert"> {errorMessage(close.error)}</span> : null}
           </div>
         ) : null}
-      </Card>
-    </li>
+      </ActionBar>
+    </CaseCard>
   );
 }
 

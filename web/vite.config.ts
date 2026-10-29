@@ -1,11 +1,30 @@
 import { defineConfig } from "vitest/config";
+import type { Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
 // The panel talks to /api/panel only. In `npm run dev` the requests go to the web container
 // (127.0.0.1:8080), whose nginx forwards /api/panel and nothing else to the API.
+/**
+ * The two faces nearly every screen starts with (Cairo Arabic regular and semibold) are asked for together with the
+ * code instead of after the CSS has been read: the text shows in its own font sooner, without a swap (idea from PR #14).
+ */
+function preloadFonts(): Plugin {
+  return {
+    name: "hazem-preload-fonts",
+    apply: "build",
+    transformIndexHtml: {
+      order: "post",
+      handler(_html, ctx) {
+        const files = Object.keys(ctx.bundle ?? {}).filter((f) => /cairo-arabic-(400|600)-normal-[^/]*\.woff2$/.test(f));
+        return files.map((f) => ({ tag: "link", injectTo: "head" as const, attrs: { rel: "preload", as: "font", type: "font/woff2", href: `/${f}`, crossorigin: "" } }));
+      },
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), preloadFonts()],
   server: {
     proxy: { "/api/panel": { target: "http://127.0.0.1:8080", changeOrigin: false } },
   },

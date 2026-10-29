@@ -1,13 +1,15 @@
 import { useState } from "react";
+import type { QueryClient } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router";
 import { errorMessage } from "../../shared/api/client";
 import { can, useMe } from "../../shared/api/session";
-import type { TaskListItem } from "../../shared/api/types";
+import type { Me, TaskListItem } from "../../shared/api/types";
 import { label, matterLabel, TASK_STATES, TASK_TYPES } from "../../shared/lib/labels";
 import { cairoWhen } from "../../shared/lib/time";
+import { useUrlState } from "../../shared/lib/url";
 import { Icon } from "../../shared/ui/Icon";
 import { Avatar, Button, Chip, Empty, ErrorState, Loading } from "../../shared/ui/ui";
-import { useTasks, type Scope, type StateFilter } from "./api";
+import { tasksQuery, useTasks, type Scope, type StateFilter } from "./api";
 
 const SCOPES: { value: Scope; label: string; needsAll?: boolean }[] = [
   { value: "mine", label: "مهامي" },
@@ -24,13 +26,19 @@ const STATES: { value: StateFilter; label: string }[] = [
 
 export const isUrgent = (t: { type: string }) => t.type === "urgent_request" || t.type === "safety_alert";
 
+/** The list the page opens on, fetched while the pointer is still on the link (idea from PR #14). */
+export function prefetchData(qc: QueryClient, me: Me | null | undefined) {
+  void qc.prefetchQuery(tasksQuery({ scope: can(me, "tasks.view_all") ? "all" : "mine", state: "active", page: 1 }));
+}
+
 export function TasksPage() {
   const { data: me } = useMe();
   const seesAll = can(me, "tasks.view_all");
-  const [scope, setScope] = useState<Scope>(seesAll ? "all" : "mine");
+  // the filters live in the address (idea from PR #14): a refresh, the back button from a task or a shared link keep them
+  const [scope, setScope] = useUrlState<Scope>("scope", seesAll ? "all" : "mine", SCOPES.filter((s) => !s.needsAll || seesAll).map((s) => s.value));
+  const [state, setState] = useUrlState<StateFilter>("state", "active", STATES.map((s) => s.value));
   const [params, setParams] = useSearchParams();
   const q = params.get("q")?.trim() || undefined;
-  const [state, setState] = useState<StateFilter>(() => (STATES.some((s) => s.value === params.get("state")) ? (params.get("state") as StateFilter) : "active"));
   const [page, setPage] = useState(1);
   const tasks = useTasks({ scope, state, page, ...(q ? { q } : {}) });
 
@@ -49,7 +57,7 @@ export function TasksPage() {
       {q ? (
         <p className="flex flex-wrap items-center gap-2 text-sm">
           نتايج البحث عن <strong className="rounded-md bg-gold-tint px-2 text-gold-ink">{q}</strong>
-          <button type="button" onClick={() => setParams({})} className="inline-flex items-center gap-1 text-ink-soft hover:text-ink">
+          <button type="button" onClick={() => setParams((p) => { const next = new URLSearchParams(p); next.delete("q"); return next; }, { replace: true })} className="inline-flex items-center gap-1 text-ink-soft hover:text-ink">
             <Icon name="x" className="size-4" /> امسح البحث
           </button>
         </p>

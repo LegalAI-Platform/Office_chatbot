@@ -1,4 +1,4 @@
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../shared/api/client";
 import type { StaffRef, TaskDetail, TaskPage } from "../../shared/api/types";
 
@@ -16,11 +16,17 @@ export interface TaskFilter {
 const tasksKey = (f?: TaskFilter) => (f ? ["tasks", f] : ["tasks"]);
 const taskKey = (id: string) => ["task", id];
 
-export function useTasks(filter: TaskFilter) {
-  return useQuery({
+/** One page of tasks; the same key wherever it is read or fetched ahead (TasksPage's prefetchData). */
+export const tasksQuery = (filter: TaskFilter) =>
+  queryOptions({
     queryKey: tasksKey(filter),
     queryFn: () =>
       api<TaskPage>("GET", `/tasks?scope=${filter.scope}&state=${filter.state}&page=${filter.page}${filter.q ? `&q=${encodeURIComponent(filter.q)}` : ""}`),
+  });
+
+export function useTasks(filter: TaskFilter) {
+  return useQuery({
+    ...tasksQuery(filter),
     placeholderData: keepPreviousData,
     refetchInterval: 60_000, // new tasks show up without a reload
   });

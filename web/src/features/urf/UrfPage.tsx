@@ -1,9 +1,11 @@
-import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { ReactNode } from "react";
+import { queryOptions, useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { errorMessage } from "../../shared/api/client";
 import { can, useMe } from "../../shared/api/session";
 import { APPOINTMENT_STATES, label, PAYMENT_STATES, URF_ANSWERS, URF_KINDS, URF_STATES } from "../../shared/lib/labels";
 import { cairoWhen } from "../../shared/lib/time";
+import { useUrlState } from "../../shared/lib/url";
+import { ActionBar, CaseCard, CaseHead, CaseNote, Facts, Files, Meta, Phone } from "../../shared/ui/caseCard";
 import { Icon } from "../../shared/ui/Icon";
 import { confirmAction, toast } from "../../shared/ui/feedback";
 import { Button, Card, Chip, Empty, ErrorState, Loading } from "../../shared/ui/ui";
@@ -15,6 +17,14 @@ const TONE: Record<string, string> = {
 };
 const yesNo = (v: boolean | null) => (v == null ? "—" : v ? "أيوه" : "لأ");
 
+const SHOWS: Show[] = ["open", "done"];
+const listQuery = (show: Show) => queryOptions({ queryKey: ["urf", show], queryFn: () => urf.list(show) });
+
+/** The open cases (the tab the page opens on), fetched while the pointer is still on the link (idea from PR #14). */
+export function prefetchData(qc: QueryClient) {
+  void qc.prefetchQuery(listQuery("open"));
+}
+
 /**
  * «حالات العرفي» (TASK 11, DECISIONS v1.15 B-11 / S-06): Hazem's questions and the client's answers, the documents
  * (ID cards, opened here only), the appointment in the office and its payment. The lawyer or the manager approves the
@@ -22,8 +32,8 @@ const yesNo = (v: boolean | null) => (v == null ? "—" : v ? "أيوه" : "لأ
  * cancelled by the office and what was paid goes back).
  */
 export function UrfPage() {
-  const [show, setShow] = useState<Show>("open");
-  const list = useQuery({ queryKey: ["urf", show], queryFn: () => urf.list(show) });
+  const [show, setShow] = useUrlState<Show>("show", "open", SHOWS);
+  const list = useQuery(listQuery(show));
   const tabs: [Show, string][] = [["open", "شغالة"], ["done", "اتقفلت"]];
 
   return (
@@ -37,14 +47,14 @@ export function UrfPage() {
       </div>
       {list.isPending ? <Loading /> : list.isError ? <ErrorState message={errorMessage(list.error)} onRetry={() => void list.refetch()} /> : (
         list.data.length === 0 ? <Card><Empty title="مفيش حالات هنا" icon="check-circle" /></Card> : (
-          <ul className="grid gap-3">{list.data.map((c) => <CaseCard key={c.id} c={c} />)}</ul>
+          <ul className="grid gap-3">{list.data.map((c) => <UrfCard key={c.id} c={c} />)}</ul>
         )
       )}
     </div>
   );
 }
 
-function CaseCard({ c }: { c: UrfCase }) {
+function UrfCard({ c }: { c: UrfCase }) {
   const qc = useQueryClient();
   const { data: me } = useMe();
   const review = useMutation({
@@ -69,47 +79,27 @@ function CaseCard({ c }: { c: UrfCase }) {
   const mayReview = can(me, "urf.review");
 
   return (
-    <li>
-      <Card>
-        <div className="flex flex-wrap items-start gap-3">
-          <span className="grid min-w-0 flex-1 gap-0.5">
-            <span className="font-semibold">{c.name ?? "من غير اسم"} · {label(URF_KINDS, c.kind)}</span>
-            <span className="text-xs text-ink-soft">بدأ {cairoWhen(c.created_at)} · <span dir="ltr">+{c.wa_id}</span></span>
-            {c.start ? (
-              <span className="text-sm">
-                الميعاد {cairoWhen(c.start)} · {label(APPOINTMENT_STATES, c.appointment ?? "")}
-                {c.payment ? <> · الدفع: {label(PAYMENT_STATES, c.payment)}</> : null}
-              </span>
-            ) : null}
-            {c.decided_by ? <span className="text-xs text-ink-soft">القرار: {c.decided_by} · {cairoWhen(c.decided_at!)}</span> : null}
-          </span>
-          <Chip tone={TONE[c.state] ?? "grey"}>{label(URF_STATES, c.state)}</Chip>
-        </div>
+    <CaseCard tone={TONE[c.state] ?? "grey"} label={`${c.name ?? "من غير اسم"}: ${label(URF_KINDS, c.kind)}`}>
+      <CaseHead title={c.name ?? "من غير اسم"} kind={label(URF_KINDS, c.kind)}
+        meta={[
+          <Meta key="w" icon="clock">بدأ {cairoWhen(c.created_at)}</Meta>,
+          <Phone key="p" wa={c.wa_id} />,
+          c.decided_by ? <span key="d">القرار: {c.decided_by} · {cairoWhen(c.decided_at!)}</span> : null,
+        ]}
+        status={<Chip tone={TONE[c.state] ?? "grey"}>{label(URF_STATES, c.state)}</Chip>} />
+      <Facts items={[
+        ...(c.start ? [["الميعاد", <>{cairoWhen(c.start)} · {label(APPOINTMENT_STATES, c.appointment ?? "")}</>] as [string, ReactNode]] : []),
+        ...(c.payment ? [["الدفع", label(PAYMENT_STATES, c.payment)] as [string, ReactNode]] : []),
+        ...answers,
+      ]} />
+      <CaseNote>المطلوب: {c.documents}</CaseNote>
+      <Files label="ورق العميل" count={c.files} href={(i) => fileUrl(c.id, i)} word="مستند" />
+      {c.files === 0 && c.state === "booked" ? <CaseNote>لسه مفيش ورق. حازم طلبه من العميل بعد صورة التحويل.</CaseNote> : null}
+      {c.notice === "failed" ? <CaseNote tone="bad">رسالة القرار ما وصلتش للعميل (غالبًا عدّى 24 ساعة من آخر رسالة منه). كلّموه.</CaseNote> : null}
 
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm md:grid-cols-4">
-          {answers.map(([k, v]) => (
-            <div key={k}><dt className="text-xs text-ink-soft">{k}</dt><dd>{v}</dd></div>
-          ))}
-        </dl>
-        <p className="text-xs text-ink-soft">المطلوب: {c.documents}</p>
-
-        {c.files > 0 ? (
-          <ul className="flex flex-wrap gap-2" aria-label="ورق العميل">
-            {Array.from({ length: c.files }, (_, i) => (
-              <li key={i}>
-                <a href={fileUrl(c.id, i)} target="_blank" rel="noopener noreferrer"
-                  className="inline-flex min-h-10 items-center gap-1.5 rounded-[var(--radius-control)] border border-line px-3 text-sm hover:border-gold-line">
-                  <Icon name="document" className="size-4" />مستند {i + 1}
-                </a>
-              </li>
-            ))}
-          </ul>
-        ) : c.state === "booked" ? <p className="text-sm text-ink-soft">لسه مفيش ورق. حازم طلبه من العميل بعد صورة التحويل.</p> : null}
-
-        {c.notice === "failed" ? <p className="text-sm text-bad" role="status">رسالة القرار ما وصلتش للعميل (غالبًا عدّى 24 ساعة من آخر رسالة منه). كلّموه.</p> : null}
-
+      <ActionBar>
         {c.state === "booked" && mayReview ? (
-          <div className="flex flex-wrap gap-2 border-t border-line pt-3">
+          <div className="flex flex-wrap gap-2">
             <Button variant="primary" busy={review.isPending}
               onClick={async () => {
                 if (await confirmAction({ title: "موافق على الورق؟", body: "حازم هيبعت للعميل تأكيد الميعاد ومين لازم يحضر.", yes: "موافق" })) review.mutate("approved");
@@ -125,7 +115,7 @@ function CaseCard({ c }: { c: UrfCase }) {
             {review.isError ? <span className="text-sm text-bad" role="alert">{errorMessage(review.error)}</span> : null}
           </div>
         ) : null}
-      </Card>
-    </li>
+      </ActionBar>
+    </CaseCard>
   );
 }
