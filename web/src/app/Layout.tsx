@@ -9,6 +9,7 @@ import { cairoLongDate, cairoTime, timeAgo } from "../shared/lib/time";
 import { Icon } from "../shared/ui/Icon";
 import { ConfirmHost, Toaster } from "../shared/ui/feedback";
 import { CommandPalette } from "./CommandPalette";
+import { prefetch, prefetchAll } from "./lazyPages";
 import { OwnerImg, type OwnerImage } from "../shared/ui/Owner";
 
 type Item = { to: string; text: string; short: string; icon: OwnerImage | "home" | "chat" | "receipt" | "document"; dot?: boolean; badge?: number; end?: boolean };
@@ -53,6 +54,8 @@ export function Layout() {
     .map((g) => ({ ...g, items: g.items.filter((i) => i.to !== "/reports" || can(me, "reports.view")) }))
     .filter((g) => g.items.length > 0);
   const items = [home, ...groups.flatMap((g) => g.items), settings];
+  // Speed (idea from PR #14): every page's file once the browser is idle, so a click never waits.
+  useEffect(() => { prefetchAll(items.map((i) => i.to)); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const phoneTabs = items.filter((i) => ["/", "/tasks", "/appointments", "/chats", "/settings"].includes(i.to));
 
   return (
@@ -101,7 +104,7 @@ export function Layout() {
         <nav aria-label="التنقل" className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-5 border-t border-side-line bg-side px-1 pt-1 text-side-ink lg:hidden"
           style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 0.25rem)" }}>
           {phoneTabs.map((i) => (
-            <NavLink key={i.to} to={i.to} end={i.end}
+            <NavLink key={i.to} to={i.to} end={i.end} onFocus={() => prefetch(i.to)} onTouchStart={() => prefetch(i.to)}
               className={({ isActive }) => `relative grid min-h-14 content-center justify-items-center gap-0.5 rounded-lg text-[11px] ${isActive ? "text-gold" : "text-side-soft"}`}>
               <NavIcon icon={i.icon} small />
               {i.short}
@@ -116,7 +119,7 @@ export function Layout() {
 
 function SideLink({ item: i }: { item: Item }) {
   return (
-    <NavLink to={i.to} end={i.end}
+    <NavLink to={i.to} end={i.end} onMouseEnter={() => prefetch(i.to)} onFocus={() => prefetch(i.to)}
       className={({ isActive }) => `flex min-h-[2.75rem] items-center gap-3.5 whitespace-nowrap rounded-[10px] px-4 text-[15px] transition ${isActive ? "nav-active font-bold" : "text-side-ink hover:bg-white/5"}`}>
       <NavIcon icon={i.icon} />
       <span className="flex-1">{i.text}</span>

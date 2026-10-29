@@ -1,7 +1,7 @@
 // Who is signed in. Shared because the layout and every feature need it (features never import
 // each other). Server state lives in TanStack Query only.
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, ApiError, resetCsrf } from "./client";
+import { api, ApiError, read, resetCsrf, takeEarlyMe } from "./client";
 import type { Me, Permission, SecondStep } from "./types";
 
 export const meKey = ["me"] as const;
@@ -11,7 +11,9 @@ export function useMe() {
     queryKey: meKey,
     queryFn: async () => {
       try {
-        return await api<Me>("GET", "/auth/me");
+        // the answer src/boot.ts already asked for while the code loaded (once; later checks ask again)
+        const res = await takeEarlyMe();
+        return res ? await read<Me>(res) : await api<Me>("GET", "/auth/me");
       } catch (e) {
         if (e instanceof ApiError && e.status === 401) return null;
         throw e;
