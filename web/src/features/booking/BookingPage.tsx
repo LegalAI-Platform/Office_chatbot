@@ -263,69 +263,218 @@ function TimeSelect({ value, onChange, label: aria, min = 0 }: { value: number; 
 
 // ---------- the appointments ----------
 
+const DAY_MS = 86_400_000;
+type Kind = "all" | "phone" | "office" | "urgent" | "urf";
+const KIND_TEST: Record<Kind, (a: Appointment) => boolean> = {
+  all: () => true,
+  phone: (a) => a.service === "consultation_phone_video",
+  office: (a) => a.service === "consultation_office",
+  urgent: (a) => a.service === "consultation_urgent",
+  urf: (a) => a.service.startsWith("urf_"),
+};
+/** Still on the office's day: held, or confirmed and not marked. */
+const isLive = (a: Appointment) => a.state === "confirmed" || a.state === "pending_payment";
+const minutesOf = (a: Appointment) => Math.round((new Date(a.end).getTime() - new Date(a.start).getTime()) / 60_000);
+const lengthWords = (m: number) => (m === 15 ? "ربع ساعة" : m === 30 ? "نص ساعة" : m === 60 ? "ساعة" : `${m} دقيقة`);
+
+/** «بعد 40 دقيقة»، «بعد 3 ساعات»، «بعد يومين»، «دلوقتي»، «من ساعتين»: how far the appointment is. */
+function fromNow(a: Appointment, now: Date): string {
+  const start = new Date(a.start).getTime();
+  const end = new Date(a.end).getTime();
+  const t = now.getTime();
+  if (t >= start && t < end) return "دلوقتي";
+  const ahead = start > t;
+  const min = Math.round(Math.abs((ahead ? start : end) - t) / 60_000);
+  const words = min < 60 ? `${min} دقيقة` : min < 24 * 60 ? (Math.round(min / 60) === 1 ? "ساعة" : Math.round(min / 60) === 2 ? "ساعتين" : `${Math.round(min / 60)} ساعات`)
+    : Math.round(min / 1440) === 1 ? "يوم" : Math.round(min / 1440) === 2 ? "يومين" : `${Math.round(min / 1440)} أيام`;
+  return ahead ? `بعد ${words}` : `من ${words}`;
+}
+
+/** What the office should look at on a booking (PR #14's notes): nothing when all is well. */
+function notesOf(a: Appointment, now: Date): { text: string; tone: string }[] {
+  const out: { text: string; tone: string }[] = [];
+  const t = now.getTime();
+  if (a.state === "pending_payment" && a.hold_until && new Date(a.hold_until).getTime() - t < 30 * 60_000) {
+    out.push({ text: "الحجز المبدئي قرّب يخلص", tone: "orange" });
+  }
+  if (a.state === "confirmed" && (a.payment === "proof_received" || a.payment === "duplicate_suspected")) {
+    out.push({ text: "التحويل محتاج مراجعة (الإيصالات والمدفوعات)", tone: "orange" });
+  }
+  if (a.state === "confirmed" && a.calendar !== "synced" && new Date(a.end).getTime() > t) {
+    out.push({ text: "لسه مش في كالندر الأستاذ", tone: "grey" });
+  }
+  if (a.state === "confirmed" && new Date(a.end).getTime() < t) {
+    out.push({ text: "عدّى: علّم «خلص» أو «ماحضرش»", tone: "orange" });
+  }
+  return out;
+}
+
 function Bookings() {
   const qc = useQueryClient();
   const { data: me } = useMe();
-  // TASK 10: the last two weeks too, so a consultation that took place can get «مطلوب رأي مكتوب» (B-17).
-  const today = cairoDate(new Date(Date.now() - 14 * 86_400_000));
-  const to = cairoDate(new Date(Date.now() + 30 * 86_400_000));
-  const list = useQuery({ queryKey: ["booking", "appointments", today], queryFn: () => booking.appointments(today, to) });
+  const [when, setWhen] = useState<"ahead" | "past">("ahead");
+  const [kind, setKind] = useState<Kind>("all");
+  const [q, setQ] = useState("");
+  // Ahead: today and the next 30 days. Past (TASK 10): the last two weeks, so a consultation that took place can get
+  // «مطلوب رأي مكتوب» (B-17), most recent first.
+  const now = new Date();
+  const from = when === "ahead" ? cairoDate(now) : cairoDate(new Date(now.getTime() - 14 * DAY_MS));
+  const to = when === "ahead" ? cairoDate(new Date(now.getTime() + 30 * DAY_MS)) : cairoDate(new Date(now.getTime() - DAY_MS));
+  const list = useQuery({ queryKey: ["booking", "appointments", from, to], queryFn: () => booking.appointments(from, to), refetchInterval: 60_000 });
   const refresh = () => void qc.invalidateQueries({ queryKey: ["booking"] });
-  const mark = useMutation({ mutationFn: ({ id, state }: { id: string; state: string }) => booking.mark(id, state), onSuccess: () => { refresh(); toast("اتسجّل ✅"); } });
+  const mark = useMutation({
+    mutationFn: ({ id, state }: { id: string; state: string }) => booking.mark(id, state),
+    onSuccess: (_, v) => { refresh(); toast(v.state === "completed" ? "اتعلّم إن الميعاد خلص ✅" : "اتعلّم إن العميل ماحضرش"); },
+  });
   const cancel = useMutation({ mutationFn: booking.cancel, onSuccess: () => { refresh(); toast("الحجز اتلغى، وحازم هيبلّغ العميل"); } });
 
-  if (list.isPending) return <Loading />;
-  if (list.isError) return <ErrorState message={errorMessage(list.error)} onRetry={() => void list.refetch()} />;
-  if (list.data.length === 0) return <Empty title="مفيش حجوزات في الشهر الجاي" icon="calendar" />;
+  const all = (list.data ?? []).slice().sort((a, b) => (when === "ahead" ? 1 : -1) * a.start.localeCompare(b.start));
+  const needle = q.trim().replace(/^\+/, "");
+  const items = all.filter((a) => KIND_TEST[kind](a) && (!needle || (a.name ?? "").includes(needle) || a.wa_id.includes(needle)));
+  const days = [...new Set(items.map((a) => cairoDate(new Date(a.start))))].map((day) => ({ day, items: items.filter((a) => cairoDate(new Date(a.start)) === day) }));
+  const todayKey = cairoDate(now);
+  const weekEnd = cairoDate(new Date(now.getTime() + 6 * DAY_MS));
+  const next = when === "ahead" ? all.find((a) => isLive(a) && new Date(a.end) > now) : undefined;
   // TASK 12 (B-18): tomorrow's confirmed appointments whose client has not pressed «هحضر ✅» yet (nothing is cancelled for it).
-  const tomorrow = cairoDate(new Date(Date.now() + 86_400_000));
-  const tomorrows = list.data.filter((a) => a.state === "confirmed" && cairoDate(new Date(a.start)) === tomorrow);
+  const tomorrowKey = cairoDate(new Date(now.getTime() + DAY_MS));
+  const tomorrows = when === "ahead" ? all.filter((a) => a.state === "confirmed" && cairoDate(new Date(a.start)) === tomorrowKey) : [];
   const unconfirmed = tomorrows.filter((a) => !a.attending).length;
+  const count = (f: (a: Appointment) => boolean) => (list.data ? all.filter(f).length : undefined);
+  const tiles: { label: string; value: number | undefined; tone: string }[] = when === "ahead" ? [
+    { label: "النهارده", value: count((a) => isLive(a) && cairoDate(new Date(a.start)) === todayKey), tone: "text-blue-ink" },
+    { label: "الأسبوع ده", value: count((a) => isLive(a) && cairoDate(new Date(a.start)) <= weekEnd), tone: "text-blue-ink" },
+    { label: "مستني الإيصال", value: count((a) => a.state === "pending_payment"), tone: "text-orange-ink" },
+    { label: "تحويل محتاج مراجعة", value: count((a) => a.state === "confirmed" && (a.payment === "proof_received" || a.payment === "duplicate_suspected")), tone: "text-red-ink" },
+  ] : [
+    { label: "خلصت", value: count((a) => a.state === "completed"), tone: "text-green-ink" },
+    { label: "ماحضروش", value: count((a) => a.state === "no_show"), tone: "text-orange-ink" },
+    { label: "اتلغت", value: count((a) => a.state.startsWith("cancelled")), tone: "text-ink" },
+    { label: "اتفكت (الإيصال ما وصلش)", value: count((a) => a.state === "expired"), tone: "text-ink" },
+  ];
+
+  const row = (a: Appointment) => (
+    <li key={a.id} className="flex flex-wrap items-center gap-3 py-2.5">
+      <span className="grid min-w-0 flex-1 gap-0.5">
+        <span className="font-semibold">
+          {cairoTime(new Date(a.start))} · {a.name ?? "من غير اسم"}
+          <span className="ms-2 text-xs font-normal text-ink-soft">{lengthWords(minutesOf(a))}{isLive(a) ? ` · ${fromNow(a, now)}` : ""}</span>
+        </span>
+        <span className="text-xs text-ink-soft">
+          {label(BOOKING_SERVICES, a.service)}{a.call_app ? ` (${label(CALL_APPS, a.call_app)})` : ""} · {matterLabel(a.matter_type ?? undefined)} · <span dir="ltr">+{a.wa_id}</span>{a.reschedules ? " · اتغيّر مرة" : ""}
+          {a.payment && a.state !== "pending_payment" ? ` · الدفع: ${label(PAYMENT_STATES, a.payment)}` : ""}
+        </span>
+        {a.state === "confirmed" && a.reminders.length > 0 ? <Reminders items={a.reminders} /> : null}
+        {notesOf(a, now).length > 0 ? (
+          <span className="flex flex-wrap gap-1.5 pt-1">
+            {notesOf(a, now).map((n) => (
+              <span key={n.text} className="inline-flex items-center gap-1 text-xs font-semibold">
+                <Icon name="alert-circle" className={`size-3.5 ${n.tone === "orange" ? "text-orange-ink" : "text-grey-ink"}`} />{n.text}
+              </span>
+            ))}
+          </span>
+        ) : null}
+      </span>
+      {a.state === "confirmed" && a.attending ? <Chip tone="green">أكّد حضوره ✅</Chip> : null}
+      <Chip tone={STATE_TONE[a.state] ?? "grey"}>
+        {label(APPOINTMENT_STATES, a.state)}{a.state === "pending_payment" && a.hold_until ? ` لحد ${cairoTime(new Date(a.hold_until))}` : ""}
+      </Chip>
+      {a.state === "completed" && can(me, "services.price") ? <Opinion id={a.id} /> : null}
+      {isLive(a) ? (
+        <span className="flex flex-wrap gap-1">
+          {a.state === "confirmed" ? (
+            <>
+              <Button variant="ghost" busy={mark.isPending && mark.variables?.id === a.id && mark.variables.state === "completed"}
+                onClick={() => mark.mutate({ id: a.id, state: "completed" })}>خلص</Button>
+              <Button variant="ghost" busy={mark.isPending && mark.variables?.id === a.id && mark.variables.state === "no_show"}
+                onClick={() => mark.mutate({ id: a.id, state: "no_show" })}>ماحضرش</Button>
+            </>
+          ) : null}
+          <Button variant="danger" busy={cancel.isPending && cancel.variables === a.id}
+            onClick={async () => {
+              if (await confirmAction({ title: "تلغي الحجز ده؟", body: "حازم هيبعت للعميل يختار ميعاد تاني، أو استرداد كامل لو كان دفع.", yes: "أيوه، الغيه", danger: true })) cancel.mutate(a.id);
+            }}>
+            إلغاء
+          </Button>
+        </span>
+      ) : null}
+    </li>
+  );
+
   return (
-    <Card>
+    <div className="grid gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex gap-1" role="group" aria-label="أنهي حجوزات">
+          {([["ahead", "الجاية (30 يوم)"], ["past", "اللي فاتت (أسبوعين)"]] as const).map(([v, t]) => (
+            <Button key={v} variant={when === v ? "dark" : "secondary"} aria-pressed={when === v} onClick={() => setWhen(v)} className="!min-h-9 !px-3 text-sm">{t}</Button>
+          ))}
+        </div>
+        <label className="relative w-full sm:w-72">
+          <span className="sr-only">دوّر بالاسم أو الرقم</span>
+          <Icon name="search" className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-ink-soft" />
+          <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="دوّر بالاسم أو الرقم"
+            className="min-h-9 w-full rounded-[var(--radius-control)] border border-line-strong bg-card ps-9 pe-3 text-sm text-ink" />
+        </label>
+      </div>
+
+      <section aria-label="ملخص الحجوزات" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {tiles.map((t) => (
+          <Card key={t.label}>
+            <span className={`text-[26px] leading-tight font-semibold ${t.tone === "text-red-ink" && !t.value ? "text-ink" : t.tone}`}>{t.value === undefined ? "…" : t.value}</span>
+            <span className="text-[13.5px] text-ink-soft">{t.label}</span>
+          </Card>
+        ))}
+      </section>
+
+      {next ? (
+        <Card>
+          <span className="text-[13px] font-semibold text-gold-ink">{fromNow(next, now) === "دلوقتي" ? "شغال دلوقتي" : "الميعاد الجاي"}</span>
+          <span className="flex flex-wrap items-baseline gap-x-3">
+            <span className="text-[26px] leading-tight font-semibold">{cairoTime(new Date(next.start))}</span>
+            <span className="text-sm text-ink-soft">{cairoWhen(next.start)}{fromNow(next, now) !== "دلوقتي" ? ` · ${fromNow(next, now)}` : ""}</span>
+          </span>
+          <span className="font-semibold">{next.name ?? "من غير اسم"}</span>
+          <span className="text-sm text-ink-soft">
+            {label(BOOKING_SERVICES, next.service)}{next.call_app ? ` (${label(CALL_APPS, next.call_app)})` : ""} · {lengthWords(minutesOf(next))} · <span dir="ltr">+{next.wa_id}</span>
+          </span>
+        </Card>
+      ) : null}
+
       {tomorrows.length > 0 ? (
-        <p className="pb-2 text-sm" role="status">
+        <p className="text-sm" role="status">
           بكرة {tomorrows.length} {tomorrows.length === 1 ? "ميعاد" : "مواعيد"}
           {unconfirmed > 0 ? <>، <span className="font-semibold text-orange-ink">{unconfirmed} ما أكدوش حضورهم</span></> : "، وكلهم أكدوا حضورهم ✅"}
         </p>
       ) : null}
-      <ul className="grid divide-y divide-line">
-        {list.data.map((a) => (
-          <li key={a.id} className="flex flex-wrap items-center gap-3 py-2.5">
-            <span className="grid min-w-0 flex-1">
-              <span className="font-semibold">{cairoWhen(a.start)} · {a.name ?? "من غير اسم"}</span>
-              <span className="text-xs text-ink-soft">
-                {label(BOOKING_SERVICES, a.service)}{a.call_app ? ` (${label(CALL_APPS, a.call_app)})` : ""} · {matterLabel(a.matter_type ?? undefined)} · <span dir="ltr">+{a.wa_id}</span>{a.reschedules ? " · اتغيّر مرة" : ""}
-                {a.payment && a.state !== "pending_payment" ? ` · الدفع: ${label(PAYMENT_STATES, a.payment)}` : ""}
-              </span>
-              {a.state === "confirmed" && a.reminders.length > 0 ? <Reminders items={a.reminders} /> : null}
-            </span>
-            {a.state === "confirmed" && a.attending ? <Chip tone="green">أكّد حضوره ✅</Chip> : null}
-            <Chip tone={STATE_TONE[a.state] ?? "grey"}>
-              {label(APPOINTMENT_STATES, a.state)}{a.state === "pending_payment" && a.hold_until ? ` لحد ${cairoTime(new Date(a.hold_until))}` : ""}
-            </Chip>
-            {a.state === "completed" && can(me, "services.price") ? <Opinion id={a.id} /> : null}
-            {a.state === "confirmed" || a.state === "pending_payment" ? (
-              <span className="flex flex-wrap gap-1">
-                {a.state === "confirmed" ? (
-                  <>
-                    <Button variant="ghost" onClick={() => mark.mutate({ id: a.id, state: "completed" })}>خلص</Button>
-                    <Button variant="ghost" onClick={() => mark.mutate({ id: a.id, state: "no_show" })}>ماحضرش</Button>
-                  </>
-                ) : null}
-                <Button variant="danger" busy={cancel.isPending && cancel.variables === a.id}
-                  onClick={async () => {
-                    if (await confirmAction({ title: "تلغي الحجز ده؟", body: "حازم هيبعت للعميل يختار ميعاد تاني، أو استرداد كامل لو كان دفع.", yes: "أيوه، الغيه", danger: true })) cancel.mutate(a.id);
-                  }}>
-                  إلغاء
-                </Button>
-              </span>
-            ) : null}
-          </li>
+
+      <div className="flex flex-wrap gap-1" role="group" aria-label="نوع الميعاد">
+        {([["all", `الكل ${all.length}`], ["phone", "تليفون أو فيديو"], ["office", "في المكتب"], ["urgent", "عاجلة"], ["urf", "عرفي"]] as const).map(([v, t]) => (
+          <Button key={v} variant={kind === v ? "dark" : "secondary"} aria-pressed={kind === v} onClick={() => setKind(v)} className="!min-h-9 !px-3 text-sm">{t}</Button>
         ))}
-      </ul>
+      </div>
+
+      {list.isPending ? <Loading /> : list.isError ? <ErrorState message={errorMessage(list.error)} onRetry={() => void list.refetch()} /> : days.length === 0 ? (
+        all.length > 0
+          ? <Empty title="مفيش حجوزات بالشكل ده" icon="search">جرّب نوع تاني أو امسح البحث.</Empty>
+          : <Empty title={when === "ahead" ? "مفيش حجوزات في الشهر الجاي" : "مفيش حجوزات في الأسبوعين اللي فاتوا"} icon="calendar" />
+      ) : days.map((g) => {
+        const live = g.items.filter(isLive);
+        const held = g.items.filter((a) => a.state === "pending_payment").length;
+        return (
+          <Card key={g.day}>
+            <h3 className="flex flex-wrap items-baseline gap-x-3 border-b border-line pb-2 font-semibold">
+              {g.day === todayKey ? "النهارده" : g.day === tomorrowKey ? "بكرة" : ""} <span className="text-sm font-normal text-ink-soft">{longDay(g.day)}</span>
+              <span className="ms-auto flex flex-wrap gap-x-3 text-xs font-normal text-ink-soft">
+                <span>{g.items.length} {g.items.length === 1 ? "ميعاد" : "مواعيد"}</span>
+                {live.length ? <span>{lengthWords(live.reduce((s, a) => s + minutesOf(a), 0))} محجوزة</span> : null}
+                {held ? <span className="text-orange-ink">{held} مستني الإيصال</span> : null}
+              </span>
+            </h3>
+            <ul className="grid divide-y divide-line">{g.items.map(row)}</ul>
+          </Card>
+        );
+      })}
       {mark.isError || cancel.isError ? <p className="text-sm text-bad" role="alert">{errorMessage(mark.error ?? cancel.error)}</p> : null}
-    </Card>
+    </div>
   );
 }
 

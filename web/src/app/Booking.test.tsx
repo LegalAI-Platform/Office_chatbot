@@ -96,13 +96,45 @@ describe("TASK 08 booking", () => {
     renderAt("/appointments");
     fireEvent.click(await screen.findByRole("tab", { name: "الحجوزات" }));
     expect((await screen.findByText(/ما أكدوش حضورهم/)).closest("p")!.textContent).toMatch(/بكرة 2 مواعيد، 1 ما أكدوش حضورهم/);
-    const first = screen.getByText(/محمد أحمد علي حسن/).closest("li")!;
+    const first = screen.getAllByText(/محمد أحمد علي حسن/).map((e) => e.closest("li")).find(Boolean)!; // the row, not «الميعاد الجاي»
     expect(within(first).getByText("أكّد حضوره ✅")).toBeTruthy();
     expect(within(first).getByText(/تذكير اليوم اللي قبله: اتبعت ✓ \(قالب واتساب\)/)).toBeTruthy();
     expect(within(first).getByText(/تذكير قبلها بساعتين: ما اتبعتش: الوقت قريب من الميعاد/)).toBeTruthy();
-    const second = screen.getByText(/سارة محمد علي حسن/).closest("li")!;
+    const second = screen.getAllByText(/سارة محمد علي حسن/).map((e) => e.closest("li")).find(Boolean)!;
     expect(within(second).queryByText("أكّد حضوره ✅")).toBeNull();
     expect(within(second).getByText(/ما وصلش ✗/)).toBeTruthy();
+  });
+
+  // PR #14's ideas: the counts, the next appointment, the search, the kind filter and what to look at on a booking.
+  it("the bookings page counts, shows the next one, searches, filters and says what to look at", async () => {
+    const soon = new Date(Date.now() + 3 * 3_600_000).toISOString();
+    const soonEnd = new Date(Date.now() + 3 * 3_600_000 + 15 * 60_000).toISOString();
+    const passed = new Date(Date.now() - 3 * 3_600_000).toISOString();
+    const passedEnd = new Date(Date.now() - 3 * 3_600_000 + 30 * 60_000).toISOString();
+    serve({
+      "GET /auth/me": { body: staff },
+      "GET /booking/appointments": { body: [
+        { ...appointment, id: "a1", start: soon, end: soonEnd, payment: "proof_received", calendar: "synced" },
+        { ...appointment, id: "a2", name: "سارة محمد علي حسن", wa_id: "201000000077", service: "consultation_office", start: passed, end: passedEnd, payment: "verified", calendar: "synced" },
+      ] },
+    });
+    renderAt("/appointments");
+    fireEvent.click(await screen.findByRole("tab", { name: "الحجوزات" }));
+    expect(await screen.findByText("الميعاد الجاي")).toBeTruthy(); // the data is in
+    const tiles = screen.getByRole("region", { name: "ملخص الحجوزات" });
+    expect(within(tiles).getByText("تحويل محتاج مراجعة").previousElementSibling!.textContent).toBe("1");
+    const first = screen.getAllByText(/محمد أحمد علي حسن/).map((e) => e.closest("li")).find(Boolean)!;
+    expect(within(first).getByText(/التحويل محتاج مراجعة/)).toBeTruthy();
+    expect(within(first).getByText(/بعد 3 ساعات/)).toBeTruthy();
+    const second = screen.getAllByText(/سارة محمد علي حسن/).map((e) => e.closest("li")).find(Boolean)!;
+    expect(within(second).getByText(/عدّى: علّم «خلص» أو «ماحضرش»/)).toBeTruthy();
+
+    fireEvent.change(screen.getByPlaceholderText("دوّر بالاسم أو الرقم"), { target: { value: "0077" } });
+    expect(screen.queryAllByText(/محمد أحمد علي حسن/).filter((e) => e.closest("li"))).toHaveLength(0);
+    fireEvent.change(screen.getByPlaceholderText("دوّر بالاسم أو الرقم"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "في المكتب" }));
+    expect(screen.queryAllByText(/محمد أحمد علي حسن/).filter((e) => e.closest("li"))).toHaveLength(0);
+    expect(screen.getAllByText(/سارة محمد علي حسن/).filter((e) => e.closest("li"))).toHaveLength(1);
   });
 
   it("the office's payment details are not shown to a staff member", async () => {
