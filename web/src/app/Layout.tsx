@@ -4,7 +4,7 @@ import { useAlerts, useMarkAlertsRead } from "../shared/api/alerts";
 import { useDashboard } from "../shared/api/dashboard";
 import { can, useLogout, useMe } from "../shared/api/session";
 import { ALERT_KINDS, label, ROLES, SYSTEM_WHAT, TASK_TYPES } from "../shared/lib/labels";
-import { setTheme, useThemeChoice, type ThemeChoice } from "../shared/lib/theme";
+import { setTheme, useTheme, type Theme } from "../shared/lib/theme";
 import { cairoLongDate, cairoTime, timeAgo } from "../shared/lib/time";
 import { Icon } from "../shared/ui/Icon";
 import { ConfirmHost, Toaster } from "../shared/ui/feedback";
@@ -291,22 +291,22 @@ function UserMenu() {
   );
 }
 
-const LOOKS: [ThemeChoice, string][] = [["light", "فاتح"], ["dark", "غامق"], ["system", "زي الجهاز"]];
+const LOOKS: [Theme, string][] = [["light", "فاتح"], ["dark", "غامق"]];
 
-/** «الشكل»: three buttons with a sliding mark; the new look spreads from the pressed one (theme.ts). */
+/** «الشكل»: two equal buttons with a sliding mark; the new look spreads from the pressed one (theme.ts). */
 function ThemePicker() {
-  const choice = useThemeChoice();
-  const at = LOOKS.findIndex(([v]) => v === choice);
+  const theme = useTheme();
+  const at = LOOKS.findIndex(([v]) => v === theme);
   return (
-    <div className="grid gap-1.5 px-3 pt-1 pb-2">
+    <div className="grid gap-2 px-3 pt-1 pb-2">
       <span className="text-xs font-semibold text-ink-soft" id="look-label">الشكل</span>
-      <div role="radiogroup" aria-labelledby="look-label" className="relative grid grid-cols-3 rounded-full bg-muted p-0.5">
-        <span aria-hidden className="absolute inset-y-0.5 w-[calc((100%-4px)/3)] rounded-full bg-card shadow-sm transition-[inset-inline-start] duration-300 ease-out"
-          style={{ insetInlineStart: `calc(2px + ${at} * (100% - 4px) / 3)` }} />
+      <div role="radiogroup" aria-labelledby="look-label" className="relative grid grid-cols-2 rounded-full bg-muted p-1">
+        <span aria-hidden className="absolute inset-y-1 w-[calc(50%-4px)] rounded-full bg-card shadow-sm transition-[inset-inline-start] duration-300 ease-out"
+          style={{ insetInlineStart: at === 1 ? "50%" : "4px" }} />
         {LOOKS.map(([v, text]) => (
-          <button key={v} type="button" role="radio" aria-checked={v === choice}
+          <button key={v} type="button" role="radio" aria-checked={v === theme}
             onClick={(e) => setTheme(v, e.currentTarget)}
-            className={`relative z-10 min-h-8 rounded-full text-[13px] ${v === choice ? "font-semibold text-ink" : "text-ink-soft hover:text-ink"}`}>
+            className={`relative z-10 min-h-9 rounded-full text-sm ${v === theme ? "font-semibold text-ink" : "text-ink-soft hover:text-ink"}`}>
             {text}
           </button>
         ))}

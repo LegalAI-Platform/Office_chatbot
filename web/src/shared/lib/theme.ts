@@ -73,11 +73,6 @@ export function useTheme(): Theme {
   return useSyncExternalStore(subscribe, () => (document.documentElement.dataset.theme as Theme | undefined) ?? system());
 }
 
-/** What the person picked, for the menu's three buttons. */
-export function useThemeChoice(): ThemeChoice {
-  return useSyncExternalStore(subscribe, () => stored() ?? "system");
-}
-
 function subscribe(l: () => void) {
   listeners.add(l);
   const mq = typeof matchMedia === "function" ? matchMedia("(prefers-color-scheme: dark)") : null;
