@@ -191,6 +191,19 @@ The dumps and the files manifests are kept 30 days; a file deleted from the offi
 backups off this disk: `scripts/windows/backup-export.ps1 -To E:\OfficeBackups`. Restoring:
 [docs/runbooks/backup-restore.md](docs/runbooks/backup-restore.md). Keys: [docs/runbooks/secrets.md](docs/runbooks/secrets.md).
 
+## CI and images (TASK 14)
+
+On GitHub's machines, never on the server (the repo is public):
+
+- **Every pull request** (`.github/workflows/ci.yml`): the backend's unit and integration tests on a throwaway
+  Postgres, the panel's typecheck, tests and build, the secret scan (`gitleaks` with `.gitleaks.toml`: keys,
+  tokens and full Egyptian mobile numbers, over the whole history; known safe findings in `.gitleaksignore`),
+  and a build of the three images. A red check means do not merge.
+- **Every merge to main** (`.github/workflows/images.yml`): the same CI, then the images published to GitHub's
+  registry as `ghcr.io/legalai-platform/office-api`, `office-web` and `office-tools`, tagged `sha-<commit>` and
+  `main`. They hold no secret. The server names them in `.env` (`OFFICE_*_IMAGE`, `OFFICE_PULL_POLICY=missing`)
+  and only pulls them; this machine keeps building its own (`:local`) as before.
+
 ## Troubleshooting
 
 | Problem | Fix |

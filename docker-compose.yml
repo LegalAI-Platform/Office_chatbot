@@ -64,11 +64,13 @@ x-chatwoot: &chatwoot
     - chatwoot_storage:/app/storage
   networks: [chatwoot_net]
 
+# The three images of this repo: built here by default (`:local`); on the server .env names the ones the CI
+# published (ghcr.io/legalai-platform/office-*:sha-…) and OFFICE_PULL_POLICY=missing, so nothing is built there.
 x-tools: &tools
   build:
     context: ./infra/tools
-  image: office-tools:local
-  pull_policy: build
+  image: ${OFFICE_TOOLS_IMAGE:-office-tools:local}
+  pull_policy: ${OFFICE_PULL_POLICY:-build}
   env_file:
     - path: .env
       required: true
@@ -247,8 +249,8 @@ services:
   api:
     build:
       context: ./backend
-    image: office-api:local
-    pull_policy: build
+    image: ${OFFICE_API_IMAGE:-office-api:local}
+    pull_policy: ${OFFICE_PULL_POLICY:-build}
     restart: unless-stopped
     logging: *logging
     security_opt: ["no-new-privileges:true"] # no process inside can gain privileges (setuid binaries)
@@ -367,8 +369,8 @@ services:
   web:
     build:
       context: ./web
-    image: office-web:local
-    pull_policy: build
+    image: ${OFFICE_WEB_IMAGE:-office-web:local}
+    pull_policy: ${OFFICE_PULL_POLICY:-build}
     restart: unless-stopped
     logging: *logging
     security_opt: ["no-new-privileges:true"] # no process inside can gain privileges (setuid binaries)
