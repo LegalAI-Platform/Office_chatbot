@@ -1,9 +1,11 @@
 import { useState, type ReactNode } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryOptions, useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { ApiError, errorMessage } from "../../shared/api/client";
 import { can, useMe } from "../../shared/api/session";
 import { APPOINTMENT_STATES, BOOKING_SERVICES, CALL_APPS, label, matterLabel, PAYMENT_STATES, REMINDER_KINDS, REMINDER_SKIPS } from "../../shared/lib/labels";
 import { cairoTime, cairoWhen } from "../../shared/lib/time";
+import { useUrlState } from "../../shared/lib/url";
+import { Phone } from "../../shared/ui/caseCard";
 import { Icon } from "../../shared/ui/Icon";
 import { confirmAction, toast } from "../../shared/ui/feedback";
 import { Button, Card, Chip, Empty, ErrorState, Field, Loading } from "../../shared/ui/ui";
@@ -28,6 +30,15 @@ const STATE_TONE: Record<string, string> = {
   pending_payment: "orange", expired: "grey", confirmed: "blue", completed: "green", no_show: "orange", cancelled_by_client: "grey", cancelled_by_office: "grey",
 };
 
+const monthQuery = (month: string) => queryOptions({ queryKey: ["booking", "month", month], queryFn: () => booking.month(month) });
+const settingsQuery = queryOptions({ queryKey: ["booking", "settings"], queryFn: booking.settings });
+
+/** This month's calendar (the tab the page opens on) and the settings, fetched while the pointer is still on the link (idea from PR #14). */
+export function prefetchData(qc: QueryClient) {
+  void qc.prefetchQuery(monthQuery(monthOf(cairoDate(new Date()))));
+  void qc.prefetchQuery(settingsQuery);
+}
+
 /**
  * «المواعيد» (TASK 08, DECISIONS v1.12 B-24): the booking hours Hazem offers, changed from here and
  * seen by Hazem at once. The calendar of the month (close a day, close some hours, other hours that
@@ -35,9 +46,9 @@ const STATE_TONE: Record<string, string> = {
  */
 export function BookingPage() {
   const { data: me } = useMe();
-  const [tab, setTab] = useState<Tab>("calendar");
   const tabs: [Tab, string][] = [["calendar", "التقويم"], ["bookings", "الحجوزات"], ["week", "المواعيد الثابتة"], ["settings", "إعدادات الحجز"]];
   if (can(me, "office.manage")) tabs.push(["office", "بيانات المكتب"]);
+  const [tab, setTab] = useUrlState<Tab>("tab", "calendar", tabs.map((t) => t[0]));
 
   return (
     <div className="grid gap-4">
@@ -58,7 +69,7 @@ export function BookingPage() {
 
 /** Whether Hazem books from WhatsApp now, and what is missing if not. */
 function Status() {
-  const s = useQuery({ queryKey: ["booking", "settings"], queryFn: booking.settings });
+  const s = useQuery(settingsQuery);
   if (!s.data) return null;
   const missing = [
     !s.data.calendar_key && "مفتاح Google Calendar (صاحب المشروع بيحطه في .env)",
@@ -100,9 +111,11 @@ function Undo() {
 // ---------- the month ----------
 
 function Calendar() {
-  const [month, setMonth] = useState(() => monthOf(cairoDate(new Date())));
-  const [picked, setPicked] = useState<string | null>(null);
-  const days = useQuery({ queryKey: ["booking", "month", month], queryFn: () => booking.month(month) });
+  // opens on today (idea from PR #14): the first question every morning is «who is coming today»
+  const today = cairoDate(new Date());
+  const [month, setMonth] = useState(() => monthOf(today));
+  const [picked, setPicked] = useState<string | null>(today);
+  const days = useQuery(monthQuery(month));
   const first = days.data?.[0];
   const lead = first ? WEEK.indexOf(new Date(`${first.day}T12:00:00Z`).getUTCDay()) : 0;
   const day = days.data?.find((d) => d.day === picked);
@@ -112,7 +125,12 @@ function Calendar() {
       <Card>
         <div className="flex items-center justify-between">
           <Button variant="ghost" aria-label="الشهر اللي فات" onClick={() => setMonth(shiftMonth(month, -1))}><Icon name="chevron-start" className="size-5" /></Button>
-          <h2 className="text-lg tabular">{new Intl.DateTimeFormat("ar-EG-u-nu-latn", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${month}-15T00:00:00Z`))}</h2>
+          <h2 className="flex items-center gap-2 text-lg tabular">
+            {new Intl.DateTimeFormat("ar-EG-u-nu-latn", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${month}-15T00:00:00Z`))}
+            {month !== monthOf(today) || picked !== today ? (
+              <Button variant="secondary" className="!min-h-8 !px-2.5 text-sm" onClick={() => { setMonth(monthOf(today)); setPicked(today); }}>النهارده</Button>
+            ) : null}
+          </h2>
           <Button variant="ghost" aria-label="الشهر الجاي" onClick={() => setMonth(shiftMonth(month, 1))}><Icon name="chevron-end" className="size-5" /></Button>
         </div>
         {days.isPending ? <Loading /> : days.isError ? <ErrorState message={errorMessage(days.error)} onRetry={() => void days.refetch()} /> : (
@@ -122,8 +140,9 @@ function Calendar() {
             {days.data.map((d) => (
               <button key={d.day} type="button" role="gridcell" aria-selected={d.day === picked} onClick={() => setPicked(d.day)}
                 aria-label={`${d.day}: ${STATUS[d.status].word}${d.bookings ? `، ${d.bookings} حجز` : ""}`}
+                aria-current={d.day === today ? "date" : undefined}
                 className={`grid min-h-14 content-start justify-items-center gap-0.5 rounded-lg border p-1 text-sm ${d.day === picked ? "border-gold bg-gold-tint" : "border-line hover:border-gold-line"} ${d.status === "closed" || d.status === "weekly_off" ? "opacity-60" : ""}`}>
-                <span className="tabular font-semibold">{Number(d.day.slice(8))}</span>
+                <span className={`tabular font-semibold ${d.day === today ? "rounded-full bg-gold px-1.5 text-white" : ""}`}>{Number(d.day.slice(8))}</span>
                 <span className={`size-2 rounded-full ${DOT[STATUS[d.status].tone]}`} aria-hidden />
                 {d.bookings ? <span className="tabular text-[11px] text-ink-soft">{d.bookings} حجز</span> : null}
               </button>
@@ -135,13 +154,13 @@ function Calendar() {
         </ul>
       </Card>
       {/* keyed by the date: nothing typed or asked about one day carries over to another */}
-      {day ? <DaySheet key={day.day} day={day} /> : <Card><Empty title="اختار يوم" icon="calendar">تقفله، أو تقفل جزء منه، أو تديله ساعات مختلفة، وتشوف حازم هيعرض إيه.</Empty></Card>}
+      {day ? <DaySheet key={day.day} day={day} isToday={day.day === today} /> : <Card><Empty title="اختار يوم" icon="calendar">تقفله، أو تقفل جزء منه، أو تديله ساعات مختلفة، وتشوف حازم هيعرض إيه.</Empty></Card>}
     </div>
   );
 }
 
 /** One date: its hours, its exceptions, closing it (asks first if it has bookings), and the preview. */
-function DaySheet({ day }: { day: Day }) {
+function DaySheet({ day, isToday }: { day: Day; isToday: boolean }) {
   const qc = useQueryClient();
   const [kind, setKind] = useState<"closed_day" | "closed_hours" | "custom_hours">("closed_day");
   const [from, setFrom] = useState(600);
@@ -168,7 +187,8 @@ function DaySheet({ day }: { day: Day }) {
 
   return (
     <Card>
-      <h2 className="flex flex-wrap items-center gap-2 text-lg">{longDay(day.day)} <Chip tone={STATUS[day.status].tone}>{STATUS[day.status].word}</Chip></h2>
+      <h2 className="flex flex-wrap items-center gap-2 text-lg">{isToday ? "النهارده · " : ""}{longDay(day.day)} <Chip tone={STATUS[day.status].tone}>{STATUS[day.status].word}</Chip></h2>
+      {day.bookings ? <DayBookings day={day.day} /> : null}
       <p className="text-sm">
         {day.hours.length === 0 ? "مفيش حجز اليوم ده." : `حازم بيحجز: ${day.hours.map((h) => `${hhmm(h.start)}–${hhmm(h.end)}`).join("، ")}`}
       </p>
@@ -224,6 +244,32 @@ function Confirm({ list, busy, onYes, onNo }: { list: Appointment[]; busy: boole
         <Button onClick={onNo}>لأ، سيبه</Button>
       </div>
     </div>
+  );
+}
+
+/** The day's bookings, in time order (the calendar opens on today with them, idea from PR #14). */
+function DayBookings({ day }: { day: string }) {
+  const list = useQuery({ queryKey: ["booking", "appointments", day, day], queryFn: () => booking.appointments(day, day), refetchInterval: 60_000 });
+  if (list.isPending) return <Loading />;
+  if (list.isError) return <ErrorState message={errorMessage(list.error)} onRetry={() => void list.refetch()} />;
+  const items = list.data.slice().sort((a, b) => a.start.localeCompare(b.start));
+  if (items.length === 0) return null;
+  return (
+    <section aria-label="حجوزات اليوم" className="grid gap-1.5 border-t border-line pt-3">
+      <h3 className="font-semibold">الحجوزات ({items.length})</h3>
+      <ul className="grid divide-y divide-line">
+        {items.map((a) => (
+          <li key={a.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 text-sm">
+            <span className="tabular font-semibold">{cairoTime(new Date(a.start))}</span>
+            <span className="min-w-0 flex-1">
+              {a.name ?? "من غير اسم"}
+              <span className="block text-xs text-ink-soft">{label(BOOKING_SERVICES, a.service)}{a.call_app ? ` (${label(CALL_APPS, a.call_app)})` : ""} · <Phone wa={a.wa_id} /></span>
+            </span>
+            <Chip tone={STATE_TONE[a.state] ?? "grey"}>{label(APPOINTMENT_STATES, a.state)}</Chip>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -312,8 +358,8 @@ function notesOf(a: Appointment, now: Date): { text: string; tone: string }[] {
 function Bookings() {
   const qc = useQueryClient();
   const { data: me } = useMe();
-  const [when, setWhen] = useState<"ahead" | "past">("ahead");
-  const [kind, setKind] = useState<Kind>("all");
+  const [when, setWhen] = useUrlState<"ahead" | "past">("when", "ahead", ["ahead", "past"]);
+  const [kind, setKind] = useUrlState<Kind>("kind", "all", ["all", "phone", "office", "urgent", "urf"]);
   const [q, setQ] = useState("");
   // Ahead: today and the next 30 days. Past (TASK 10): the last two weeks, so a consultation that took place can get
   // «مطلوب رأي مكتوب» (B-17), most recent first.
@@ -360,7 +406,7 @@ function Bookings() {
           <span className="ms-2 text-xs font-normal text-ink-soft">{lengthWords(minutesOf(a))}{isLive(a) ? ` · ${fromNow(a, now)}` : ""}</span>
         </span>
         <span className="text-xs text-ink-soft">
-          {label(BOOKING_SERVICES, a.service)}{a.call_app ? ` (${label(CALL_APPS, a.call_app)})` : ""} · {matterLabel(a.matter_type ?? undefined)} · <span dir="ltr">+{a.wa_id}</span>{a.reschedules ? " · اتغيّر مرة" : ""}
+          {label(BOOKING_SERVICES, a.service)}{a.call_app ? ` (${label(CALL_APPS, a.call_app)})` : ""} · {matterLabel(a.matter_type ?? undefined)} · <Phone wa={a.wa_id} />{a.reschedules ? " · اتغيّر مرة" : ""}
           {a.payment && a.state !== "pending_payment" ? ` · الدفع: ${label(PAYMENT_STATES, a.payment)}` : ""}
         </span>
         {a.state === "confirmed" && a.reminders.length > 0 ? <Reminders items={a.reminders} /> : null}
@@ -434,7 +480,7 @@ function Bookings() {
           </span>
           <span className="font-semibold">{next.name ?? "من غير اسم"}</span>
           <span className="text-sm text-ink-soft">
-            {label(BOOKING_SERVICES, next.service)}{next.call_app ? ` (${label(CALL_APPS, next.call_app)})` : ""} · {lengthWords(minutesOf(next))} · <span dir="ltr">+{next.wa_id}</span>
+            {label(BOOKING_SERVICES, next.service)}{next.call_app ? ` (${label(CALL_APPS, next.call_app)})` : ""} · {lengthWords(minutesOf(next))} · <Phone wa={next.wa_id} />
           </span>
         </Card>
       ) : null}
@@ -533,10 +579,21 @@ function Week() {
   if (week.isPending) return <Loading />;
   if (week.isError || !days) return <ErrorState message={errorMessage(week.error)} onRetry={() => void week.refetch()} />;
   const edit = (w: number, ranges: WeekDay["ranges"]) => setDraft(days.map((d) => (d.weekday === w ? { ...d, ranges } : d)));
+  // idea from PR #14: the hours of each day and of the week, so the full and the light days show at a glance
+  const minutesIn = (d: WeekDay) => d.ranges.reduce((s, r) => s + Math.max(0, r.end - r.start), 0);
+  const total = days.reduce((s, d) => s + minutesIn(d), 0);
+  const working = days.filter((d) => d.ranges.length > 0).length;
 
   return (
     <Card>
-      <p className="text-sm text-ink-soft">دي المواعيد اللي حازم بيحجز فيها كل أسبوع. اليوم من غير فترات = إجازة. أي يوم معين بيتغيّر من «التقويم».</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <p className="max-w-xl text-sm text-ink-soft">دي المواعيد اللي حازم بيحجز فيها كل أسبوع. اليوم من غير فترات = إجازة. أي يوم معين بيتغيّر من «التقويم».</p>
+        <p className="flex gap-4 text-sm text-ink-soft" role="status">
+          <span><strong className="tabular font-semibold text-ink">{hoursWords(total)}</strong> في الأسبوع</span>
+          <span><strong className="tabular font-semibold text-ink">{working}</strong> {working === 1 ? "يوم" : "أيام"} شغل</span>
+        </p>
+      </div>
+      {draft ? <p role="status" className="rounded-lg bg-gold-tint px-3 py-2 text-sm font-semibold text-gold-ink">فيه تعديلات لسه ما اتحفظتش.</p> : null}
       <ul className="grid divide-y divide-line">
         {WEEK.map((w) => {
           const d = days.find((x) => x.weekday === w) ?? { weekday: w, ranges: [] };
@@ -553,6 +610,7 @@ function Week() {
                 </Row>
               ))}
               <Button variant="ghost" onClick={() => edit(w, [...d.ranges, { start: d.ranges.at(-1)?.end ?? 600, end: 1440 }])}>+ فترة</Button>
+              {d.ranges.length ? <span className="ms-auto tabular text-xs text-ink-soft">{hoursWords(minutesIn(d))}</span> : null}
             </li>
           );
         })}
@@ -567,13 +625,22 @@ function Week() {
   );
 }
 
+/** 480 → «8 ساعات»، 90 → «ساعة و30 دقيقة». */
+function hoursWords(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  const hours = h === 0 ? "" : h === 1 ? "ساعة" : h === 2 ? "ساعتين" : h <= 10 ? `${h} ساعات` : `${h} ساعة`;
+  if (m === 0) return hours || "0 ساعة";
+  return hours ? `${hours} و${m} دقيقة` : `${m} دقيقة`;
+}
+
 const Row = ({ children }: { children: ReactNode }) => <span className="flex items-center gap-1 rounded-lg bg-card-2 px-2 py-1">{children}</span>;
 
 // ---------- the settings and the office's details ----------
 
 function SettingsForm() {
   const qc = useQueryClient();
-  const s = useQuery({ queryKey: ["booking", "settings"], queryFn: booking.settings });
+  const s = useQuery(settingsQuery);
   const [draft, setDraft] = useState<Settings | null>(null);
   const v = draft ?? s.data;
   const save = useMutation({ mutationFn: booking.saveSettings, onSuccess: () => { setDraft(null); void qc.invalidateQueries({ queryKey: ["booking"] }); toast("إعدادات الحجز اتحفظت ✅"); } });

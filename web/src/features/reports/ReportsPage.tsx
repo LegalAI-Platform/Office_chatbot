@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { queryOptions, useQuery, type QueryClient } from "@tanstack/react-query";
 import { api, errorMessage } from "../../shared/api/client";
 import type { MonthReport, ReportRow } from "../../shared/api/types";
 import { APPOINTMENT_STATES, label, SOURCES, TASK_TYPES, CLIENT_TYPES, matterLabel } from "../../shared/lib/labels";
@@ -16,9 +16,16 @@ function thisMonth(): string {
  * member, and how many were done before their due time) and the new clients (by source, topic and
  * kind). TASK 09: the month's bookings by state and their money as the office marked it.
  */
+const reportQuery = (month: string) => queryOptions({ queryKey: ["report", month], queryFn: () => api<MonthReport>("GET", `/reports?month=${month}`) });
+
+/** This month's report (what the page opens on), fetched while the pointer is still on the link (idea from PR #14). */
+export function prefetchData(qc: QueryClient) {
+  void qc.prefetchQuery(reportQuery(thisMonth()));
+}
+
 export function ReportsPage() {
   const [month, setMonth] = useState(thisMonth);
-  const report = useQuery({ queryKey: ["report", month], queryFn: () => api<MonthReport>("GET", `/reports?month=${month}`) });
+  const report = useQuery(reportQuery(month));
   const r = report.data;
   const pct = (a: number, b: number) => (b === 0 ? "—" : `${Math.round((a / b) * 100)}%`);
 

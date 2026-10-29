@@ -1,11 +1,20 @@
 // Each page is its own file, loaded the first time it is needed (idea from PR #14): the sign-in and the home screen
 // arrive with the panel, the rest on the way. Once the panel is idle it fetches them all, and a hover or focus on a
-// page's link fetches that page at once, so a click never waits.
+// page's link fetches that page at once, so a click never waits. The hover also fetches the data the page opens on
+// (its prefetchData), so it opens full instead of with the loader.
 import { lazy, Suspense, type ComponentType, type LazyExoticComponent } from "react";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useMe } from "../shared/api/session";
+import type { Me } from "../shared/api/types";
 import { Loading } from "../shared/ui/ui";
 
-type Loader = () => Promise<ComponentType>;
-const pick = <M,>(load: () => Promise<M>, name: keyof M): Loader => () => load().then((m) => m[name] as ComponentType);
+type PrefetchData = (qc: QueryClient, me: Me | null | undefined) => void;
+type Page = { C: ComponentType; prefetchData?: PrefetchData | undefined };
+type Loader = () => Promise<Page>;
+const pick = <M,>(load: () => Promise<M>, name: keyof M): Loader => () => load().then((m) => ({
+  C: m[name] as ComponentType,
+  prefetchData: (m as { prefetchData?: PrefetchData }).prefetchData,
+}));
 
 const LOADERS = {
   "/tasks": pick(() => import("../features/tasks/TasksPage"), "TasksPage"),
@@ -31,7 +40,7 @@ const LOADERS = {
 export type LazyPath = keyof typeof LOADERS;
 
 // One promise per page: a prefetch and the real render share it.
-const started = new Map<LazyPath, Promise<ComponentType>>();
+const started = new Map<LazyPath, Promise<Page>>();
 const load = (path: LazyPath) => {
   let p = started.get(path);
   if (!p) {
@@ -48,7 +57,7 @@ const components = new Map<LazyPath, LazyExoticComponent<ComponentType>>();
 export function LazyPage({ path }: { path: LazyPath }) {
   let C = components.get(path);
   if (!C) {
-    C = lazy(() => load(path).then((c) => ({ default: c })));
+    C = lazy(() => load(path).then((p) => ({ default: p.C })));
     components.set(path, C);
   }
   return (
@@ -58,16 +67,23 @@ export function LazyPage({ path }: { path: LazyPath }) {
   );
 }
 
-/** The page behind a link (on hover or focus): its file, ahead of the click. */
-export function prefetch(to: string) {
+/** The page behind a link (on hover or focus): its file, and with a query client also the data it opens on. */
+export function prefetch(to: string, qc?: QueryClient, me?: Me | null) {
   const path = (to.split("?")[0] ?? to) as LazyPath;
   if (!(path in LOADERS)) return;
-  void load(path).catch(() => undefined);
+  void load(path).then((p) => { if (qc) p.prefetchData?.(qc, me); }).catch(() => undefined);
+}
+
+/** prefetch() with the panel's query cache and the person signed in, for the links of the layout. */
+export function usePrefetch() {
+  const qc = useQueryClient();
+  const { data: me } = useMe();
+  return (to: string) => prefetch(to, qc, me);
 }
 
 /** Once the browser is idle, every page the person can open, so later clicks never wait. */
 export function prefetchAll(paths: string[]) {
-  const run = () => paths.forEach((p) => prefetch(p));
+  const run = () => paths.forEach((p) => prefetch(p)); // the files only: the data waits for a hover
   if ("requestIdleCallback" in window) window.requestIdleCallback(run, { timeout: 4000 });
   else setTimeout(run, 2000);
 }
