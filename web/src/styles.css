@@ -269,6 +269,13 @@
   }
 }
 
+/* The theme switch (shared/lib/theme.ts): the browser's own cross-fade is off, the new look grows as a circle instead. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
