@@ -82,7 +82,7 @@ public sealed class PanelTesting(HazemDbContext db, ISettingsReader settings, Go
             }
         }
 
-        await PanelAudit.WriteAsync(db, clock, by, "testing.forget", "number", null, new Dictionary<string, string?>
+        await PanelAudit.WriteAsync(db, clock, by, "testing.forget", "conversation", null, new Dictionary<string, string?>
         {
             ["wa_id"] = LogMask.Phone(wa),
             ["rows"] = rows.ToString(System.Globalization.CultureInfo.InvariantCulture),

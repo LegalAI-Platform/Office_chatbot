@@ -184,10 +184,18 @@ sent (the healthcheck fails while one is active). Then run `healthcheck`.
 
 ## Forget one number (test only)
 
-To test a conversation from the start with the same phone («انسى الرقم ده»):
+To test a conversation from the start with the same phone («انسى الرقم ده»).
+
+**From the panel** (the manager and the lawyer): الإعدادات ← **أدوات التجربة**, or Ctrl K «حازم ينسى رقم تجربة». It lists
+Hazem's test numbers (`hazem.recipients`, the end of each number only) with «انسى الرقم ده» and «انسى كل الأرقام»,
+asks first, and does steps 2 and 3 below (no backup first: the nightly one is there; Redis is left, n8n's keys there
+expire in seconds). Only in the test environment (the API answers 404 anywhere else) and only on those numbers; each
+use is written to the panel's audit (`testing.forget`).
+
+**From a terminal** (where the stack runs, on the server too):
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\windowsorget-number.ps1 01012345678
+powershell -ExecutionPolicy Bypass -File scripts\windows\forget-number.ps1 01012345678
 ```
 
 (`scripts/linux/forget-number.sh 01012345678` on Linux; `+20 10…` and `2010…` work too.) It refuses unless
