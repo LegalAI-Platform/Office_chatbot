@@ -95,7 +95,8 @@ still safe because a red CI publishes no image.
 | Stack | `/opt/office`: a git clone of this repository, checked out at the deployed commit; `.env` (mode 600) |
 
 **Hardening** (`deploy/server-setup.sh`, idempotent, run once as root): system updates and automatic security
-updates; SSH by key only (`sshd_config.d/00-office.conf`: no passwords, root by key only, no agent or X11
+updates, with an automatic restart at 04:30 Cairo when one needs it (a new kernel; Hazem is back by himself in about
+two minutes, the tunnel and Meta's link included); SSH by key only (`sshd_config.d/00-office.conf`: no passwords, root by key only, no agent or X11
 forwarding); ufw lets in SSH only; fail2ban on SSH; Docker Engine + Compose from Docker's own repository; Cairo
 time; 2 GB swap. Measured load: the whole stack idles at about 1.7 GB of RAM.
 

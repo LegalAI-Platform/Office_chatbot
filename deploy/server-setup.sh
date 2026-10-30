@@ -4,7 +4,7 @@
 # Safe to run again: each step checks what is already there.
 #
 # What it does:
-#   1. updates the system and turns on the automatic security updates
+#   1. updates the system and turns on the automatic security updates, with a restart at 04:30 when one needs it
 #   2. a user «office» (the stack runs as it, in /opt/office), with root's SSH keys
 #   3. SSH by key only: no password login for anyone (Hostinger's browser console still works with the root password)
 #   4. a firewall that lets in SSH only (the tunnel goes out, so nothing else needs to come in) and fail2ban on SSH
@@ -27,6 +27,13 @@ apt-get install -y -q ca-certificates curl gnupg git jq unattended-upgrades fail
 cat > /etc/apt/apt.conf.d/20auto-upgrades <<'EOF'
 APT::Periodic::Update-Package-Lists "1";
 APT::Periodic::Unattended-Upgrade "1";
+EOF
+# A new kernel (a security fix) only counts after a restart: at 04:30 Cairo, after the 03:00 nightly backup, and
+# only when an update asks for one. Every service comes back by itself (restart: unless-stopped, docker enabled).
+cat > /etc/apt/apt.conf.d/52office-reboot <<'EOF'
+Unattended-Upgrade::Automatic-Reboot "true";
+Unattended-Upgrade::Automatic-Reboot-Time "04:30";
+Unattended-Upgrade::Automatic-Reboot-WithUsers "true";
 EOF
 
 step "2/6 The «office» user and /opt/office"
