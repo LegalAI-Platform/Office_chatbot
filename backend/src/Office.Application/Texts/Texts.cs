@@ -217,6 +217,21 @@ public static class TextKeys
     public const string ReminderDetailsPhone = "reminder_details_phone";    // the details line: the lawyer calls
     public const string ReminderDetailsUrf = "reminder_details_urf";        // the details line: who comes to an Urfi appointment
     public const string ReminderOldButton = "reminder_old_button";          // «هحضر» from the reminder of a time that moved
+
+    // v1.31 (B-01.7): a returning client whose last request finished, before the services list (the owner's words).
+    public const string WelcomeBack = "welcome_back";
+
+    // v1.31 (B-26): the service rating. A WhatsApp list sent by the worker, its five rows read by code, and the replies.
+    public const string RatingAsk = "rating_ask";
+    public const string BtnRating = "btn_rating";
+    public const string RowRating5 = "row_rating_5";
+    public const string RowRating4 = "row_rating_4";
+    public const string RowRating3 = "row_rating_3";
+    public const string RowRating2 = "row_rating_2";
+    public const string RowRatingLater = "row_rating_later";
+    public const string RatingThanks = "rating_thanks";  // 5, 4 or 3 (and a second press on an answered rating)
+    public const string RatingLow = "rating_low";        // 2: a task for the managers
+    public const string RatingLater = "rating_later";    // «ليس الآن»
 }
 
 /// <summary>
