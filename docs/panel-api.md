@@ -127,6 +127,8 @@ The system never confirms a payment and never says a refund was made: a person d
 Partial, not received and refunded are told to the client by the booking worker (every 10 s), never
 inside the request; a send that fails (outside the 24-hour window too, P5) becomes a `booking_message_failed` task.
 `GET /reports` (07c) also has `by_booking` (the month's appointments by state), `received`, `missing` and `refunded` (pounds).
+v1.31 (B-26): `ratings` = `{ sent, answered, average, by_service: [{ key, count, average }], low: [{ at, service, client_name }] }`,
+the ratings sent in the month (`answered` = with a score; «ليس الآن» is none).
 
 ## Service orders (TASK 10, DECISIONS v1.14 B-16 / B-17 / S-07)
 
