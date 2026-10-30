@@ -143,6 +143,12 @@ public static class DependencyInjection
         services.AddScoped<Urf.UrfNotices>();
         services.AddScoped<Urf.PanelUrf>();
 
+        // v1.31 (B-01.7, B-26): the returning client's new request and the service rating.
+        services.AddScoped<Ratings.RatingStore>();
+        services.AddScoped<Application.Ratings.IRatingStore>(sp => sp.GetRequiredService<Ratings.RatingStore>());
+        services.AddScoped<IIntakeHistory>(sp => sp.GetRequiredService<Ratings.RatingStore>());
+        services.AddScoped<Ratings.RatingNotices>();
+
         return services;
     }
 }

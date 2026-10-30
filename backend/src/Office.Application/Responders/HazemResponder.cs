@@ -1,5 +1,6 @@
 using Office.Application.Booking;
 using Office.Application.Conversations;
+using Office.Application.Ratings;
 using Office.Application.Reminders;
 using Office.Application.Services;
 using Office.Application.Texts;
@@ -18,6 +19,8 @@ namespace Office.Application.Responders;
 /// B-14.4 roles), where they came from (B-13), the topic (B-25), insults (S-01), real tasks (S-05).
 /// TASK 08: booking (B-08, B-09, B-15) when <paramref name="booking"/> is there, booking.enabled is
 /// true and its texts are approved; otherwise the consultation offer as before.
+/// v1.31: a returning client's new request (B-01.7, <paramref name="history"/>) and the service rating's answers (B-26,
+/// <paramref name="ratings"/>).
 /// </summary>
 public sealed class HazemResponder(
     IConversationStore conversations,
@@ -27,7 +30,9 @@ public sealed class HazemResponder(
     TimeProvider clock,
     BookingDesk? booking = null,
     ServiceDesk? services = null,
-    UrfDesk? urf = null) : ITurnResponder
+    UrfDesk? urf = null,
+    IIntakeHistory? history = null,
+    IRatingStore? ratings = null) : ITurnResponder
 {
     /// <summary>
     /// TASK 10 (v1.14): the written services run (an order from the request to the delivery) only when every
@@ -135,8 +140,20 @@ public sealed class HazemResponder(
                 Check(state.Conversation.Mute(Actor.System));
             }
         }
+        else if (state.Conversation.HazemMayAnswer && !firstContact && ratings is not null && await RatingTurnAsync(turn, state, plan, now, ct))
+        {
+            // v1.31 (B-26): a row of the rating's list, or the reason after «يحتاج للتحسين»: answered by code, nothing else.
+        }
         else if (state.Conversation.HazemMayAnswer)
         {
+            // v1.31 (B-01.7): a known client whose request is finished starts a new one, the name kept («أهلًا بحضرتك تاني»).
+            var returning = false;
+            if (!firstContact && history is not null && await FreshIntakeAsync(turn, state, list, settings, now, ct) is { } fresh)
+            {
+                state = fresh;
+                returning = true;
+            }
+
             var urfOn = urf is not null && bookingOn && UrfTextKeys.All(k => texts.TryGetValue(k, out var t) && t.Active);
             IReadOnlyList<UrfCase> urfOpen = urfOn ? await urf!.OpenAsync(state.Person.Id, ct) : [];
             var urfCase = urfOpen.FirstOrDefault();
@@ -200,7 +217,7 @@ public sealed class HazemResponder(
                 else
                 {
                     flow = new Flow(turn, state, list, row.AsClassification, plan, settings.Flag(HandoffEnabledKey),
-                        bookingOn ? bookingSettings : null, servicesOn, urfOn, urfOpen, null, ageRefusal);
+                        bookingOn ? bookingSettings : null, servicesOn, urfOn, urfOpen, null, ageRefusal, returning);
                     flow.Respond(firstContact);
                 }
             }
@@ -261,7 +278,7 @@ public sealed class HazemResponder(
                         ? await OfficeDetailsAsync(settings, asked.Topic == InfoTopic.Hours, now, ct)
                         : null;
                     flow = new Flow(turn, state, list, classification, plan, settings.Flag(HandoffEnabledKey), bookingOn ? bookingSettings : null,
-                        servicesOn, urfOn, urfOpen, office, ageRefusal);
+                        servicesOn, urfOn, urfOpen, office, ageRefusal, returning);
                     if (greet is not null && classification?.Intent != Intent.Abusive)
                     {
                         plan.Say(greet); // first, so it opens Hazem's answer
@@ -335,6 +352,64 @@ public sealed class HazemResponder(
         }
 
         person.FirstSeen("direct", null, now);
+    }
+
+    /// <summary>
+    /// v1.31 (B-26): the rating's row the client pressed (a list row inside the 24 hours, the template's quick reply outside),
+    /// read by code: the first answer is stored and answered; «يحتاج للتحسين» is a task for the managers; a second press of
+    /// an answered rating gets the same kind of reply and changes nothing; somebody else's id gets nothing. Words without a
+    /// press: the reason after «يحتاج للتحسين» when they are the client's next message within 24 hours (no reply: the
+    /// office calls, as rating_low told him). True when the turn was one of these.
+    /// </summary>
+    private async Task<bool> RatingTurnAsync(Turn turn, ClientState state, Plan plan, DateTimeOffset now, CancellationToken ct)
+    {
+        var last = turn.Messages.LastOrDefault(m => m.Interactive?.Id is not null || m.Button?.Payload is not null);
+        if (RatingButtons.Parse(last?.Interactive?.Id ?? last?.Button?.Payload) is { } press)
+        {
+            var answer = await ratings!.AnswerAsync(state.Person.Id, press, turn.TurnId, now, ct);
+            switch (answer.Status)
+            {
+                case RatingAnswerStatus.Recorded:
+                    plan.Say(RatingTexts.Reply(press.Score));
+                    if (press.IsLow)
+                    {
+                        plan.Task(PendingTask.RatingLow);
+                    }
+
+                    break;
+                case RatingAnswerStatus.Again:
+                    plan.Say(answer.Score is null ? TextKeys.RatingLater : TextKeys.RatingThanks);
+                    break;
+            }
+
+            return true;
+        }
+
+        return last is null && !turn.Messages.Any(IsStoredFile) && AiInput.Build(turn) is { } words && words.Any(char.IsLetter)
+               && await ratings!.TakeReasonAsync(state.Person.Id, turn.WaId, turn.TurnId, now, ct);
+    }
+
+    /// <summary>
+    /// v1.31 (B-01.7, S-02): a new client (never a listed one, the lawyer's list or a colleague) whose name is settled and whose
+    /// open request is finished (<see cref="ReturningClient.Finished"/>): that intake is closed and a new one opens for the
+    /// same person, classified at once. Null when the request goes on.
+    /// </summary>
+    private async Task<ClientState?> FreshIntakeAsync(Turn turn, ClientState state, ListMatch list, HazemSettings settings, DateTimeOffset now,
+        CancellationToken ct)
+    {
+        var open = state.Intake;
+        if (list.ExistingClient is not null || list.LawyerDirect || !state.Person.NameSettled || !open.IsClassified
+            || open.ClientType != ClientType.NewClient
+            || !ReturningClient.Finished(await history!.FactsAsync(state.Person.Id, turn.WaId, open.Id, ct), now, ReturningClient.Quiet(settings)))
+        {
+            return null;
+        }
+
+        Check(open.MoveTo(IntakeState.Closed));
+        var fresh = Intake.Open(state.Person);
+        Check(fresh.Classify(ClientType.NewClient));
+        state.ClosedIntakes.Add(open);
+        return state with { Intake = fresh };
     }
 
     /// <summary>The booking id of the last button or list row the client pressed, if any.</summary>
@@ -420,7 +495,7 @@ public sealed class HazemResponder(
     /// <summary>The decisions for one turn. Changes the state in memory; the store saves it with the turn.</summary>
     private sealed class Flow(Turn turn, ClientState state, ListMatch list, Classification? c, Plan plan, bool handoffEnabled,
         BookingSettings? booking, bool servicesOn, bool urfOn = false, IReadOnlyList<UrfCase>? urfOpen = null,
-        IReadOnlyDictionary<string, string>? office = null, AgeRefusal? ageRefusal = null)
+        IReadOnlyDictionary<string, string>? office = null, AgeRefusal? ageRefusal = null, bool returning = false)
     {
         /// <summary>TASK 11: the client's Urfi case (B-11) this turn is about (the newest running one), as the turn leaves it.</summary>
         public UrfCase? Urf { get; private set; } = urfOpen?.FirstOrDefault();
@@ -703,6 +778,32 @@ public sealed class HazemResponder(
 
                 plan.Say(TextKeys.LawyerDirectReceived);
                 plan.Task(PendingTask.LawyerDirectMessage);
+                return;
+            }
+
+            // v1.31 (B-01.7): a returning client (his last request finished, a new intake): «أهلًا بحضرتك تاني يا …», then
+            // what a new client gets after his name (B-01.3 / B-01.4): his request if he said one, else the services list.
+            // A thanks or a goodbye is answered as it is, without the welcome.
+            if (returning)
+            {
+                if (c?.Intent == Intent.ThanksOrClosing)
+                {
+                    Answer(c);
+                    return;
+                }
+
+                var first = ReturningClient.FirstName(State.Person);
+                plan.Say(TextKeys.WelcomeBack, Fill: first is null ? null : new Dictionary<string, string> { ["first_name"] = first });
+                if (c is not null && IsRequest(c.Intent))
+                {
+                    Answer(c);
+                }
+                else
+                {
+                    ServicesMenu();
+                }
+
+                AnswerMediaProblems();
                 return;
             }
 

@@ -91,6 +91,24 @@ cancelled one loses its own.
 - The reminders run while their 9 texts are active («نصوص حازم»); with one switched off, no reminder goes («ما اتبعتش:
   نصوص التذكير مش متفعّلة»).
 
+## The service rating (DECISIONS v1.31 B-26)
+
+The same worker makes one rating per finished service: **2 hours** after an appointment is marked «خلص» in «المواعيد»
+(a consultation or an Urfi contract; never the urgent consultation or an Urfi divorce) and **24 hours** after a written
+service is delivered. Only services finished after migration 0033 (`rating.since`) get one.
+
+- Inside the 24-hour window it is a WhatsApp list («قيّم الخدمة»: ممتاز، جيد جدًا، جيد، يحتاج للتحسين، ليس الآن). Outside it
+  the M-03 template `service_rating` goes; until Meta approves it the rating is **skipped** («no_template»), never a task.
+- Never to a muted conversation, and one person at most once in `rating.repeat_days` (30). `rating.enabled` = false
+  stops them (the ones that come due are skipped «off»). The delays: `rating.after_appointment_hours` (2),
+  `rating.after_delivery_hours` (24).
+- The answer is read by code. «يحتاج للتحسين» is a task `rating_low` with its own bell alert and e-mail, for the managers
+  only; the client's next words within 24 hours are its reason (the task's «كلام العميل»), with no reply from Hazem.
+- «التقارير» → «تقييمات العملاء»: the month's average, by service, sent and answered, and the low ones.
+
+A known client whose request is finished (B-01.7: its work ended, or `intake.fresh_after_days` silent days with nothing
+pending) gets a new request on his next message: «أهلًا بحضرتك تاني يا …» and the services list. Nothing is deleted.
+
 ## Checks
 
 `healthcheck` («The booking» section): the tables, the no-overlap constraint, n8n locked out, no
@@ -99,3 +117,4 @@ empty. `hazem-e2e` step 11 books through the Google Calendar stub and closes day
 «The reminders» section: the table, n8n locked out, no reminder more than 10 minutes past its time (the worker
 stopped), the 9 texts active; WARN while a `reminder_failed` task is open. `hazem-e2e` step 15 sends a day-before
 reminder through n8n and presses «هحضر ✅».
+«The service rating» section: the table, n8n locked out, no rating more than 10 minutes past its time.

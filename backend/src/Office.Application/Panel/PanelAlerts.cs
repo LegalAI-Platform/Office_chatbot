@@ -11,6 +11,9 @@ public static class AlertKinds
     public const string Urgent = "task_urgent";
     public const string Human = "task_human";
 
+    /// <summary>v1.31 (B-26): a client rated a service «يحتاج للتحسين» (rating_low). The managers only.</summary>
+    public const string Rating = "task_rating";
+
     /// <summary>TASK 13 (v1.18): a nightly job failed, or n8n workflows failed in an hour. No task; the managers only.</summary>
     public const string System = "system";
 }
@@ -88,7 +91,8 @@ public sealed class PanelAlerts(IPanelAlertStore store, IPanelMailer mailer)
         foreach (var alert in await store.UnsentAsync(ct))
         {
             var system = alert.Kind == AlertKinds.System;
-            foreach (var to in system ? await store.ManagersAsync(ct) : await store.RecipientsAsync(alert.StaffId, ct))
+            var managers = system || alert.Kind == AlertKinds.Rating; // v1.31: a low rating is the managers' too
+            foreach (var to in managers ? await store.ManagersAsync(ct) : await store.RecipientsAsync(alert.StaffId, ct))
             {
                 try
                 {
