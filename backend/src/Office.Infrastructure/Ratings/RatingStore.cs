@@ -58,7 +58,11 @@ public sealed class RatingStore(HazemDbContext db) : IRatingStore, IIntakeHistor
 
     public async Task<IntakeFacts> FactsAsync(Guid personId, string waId, Guid intakeId, CancellationToken ct)
     {
-        var last = await db.Turns.AsNoTracking().Where(t => t.WaId == waId).MaxAsync(t => (DateTimeOffset?)t.CreatedAt, ct);
+        // Silent since his last stored turn, by the database's clock (it stamped the turns; the API's clock may differ).
+        var seconds = await db.Database.SqlQuery<double?>($"""
+            SELECT extract(epoch FROM now() - max(created_at))::float8 AS "Value" FROM hazem.turns WHERE wa_id = {waId}
+            """).SingleAsync(ct);
+        var last = seconds is { } s ? TimeSpan.FromSeconds(s) : (TimeSpan?)null;
         var items = new List<RequestItem>();
         items.AddRange(await db.Appointments.AsNoTracking().Where(a => a.PersonId == personId)
             .Select(a => new RequestItem(RequestItem.Appointment, a.State, a.IntakeId == intakeId, a.StartsAt)).ToListAsync(ct));

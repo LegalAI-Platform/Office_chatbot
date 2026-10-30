@@ -227,7 +227,7 @@ public sealed class RatingApiTests(TestDatabase db) : IAsyncLifetime
         await Completed();
         await Ratings();
         _factory.N8n.Responder = r => Answer(false, TypeOf(r) == "send_template" ? "TEMPLATE_NOT_APPROVED" : ReminderNotices.OutsideWindow);
-        At(Friday12.AddDays(2));
+        At(Friday13.AddHours(2)); // the stub says the window closed
         var from = _factory.N8n.Requests.Count;
         await Ratings();
 
@@ -290,14 +290,15 @@ public sealed class RatingApiTests(TestDatabase db) : IAsyncLifetime
         await Ratings();
         await Press(RatingButtons.Id(await db.ScalarAsync<Guid>("SELECT id FROM hazem.service_ratings"), 2));
 
-        var r = (await _lawyer!.GetFromJsonAsync<JsonNode>("/api/panel/reports?month=2026-11", Ct))!["ratings"]!;
+        using var lawyer = await SignIn("nour", Permissions.Lawyer); // signed in now: the clock moved hours since «saad» did
+        var r = (await lawyer.GetFromJsonAsync<JsonNode>("/api/panel/reports?month=2026-11", Ct))!["ratings"]!;
         Assert.Equal((1, 1, 2.0), ((int)r["sent"]!, (int)r["answered"]!, (double)r["average"]!));
         var service = Assert.Single(r["by_service"]!.AsArray())!;
         Assert.Equal(("consultation_phone_video", 1, 2.0), ((string)service["key"]!, (int)service["count"]!, (double)service["average"]!));
         var low = Assert.Single(r["low"]!.AsArray())!;
         Assert.Equal(("consultation_phone_video", "محمد أحمد علي حسن"), ((string)low["service"]!, (string)low["client_name"]!));
 
-        var october = (await _lawyer!.GetFromJsonAsync<JsonNode>("/api/panel/reports?month=2026-10", Ct))!["ratings"]!;
+        var october = (await lawyer.GetFromJsonAsync<JsonNode>("/api/panel/reports?month=2026-10", Ct))!["ratings"]!;
         Assert.Equal((0, 0), ((int)october["sent"]!, (int)october["answered"]!));
         Assert.Null(october["average"]);
         Assert.NotEqual(Guid.Empty, id);

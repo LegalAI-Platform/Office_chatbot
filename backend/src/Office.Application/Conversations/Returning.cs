@@ -18,9 +18,10 @@ public sealed record RequestItem(string Kind, string State, bool OfThisIntake, D
 
 /// <summary>
 /// The person's requests (<see cref="Items"/>: <see cref="RequestItem.OfThisIntake"/> marks the ones made under the open
-/// intake) and when he last wrote before this turn (<see cref="LastClientMessageAt"/>, null: never).
+/// intake) and how long he has been silent before this turn (<see cref="SilentFor"/>, null: he never wrote). The silence
+/// is measured by the database's own clock, the one that stamped his messages.
 /// </summary>
-public sealed record IntakeFacts(DateTimeOffset? LastClientMessageAt, IReadOnlyList<RequestItem> Items);
+public sealed record IntakeFacts(TimeSpan? SilentFor, IReadOnlyList<RequestItem> Items);
 
 public interface IIntakeHistory
 {
@@ -52,7 +53,7 @@ public static class ReturningClient
             return true;
         }
 
-        return facts.LastClientMessageAt is { } last && now - last >= quiet && !facts.Items.Any(i => Pending(i, now));
+        return facts.SilentFor >= quiet && !facts.Items.Any(i => Pending(i, now));
     }
 
     /// <summary>The first word of the stored name ({{first_name}} in welcome_back); null without a name.</summary>

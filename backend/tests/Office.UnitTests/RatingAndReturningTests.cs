@@ -13,7 +13,7 @@ public sealed class ReturningClientRulesTests
     private static readonly DateTimeOffset Now = new(2026, 11, 20, 12, 0, 0, TimeSpan.FromHours(2));
     private static readonly TimeSpan Week = TimeSpan.FromDays(7);
 
-    private static IntakeFacts Facts(DateTimeOffset? last, params RequestItem[] items) => new(last, items);
+    private static IntakeFacts Facts(TimeSpan? silent, params RequestItem[] items) => new(silent, items);
 
     private static RequestItem Appointment(string state, bool mine = true, DateTimeOffset? start = null) =>
         new(RequestItem.Appointment, state, mine, start ?? Now.AddDays(-1));
@@ -25,52 +25,52 @@ public sealed class ReturningClientRulesTests
     [InlineData("cancelled_by_office")]
     [InlineData("expired")]
     public void An_appointment_that_ended_finishes_the_request_at_once(string state) =>
-        Assert.True(ReturningClient.Finished(Facts(Now.AddMinutes(-5), Appointment(state)), Now, Week));
+        Assert.True(ReturningClient.Finished(Facts(TimeSpan.FromMinutes(5), Appointment(state)), Now, Week));
 
     [Theory]
     [InlineData("delivered")]
     [InlineData("closed")]
     public void A_delivered_or_closed_order_finishes_it(string state) =>
-        Assert.True(ReturningClient.Finished(Facts(Now.AddHours(-1), new RequestItem(RequestItem.Order, state, true)), Now, Week));
+        Assert.True(ReturningClient.Finished(Facts(TimeSpan.FromHours(1), new RequestItem(RequestItem.Order, state, true)), Now, Week));
 
     [Fact]
     public void An_urfi_case_finishes_when_the_lawyer_refused_it_or_its_appointment_is_completed()
     {
-        Assert.True(ReturningClient.Finished(Facts(Now, new RequestItem(RequestItem.Urf, "lawyer_rejected", true)), Now, Week));
-        Assert.True(ReturningClient.Finished(Facts(Now, new RequestItem(RequestItem.Urf, "approved", true), Appointment("completed")), Now, Week));
-        Assert.False(ReturningClient.Finished(Facts(Now, new RequestItem(RequestItem.Urf, "approved", true),
+        Assert.True(ReturningClient.Finished(Facts(TimeSpan.Zero, new RequestItem(RequestItem.Urf, "lawyer_rejected", true)), Now, Week));
+        Assert.True(ReturningClient.Finished(Facts(TimeSpan.Zero, new RequestItem(RequestItem.Urf, "approved", true), Appointment("completed")), Now, Week));
+        Assert.False(ReturningClient.Finished(Facts(TimeSpan.Zero, new RequestItem(RequestItem.Urf, "approved", true),
             Appointment("confirmed", start: Now.AddDays(1))), Now, Week));
         // Hazem's own refusals (age, guardian) do not: the B-11.1 closing text answers the same matter for 24 hours.
-        Assert.False(ReturningClient.Finished(Facts(Now, new RequestItem(RequestItem.Urf, "rejected_age", true)), Now, Week));
+        Assert.False(ReturningClient.Finished(Facts(TimeSpan.Zero, new RequestItem(RequestItem.Urf, "rejected_age", true)), Now, Week));
     }
 
     [Fact]
     public void Anything_still_open_keeps_the_request()
     {
         var ended = Appointment("completed");
-        Assert.False(ReturningClient.Finished(Facts(Now, ended, Appointment("pending_payment", mine: false, start: Now.AddDays(2))), Now, Week));
-        Assert.False(ReturningClient.Finished(Facts(Now, ended, Appointment("confirmed", mine: false, start: Now.AddDays(-2))), Now, Week)); // not marked yet
-        Assert.False(ReturningClient.Finished(Facts(Now, ended, new RequestItem(RequestItem.Order, "collecting", false)), Now, Week));
-        Assert.False(ReturningClient.Finished(Facts(Now, ended, new RequestItem(RequestItem.Payment, "proof_received", false)), Now, Week));
-        Assert.False(ReturningClient.Finished(Facts(Now, ended, new RequestItem(RequestItem.Urf, "documents_pending", false)), Now, Week));
+        Assert.False(ReturningClient.Finished(Facts(TimeSpan.Zero, ended, Appointment("pending_payment", mine: false, start: Now.AddDays(2))), Now, Week));
+        Assert.False(ReturningClient.Finished(Facts(TimeSpan.Zero, ended, Appointment("confirmed", mine: false, start: Now.AddDays(-2))), Now, Week)); // not marked yet
+        Assert.False(ReturningClient.Finished(Facts(TimeSpan.Zero, ended, new RequestItem(RequestItem.Order, "collecting", false)), Now, Week));
+        Assert.False(ReturningClient.Finished(Facts(TimeSpan.Zero, ended, new RequestItem(RequestItem.Payment, "proof_received", false)), Now, Week));
+        Assert.False(ReturningClient.Finished(Facts(TimeSpan.Zero, ended, new RequestItem(RequestItem.Urf, "documents_pending", false)), Now, Week));
     }
 
     [Fact]
     public void Only_work_of_the_open_request_finishes_it()
     {
         // An old appointment of an earlier request: the request opened after it has nothing ended yet.
-        Assert.False(ReturningClient.Finished(Facts(Now.AddDays(-1), Appointment("completed", mine: false)), Now, Week));
-        Assert.False(ReturningClient.Finished(Facts(Now.AddDays(-1)), Now, Week));
+        Assert.False(ReturningClient.Finished(Facts(TimeSpan.FromDays(1), Appointment("completed", mine: false)), Now, Week));
+        Assert.False(ReturningClient.Finished(Facts(TimeSpan.FromDays(1)), Now, Week));
     }
 
     [Fact]
     public void Seven_silent_days_with_nothing_pending_finish_it()
     {
-        Assert.True(ReturningClient.Finished(Facts(Now.AddDays(-7)), Now, Week));
-        Assert.False(ReturningClient.Finished(Facts(Now.AddDays(-7).AddMinutes(1)), Now, Week));
+        Assert.True(ReturningClient.Finished(Facts(TimeSpan.FromDays(7)), Now, Week));
+        Assert.False(ReturningClient.Finished(Facts(TimeSpan.FromDays(7) - TimeSpan.FromMinutes(1)), Now, Week));
         Assert.False(ReturningClient.Finished(Facts(null), Now, Week)); // never wrote before
         // An order left waiting for documents, or a confirmed appointment in the past nobody marked: not pending.
-        Assert.True(ReturningClient.Finished(Facts(Now.AddDays(-8), new RequestItem(RequestItem.Order, "collecting", true),
+        Assert.True(ReturningClient.Finished(Facts(TimeSpan.FromDays(8), new RequestItem(RequestItem.Order, "collecting", true),
             Appointment("confirmed", start: Now.AddDays(-9))), Now, Week));
         // A future or held appointment, a priced or running order, a receipt under review, a running Urfi case: pending.
         foreach (var pending in new[]
@@ -81,7 +81,7 @@ public sealed class ReturningClientRulesTests
                      new RequestItem(RequestItem.Urf, "collecting", true),
                  })
         {
-            Assert.False(ReturningClient.Finished(Facts(Now.AddDays(-30), pending), Now, Week));
+            Assert.False(ReturningClient.Finished(Facts(TimeSpan.FromDays(30), pending), Now, Week));
         }
     }
 
@@ -253,7 +253,7 @@ public sealed class RatingAndReturningFlowTests
     {
         await Known();
         var before = _rows[Number].Intake.Id;
-        _history.Facts = new IntakeFacts(DateTimeOffset.UtcNow.AddDays(-1),
+        _history.Facts = new IntakeFacts(TimeSpan.FromDays(1),
             [new RequestItem(RequestItem.Appointment, "completed", true, DateTimeOffset.UtcNow.AddDays(-1))]);
 
         var d = await Say("صباح الخير");
@@ -272,10 +272,10 @@ public sealed class RatingAndReturningFlowTests
     public async Task A_returning_client_who_says_his_request_gets_it_after_the_welcome_and_a_thanks_gets_its_reply_only()
     {
         await Known();
-        _history.Facts = new IntakeFacts(DateTimeOffset.UtcNow.AddDays(-8), []); // seven silent days, nothing pending
+        _history.Facts = new IntakeFacts(TimeSpan.FromDays(8), []); // seven silent days, nothing pending
         Assert.Equal([TextKeys.WelcomeBack, TextKeys.ConsultationOffer], Keys(await Say("عايز أحجز استشارة")));
 
-        _history.Facts = new IntakeFacts(DateTimeOffset.UtcNow.AddDays(-8), []);
+        _history.Facts = new IntakeFacts(TimeSpan.FromDays(8), []);
         Assert.Equal([TextKeys.Thanks], Keys(await Say("شكرا")));
     }
 
@@ -284,7 +284,7 @@ public sealed class RatingAndReturningFlowTests
     {
         await Known();
         var before = _rows[Number].Intake.Id;
-        _history.Facts = new IntakeFacts(DateTimeOffset.UtcNow.AddDays(-1),
+        _history.Facts = new IntakeFacts(TimeSpan.FromDays(1),
             [new RequestItem(RequestItem.Appointment, "confirmed", true, DateTimeOffset.UtcNow.AddDays(1))]);
         var d = await Say("عايز أحجز استشارة");
         Assert.DoesNotContain(TextKeys.WelcomeBack, Keys(d));
@@ -297,7 +297,7 @@ public sealed class RatingAndReturningFlowTests
     {
         await Known();
         _rows[Number].Conversation.Mute(Office.Domain.Common.Actor.System);
-        _history.Facts = new IntakeFacts(DateTimeOffset.UtcNow.AddDays(-30), []);
+        _history.Facts = new IntakeFacts(TimeSpan.FromDays(30), []);
         var d = await Say("صباح الخير");
         Assert.Empty(d.Actions);
         Assert.Null(_history.AskedFor);
