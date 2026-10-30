@@ -124,7 +124,8 @@ public sealed class Task08ApiTests(TestDatabase db) : IAsyncLifetime
     private async Task<JsonArray> UpToTheOffer()
     {
         await Say("السلام عليكم");
-        return await Say("محمد أحمد علي حسن");
+        await Say("محمد أحمد علي حسن"); // v1.32: a name on its own is kept (the booking does not ask it again)
+        return await Press("sv:menu"); // the welcome's «خدمات المكتب»: the services list
     }
 
     /// <summary>One round of the worker that tells the clients of appointments the office cancelled.</summary>

@@ -16,7 +16,6 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
     private const string Client = "201000000071";
     // v1.32 (B-01.1): the welcome with its two buttons, no name question (0034)
     private const string Welcome = "أنا حازم، المساعد الرقمي لمكتب المستشار سعد فتحي سعد للمحاماة.\nحضرتك تحب تعرف خدمات المكتب، ولا تحكيلي محتاج إيه وأساعدك؟";
-    private const string Services = "تحت أمرك يا فندم، دي خدمات المكتب وأسعارها. اختار اللي يناسب حضرتك.";
     private const string Offer = "المستشار يقدر يشوف الموضوع مع حضرتك في استشارة: بالتليفون بـ500 أو في المكتب بـ1,000.";
     private const string AskTopic = "ولو تحب، قولّي باختصار الموضوع عن إيه عشان المستشار يبقى عارفه.";
     private ApiFactory _factory = null!;
@@ -73,14 +72,14 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
         // v1.21 (B-01.6): the salam is returned first; v1.32: then the request is answered at once (no welcome, no name).
         Assert.Equal(["وعليكم السلام ورحمة الله وبركاته", Offer, AskTopic], // B-25: the topic is still unknown
             Texts(await Say("السلام عليكم عايز أحجز استشارة")));
-        Assert.Equal([Services], Texts(await Say("محمد أحمد علي حسن"))); // a name on its own: kept, and the services list
+        Assert.Equal(["أهلًا بحضرتك 👋 تحت أمرك، محتاج إيه؟"], Texts(await Say("محمد أحمد علي حسن"))); // a name on its own: kept, a short reply
 
         Assert.Equal("محمد أحمد علي حسن|true|bot_active|offer_sent|new_client|", await db.ScalarAsync<string>($"""
             SELECT p.name_normalized || '|' || p.full_name_provided || '|' || c.state || '|' || i.state || '|' || i.client_type || '|' || COALESCE(i.pending_intent, '')
               FROM hazem.persons p JOIN hazem.conversations c ON c.person_id = p.id JOIN hazem.intakes i ON i.person_id = p.id
              WHERE p.wa_id = '{Client}'
             """));
-        Assert.Equal("greet_salam:1,consultation_offer:3,ask_topic:2,services_menu:2", await db.ScalarAsync<string>( // 0034: «المستشار» versions
+        Assert.Equal("greet_salam:1,consultation_offer:3,ask_topic:2,greeting:1", await db.ScalarAsync<string>( // 0034: «المستشار» versions
             "SELECT string_agg(text_key || ':' || text_version, ',' ORDER BY created_at, idempotency_key) FROM hazem.turn_replies"));
     }
 
