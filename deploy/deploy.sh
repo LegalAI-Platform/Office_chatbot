@@ -6,7 +6,9 @@
 # ghcr.io/legalai-platform/office-*:sha-<commit>. Steps: the files of that commit (compose, migrations, n8n workflows),
 # the images named in .env, a backup, the migrations, the stack, the healthcheck. A failed healthcheck puts the
 # previous version back (its images are still here); its database changes, if any, stay (migrations go forward only).
-# The tunnel is not restarted, so its link (and Meta's webhook) stays the same.
+# The tunnel is not restarted, so its link (and Meta's webhook) stays the same. Two parts the stack's `up` does not
+# refresh by itself are refreshed when that commit changed them: n8n's workflows (n8n runs the copy in its own
+# database, so they are imported again, n8n restarts for ~30 s and Meta's link is checked) and the edge's config.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export MSYS_NO_PATHCONV=1
@@ -19,6 +21,28 @@ set_env() {
   if grep -qE "^$1=" .env; then sed -i "s#^$1=.*#$1=$2#" .env; else echo "$1=$2" >> .env; fi
 }
 current() { grep -E '^OFFICE_API_IMAGE=' .env | sed -E 's/.*:sha-([0-9a-f]+)$/\1/' | grep -E '^[0-9a-f]{7}$' || true; }
+# Did this deploy change these paths? (Everything counts as changed on a first deploy.)
+changed() { [[ -z "$previous" ]] || ! git diff --quiet "$previous" "$target" -- "$@"; }
+# Meta's webhook still on the domain's link after n8n restarted; Meta sometimes refuses the first registration, so
+# once more after an import (as by hand). A Quick Tunnel's link is left to tunnel-refresh.sh.
+meta_check() {
+  local url; url="$(grep -E '^WEBHOOK_URL=' .env | cut -d= -f2-)"; url="${url%/}"
+  if [[ ! "$url" =~ ^https://wa\. ]]; then echo "(Meta's link is not the domain's: run tunnel-refresh.sh yourself)"; return 0; fi
+  bash scripts/linux/tunnel-refresh.sh --url "$url" && return 0
+  echo "Meta refused the registration: importing again and once more"
+  bash scripts/linux/n8n-import.sh && bash scripts/linux/tunnel-refresh.sh --url "$url"
+}
+refresh_parts() { # after the stack is up on a version
+  if changed n8n/workflows n8n/scripts; then
+    echo "-- n8n's workflows changed: importing them"
+    bash scripts/linux/n8n-import.sh
+    meta_check
+  fi
+  if changed infra/edge && docker compose --profile tunnel --profile tunnel-named ps --status running --quiet edge | grep -q .; then
+    echo "-- the edge's config changed: restarting it"
+    docker compose --profile tunnel --profile tunnel-named up -d --force-recreate --no-deps edge
+  fi
+}
 point_at() { # the files and the images of one commit
   git checkout --quiet --detach "$1"
   local tag="sha-${1::7}"
@@ -52,6 +76,7 @@ bash scripts/linux/migrate.sh up
 
 echo "==== 5/6 The stack"
 docker compose up -d --wait
+refresh_parts
 
 echo "==== 6/6 The healthcheck"
 # it wants a backup and a log scan from the last 26 hours (the nightly job's): a first deploy has had neither here
@@ -67,6 +92,7 @@ if [[ -n "$previous" ]]; then
   echo "The healthcheck failed: going back to $previous."
   point_at "$previous"
   docker compose up -d --wait
+  refresh_parts # the earlier workflows and edge config again, when this deploy had changed them
   die "${target::7} failed its healthcheck; $previous is running again"
 fi
 die "${target::7} failed its healthcheck (no earlier version to go back to)"
