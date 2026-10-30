@@ -27,6 +27,11 @@ public interface IChatwootApi
 
     Task<long> CreateConversationAsync(long contactId, string sourceId, CancellationToken ct);
 
+    /// <summary>
+    /// The number's contact and all its conversations deleted («أدوات التجربة»: a test number forgotten). Zero when it has none.
+    /// </summary>
+    Task<(int Contacts, int Conversations)> DeleteContactAsync(string waId, CancellationToken ct);
+
     /// <summary>A message in the conversation: the client's (incoming) or Hazem's (outgoing), or a private note.</summary>
     Task PostAsync(long conversationId, string content, ChatwootPost kind, CancellationToken ct);
 

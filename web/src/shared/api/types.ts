@@ -21,7 +21,8 @@ export type Permission =
   | "services.price"
   | "urf.manage"
   | "urf.review"
-  | "prices.manage";
+  | "prices.manage"
+  | "testing.forget";
 
 export interface Me {
   id: string;

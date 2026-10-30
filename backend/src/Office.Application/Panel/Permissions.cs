@@ -36,10 +36,12 @@ public static class Permissions
     public const string UrfManage = "urf.manage";   // TASK 11: the Urfi cases and their documents (every role)
     public const string UrfReview = "urf.review";   // TASK 11: approve or refuse a case (the lawyer and the manager)
     public const string PricesManage = "prices.manage"; // TASK 06: the price list of B-23 (the lawyer and the manager)
+    // «أدوات التجربة» (the owner, 2026-10-30): forget a test number, the manager and the lawyer, test environment only.
+    public const string TestingForget = "testing.forget";
 
     public static IReadOnlyList<string> All { get; } =
         [TasksViewOwn, TasksViewAll, TasksUpdate, TasksAssign, UsersManage, AccountSelf, ListsManage, TextsManage, ReportsView, ConversationsUnmute,
-            ScheduleManage, OfficeManage, PaymentsVerify, PaymentsRefund, ServicesManage, ServicesPrice, UrfManage, UrfReview, PricesManage];
+            ScheduleManage, OfficeManage, PaymentsVerify, PaymentsRefund, ServicesManage, ServicesPrice, UrfManage, UrfReview, PricesManage, TestingForget];
 
     public const string Manager = "manager";
     public const string Lawyer = "lawyer";
@@ -50,9 +52,10 @@ public static class Permissions
     private static readonly Dictionary<string, string[]> ByRole = new(StringComparer.Ordinal)
     {
         [Manager] = [TasksViewOwn, TasksViewAll, TasksUpdate, TasksAssign, UsersManage, AccountSelf, ListsManage, TextsManage, ReportsView,
-            ConversationsUnmute, ScheduleManage, OfficeManage, PaymentsVerify, PaymentsRefund, ServicesManage, ServicesPrice, UrfManage, UrfReview, PricesManage],
+            ConversationsUnmute, ScheduleManage, OfficeManage, PaymentsVerify, PaymentsRefund, ServicesManage, ServicesPrice, UrfManage, UrfReview, PricesManage,
+            TestingForget],
         [Lawyer] = [TasksViewOwn, TasksViewAll, TasksUpdate, TasksAssign, AccountSelf, ListsManage, TextsManage, ReportsView, ScheduleManage,
-            OfficeManage, PaymentsVerify, PaymentsRefund, ServicesManage, ServicesPrice, UrfManage, UrfReview, PricesManage],
+            OfficeManage, PaymentsVerify, PaymentsRefund, ServicesManage, ServicesPrice, UrfManage, UrfReview, PricesManage, TestingForget],
         [Staff] = [TasksViewOwn, TasksUpdate, AccountSelf, ScheduleManage, PaymentsVerify, PaymentsRefund, ServicesManage, UrfManage],
     };
 

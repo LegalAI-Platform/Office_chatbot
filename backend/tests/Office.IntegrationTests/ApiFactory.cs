@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Text;
@@ -274,6 +275,9 @@ public sealed class FakeChatwoot : HttpMessageHandler
     public ConcurrentQueue<(string Method, string Path, string? Token, JsonNode? Body)> Calls { get; } = new();
     public bool Down { get; set; }
 
+    /// <summary>Contacts the search finds, by wa_id; each has one conversation, its id + 100.</summary>
+    public ConcurrentDictionary<string, long> Contacts { get; } = new();
+
     /// <summary>Fails the n-th message post from now on (a turn copied half-way), then works again.</summary>
     public int FailMessagePostAt { get; private set; } = -1;
     private int _messagePosts;
@@ -319,7 +323,20 @@ public sealed class FakeChatwoot : HttpMessageHandler
             {
                 ["payload"] = new JsonArray(new JsonObject { ["id"] = Inbox, ["name"] = "واتساب (حازم)" }),
             },
-            ("GET", var p) when p == $"{a}/contacts/search" => new JsonObject { ["payload"] = new JsonArray() },
+            ("GET", var p) when p == $"{a}/contacts/search" => new JsonObject
+            {
+                ["payload"] = new JsonArray(Contacts
+                    .Where(c => request.RequestUri!.Query.Contains(c.Key, StringComparison.Ordinal))
+                    .Select(c => (JsonNode)new JsonObject { ["id"] = c.Value, ["identifier"] = c.Key, ["phone_number"] = "+" + c.Key })
+                    .ToArray()),
+            },
+            ("GET", var p) when p.StartsWith($"{a}/contacts/", StringComparison.Ordinal) && p.EndsWith("/conversations", StringComparison.Ordinal) =>
+                new JsonObject
+                {
+                    ["payload"] = new JsonArray(new JsonObject { ["id"] = long.Parse(p.Split('/')[^2], CultureInfo.InvariantCulture) + 100 }),
+                },
+            ("DELETE", var p) when p.StartsWith($"{a}/contacts/", StringComparison.Ordinal) || p.StartsWith($"{a}/conversations/", StringComparison.Ordinal) =>
+                new JsonObject(),
             ("POST", var p) when p == $"{a}/contacts" => new JsonObject
             {
                 ["payload"] = new JsonObject

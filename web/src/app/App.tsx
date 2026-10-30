@@ -78,6 +78,10 @@ export const routes = [
             children: [{ path: "/texts", element: <LazyPage path="/texts" /> }],
           },
           {
+            element: <RequirePermission permission="testing.forget" />,
+            children: [{ path: "/testing", element: <LazyPage path="/testing" /> }],
+          },
+          {
             element: <RequirePermission permission="schedule.manage" />,
             children: [{ path: "/receipts", element: <LazyPage path="/receipts" /> }],
           },

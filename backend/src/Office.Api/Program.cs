@@ -62,6 +62,7 @@ app.MapHazemApi();
 app.MapPanelApi();
 app.MapChatwoot();
 app.MapPanelTools(); // TASK 07c
+app.MapPanelTesting(); // «أدوات التجربة», test environment only
 app.MapPanelBooking(); // TASK 08
 app.MapPanelServices(); // TASK 10
 app.MapPanelUrf(); // TASK 11
