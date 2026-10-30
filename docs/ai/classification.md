@@ -284,3 +284,14 @@ words of love to the assistant or staff with the flirting. Scope samples 3021–
 
 The set's misses: v1.26's minus 230 «بحبك» (now abusive), plus 167 «اتجوزت عرفي والراجل اختفى» → an Urfi service (the same
 Urfi offer either way).
+
+## When the AI is down (migration 0032)
+
+If the classifier gives no answer at all (`no_key`, `error`, `timeout`, `invalid_output`; not `low_confidence`),
+`Backstop.cs` still reads two things by code: an insult (→ `abusive`: the warning once, then silence, S-01) and a
+message that is only a thanks (→ `thanks_or_closing`). Everything else keeps the «unclear» fallback. The
+classification log then says `fallback_reason = backstop:<reason>`.
+
+Three messages or more in one hour that the AI could not read make one system alert «الـ AI اللي بيفهم رسايل العملاء
+مش شغال» for the managers (the bell and an e-mail, one per hour). It happened on 2026-10-30: the Anthropic key was
+deactivated and for twenty minutes nobody knew.

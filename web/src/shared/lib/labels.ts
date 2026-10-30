@@ -202,6 +202,7 @@ export const SYSTEM_WHAT: Record<string, string> = {
   log_scan: "السجلات فيها مفتاح أو رقم كامل",
   n8n: "فيه حاجات في n8n فشلت",
   turn: "رسالة عميل وقفت بعد محاولات كتير",
+  ai: "الـ AI اللي بيفهم رسايل العملاء مش شغال",
 };
 
 /** B-14: the office's lists. */

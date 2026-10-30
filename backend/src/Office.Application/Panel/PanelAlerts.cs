@@ -25,6 +25,8 @@ public static class SystemWhat
     public const string N8n = "n8n";
     /// <summary>A client's turn the API failed on too many times (migration 0020): set aside, the client unblocked.</summary>
     public const string Turn = "turn";
+    /// <summary>0032: three messages or more in an hour that the AI could not read at all (its key, an error, a timeout).</summary>
+    public const string Ai = "ai";
 }
 
 /// <summary>An alert as the bell shows it. A system alert has no task (<see cref="SystemWhat"/> instead).</summary>

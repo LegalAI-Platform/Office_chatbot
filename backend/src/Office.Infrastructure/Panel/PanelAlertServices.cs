@@ -52,6 +52,17 @@ public sealed class PanelAlertStore(HazemDbContext db) : IPanelAlertStore
             SELECT 'system', 'turn', 'turn:' || f.turn_id FROM hazem.failed_turns({Since}) f
             ON CONFLICT (system_ref) DO NOTHING
             """, ct);
+        // 0032: the AI that reads the clients' messages is down (its key refused, out of credit, an error, a timeout): three
+        // messages or more in one hour it could not read at all, one alert that hour. Counts only.
+        var ai = await db.Database.ExecuteSqlRawAsync($"""
+            INSERT INTO hazem.panel_alerts (kind, system_what, system_ref)
+            SELECT 'system', 'ai', 'ai:' || to_char(date_trunc('hour', c.created_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24')
+              FROM hazem.classifications c
+             WHERE c.created_at >= {Since}
+               AND c.fallback_reason ~ '^(backstop:)?(no_key|timeout|error|invalid_output)$'
+             GROUP BY 1 HAVING count(*) >= 3
+            ON CONFLICT (system_ref) DO NOTHING
+            """, ct);
         // A night with no backup at all (the PC or Docker off at 03:00, the scheduled task gone, a run killed half way):
         // once a backup has ever run, 26 hours with none that finished is an alert, one a day (a failed one has its own).
         var missed = await db.Database.ExecuteSqlRawAsync("""
@@ -61,7 +72,7 @@ public sealed class PanelAlertStore(HazemDbContext db) : IPanelAlertStore
                AND NOT EXISTS (SELECT 1 FROM hazem.ops_runs WHERE kind = 'backup' AND finished_at IS NOT NULL AND started_at > now() - interval '26 hours')
             ON CONFLICT (system_ref) DO NOTHING
             """, ct);
-        return failed + n8n + turns + missed;
+        return failed + n8n + turns + ai + missed;
     }
 
     public async Task<IReadOnlyList<string>> ManagersAsync(CancellationToken ct) =>

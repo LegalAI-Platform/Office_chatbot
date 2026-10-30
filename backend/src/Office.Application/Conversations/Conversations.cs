@@ -105,7 +105,7 @@ public sealed record ClassificationRecord(
         c.Call?.LatencyMs,
         c.Call?.InputTokens,
         c.Call?.OutputTokens,
-        c.FallbackReason,
+        c.LoggedReason,
         c.Matter is { } m ? Classification.Code(m) : null,
         c.Subtype is { } st ? Classification.Code(st) : null,
         Classification.Code(c.Role),
