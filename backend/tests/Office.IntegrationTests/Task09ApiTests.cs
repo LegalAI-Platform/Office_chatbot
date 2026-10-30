@@ -142,7 +142,8 @@ public sealed class Task09ApiTests(TestDatabase db) : IAsyncLifetime
     [Fact]
     public async Task Migration_0014_activated_the_15_texts_the_owner_approved_and_the_booking_needs_them_all()
     {
-        Assert.Equal("14|15", await db.ScalarAsync<string>( // 1.25: booking_paid v2 (the time kept until the review) replaced v1
+        // 1.25: booking_paid v2 (the time kept until the review) replaced v1; 1.32: one more got its «المستشار» version (0034)
+        Assert.Equal("13|15", await db.ScalarAsync<string>(
             """
             SELECT count(*) FILTER (WHERE active) || '|' || count(*) FROM hazem.approved_texts
              WHERE source = 'proposal TASK 09' AND updated_by = 'owner approval 2026-10-24'
@@ -243,7 +244,7 @@ public sealed class Task09ApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal(1, await Notices());
         var confirmed = Assert.Single(SentSince(sends));
         Assert.StartsWith("تم تأكيد الاستشارة بكرة الساعة", confirmed);
-        Assert.EndsWith("✅، والأستاذ هيكلم حضرتك على FaceTime على نفس الرقم ده.", confirmed);
+        Assert.EndsWith("✅، والمستشار هيكلم حضرتك على FaceTime على نفس الرقم ده.", confirmed);
 
         Assert.Equal(HttpStatusCode.NoContent, (await staff.PostAsJsonAsync($"/api/panel/payments/{id}/review",
             new { state = "verified", received = 500 }, Ct)).StatusCode);
@@ -462,7 +463,7 @@ public sealed class Task09ApiTests(TestDatabase db) : IAsyncLifetime
         var sends = _factory.N8n.Requests.Count;
         Assert.Equal(1, await Notices());
         var unpaid = JsonNode.Parse(_factory.N8n.Requests.Skip(sends).Single().Body)!;
-        Assert.StartsWith("نعتذر لحضرتك، الأستاذ عنده ظرف في ميعاد بكرة الساعة 12:00 م", (string?)unpaid["text"]);
+        Assert.StartsWith("نعتذر لحضرتك، المستشار عنده ظرف في ميعاد بكرة الساعة 12:00 م", (string?)unpaid["text"]);
         Assert.DoesNotContain(unpaid["interactive"]!["choices"]!.AsArray(), r => ((string?)r!["id"])!.StartsWith("bk:f:", StringComparison.Ordinal));
 
         var second = "bk:s:pv:" + new DateTimeOffset(2026, 11, 22, 12, 0, 0, TimeSpan.FromHours(2)).ToUnixTimeSeconds();

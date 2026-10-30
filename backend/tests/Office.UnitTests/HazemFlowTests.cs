@@ -13,17 +13,22 @@ public sealed class HazemFlowTests
 {
     private const string Number = "201000000041";
 
-    /// <summary>The active texts of migration 0005 (DECISIONS word for word).</summary>
+    /// <summary>
+    /// The active texts of migration 0005 (DECISIONS word for word), as 0034 left them (v1.32: «المستشار», and the welcome
+    /// with two buttons and the name at the booking instead of welcome_ask_name).
+    /// </summary>
     public static readonly IReadOnlyDictionary<string, string> Approved = new Dictionary<string, string>
     {
-        [TextKeys.WelcomeAskName] = "أهلًا بحضرتك في مكتب الأستاذ سعد فتحي سعد للمحاماة، معاك حازم. ممكن اسم حضرتك؟",
-        [TextKeys.ConsultationOffer] = "الأستاذ يقدر يشوف الموضوع مع حضرتك في استشارة: بالتليفون بـ500 أو في المكتب بـ1,000.",
-        [TextKeys.LegalQuestion] = "الأستاذ هو اللي هيجاوب حضرتك على ده في الاستشارة.",
+        [TextKeys.Welcome] = "أنا حازم، المساعد الرقمي لمكتب المستشار سعد فتحي سعد للمحاماة.\nحضرتك تحب تعرف خدمات المكتب، ولا تحكيلي محتاج إيه وأساعدك؟",
+        [TextKeys.WelcomeChoose] = "حضرتك تحب تعرف خدمات المكتب، ولا تحكيلي محتاج إيه وأساعدك؟",
+        [TextKeys.AskNameBooking] = "تمام، ممكن اسم حضرتك عشان أسجّل الميعاد؟",
+        [TextKeys.ConsultationOffer] = "المستشار يقدر يشوف الموضوع مع حضرتك في استشارة: بالتليفون بـ500 أو في المكتب بـ1,000.",
+        [TextKeys.LegalQuestion] = "المستشار هو اللي هيجاوب حضرتك على ده في الاستشارة.",
         [TextKeys.UrgentPrice] = "الاستشارة العاجلة بالتليفون ربع ساعة بـ1,000 جنيه.",
         [TextKeys.DocumentReviewRequest] = "تحت أمرك. مراجعة العقد بتبدأ من 1,500 جنيه. ابعتلي صورة العقد هنا.",
         [TextKeys.WrittenOpinion] = "الرأي المكتوب بيكون بعد الاستشارة، وسعره سعر الاستشارة + 2,000 جنيه.",
         [TextKeys.UrfUnclear] = "تحت أمرك، قولّي المطلوب",
-        [TextKeys.UrfProof] = "إثبات الجواز بيكون بدعوى قدام محكمة الأسرة، والأستاذ هيحدد المطلوب حسب الورق اللي معاك.",
+        [TextKeys.UrfProof] = "إثبات الجواز بيكون بدعوى قدام محكمة الأسرة، والمستشار هيحدد المطلوب حسب الورق اللي معاك.",
     };
 
     private readonly FakeStore _store = new();
@@ -66,27 +71,28 @@ public sealed class HazemFlowTests
     // ---------- B-01 / B-02 ----------
 
     [Fact]
-    public async Task First_message_gets_the_welcome_and_after_the_name_hazem_answers_the_saved_request()
+    public async Task A_request_in_the_first_message_is_answered_at_once_without_the_welcome_or_the_name() // v1.32
     {
         var (first, d1) = await Say("السلام عليكم عايز أحجز استشارة");
-        Assert.Equal([TextKeys.WelcomeAskName], first);
-        Assert.Equal(Approved[TextKeys.WelcomeAskName], Assert.Single(d1.Actions).Text);
-        Assert.Equal("consultation_request", _store.Rows[Number].Intake.Pending?.Intent);
-
-        var (second, _) = await Say("محمد أحمد علي حسن");
-        Assert.Equal([TextKeys.ConsultationOffer], second);
+        Assert.Equal([TextKeys.ConsultationOffer], first);
+        Assert.Equal(Approved[TextKeys.ConsultationOffer], Assert.Single(d1.Actions).Text);
         var s = _store.Rows[Number];
+        Assert.Equal((IntakeState.OfferSent, ClientType.NewClient), (s.Intake.State, s.Intake.ClientType));
+        Assert.Null(s.Intake.Pending); // nothing kept for later: it was answered
+        Assert.Null(s.Person.Name);
+        Assert.Equal(0, s.Intake.NameAsks);
+
+        // A name told later on the way is kept (the booking will not ask it).
+        await Say("محمد أحمد علي حسن");
+        s = _store.Rows[Number];
         Assert.True(s.Person.HasFullName);
         Assert.Equal("محمد أحمد علي حسن", s.Person.Name?.Normalized);
-        Assert.Equal((IntakeState.OfferSent, ClientType.NewClient), (s.Intake.State, s.Intake.ClientType));
-        Assert.Null(s.Intake.Pending);
     }
 
     [Fact]
-    public async Task Legal_question_first_then_name_gets_b20_and_the_offer()
+    public async Task Legal_question_in_the_first_message_gets_b20_and_the_offer_at_once()
     {
-        await Say("ينفع أطلق مراتي غيابي؟");
-        Assert.Equal([TextKeys.LegalQuestion, TextKeys.ConsultationOffer], (await Say("منى سعيد عبد الله حسن")).Keys);
+        Assert.Equal([TextKeys.LegalQuestion, TextKeys.ConsultationOffer], (await Say("ينفع أطلق مراتي غيابي؟")).Keys);
     }
 
     [Fact]
@@ -107,31 +113,26 @@ public sealed class HazemFlowTests
         Assert.Equal("محمد أحمد", s.Person.Name?.Raw);
     }
 
+    // v1.32: «ههههه» or a refusal right after the welcome is no name question any more (the name is asked at the booking,
+    // BookingFlowTests); it is an unclear message and is never taken as the name.
     [Fact]
-    public async Task No_name_at_all_is_asked_once_more_then_hazem_carries_on()
+    public async Task After_the_welcome_no_name_is_asked_and_a_refusal_is_no_name()
     {
         await Say("السلام عليكم");
-        var (again, d) = await Say("ههههه");
-        Assert.Equal([TextKeys.WelcomeAskName], again); // ask_name_again is not approved yet → B-01 text
-        Assert.Equal(TextKeys.AskNameAgain, Assert.Single(d.Effects!.Replies).InsteadOf);
+        var (keys, _) = await Say("مش هقول اسمي");
+        Assert.Equal([TextKeys.ConsultationOffer], keys); // unclear, its text not approved here: the offer
+        Assert.DoesNotContain(TextKeys.AskNameAgain, keys);
         Assert.Null(_store.Rows[Number].Person.Name);
+        Assert.Equal(0, _store.Rows[Number].Intake.NameAsks);
     }
 
     [Fact]
-    public async Task Approved_ask_name_again_is_used_once_approved()
-    {
-        Activate(TextKeys.AskNameAgain);
-        await Say("السلام عليكم");
-        Assert.Equal([TextKeys.AskNameAgain], (await Say("مش هقول")).Keys);
-    }
-
-    [Fact]
-    public async Task Known_number_with_a_full_name_is_never_asked_again()
+    public async Task Known_number_with_a_full_name_is_never_welcomed_again()
     {
         await Known();
         var (keys, _) = await Say("عايز أحجز استشارة");
         Assert.Equal([TextKeys.ConsultationOffer], keys);
-        Assert.DoesNotContain(TextKeys.WelcomeAskName, keys);
+        Assert.DoesNotContain(TextKeys.Welcome, keys);
     }
 
     // ---------- section 5.2: every intent ----------
@@ -240,8 +241,38 @@ public sealed class HazemFlowTests
     {
         Activate(GreetKeys);
         var (keys, d) = await Say("السلام عليكم");
-        Assert.Equal([TextKeys.GreetSalam, TextKeys.WelcomeAskName], keys);
+        Assert.Equal([TextKeys.GreetSalam, TextKeys.Welcome], keys);
         Assert.Equal("PROPOSED " + TextKeys.GreetSalam, d.Actions[0].Text);
+    }
+
+    [Fact]
+    public async Task The_welcome_comes_with_its_two_buttons_and_no_name_question() // v1.32 (B-01.1)
+    {
+        Activate(GreetKeys);
+        _texts[TextKeys.BtnServicesList] = new ApprovedText(TextKeys.BtnServicesList, 1, "خدمات المكتب", 20, true);
+        _texts[TextKeys.RowTell] = new ApprovedText(TextKeys.RowTell, 1, "أحكي مشكلتي", 24, true);
+        var (keys, d) = await Say("السلام عليكم");
+        Assert.Equal([TextKeys.GreetSalam, TextKeys.Welcome], keys);
+        var welcome = d.Actions[1];
+        Assert.Equal((ActionType.SendInteractive, Approved[TextKeys.Welcome]), (welcome.Type, welcome.Text));
+        Assert.Equal(InteractivePayload.Buttons, welcome.Interactive!.Kind);
+        Assert.Equal(["sv:menu", "sv:tell"], welcome.Interactive.Choices.Select(c => c.Id));
+        Assert.Equal(["خدمات المكتب", "أحكي مشكلتي"], welcome.Interactive.Choices.Select(c => c.Title));
+        var s = _store.Rows[Number];
+        Assert.Equal((IntakeState.OfferSent, ClientType.NewClient, 0), (s.Intake.State, s.Intake.ClientType, s.Intake.NameAsks));
+        Assert.Null(s.Intake.Pending);
+    }
+
+    [Fact]
+    public async Task A_greeting_the_list_does_not_know_is_answered_by_the_kind_the_ai_read() // v1.32: the AI's «courtesy»
+    {
+        Activate(GreetKeys);
+        Assert.Equal(CourtesyKind.None, Courtesy.Read("صباحين الخير").Kind); // the code's list finds nothing
+        Assert.Equal([TextKeys.GreetMorning, TextKeys.Welcome], (await Say("صباحين الخير")).Keys);
+        Assert.Equal([TextKeys.GreetMorning, TextKeys.ConsultationOffer], (await Say("صباحين الخير")).Keys); // later in the chat too
+
+        _ai.Down = true; // the AI down: no kind read, no greeting guessed
+        Assert.DoesNotContain(TextKeys.GreetMorning, (await Say("صباحين الخير")).Keys);
     }
 
     [Fact]
@@ -271,14 +302,23 @@ public sealed class HazemFlowTests
     {
         Activate(GreetKeys);
         var (keys, _) = await Say("مع السلامة");
-        Assert.Equal([TextKeys.GreetGoodbye, TextKeys.WelcomeAskName], keys);
+        Assert.Equal([TextKeys.GreetGoodbye, TextKeys.Welcome], keys);
     }
 
     [Fact]
     public async Task No_greeting_is_answered_while_its_text_is_not_approved()
     {
         var (keys, _) = await Say("السلام عليكم");
-        Assert.Equal([TextKeys.WelcomeAskName], keys);
+        Assert.Equal([TextKeys.Welcome], keys);
+    }
+
+    [Fact]
+    public async Task The_welcome_switched_off_never_leaves_the_first_message_unanswered()
+    {
+        _texts[TextKeys.Welcome] = _texts[TextKeys.Welcome] with { Active = false };
+        var (keys, d) = await Say("السلام عليكم");
+        Assert.Equal([TextKeys.ConsultationOffer], keys);
+        Assert.Equal(TextKeys.Welcome, Assert.Single(d.Effects!.Replies).InsteadOf);
     }
 
     [Fact]
@@ -306,56 +346,18 @@ public sealed class HazemFlowTests
         Assert.Contains(d.Notes!, n => n.Contains("fell back", StringComparison.Ordinal));
     }
 
-    [Fact]
-    public async Task A_refusal_is_never_saved_as_the_name()
-    {
-        await Say("السلام عليكم");
-        await Say("مش هقول اسمي");
-        Assert.Equal([TextKeys.ConsultationOffer], (await Say("مش هقول اسمي")).Keys);
-        var p = _store.Rows[Number].Person;
-        Assert.Null(p.Name);
-        Assert.Equal(false, p.FullNameProvided);
-    }
-
+    // v1.32: the refusal, the AI-down name and the photo instead of the name are at the booking's name question now
+    // (BookingFlowTests: the name asked at the booking).
     [Theory]
     [InlineData("عايز احجز استشارة")]
     [InlineData("مش هقول اسمي")]
     [InlineData("السلام عليكم يا استاذ")]
-    public async Task Ai_down_a_request_or_refusal_is_not_taken_as_a_name(string text)
+    public async Task Ai_down_a_request_or_refusal_after_the_welcome_is_not_taken_as_a_name(string text)
     {
         await Say("السلام عليكم");
         _ai.Down = true;
-        await Say(text);
+        Assert.NotEmpty((await Say(text)).Keys); // still an answer
         Assert.Null(_store.Rows[Number].Person.Name);
-    }
-
-    [Fact]
-    public async Task Ai_down_a_name_after_اسمي_is_taken()
-    {
-        await Say("السلام عليكم");
-        _ai.Down = true;
-        await Say("اسمي منى سعيد عبد الله حسن");
-        Assert.Equal("منى سعيد عبد الله حسن", _store.Rows[Number].Person.Name?.Normalized);
-        Assert.True(_store.Rows[Number].Person.HasFullName);
-    }
-
-    [Fact]
-    public async Task A_photo_instead_of_the_name_does_not_use_up_the_extra_ask()
-    {
-        await Say("السلام عليكم");
-        Assert.Equal([TextKeys.WelcomeAskName], (await Send(Image())).Keys); // asked again, not counted
-        Assert.Equal(1, _store.Rows[Number].Intake.NameAsks);
-        Assert.Equal([TextKeys.ConsultationOffer], (await Say("محمد أحمد")).Keys); // v1.29: the name after the photo is taken
-        Assert.Equal(false, _store.Rows[Number].Person.FullNameProvided);
-    }
-
-    [Fact]
-    public async Task Ai_down_a_typed_name_is_still_taken()
-    {
-        await Say("السلام عليكم");
-        _ai.Down = true;
-        await Say("محمد أحمد علي حسن");
-        Assert.True(_store.Rows[Number].Person.HasFullName);
     }
 
     [Fact]
@@ -420,7 +422,7 @@ public sealed class HazemFlowTests
     public async Task Open_to_all_answers_any_number()
     {
         _settings = new(new Dictionary<string, string> { [HazemResponder.OpenToAllKey] = "true" });
-        Assert.Equal([TextKeys.WelcomeAskName], (await Say("السلام عليكم", waId: "201000000099")).Keys);
+        Assert.Equal([TextKeys.Welcome], (await Say("السلام عليكم", waId: "201000000099")).Keys);
     }
 
     [Fact]
@@ -514,6 +516,8 @@ public sealed class HazemFlowTests
             RawClassification Info(string topic) => new("office_info", null, "unknown", null, 0.9, InfoTopic: topic);
             return t switch
             {
+                // v1.32: a greeting the code's list does not know; the AI reads its kind («courtesy»)
+                _ when t.Contains("صباحين", StringComparison.Ordinal) => R("greeting") with { Courtesy = "morning" },
                 // v1.22
                 _ when t.Contains("صلاه", StringComparison.Ordinal) || t.Contains("instructions", StringComparison.Ordinal) => R("off_topic"),
                 _ when t.Contains("اسمك", StringComparison.Ordinal) => Info("assistant"),

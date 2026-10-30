@@ -217,7 +217,7 @@ public sealed class Task06ApiTests(TestDatabase db) : IAsyncLifetime
         await db.ExecAsync("UPDATE hazem.approved_texts SET active = true WHERE source = 'proposal TASK 06' AND version = (SELECT max(m.version) FROM hazem.approved_texts m WHERE m.key = approved_texts.key)");
         await Named(First);
         var none = await Say(First, "المكتب فين؟");
-        Assert.StartsWith("الأستاذ يقدر يشوف الموضوع", Text(none)); // never half a message: the offer alone
+        Assert.StartsWith("المستشار يقدر يشوف الموضوع", Text(none)); // never half a message: the offer alone
         Assert.Equal("office_info|address|1", await db.ScalarAsync<string>("""
             SELECT (SELECT intent || '|' || info_topic FROM hazem.classifications ORDER BY created_at DESC LIMIT 1) || '|' ||
                    (SELECT count(*) FROM hazem.staff_tasks WHERE type = 'office_info_missing')
@@ -233,7 +233,7 @@ public sealed class Task06ApiTests(TestDatabase db) : IAsyncLifetime
             """);
         var d = await Say(First, "المكتب فين؟");
         Assert.StartsWith("📍 عنوان المكتب: 183 شارع التحرير، وسط البلد، القاهرة.\nالخريطة: https://maps.example.test/office", Text(d));
-        Assert.Contains("الأستاذ يقدر يشوف الموضوع", Text(d));
+        Assert.Contains("المستشار يقدر يشوف الموضوع", Text(d));
     }
 
     [Fact]

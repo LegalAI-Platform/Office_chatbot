@@ -14,7 +14,7 @@ namespace Office.Infrastructure.Booking;
 /// <summary>
 /// What the client is told outside his own turn, from the worker (never inside a panel request):
 /// <list type="bullet">
-/// <item>B-22: the office cancelled: «الأستاذ عنده ظرف…» with the nearest free times and «استرداد كامل» when he had
+/// <item>B-22: the office cancelled: «المستشار عنده ظرف…» with the nearest free times and «استرداد كامل» when he had
 /// paid, the times alone when it was only held (1.13), the text alone and a task (office_cancelled) when booking
 /// from WhatsApp is off.</item>
 /// <item>B-08.6 (1.13): the one reminder before a hold runs out, and the hold that ran out (hazem.booking_due).</item>

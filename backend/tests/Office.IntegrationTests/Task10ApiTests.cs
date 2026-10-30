@@ -121,7 +121,7 @@ public sealed class Task10ApiTests(TestDatabase db) : IAsyncLifetime
         await Say("محمد أحمد علي حسن");
         Assert.Contains("ابعتلي صورة العقد", (string?)(await Say("عايز حد يراجعلي عقد")).Single()!["text"]);
         var pages = await Turn(File("image", "image/jpeg", "p1"), File("document", "application/pdf", "p2"));
-        Assert.StartsWith("استلمت ✅. الأستاذ هيراجع", (string?)Assert.Single(pages)!["text"]);
+        Assert.StartsWith("استلمت ✅. المستشار هيراجع", (string?)Assert.Single(pages)!["text"]);
         return await db.ScalarAsync<Guid>("SELECT id FROM hazem.service_orders");
     }
 
@@ -160,7 +160,7 @@ public sealed class Task10ApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal("in_progress", await db.ScalarAsync<string>("SELECT state FROM hazem.service_orders"));
         sends = _factory.N8n.Requests.Count;
         await Notices();
-        Assert.Contains("الأستاذ بدأ", (string?)SentSince(sends).Single()["text"]);
+        Assert.Contains("المستشار بدأ", (string?)SentSince(sends).Single()["text"]);
 
         var up = (await (await staff.PostAsJsonAsync($"/api/panel/services/{id}/upload", new { filename = "مراجعة العقد.pdf" }, Ct))
             .Content.ReadFromJsonAsync<JsonNode>(Ct))!;
@@ -248,7 +248,7 @@ public sealed class Task10ApiTests(TestDatabase db) : IAsyncLifetime
         await lawyer.PostAsJsonAsync($"/api/panel/services/{id}/price", new { price = 1500, exception = false, due_on = "2026-11-25", delivery = "call" }, Ct);
         await Turn(File("image", "image/jpeg", "r1"));
         await lawyer.PostAsJsonAsync($"/api/panel/payments/{id}/review", new { state = "verified", received = 1500 }, Ct);
-        await Notices(); // «الأستاذ بدأ»
+        await Notices(); // «المستشار بدأ»
         Assert.Equal(HttpStatusCode.NoContent, (await lawyer.PostAsJsonAsync($"/api/panel/services/{id}/deliver", new { }, Ct)).StatusCode);
         var sends = _factory.N8n.Requests.Count;
         Assert.Equal(1, await Notices());

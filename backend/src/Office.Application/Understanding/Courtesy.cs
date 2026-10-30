@@ -8,6 +8,8 @@ namespace Office.Application.Understanding;
 // DECISIONS v1.21 (B-01.6): the greetings and the courtesies a client writes are answered in kind, read by code (never
 // the AI): «السلام عليكم» gets «وعليكم السلام…» before Hazem's answer, «صباح الخير» «صباح النور», and so on. A message
 // that is only a goodbye gets the goodbye alone. The thanks stay the classifier's (thanks_or_closing, B-01).
+// v1.32: the code's list first; when it finds nothing, the kind the AI read (its «courtesy» field), so a greeting spelled
+// another way is answered too. The answer is the approved text in both.
 
 /// <summary>What the client's greeting asks back, in the order Hazem answers one (the first that matches).</summary>
 public enum CourtesyKind
@@ -43,6 +45,13 @@ public sealed record CourtesyMatch(CourtesyKind Kind, bool Only)
         CourtesyKind.Goodbye => TextKeys.GreetGoodbye,
         _ => null,
     };
+
+    /// <summary>
+    /// v1.32: the kind the AI read when the code's list did not know the words («صباحين الخير», a typo): only the kind is
+    /// taken, the answer is still the approved text. Null or a value outside the list is none.
+    /// </summary>
+    public static CourtesyKind FromAi(string? code) =>
+        Enum.GetValues<CourtesyKind>().Where(k => Domain.Common.StateName.Of(k) == code).DefaultIfEmpty(CourtesyKind.None).First();
 
     /// <summary>A goodbye with nothing else: answered alone, without the AI or the rest of the flow.</summary>
     public bool EndsTheChat => Only && Kind is CourtesyKind.Goodbye or CourtesyKind.GoodNight;
@@ -147,15 +156,15 @@ public static partial class Courtesy
     private static partial Regex OccasionRegex();
 
     // «صباح الخير / الفل / الورد…»; Latin.
-    [GeneratedRegex(@"(?<!\S)(?:صباح (?:الخير|الفل|الورد|النور|الياسمين|العسل|الجمال)|(?:good )?morning|sabah el ?(?:kheir|khair|5eir|5er))(?!\S)")]
+    [GeneratedRegex(@"(?<!\S)(?:(?:صباح|صيباح|صباحو) (?:الخير|الفل|الورد|النور|الياسمين|العسل|الجمال)|(?:good )?morning|sabah el ?(?:kheir|khair|5eir|5er))(?!\S)")]
     private static partial Regex MorningRegex();
 
     // «مساء الخير / الفل…» (also «مسا»); Latin.
-    [GeneratedRegex(@"(?<!\S)(?:مساء? (?:الخير|الفل|الورد|النور|الياسمين|العسل|الجمال)|good (?:evening|afternoon)|masa el ?(?:kheir|khair|5eir|5er))(?!\S)")]
+    [GeneratedRegex(@"(?<!\S)(?:(?:مساء?|مسايو|مساو|مسي) (?:الخير|الفل|الورد|النور|الياسمين|العسل|الجمال)|good (?:evening|afternoon)|masa el ?(?:kheir|khair|5eir|5er))(?!\S)")]
     private static partial Regex EveningRegex();
 
     // «إزيك»، «عامل إيه»، «أخبارك»…
-    [GeneratedRegex(@"(?<!\S)(?:ازيك|ازيكم|ازيكو|ازيكي|ازي حضرتك|ازاي حضرتك|عامل ايه|عامله ايه|عاملين ايه|عامل اي|اخبارك|اخبار حضرتك|ايه الاخبار|كيفك|كيف حالك|كيف الحال|how are (?:you|u)|ezayak|ezayk|3amel eh)(?!\S)")]
+    [GeneratedRegex(@"(?<!\S)(?:ازيك|ازيكك|ازايك|ازيكم|ازيكو|ازيكي|ازي حضرتك|ازاي حضرتك|عامل ايه|عامله ايه|عاملين ايه|عامل اي|اخبارك|اخبار حضرتك|ايه الاخبار|كيفك|كيف حالك|كيف الحال|how are (?:you|u)|ezayak|ezayk|3amel eh)(?!\S)")]
     private static partial Regex HowAreYouRegex();
 
     // «تصبح على خير».

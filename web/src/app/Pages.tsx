@@ -28,7 +28,7 @@ export function SettingsPage() {
     { to: "/account", icon: "account", title: "حسابي", text: "اسمك وإيميلك ودورك في المكتب.", show: true },
     { to: "/change-password", icon: "key", title: "تغيير كلمة السر", text: "كلمة سر جديدة، وكل الأجهزة التانية بتخرج.", show: true },
     { to: "/users", icon: "users", title: "الحسابات", text: "زوّد موظف، اقفل حساب، أو اعمل كلمة سر مؤقتة.", show: can(me, "users.manage") },
-    { to: "/lists", icon: "clients", title: "قوايم المكتب", text: "الموكلين الحاليين، وقايمة الأستاذ، والممنوعين" + (can(me, "conversations.unmute") ? "، والمحادثات الساكتة." : "."), show: can(me, "lists.manage") },
+    { to: "/lists", icon: "clients", title: "قوايم المكتب", text: "الموكلين الحاليين، وقايمة المستشار، والممنوعين" + (can(me, "conversations.unmute") ? "، والمحادثات الساكتة." : "."), show: can(me, "lists.manage") },
     { to: "/texts", icon: "chat", title: "نصوص حازم", text: "الكلام اللي حازم بيرد بيه، وكل نسخة قديمة محفوظة.", show: can(me, "texts.manage") },
     { to: "/prices", icon: "receipt", title: "الأسعار", text: "الأسعار اللي حازم بيقولها وبيطلبها؛ التعديل للأستاذ والمدير.", show: true },
     { to: "/testing", icon: "refresh", title: "أدوات التجربة", text: "حازم ينسى رقم من أرقام التجربة، علشان تجرّب المحادثة من الأول.", show: can(me, "testing.forget") },

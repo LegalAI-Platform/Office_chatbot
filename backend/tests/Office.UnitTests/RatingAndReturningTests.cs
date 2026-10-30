@@ -243,13 +243,13 @@ public sealed class RatingAndReturningFlowTests
     private async Task Known()
     {
         await Say("السلام عليكم");
-        await Say("محمد أحمد علي حسن"); // the services list (B-01.3)
+        await Say("محمد أحمد علي حسن"); // v1.32: after the welcome, the name told on its own: the services list
     }
 
     // ---------- B-01.7 ----------
 
     [Fact]
-    public async Task A_returning_client_gets_welcome_back_with_his_first_name_then_the_services_list()
+    public async Task A_returning_client_gets_welcome_back_with_his_first_name_then_the_two_buttons()
     {
         await Known();
         var before = _rows[Number].Intake.Id;
@@ -257,15 +257,27 @@ public sealed class RatingAndReturningFlowTests
             [new RequestItem(RequestItem.Appointment, "completed", true, DateTimeOffset.UtcNow.AddDays(-1))]);
 
         var d = await Say("صباح الخير");
-        Assert.Equal([TextKeys.WelcomeBack, TextKeys.ServicesMenu], Keys(d));
-        Assert.Equal("أهلًا بحضرتك تاني يا محمد 👋", d.Actions[0].Text); // its own message, before the list
-        Assert.Equal(InteractivePayload.List, d.Actions[1].Interactive!.Kind);
+        Assert.Equal([TextKeys.WelcomeBack, TextKeys.WelcomeChoose], Keys(d)); // v1.32: the welcome's question alone
+        Assert.Equal("أهلًا بحضرتك تاني يا محمد 👋", d.Actions[0].Text); // its own message, before the question
+        Assert.Equal(InteractivePayload.Buttons, d.Actions[1].Interactive!.Kind);
+        Assert.Equal(["sv:menu", "sv:tell"], d.Actions[1].Interactive!.Choices.Select(c => c.Id));
         var s = d.Effects!.State;
         Assert.NotEqual(before, s.Intake.Id); // a new request for the same person, the old one closed (nothing deleted)
         Assert.Equal(IntakeState.Closed, Assert.Single(s.ClosedIntakes).State);
         Assert.Equal((ClientType.NewClient, IntakeState.OfferSent), (s.Intake.ClientType!.Value, s.Intake.State));
         Assert.Equal(before, _history.AskedFor);
-        Assert.DoesNotContain(TextKeys.WelcomeAskName, Keys(d)); // no name question
+        Assert.DoesNotContain(TextKeys.AskNameBooking, Keys(d)); // no name question
+    }
+
+    [Fact]
+    public async Task A_returning_client_who_never_gave_his_name_gets_the_welcome_of_a_new_one() // v1.32
+    {
+        await Say("السلام عليكم"); // the welcome; no name asked
+        _history.Facts = new IntakeFacts(TimeSpan.FromDays(8), []);
+        var d = await Say("صباح الخير");
+        Assert.Equal([TextKeys.Welcome], Keys(d)); // no «أهلًا بحضرتك تاني يا …» without a first name
+        Assert.Equal(["sv:menu", "sv:tell"], d.Actions[0].Interactive!.Choices.Select(c => c.Id));
+        Assert.Single(d.Effects!.State.ClosedIntakes);
     }
 
     [Fact]
@@ -297,6 +309,7 @@ public sealed class RatingAndReturningFlowTests
     {
         await Known();
         _rows[Number].Conversation.Mute(Office.Domain.Common.Actor.System);
+        _history.AskedFor = null; // v1.32: Known()'s second message was already checked (the name is no longer needed for it)
         _history.Facts = new IntakeFacts(TimeSpan.FromDays(30), []);
         var d = await Say("صباح الخير");
         Assert.Empty(d.Actions);
@@ -362,7 +375,7 @@ public sealed class RatingAndReturningFlowTests
     {
         public IntakeFacts Facts { get; set; } = new(null, []);
 
-        public Guid? AskedFor { get; private set; }
+        public Guid? AskedFor { get; set; }
 
         public Task<IntakeFacts> FactsAsync(Guid personId, string waId, Guid intakeId, CancellationToken ct)
         {

@@ -16,7 +16,7 @@ import { ACCEPT, deliverFile, fileUrl, inRange, services, startPrice, type Servi
 const TONE: Record<string, string> = {
   collecting: "grey", awaiting_price: "orange", awaiting_payment: "blue", in_progress: "blue", delivered: "green", closed: "grey",
 };
-const DELIVERY: Record<string, string> = { file: "ملف على واتساب", call: "مكالمة من الأستاذ" };
+const DELIVERY: Record<string, string> = { file: "ملف على واتساب", call: "مكالمة من المستشار" };
 
 const SHOWS: Show[] = ["open", "done"];
 const listQuery = (show: Show) => queryOptions({ queryKey: ["services", show], queryFn: () => services.list(show) });

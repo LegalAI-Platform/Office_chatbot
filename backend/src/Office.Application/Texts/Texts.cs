@@ -20,7 +20,11 @@ public interface IApprovedTexts
 public static class TextKeys
 {
     // From DECISIONS (v1.4, unchanged in v1.5), word for word (active).
-    public const string WelcomeAskName = "welcome_ask_name";
+    public const string WelcomeAskName = "welcome_ask_name"; // off since v1.32 (the name is asked at the booking)
+    // v1.32 (B-01.1): the welcome with two buttons; the question alone after «أهلًا بحضرتك تاني»; the name at the booking.
+    public const string Welcome = "welcome";
+    public const string WelcomeChoose = "welcome_choose";
+    public const string AskNameBooking = "ask_name_booking";
     public const string ConsultationOffer = "consultation_offer";
     public const string LegalQuestion = "legal_question";
     public const string UrgentPrice = "urgent_price";

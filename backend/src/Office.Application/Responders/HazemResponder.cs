@@ -214,6 +214,10 @@ public sealed class HazemResponder(
                 {
                     plan.Say(TextKeys.ServicesTell);
                 }
+                else if (row.IsMenu)
+                {
+                    flow.ShowServices(); // v1.32: the welcome's «خدمات المكتب»
+                }
                 else
                 {
                     flow = new Flow(turn, state, list, row.AsClassification, plan, settings.Flag(HandoffEnabledKey),
@@ -279,6 +283,13 @@ public sealed class HazemResponder(
                         : null;
                     flow = new Flow(turn, state, list, classification, plan, settings.Flag(HandoffEnabledKey), bookingOn ? bookingSettings : null,
                         servicesOn, urfOn, urfOpen, office, ageRefusal, returning);
+                    // v1.32: the list did not know the greeting («صباحين الخير»): the kind the AI read, answered the same way
+                    if (greet is null && classification is { IsFallback: false, Courtesy: not CourtesyKind.None } read
+                        && new CourtesyMatch(read.Courtesy, false).TextKey is { } ak && texts.TryGetValue(ak, out var at) && at.Active)
+                    {
+                        greet = ak;
+                    }
+
                     if (greet is not null && classification?.Intent != Intent.Abusive)
                     {
                         plan.Say(greet); // first, so it opens Hazem's answer
@@ -398,7 +409,7 @@ public sealed class HazemResponder(
         CancellationToken ct)
     {
         var open = state.Intake;
-        if (list.ExistingClient is not null || list.LawyerDirect || !state.Person.NameSettled || !open.IsClassified
+        if (list.ExistingClient is not null || list.LawyerDirect || !open.IsClassified
             || open.ClientType != ClientType.NewClient
             || !ReturningClient.Finished(await history!.FactsAsync(state.Person.Id, turn.WaId, open.Id, ct), now, ReturningClient.Quiet(settings)))
         {
@@ -529,9 +540,12 @@ public sealed class HazemResponder(
             Intake.RecordMatter(typed.Matter is { } m ? Classification.Code(m) : null,
                 typed.Subtype is { } st ? Classification.Code(st) : null);
 
-        /// <summary>A new or current client past the name question; never the lists' lawyer or the roles (B-14).</summary>
+        /// <summary>
+        /// A new or current client past the first message (v1.32: the name is no longer needed first); never the lists'
+        /// lawyer or the roles (B-14).
+        /// </summary>
         public bool MayOrder =>
-            State.Person.NameSettled && !list.LawyerDirect
+            !list.LawyerDirect
             && Intake.State is not (IntakeState.New or IntakeState.AwaitingName)
             && Intake.ClientType is not (ClientType.Colleague or ClientType.Press or ClientType.Vendor or ClientType.LawyerDirect);
 
@@ -549,6 +563,7 @@ public sealed class HazemResponder(
                 'm' when choice.Service == BookingService.PhoneVideo => new AskCallApp(), // 1.25 (B-23): where the lawyer calls
                 'm' => new OfferTimes(choice.Service!, null, TextKeys.BookingChooseSlot, null),
                 'v' => new OfferTimes(BookingService.PhoneVideo, null, TextKeys.BookingChooseSlot, null, App: choice.App),
+                's' when !State.Person.NameSettled => AskNameFor(BookingChoice.Pick(choice.Service!, choice.At!.Value, choice.App)),
                 's' => new PickTime(choice.Service!, choice.At!.Value, choice.App),
                 'n' => new OfferTimes(choice.Service!, choice.At, TextKeys.BookingChooseSlot, null, App: choice.App),
                 'r' => new StartChange(choice.AppointmentId!.Value),
@@ -560,6 +575,92 @@ public sealed class HazemResponder(
                 _ => new RefundIt(choice.AppointmentId!.Value),
             };
         }
+
+        /// <summary>v1.32 (B-02): a time picked before the name: the name is asked, the time waits for it (no hold yet).</summary>
+        private BookingWork? AskNameFor(string pickId)
+        {
+            Intake.AskNameFor(pickId);
+            plan.Say(TextKeys.AskNameBooking);
+            return null;
+        }
+
+        /// <summary>
+        /// v1.32 (B-02): the answer to the name asked at the booking. A name (any length) books the time waiting for it; anything
+        /// else asks once more, then the time is booked without the name (as B-02 carried on before).
+        /// </summary>
+        private void AnswerNameForPick(string pickId)
+        {
+            if (c is null)
+            {
+                // A photo or file instead of the name is not a refusal (B-02): answer the file and ask again without
+                // using up the one extra ask; the time keeps waiting.
+                AnswerMediaOnly();
+                plan.Say(TextKeys.AskNameAgain, TextKeys.AskNameBooking);
+                return;
+            }
+
+            PersonName? name = null;
+            if (c.FullName is { } extracted && PersonName.TryParse(extracted, out var fromAi, minWords: 1))
+            {
+                name = fromAi;
+            }
+            else if (c.Intent == Intent.ProvideName || c.IsFallback)
+            {
+                name = NameGuess.TryRead(PlainText(), out var typed) ? typed : null;
+            }
+
+            if (name is null && IsRequest(c.Intent))
+            {
+                // Another request instead of the name («بكام؟»، «عايز أكلم موظف»): it is answered, and the time is let go
+                // (a new pick asks the name again).
+                Intake.TakePending();
+                AnswerTurn();
+                return;
+            }
+
+            if (name is not null)
+            {
+                State.Person.GiveName(name);
+            }
+            else if (Intake.MayAskNameAgain)
+            {
+                Intake.AskNameFor(pickId);
+                plan.Say(TextKeys.AskNameAgain, TextKeys.AskNameBooking);
+                return;
+            }
+            else
+            {
+                State.Person.ContinueWithoutFullName();
+            }
+
+            Intake.TakePending();
+            var pick = BookingChoice.Parse(pickId)!;
+            work = new PickTime(pick.Service!, pick.At!.Value, pick.App);
+        }
+
+        /// <summary>
+        /// v1.32 (B-01.1): the welcome with its two buttons, «خدمات المكتب» (the services list) and «أحكي مشكلتي». After
+        /// «أهلًا بحضرتك تاني يا …» (<paramref name="back"/>) the question alone. Without the services, the consultation offer.
+        /// </summary>
+        private void Welcome(bool back = false)
+        {
+            if (!MayOrder)
+            {
+                Offer();
+                return;
+            }
+
+            var key = back ? TextKeys.WelcomeChoose : TextKeys.Welcome;
+            plan.Ask(key, new ReplyChoices(InteractivePayload.Buttons,
+            [
+                new ReplyChoice(ServiceRow.Id(ServiceRow.Menu), TextKeys.BtnServicesList),
+                new ReplyChoice(ServiceRow.Id(ServiceRow.Tell), TextKeys.RowTell),
+            ]), fallback: TextKeys.ConsultationOffer); // never a silent first answer while the welcome is switched off
+            Check(Intake.MoveTo(IntakeState.OfferSent));
+        }
+
+        /// <summary>v1.32: the welcome's «خدمات المكتب» button.</summary>
+        public void ShowServices() => ServicesMenu();
 
         /// <summary>
         /// TASK 09 (B-05): a receipt image was attached (<paramref name="outcome"/>), or a PDF came while a
@@ -792,28 +893,55 @@ public sealed class HazemResponder(
                     return;
                 }
 
+                // v1.32: a client who never gave his name is welcomed as a new one
                 var first = ReturningClient.FirstName(State.Person);
-                plan.Say(TextKeys.WelcomeBack, Fill: first is null ? null : new Dictionary<string, string> { ["first_name"] = first });
+                if (first is not null)
+                {
+                    plan.Say(TextKeys.WelcomeBack, Fill: new Dictionary<string, string> { ["first_name"] = first });
+                }
+
                 if (c is not null && IsRequest(c.Intent))
                 {
                     Answer(c);
                 }
                 else
                 {
-                    ServicesMenu();
+                    Welcome(back: first is not null);
                 }
 
                 AnswerMediaProblems();
                 return;
             }
 
-            // B-01.1: the first message from an unknown number always gets the welcome and the name
-            // question; whatever was asked is kept and answered after the name (B-01.4).
-            if ((firstContact || Intake.State == IntakeState.New) && !State.Person.NameSettled)
+            // v1.32 (B-02): the name asked at the booking: this message answers it, and the time waiting is booked.
+            if (Intake.PickWaitingForName is { } pickId && !State.Person.NameSettled)
             {
-                RememberRequest();
-                Check(Intake.AskForName());
-                plan.Say(TextKeys.WelcomeAskName);
+                AnswerNameForPick(pickId);
+                return;
+            }
+
+            // v1.32 (B-01.1): the first message from an unknown number: no name question any more (it is asked at the
+            // booking). A request is answered at once; anything else (a greeting, «ألو», a name, a photo) gets the welcome
+            // with its two buttons. A name said on the way is kept.
+            // v1.32: a name the client tells on the way (any message, before the booking asks it) is kept
+            var named = !State.Person.NameSettled && Intake.State != IntakeState.AwaitingName
+                        && c?.FullName is { } said && PersonName.TryParse(said, out var given, minWords: 1) && State.Person.GiveName(given);
+            if ((firstContact || Intake.State == IntakeState.New) && (!State.Person.NameSettled || named))
+            {
+                Check(Intake.Classify(TypeOf()));
+                if (AnswerByType())
+                {
+                    return;
+                }
+
+                if (Intake.ClientType == ClientType.ExistingClient || (c is not null && (IsRequest(c.Intent) || c.Intent == Intent.Abusive)))
+                {
+                    AnswerTurn();
+                    return;
+                }
+
+                Welcome();
+                AnswerMediaProblems();
                 return;
             }
 
@@ -1109,6 +1237,10 @@ public sealed class HazemResponder(
                     break;
                 case Intent.RescheduleOrCancel:
                     HandToOffice(TextKeys.RescheduleOrCancel, PendingTask.RescheduleOrCancel);
+                    break;
+                case Intent.ProvideName when MayOrder:
+                    // v1.32: a name told on its own (kept in Respond), after the welcome or an answer: «تحت أمرك، محتاج إيه؟»
+                    plan.Say(TextKeys.Greeting, TextKeys.ConsultationOffer);
                     break;
                 case Intent.Greeting:
                 case Intent.ProvideName:

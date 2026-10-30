@@ -43,7 +43,7 @@ export function ListsPage() {
     <div className="grid gap-4">
       <h1 className="text-2xl">قوايم المكتب</h1>
       <p className="max-w-2xl text-sm text-ink-soft">
-        حازم بيستخدم القوايم دي علشان يعرف مين بيكلمه. لو الرقم في أكتر من قايمة: الممنوعين الأول، بعدين قايمة الأستاذ، بعدين الموكلين الحاليين.
+        حازم بيستخدم القوايم دي علشان يعرف مين بيكلمه. لو الرقم في أكتر من قايمة: الممنوعين الأول، بعدين قايمة المستشار، بعدين الموكلين الحاليين.
       </p>
 
       <div className="flex flex-wrap gap-2" role="group" aria-label="القايمة">

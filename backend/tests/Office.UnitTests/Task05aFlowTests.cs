@@ -40,7 +40,7 @@ public sealed class Task05aFlowTests
         }
 
         Add(TextKeys.ExistingOrNew, "حضرتك بتتابع موضوع قائم مع المكتب، ولا عايز استشارة في موضوع جديد؟");
-        Add(TextKeys.AskTopic, "ولو تحب، قولّي باختصار الموضوع عن إيه عشان الأستاذ يبقى عارفه.");
+        Add(TextKeys.AskTopic, "ولو تحب، قولّي باختصار الموضوع عن إيه عشان المستشار يبقى عارفه.");
         Add(TextKeys.TopicReceived, "تمام، وصلت ✅");
         Add(TextKeys.AbuseWarning, "T:abuse", active: false);
         Add(TextKeys.LawyerDirectReceived, "T:lawyer", active: false);
@@ -158,13 +158,16 @@ public sealed class Task05aFlowTests
     public async Task A_colleague_is_recognised_from_their_words_and_gets_a_task()
     {
         Activate(TextKeys.ColleagueReceived);
-        await Say("السلام عليكم أنا محامي", R("greeting", role: "lawyer_colleague"));
-        var (keys, d) = await Say("محمد أحمد علي حسن", new("provide_name", null, "unknown", "محمد أحمد علي حسن", 0.95));
+        // v1.32: recognised on the first message (no name question before it any more), never the welcome
+        var (keys, d) = await Say("السلام عليكم أنا محامي", R("greeting", role: "lawyer_colleague"));
         Assert.Equal([TextKeys.ColleagueReceived], keys);
         Assert.Equal(ClientType.Colleague, S.Intake.ClientType);
         Assert.Equal(PendingTask.ExternalContact, Assert.Single(d.Effects!.Tasks).Kind);
 
         // Later messages wait for the staff member who has the task: no repeated reply, no new task.
+        var (named, d1) = await Say("محمد أحمد علي حسن", new("provide_name", null, "unknown", "محمد أحمد علي حسن", 0.95));
+        Assert.Empty(named);
+        Assert.Empty(d1.Effects!.Tasks);
         var (again, d2) = await Say("بخصوص القضية المشتركة", R("existing_matter", role: "lawyer_colleague"));
         Assert.Empty(again);
         Assert.Empty(d2.Effects!.Tasks);
@@ -219,9 +222,7 @@ public sealed class Task05aFlowTests
     public async Task Unknown_topic_the_offer_carries_the_question_once()
     {
         var (keys, _) = await Say("السلام عليكم عايز احجز", R("consultation_request"));
-        Assert.Equal([TextKeys.WelcomeAskName], keys);
-        var (afterName, _) = await Say("محمد أحمد علي حسن", new("provide_name", null, "unknown", "محمد أحمد علي حسن", 0.95));
-        Assert.Equal([TextKeys.ConsultationOffer, TextKeys.AskTopic], afterName);
+        Assert.Equal([TextKeys.ConsultationOffer, TextKeys.AskTopic], keys); // v1.32: answered at once, no name first
         Assert.Equal([TextKeys.ConsultationOffer], (await Say("عايز احجز", R("consultation_request"))).Keys); // never twice
     }
 
@@ -239,7 +240,7 @@ public sealed class Task05aFlowTests
     {
         await Say("السلام عليكم، مضيت على إيصال أمانة وبيهددني يرفع قضية", R("describe_matter", "cheques_trust_receipts"));
         var (keys, _) = await Say("محمد أحمد علي حسن", new("provide_name", null, "unknown", "محمد أحمد علي حسن", 0.95));
-        Assert.Equal([TextKeys.ConsultationOffer], keys);
+        Assert.Equal([TextKeys.Greeting], keys); // v1.32: the offer went with the first message; the name alone, the short reply
         Assert.Equal("cheques_trust_receipts", S.Intake.MatterType);
     }
 

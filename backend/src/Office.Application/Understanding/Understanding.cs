@@ -146,7 +146,8 @@ public sealed record RawClassification(
     string? MatterSubtype = null,
     string? SenderRole = null,
     string? InfoTopic = null,
-    string? Scope = null);
+    string? Scope = null,
+    string? Courtesy = null);
 
 /// <summary>One call to the classifier: the answer, or why there is none, plus what it cost.</summary>
 public sealed record ClassifierOutcome(
@@ -184,7 +185,8 @@ public sealed record Classification(
     SenderRole Role = SenderRole.Client,
     InfoTopic? Topic = null,
     Scope Scope = Scope.Office,
-    string? BackstopFor = null)
+    string? BackstopFor = null,
+    CourtesyKind Courtesy = CourtesyKind.None)
 {
     /// <summary>
     /// 0032: the AI failed for this reason and <see cref="Backstop"/> read the message by code instead (the intent is
@@ -251,7 +253,7 @@ public sealed record Classification(
         }
 
         return new(intent, service, mode, string.IsNullOrWhiteSpace(a.FullName) ? null : a.FullName.Trim(), a.Confidence.Value, null, call,
-            matter, subtype, role, intent == Intent.OfficeInfo ? topic : null, scope);
+            matter, subtype, role, intent == Intent.OfficeInfo ? topic : null, scope, Courtesy: CourtesyMatch.FromAi(a.Courtesy));
     }
 
     public static string Code<T>(T value)
