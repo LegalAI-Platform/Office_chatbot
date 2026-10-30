@@ -1,5 +1,7 @@
 # The server (TASK 14)
 
+The design and the reasons are in [`../deployment.md`](../deployment.md); this file is the commands.
+
 The test server: a Hostinger VPS **KVM 2** (2 vCPU, 8 GB, 96 GB), Ubuntu 24.04, Paris. It runs the same stack as
 the owner's PC, from the images the CI published (`ghcr.io/legalai-platform/office-*`), never built there. Still the
 test setup: Meta's test number and the test recipients only. The real number and clients come in TASK 14 part 2.
