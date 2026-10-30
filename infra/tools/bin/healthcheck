@@ -207,8 +207,8 @@ check "no turn waits more than 10 minutes to reach Chatwoot" \
   sql_equals office "SELECT count(*) FROM hazem.chatwoot_turns WHERE state = 'failed' AND updated_at < now() - interval '10 minutes'" "0"
 check "no staff reply is stuck while sending" \
   sql_equals office "SELECT count(*) FROM hazem.chatwoot_replies WHERE state = 'sending' AND created_at < now() - interval '5 minutes'" "0"
-check "no active approved text promises a contact time (B-06 promises wait for the alerts, TASK 07c)" \
-  sql_equals office "SELECT count(*) FROM hazem.approved_texts WHERE active AND text ~ '(خلال ساعة|الساعة 10|هيتواصل|هيرد عليك)'" "0"
+check "no active approved text promises a contact time (B-06 promises wait for the alerts, TASK 07c; rating_low names no time, v1.31)" \
+  sql_equals office "SELECT count(*) FROM hazem.approved_texts WHERE active AND text ~ '(خلال ساعة|الساعة 10|هيتواصل|هيرد عليك)' AND key <> 'rating_low'" "0"
 
 echo "== Who may receive messages (CLAUDE.md, migration 0006)"
 check "every send is limited to whatsapp.test_recipients unless the owner decided otherwise (setting exists)" \
@@ -308,6 +308,14 @@ if [[ "$(psql_super office -c "SELECT count(*) FROM hazem.staff_tasks WHERE type
   warn "a reminder could not reach a client (outside the 24 hours the M-03 templates need Meta's approval): the office reminds by phone (the tasks)"
 fi
 
+echo "== The service rating (DECISIONS v1.31 B-26 / M-03)"
+check "table service_ratings exists" \
+  sql_equals office "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'hazem' AND table_name = 'service_ratings'" "1"
+check "office_app (n8n) cannot read the ratings" \
+  expect_fail psql_as office_app "$OFFICE_APP_PASSWORD" office -c 'SELECT 1 FROM hazem.service_ratings LIMIT 1'
+check "no rating forgotten by the worker (one more than 10 minutes past its time)" \
+  sql_equals office "SELECT count(*) FROM hazem.service_ratings WHERE (state = 'scheduled' AND due_at < now() - interval '10 minutes') OR (state = 'sending' AND updated_at < now() - interval '10 minutes')" "0"
+
 echo "== The prices and the office's questions (TASK 06, DECISIONS v1.17 B-20 / B-23)"
 check "the price list has its 10 lines, each a whole number from 1 to 1,000,000 (price.*)" \
   sql_equals office "SELECT count(*) FROM hazem.settings WHERE key IN ('price.phone_video', 'price.office', 'price.urgent', 'price.review_min',
@@ -377,6 +385,8 @@ if [[ "$provider" == waha ]]; then
 fi
 
 echo "== Migrations"
+check "migration 0033 (the returning client and the service rating) is applied" \
+  sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0033'" "1"
 check "migration 0025 (forget one test number) is applied" \
   sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0025'" "1"
 check "migration 0024 (off-topic, who is who, one specific service) is applied" \

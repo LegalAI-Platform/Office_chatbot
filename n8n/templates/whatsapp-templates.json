@@ -1,5 +1,5 @@
 {
-  "_comment": "M-03 templates from docs/decisions/DECISIONS-v1.4.md (10 templates). Source of truth for META-WA-TEMPLATES-SUBMIT (its 'Template definitions' node holds the same list). Texts marked 'adjusted' were changed only because Meta rejects a body that starts or ends with a variable. Removed in v1.4: booking_followup, staff_contact_10am, payment_confirmed_booking, payment_rejected, urgent_10am.",
+  "_comment": "M-03 templates from docs/decisions/DECISIONS-v1.4.md (11 templates). Source of truth for META-WA-TEMPLATES-SUBMIT (its 'Template definitions' node holds the same list). Texts marked 'adjusted' were changed only because Meta rejects a body that starts or ends with a variable. Removed in v1.4: booking_followup, staff_contact_10am, payment_confirmed_booking, payment_rejected, urgent_10am. Added in v1.31 (B-26): service_rating, the service rating outside the 24-hour window, five quick replies read by code.",
   "templates": [
     {
       "name": "reminder_day_before",
@@ -205,6 +205,49 @@
               ]
             ]
           }
+        }
+      ]
+    },
+    {
+      "name": "service_rating",
+      "language": "ar",
+      "category": "UTILITY",
+      "components": [
+        {
+          "type": "BODY",
+          "text": "شكرًا إن حضرتك اخترت مكتب الأستاذ سعد في {{1}}. رأيك يهمنا عشان نحسّن خدمتنا، ممكن تقيّم الخدمة؟",
+          "example": {
+            "body_text": [
+              [
+                "مراجعة العقد"
+              ]
+            ]
+          }
+        },
+        {
+          "type": "BUTTONS",
+          "buttons": [
+            {
+              "type": "QUICK_REPLY",
+              "text": "ممتاز"
+            },
+            {
+              "type": "QUICK_REPLY",
+              "text": "جيد جدًا"
+            },
+            {
+              "type": "QUICK_REPLY",
+              "text": "جيد"
+            },
+            {
+              "type": "QUICK_REPLY",
+              "text": "يحتاج للتحسين"
+            },
+            {
+              "type": "QUICK_REPLY",
+              "text": "ليس الآن"
+            }
+          ]
         }
       ]
     }
