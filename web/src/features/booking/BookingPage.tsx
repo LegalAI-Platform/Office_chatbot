@@ -73,7 +73,7 @@ function Status() {
   if (!s.data) return null;
   const missing = [
     !s.data.calendar_key && "مفتاح Google Calendar (صاحب المشروع بيحطه في .env)",
-    !s.data.calendar_id && "إيميل كالندر الأستاذ (في إعدادات الحجز)",
+    !s.data.calendar_id && "إيميل كالندر المستشار (في إعدادات الحجز)",
     !s.data.texts_approved && "اعتماد نصوص الحجز (من «نصوص حازم»)",
   ].filter(Boolean);
   return (
@@ -289,7 +289,7 @@ function PreviewOf({ day }: { day: string }) {
       </div>
       {p.isPending ? <Loading /> : p.isError ? <ErrorState message={errorMessage(p.error)} /> : (
         <>
-          {p.data.calendar !== "ok" ? <p className="text-xs text-orange-ink">كالندر الأستاذ {p.data.calendar === "not_configured" ? "مش متوصل" : "مش بيرد"}: دي ساعات اللوحة بس، وحازم مش هيعرض مواعيد لحد ما يتوصل.</p> : null}
+          {p.data.calendar !== "ok" ? <p className="text-xs text-orange-ink">كالندر المستشار {p.data.calendar === "not_configured" ? "مش متوصل" : "مش بيرد"}: دي ساعات اللوحة بس، وحازم مش هيعرض مواعيد لحد ما يتوصل.</p> : null}
           {p.data.slots.length === 0 ? <p className="text-sm text-ink-soft">مفيش مواعيد فاضية اليوم ده.</p> : (
             <ul className="flex flex-wrap gap-1.5">{p.data.slots.map((s) => <li key={s} className="tabular rounded-md bg-card-2 px-2 py-1 text-xs">{cairoTime(new Date(s))}</li>)}</ul>
           )}
@@ -347,7 +347,7 @@ function notesOf(a: Appointment, now: Date): { text: string; tone: string }[] {
     out.push({ text: "التحويل محتاج مراجعة (الإيصالات والمدفوعات)", tone: "orange" });
   }
   if (a.state === "confirmed" && a.calendar !== "synced" && new Date(a.end).getTime() > t) {
-    out.push({ text: "لسه مش في كالندر الأستاذ", tone: "grey" });
+    out.push({ text: "لسه مش في كالندر المستشار", tone: "grey" });
   }
   if (a.state === "confirmed" && new Date(a.end).getTime() < t) {
     out.push({ text: "عدّى: علّم «خلص» أو «ماحضرش»", tone: "orange" });
@@ -666,7 +666,7 @@ function SettingsForm() {
           </select>
         </label>
         <Field label="عدد المواعيد اللي حازم يعرضها مرة واحدة" type="number" min={1} max={9} value={v.offer_count} onChange={num("offer_count")} />
-        <Field label="إيميل كالندر الأستاذ (Google)" dir="ltr" value={v.calendar_id} onChange={(e) => setDraft({ ...v, calendar_id: e.target.value })}
+        <Field label="إيميل كالندر المستشار (Google)" dir="ltr" value={v.calendar_id} onChange={(e) => setDraft({ ...v, calendar_id: e.target.value })}
           hint={v.calendar_key ? "مفتاح Google موجود." : "مفتاح Google لسه مش متحط (صاحب المشروع)."} />
       </div>
       <fieldset className="grid gap-3 border-t border-line pt-3">
@@ -711,7 +711,7 @@ function OfficeForm() {
         <Field label="نوع المحفظة" hint="مثلًا فودافون كاش" value={v.wallet_provider} onChange={set("wallet_provider")} />
         <Field label="عنوان المكتب" value={v.address} onChange={set("address")} />
         <Field label="لينك الخريطة" dir="ltr" placeholder="https://maps.app.goo.gl/…" value={v.map_url} onChange={set("map_url")} />
-        <Field label="لينك Google Meet بتاع الأستاذ" dir="ltr" placeholder="https://meet.google.com/…" value={v.meet_link ?? ""} onChange={set("meet_link")} />
+        <Field label="لينك Google Meet بتاع المستشار" dir="ltr" placeholder="https://meet.google.com/…" value={v.meet_link ?? ""} onChange={set("meet_link")} />
         <Field label="رقم تليفون المكتب" dir="ltr" inputMode="tel" value={v.phone ?? ""} onChange={set("phone")} />
       </div>
       {save.isError ? <p className="text-sm text-bad" role="alert">{errorMessage(save.error)}</p> : null}

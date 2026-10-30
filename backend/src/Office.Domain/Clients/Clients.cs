@@ -344,6 +344,22 @@ public sealed class Intake
 
     public bool MayAskNameAgain => NameAsks < MaxNameAsks;
 
+    /// <summary>v1.32 (B-02): the pending «request» that is a time the client picked before his name was asked.</summary>
+    public const string PickIntent = "pick";
+
+    /// <summary>
+    /// v1.32 (B-02): the name is asked when the client picks a time (no state change: the offer stays); the pick waits in
+    /// <see cref="Pending"/> (its button id) and is booked once the name comes. Counts as an ask.
+    /// </summary>
+    public void AskNameFor(string pickId)
+    {
+        Pending = new PendingRequest(PickIntent, pickId, null);
+        NameAsks++;
+    }
+
+    /// <summary>The button id of the time waiting for the name, if any.</summary>
+    public string? PickWaitingForName => Pending is { Intent: PickIntent } p ? p.Service : null;
+
     /// <summary>B-01.4: keep the first request; only the first one is kept.</summary>
     public void Remember(PendingRequest request) => Pending ??= request;
 

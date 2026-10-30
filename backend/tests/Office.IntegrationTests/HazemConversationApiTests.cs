@@ -14,9 +14,10 @@ namespace Office.IntegrationTests;
 public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
 {
     private const string Client = "201000000071";
-    private const string Welcome = "أهلًا بحضرتك في مكتب الأستاذ سعد فتحي سعد للمحاماة، معاك حازم. ممكن اسم حضرتك؟"; // v1.29: no «رباعي»
-    private const string Offer = "الأستاذ يقدر يشوف الموضوع مع حضرتك في استشارة: بالتليفون بـ500 أو في المكتب بـ1,000.";
-    private const string AskTopic = "ولو تحب، قولّي باختصار الموضوع عن إيه عشان الأستاذ يبقى عارفه.";
+    // v1.32 (B-01.1): the welcome with its two buttons, no name question (0034)
+    private const string Welcome = "أنا حازم، المساعد الرقمي لمكتب المستشار سعد فتحي سعد للمحاماة.\nحضرتك تحب تعرف خدمات المكتب، ولا تحكيلي محتاج إيه وأساعدك؟";
+    private const string Offer = "المستشار يقدر يشوف الموضوع مع حضرتك في استشارة: بالتليفون بـ500 أو في المكتب بـ1,000.";
+    private const string AskTopic = "ولو تحب، قولّي باختصار الموضوع عن إيه عشان المستشار يبقى عارفه.";
     private ApiFactory _factory = null!;
     private HttpClient _n8n = null!;
     private int _n;
@@ -66,18 +67,19 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
     private static List<string?> Texts(JsonNode response) => response["actions"]!.AsArray().Select(a => (string?)a!["text"]).ToList();
 
     [Fact]
-    public async Task Booking_request_then_the_name_gets_the_offer_without_asking_again()
+    public async Task A_booking_request_in_the_first_message_gets_the_offer_at_once_and_a_later_name_is_kept()
     {
-        // v1.21 (B-01.6): the salam is returned first, then the welcome.
-        Assert.Equal(["وعليكم السلام ورحمة الله وبركاته", Welcome], Texts(await Say("السلام عليكم عايز أحجز استشارة")));
-        Assert.Equal([Offer, AskTopic], Texts(await Say("محمد أحمد علي حسن"))); // B-25: the topic is still unknown
+        // v1.21 (B-01.6): the salam is returned first; v1.32: then the request is answered at once (no welcome, no name).
+        Assert.Equal(["وعليكم السلام ورحمة الله وبركاته", Offer, AskTopic], // B-25: the topic is still unknown
+            Texts(await Say("السلام عليكم عايز أحجز استشارة")));
+        Assert.Equal(["أهلًا بحضرتك 👋 تحت أمرك، محتاج إيه؟"], Texts(await Say("محمد أحمد علي حسن"))); // a name on its own: kept, a short reply
 
         Assert.Equal("محمد أحمد علي حسن|true|bot_active|offer_sent|new_client|", await db.ScalarAsync<string>($"""
             SELECT p.name_normalized || '|' || p.full_name_provided || '|' || c.state || '|' || i.state || '|' || i.client_type || '|' || COALESCE(i.pending_intent, '')
               FROM hazem.persons p JOIN hazem.conversations c ON c.person_id = p.id JOIN hazem.intakes i ON i.person_id = p.id
              WHERE p.wa_id = '{Client}'
             """));
-        Assert.Equal("greet_salam:1,welcome_ask_name:2,consultation_offer:2,ask_topic:1", await db.ScalarAsync<string>(
+        Assert.Equal("greet_salam:1,consultation_offer:3,ask_topic:2,greeting:1", await db.ScalarAsync<string>( // 0034: «المستشار» versions
             "SELECT string_agg(text_key || ':' || text_version, ',' ORDER BY created_at, idempotency_key) FROM hazem.turn_replies"));
     }
 
@@ -87,7 +89,7 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
         await Say("السلام عليكم");
         await Say("محمد أحمد علي حسن");
         // v1.30: the services list came after the name (not the offer), so the topic question follows the offer here
-        Assert.Equal(["الأستاذ هو اللي هيجاوب حضرتك على ده في الاستشارة.", Offer, "ولو تحب، قولّي باختصار الموضوع عن إيه عشان الأستاذ يبقى عارفه."],
+        Assert.Equal(["المستشار هو اللي هيجاوب حضرتك على ده في الاستشارة.", Offer, "ولو تحب، قولّي باختصار الموضوع عن إيه عشان المستشار يبقى عارفه."],
             Texts(await Say("ينفع أطلق؟")));
     }
 
@@ -205,8 +207,8 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
         };
         var results = await Task.WhenAll(Enumerable.Range(0, 6).Select(_ => _n8n.PostAsJsonAsync("/api/hazem/turns", turn, Ct)));
         Assert.All(results, r => Assert.Equal(HttpStatusCode.OK, r.StatusCode));
-        // one turn, one person, its two replies (v1.21: the salam returned, then the welcome) once, one name ask
-        Assert.Equal("1|1|2|1", await db.ScalarAsync<string>("""
+        // one turn, one person, its two replies (v1.21: the salam returned, then the welcome) once, no name ask (v1.32)
+        Assert.Equal("1|1|2|0", await db.ScalarAsync<string>("""
             SELECT (SELECT count(*) FROM hazem.turns) || '|' || (SELECT count(*) FROM hazem.persons) || '|' ||
                    (SELECT count(*) FROM hazem.turn_replies) || '|' || (SELECT name_asks FROM hazem.intakes)
             """));
@@ -233,7 +235,7 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Contains("\"calendar_events\": []", result, StringComparison.Ordinal);
         Assert.Equal("0|0|0|0", await db.ScalarAsync<string>(counts));
 
-        // From the start again: the welcome and the name, as a new number.
+        // From the start again: the welcome, as a new number.
         Assert.Equal(["وعليكم السلام ورحمة الله وبركاته", Welcome], Texts(await Say("السلام عليكم")));
     }
 
@@ -258,7 +260,8 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
                         + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.28.md"), Ct) // B-23's case offer of 1.28
                         + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.29.md"), Ct) // B-01 / B-02 of 1.29
                         + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.30.md"), Ct) // the services list of 1.30
-                        + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.31.md"), Ct); // B-01.7 and B-26 of 1.31
+                        + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.31.md"), Ct) // B-01.7 and B-26 of 1.31
+                        + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.32.md"), Ct); // the welcome and «المستشار» of 1.32
         await using var c = new NpgsqlConnection(db.ApiConnectionString);
         await c.OpenAsync(Ct);
         await using var cmd = new NpgsqlCommand("SELECT key, text FROM hazem.approved_texts WHERE active AND source LIKE 'DECISIONS%'", c);
@@ -287,7 +290,7 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
             Assert.True(decisions.Contains(text, StringComparison.Ordinal), $"{r.GetString(0)} is not word for word in DECISIONS");
         }
 
-        Assert.Equal(85, count); // 8 (TASK 04) + B-04 question + the two B-25 texts (TASK 05a) + B-08 and B-22 (TASK 08) + B-11 (TASK 11) + B-18 (TASK 12) + B-11.1 (v1.20) + 9 greetings B-01.6 (v1.21) + 5 of v1.22 + 8 of v1.25 + 3 of v1.28 + ask_name_again of v1.29 (welcome_ask_name's v2 replaced its v1) + the 22 of the services list (v1.30: 13 texts and 9 price lines) + 11 of v1.31 (welcome_back and the 10 of the rating)
+        Assert.Equal(87, count); // 8 (TASK 04) + B-04 question + the two B-25 texts (TASK 05a) + B-08 and B-22 (TASK 08) + B-11 (TASK 11) + B-18 (TASK 12) + B-11.1 (v1.20) + 9 greetings B-01.6 (v1.21) + 5 of v1.22 + 8 of v1.25 + 3 of v1.28 + ask_name_again of v1.29 (welcome_ask_name's v2 replaced its v1) + the 22 of the services list (v1.30: 13 texts and 9 price lines) + 11 of v1.31 (welcome_back and the 10 of the rating) + 2 of v1.32 (welcome, welcome_choose and ask_name_booking added, welcome_ask_name switched off; services_menu's v2 replaced its v1, and every «المستشار» text replaced its own «الأستاذ» version one for one)
     }
 
     [Fact]

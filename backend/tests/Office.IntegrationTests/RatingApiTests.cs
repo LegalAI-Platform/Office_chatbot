@@ -194,7 +194,7 @@ public sealed class RatingApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal(1, await Ratings());
         var list = Assert.Single(SentSince(from));
         Assert.Equal("send_interactive", (string)list["type"]!);
-        Assert.Equal("شكرًا إن حضرتك اخترت مكتب الأستاذ سعد في الاستشارة. رأيك يهمنا عشان نحسّن خدمتنا، تقيّم الخدمة إزاي؟", (string)list["text"]!);
+        Assert.Equal("شكرًا إن حضرتك اخترت مكتب المستشار سعد في الاستشارة. رأيك يهمنا عشان نحسّن خدمتنا، تقيّم الخدمة إزاي؟", (string)list["text"]!);
         var interactive = list["interactive"]!;
         Assert.Equal(("list", "قيّم الخدمة"), ((string)interactive["kind"]!, (string)interactive["button"]!));
         var rating = await db.ScalarAsync<Guid>("SELECT id FROM hazem.service_ratings");

@@ -288,7 +288,9 @@ public sealed class BookingFlowTests
         }
     }
 
-    private HazemResponder Hazem => new(new Store(_rows), new Scripted(_script), new Texts(_texts), new NoLists(), new Clock(_now),
+    private bool _aiDown;
+
+    private HazemResponder Hazem => new(new Store(_rows), new Scripted(_script, () => _aiDown), new Texts(_texts), new NoLists(), new Clock(_now),
         new BookingDesk(_booking, _calendar), new Office.Application.Services.ServiceDesk(_booking),
         new Office.Application.Urf.UrfDesk(new MemoryUrf(_booking, () => _now)));
 
@@ -319,15 +321,20 @@ public sealed class BookingFlowTests
     private IncomingMessage Pressed(string id) =>
         new($"wamid.{++_turn}", MessageType.Interactive, null, null, null, Interactive: new Interactive("list_reply", id, "x"));
 
-    // ---------- v1.30 (B-01.3): the services list after the name ----------
+    // ---------- v1.30 (B-01.3), v1.32 (B-01.1): the welcome's two buttons and the services list ----------
 
     [Fact]
-    public async Task After_the_name_the_services_list_and_each_row_starts_its_flow_without_the_ai()
+    public async Task The_welcome_s_services_button_shows_the_list_and_each_row_starts_its_flow_without_the_ai()
     {
         _script["السلام عليكم"] = new("greeting", null, "unknown", null, 0.9);
-        _script["محمد أحمد"] = new("provide_name", null, "unknown", "محمد أحمد", 0.95);
-        await Say("السلام عليكم");
-        var menu = Assert.Single((await Say("محمد أحمد")).Actions);
+        var welcome = Assert.Single((await Say("السلام عليكم")).Actions);
+        Assert.Equal(HazemFlowTests.Approved[TextKeys.Welcome], welcome.Text);
+        Assert.Equal(["sv:menu", "sv:tell"], welcome.Interactive!.Choices.Select(c => c.Id));
+
+        var pressed = await Press("sv:menu");
+        Assert.Null(pressed.Effects!.Classification); // read by code
+        Assert.Equal([TextKeys.ServicesMenu], Keys(pressed));
+        var menu = Assert.Single(pressed.Actions);
         Assert.Equal("T:services_menu", menu.Text);
         Assert.Equal(InteractivePayload.List, menu.Interactive!.Kind);
         Assert.Equal(["sv:urgent", BookingChoice.Mode(BookingService.PhoneVideo), BookingChoice.Mode(BookingService.Office), "sv:case", "sv:review",
@@ -347,6 +354,160 @@ public sealed class BookingFlowTests
         Assert.Equal(TextKeys.ContractDraftingRequest, (await Press("sv:draft")).Effects!.Replies[0].InsteadOf);
         var urgent = await Press("sv:urgent"); // the urgent path: its price, a task, today's times
         Assert.Contains(PendingTask.UrgentRequest, TaskKinds(urgent));
+    }
+
+    [Fact]
+    public async Task Ahmed_salam_then_the_services_then_the_urgent_row_gets_its_price_and_today_s_times()
+    {
+        // The conversation that brought v1.32 (owner, 2026-10-30): «السلام عليكم», the name question, the name, the list,
+        // «استشارة عاجلة»... Now: no name question; the welcome's buttons; the urgent row answers with its own price and
+        // today's times, never the consultation offer (twice).
+        _texts[TextKeys.GreetSalam] = new ApprovedText(TextKeys.GreetSalam, 1, "وعليكم السلام ورحمة الله وبركاته", 300, true);
+        _script["السلام عليكم"] = new("greeting", null, "unknown", null, 0.9);
+        var first = await Say("السلام عليكم");
+        Assert.Equal([TextKeys.GreetSalam, TextKeys.Welcome], Keys(first));
+        Assert.Equal(["sv:menu", "sv:tell"], first.Actions[1].Interactive!.Choices.Select(c => c.Id));
+        Assert.DoesNotContain(first.Actions, a => a.Text!.Contains("اسم حضرتك", StringComparison.Ordinal));
+
+        var menu = await Press("sv:menu");
+        Assert.Equal([TextKeys.ServicesMenu], Keys(menu));
+        Assert.Equal("sv:urgent", Assert.Single(menu.Actions).Interactive!.Choices[0].Id);
+
+        var urgent = await Press("sv:urgent");
+        Assert.Equal([TextKeys.UrgentPrice, TextKeys.BookingChooseSlot], Keys(urgent));
+        Assert.DoesNotContain(TextKeys.ConsultationOffer, Keys(urgent));
+        var times = urgent.Actions[1].Interactive!;
+        Assert.Equal(InteractivePayload.List, times.Kind);
+        Assert.All(times.Choices.SkipLast(1), c => Assert.StartsWith("النهارده", c.Title));
+        Assert.Contains(PendingTask.UrgentRequest, TaskKinds(urgent));
+        Assert.Empty(_booking.Appointments); // nothing held before a time is picked (and the name asked then)
+    }
+
+    // ---------- v1.32 (B-02): the name asked at the booking ----------
+
+    /// <summary>A new client up to the offer without ever giving his name: «السلام عليكم», then «عايز أحجز».</summary>
+    private async Task ToTheOfferWithoutName()
+    {
+        _script["السلام عليكم"] = new("greeting", null, "unknown", null, 0.9);
+        _script["عايز أحجز"] = new("consultation_request", null, "unknown", null, 0.9, "inheritance");
+        await Say("السلام عليكم");
+        await Say("عايز أحجز");
+    }
+
+    private static readonly DateTimeOffset NameSlot = AvailabilityTests.At(19, 15);
+
+    private static string NamePick => BookingChoice.Pick(BookingService.Office, NameSlot);
+
+    [Fact]
+    public async Task A_time_picked_before_the_name_asks_it_and_holds_nothing_then_the_name_holds_the_time()
+    {
+        await ToTheOfferWithoutName();
+        var ask = await Press(NamePick);
+        Assert.Equal([TextKeys.AskNameBooking], Keys(ask));
+        Assert.Empty(_booking.Appointments); // no hold yet
+        Assert.Equal(NamePick, _rows[Number].Intake.PickWaitingForName);
+
+        _script["أحمد محمود"] = new("provide_name", null, "unknown", "أحمد محمود", 0.95);
+        var held = await Say("أحمد محمود");
+        Assert.Equal([TextKeys.BookingHold], Keys(held));
+        var a = Assert.Single(_booking.Appointments);
+        Assert.Equal((AppointmentInfo.PendingPayment, NameSlot, "inheritance"), (a.State, a.Start, a.MatterType));
+        var s = _rows[Number];
+        Assert.Equal("أحمد محمود", s.Person.Name?.Raw);
+        Assert.Null(s.Intake.PickWaitingForName);
+    }
+
+    [Fact]
+    public async Task A_client_who_told_his_name_before_is_not_asked_it_at_the_booking()
+    {
+        await ToTheOffer(); // the name came on the way
+        Assert.Equal([TextKeys.BookingHold], Keys(await Press(NamePick)));
+    }
+
+    [Fact]
+    public async Task No_name_twice_at_the_booking_books_the_time_without_the_name()
+    {
+        _texts[TextKeys.AskNameAgain] = _texts[TextKeys.AskNameAgain] with { Active = false };
+        await ToTheOfferWithoutName();
+        await Press(NamePick);
+        var again = await Say("مش هقول اسمي");
+        Assert.Equal([TextKeys.AskNameBooking], Keys(again)); // ask_name_again not approved: the booking's question again
+        Assert.Equal(TextKeys.AskNameAgain, Assert.Single(again.Effects!.Replies).InsteadOf);
+        Assert.Empty(_booking.Appointments);
+        Assert.Null(_rows[Number].Person.Name); // a refusal is never the name
+
+        var held = await Say("مش هقول");
+        Assert.Equal([TextKeys.BookingHold], Keys(held)); // Intake.MaxNameAsks used up: Hazem carries on
+        Assert.Equal(NameSlot, Assert.Single(_booking.Appointments).Start);
+        var p = _rows[Number].Person;
+        Assert.Null(p.Name);
+        Assert.Equal(false, p.FullNameProvided);
+        Assert.True(p.NameSettled);
+    }
+
+    [Fact]
+    public async Task Approved_ask_name_again_is_used_at_the_booking()
+    {
+        await ToTheOfferWithoutName();
+        await Press(NamePick);
+        Assert.Equal([TextKeys.AskNameAgain], Keys(await Say("ههههه")));
+    }
+
+    [Fact]
+    public async Task A_photo_instead_of_the_name_does_not_use_up_the_extra_ask()
+    {
+        await ToTheOfferWithoutName();
+        await Press(NamePick);
+        Assert.Equal(1, _rows[Number].Intake.NameAsks);
+        var photo = await Send(new IncomingMessage($"wamid.{++_turn}", MessageType.Image, null, null, null,
+            Media: new MediaRef(MediaStatus.Stored, "office-sensitive", $"k{_turn}", "image/jpeg", 1000)));
+        Assert.Equal([TextKeys.MediaReceived, TextKeys.AskNameAgain], Keys(photo)); // the photo answered, asked again, not counted
+        Assert.Equal(1, _rows[Number].Intake.NameAsks);
+        Assert.Empty(_booking.Appointments);
+
+        _script["محمد أحمد"] = new("provide_name", null, "unknown", "محمد أحمد", 0.95);
+        Assert.Equal([TextKeys.BookingHold], Keys(await Say("محمد أحمد"))); // v1.29: the name after the photo is taken
+        Assert.Equal(false, _rows[Number].Person.FullNameProvided);
+    }
+
+    [Fact]
+    public async Task A_request_instead_of_the_name_is_answered_and_the_time_let_go()
+    {
+        await ToTheOfferWithoutName();
+        await Press(NamePick);
+        _script["عايز أكلم موظف"] = new("human_request", null, "unknown", null, 0.95);
+        var asked = Keys(await Say("عايز أكلم موظف"));
+        Assert.DoesNotContain(TextKeys.AskNameAgain, asked); // the request is answered, not the name asked again
+        Assert.DoesNotContain(TextKeys.BookingHold, asked);
+        Assert.Null(_rows[Number].Intake.PickWaitingForName);
+        Assert.Empty(_booking.Appointments);
+    }
+
+    [Theory]
+    [InlineData("محمد أحمد علي حسن", "محمد أحمد علي حسن")]
+    [InlineData("اسمي منى سعيد عبد الله حسن", "منى سعيد عبد الله حسن")]
+    public async Task Ai_down_a_typed_name_at_the_booking_is_still_taken(string typed, string name)
+    {
+        await ToTheOfferWithoutName();
+        await Press(NamePick);
+        _aiDown = true;
+        Assert.Equal([TextKeys.BookingHold], Keys(await Say(typed)));
+        Assert.Equal(name, _rows[Number].Person.Name?.Normalized);
+        Assert.True(_rows[Number].Person.HasFullName);
+    }
+
+    [Theory]
+    [InlineData("عايز احجز استشارة")]
+    [InlineData("مش هقول اسمي")]
+    [InlineData("السلام عليكم يا استاذ")]
+    public async Task Ai_down_a_request_or_refusal_at_the_booking_is_not_taken_as_a_name(string text)
+    {
+        await ToTheOfferWithoutName();
+        await Press(NamePick);
+        _aiDown = true;
+        await Say(text);
+        Assert.Null(_rows[Number].Person.Name);
+        Assert.Empty(_booking.Appointments); // asked once more
     }
 
     // ---------- v1.22 (B-08, B-25) ----------
@@ -1430,10 +1591,12 @@ public sealed class BookingFlowTests
             Task.FromResult<IReadOnlyDictionary<string, ApprovedText>>(texts.Where(kv => kv.Value.Active).ToDictionary());
     }
 
-    private sealed class Scripted(Dictionary<string, RawClassification> script) : IIntentClassifier
+    private sealed class Scripted(Dictionary<string, RawClassification> script, Func<bool>? down = null) : IIntentClassifier
     {
         public Task<ClassifierOutcome> ClassifyAsync(string text, HazemSettings settings, CancellationToken ct) =>
-            Task.FromResult(new ClassifierOutcome(script.TryGetValue(text, out var r) ? r : new("other", null, "unknown", null, 0.9), null, "fake", "v", 1));
+            Task.FromResult(down?.Invoke() == true
+                ? new ClassifierOutcome(null, ClassifierOutcome.Error, "fake", "v", 1)
+                : new ClassifierOutcome(script.TryGetValue(text, out var r) ? r : new("other", null, "unknown", null, 0.9), null, "fake", "v", 1));
     }
 
     private sealed class FakeCalendar : IBusyCalendar

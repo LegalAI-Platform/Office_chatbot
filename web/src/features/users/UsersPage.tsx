@@ -122,7 +122,7 @@ function AddUser({ onCancel, onCreated }: { onCancel: () => void; onCreated: (r:
           <select className="surface min-h-11 rounded-[var(--radius-control)] px-3 text-ink" value={form.role}
             onChange={(e) => setForm({ ...form, role: e.target.value as Role })}>
             <option value="staff">موظف: مهامه والمهام اللي مش متعيّنة</option>
-            <option value="lawyer">الأستاذ: كل المهام، ويوزّعها</option>
+            <option value="lawyer">المستشار: كل المهام، ويوزّعها</option>
             <option value="manager">مدير: كل حاجة، ومنها الحسابات</option>
           </select>
         </label>
@@ -177,7 +177,7 @@ function PendingCard({ user }: { user: PanelUser }) {
             <select className="surface min-h-11 rounded-[var(--radius-control)] px-3 text-ink" value={role}
               onChange={(e) => setRole(e.target.value as Role)}>
               <option value="staff">موظف</option>
-              <option value="lawyer">الأستاذ</option>
+              <option value="lawyer">المستشار</option>
               <option value="manager">مدير</option>
             </select>
           </label>

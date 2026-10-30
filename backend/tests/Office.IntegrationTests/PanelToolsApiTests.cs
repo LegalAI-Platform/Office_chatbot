@@ -41,12 +41,16 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
     public async ValueTask DisposeAsync()
     {
         await _factory.DisposeAsync();
-        // Texts edited here go away; the approved versions are active again.
+        // Texts edited here go away; the approved versions are active again. Only the keys edited here: a text switched off
+        // by a migration (welcome_ask_name since 0034) stays off.
         await db.ExecAsync("""
+            CREATE TEMP TABLE edited AS SELECT DISTINCT key FROM hazem.approved_texts WHERE source LIKE 'panel %';
             DELETE FROM hazem.approved_texts WHERE source LIKE 'panel %';
             UPDATE hazem.approved_texts t SET active = true
-             WHERE NOT EXISTS (SELECT 1 FROM hazem.approved_texts a WHERE a.key = t.key AND a.active)
+             WHERE t.key IN (SELECT key FROM edited)
+               AND NOT EXISTS (SELECT 1 FROM hazem.approved_texts a WHERE a.key = t.key AND a.active)
                AND t.version = (SELECT max(version) FROM hazem.approved_texts m WHERE m.key = t.key);
+            DROP TABLE edited;
             TRUNCATE hazem.panel_audit; DELETE FROM hazem.panel_users;
             """);
     }

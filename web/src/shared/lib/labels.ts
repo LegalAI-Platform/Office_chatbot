@@ -9,7 +9,7 @@ export const TASK_TYPES: Record<string, string> = {
   complaint: "شكوى",
   human_requested: "طلب يكلم موظف",
   safety_alert: "تنبيه أمان",
-  lawyer_direct_message: "رسالة لقايمة الأستاذ",
+  lawyer_direct_message: "رسالة لقايمة المستشار",
   external_contact: "زميل أو صحافة أو مورّد",
   unclear_message: "رسالة مش واضحة",
   urgent_request: "طلب عاجل",
@@ -120,7 +120,7 @@ export const TASK_STATES: Record<string, string> = {
 export const CLIENT_TYPES: Record<string, string> = {
   new_client: "عميل جديد",
   existing_client: "موكل حالي",
-  lawyer_direct: "قايمة الأستاذ",
+  lawyer_direct: "قايمة المستشار",
   blocked: "ممنوع",
   lawyer_colleague: "زميل محامي",
   press: "صحافة",
@@ -161,7 +161,7 @@ export const MATTER_SUBTYPES: Record<string, string> = {
 
 export const ROLES: Record<string, string> = {
   manager: "مدير",
-  lawyer: "الأستاذ",
+  lawyer: "المستشار",
   staff: "موظف",
 };
 
@@ -210,7 +210,7 @@ export const SYSTEM_WHAT: Record<string, string> = {
 /** B-14: the office's lists. */
 export const LIST_KINDS: Record<string, string> = {
   existing_client: "الموكلين الحاليين",
-  lawyer_direct: "قايمة الأستاذ المباشرة",
+  lawyer_direct: "قايمة المستشار المباشرة",
   blocked: "الممنوعين",
 };
 
@@ -221,8 +221,8 @@ export const URF_STATES: Record<string, string> = {
   collecting: "بيجاوب على الأسئلة",
   documents_pending: "بيختار ميعاد",
   booked: "محجوز: راجع الورق",
-  approved: "الأستاذ وافق",
-  lawyer_rejected: "الأستاذ رفض",
+  approved: "المستشار وافق",
+  lawyer_rejected: "المستشار رفض",
   rejected_age: "اتقفل: السن أقل من 18",
   rejected_guardian: "اتقفل: مفيش ولي",
   redirected_consultation: "اتحوّل لاستشارة",

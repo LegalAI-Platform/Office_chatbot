@@ -39,7 +39,7 @@ export function UrfPage() {
   return (
     <div className="grid gap-4">
       <h1 className="text-2xl">حالات العرفي</h1>
-      <p className="text-sm text-ink-soft">عقد الجواز والطلاق العرفي: إجابات العميل، والورق، والميعاد في المكتب. الأستاذ يراجع الورق قبل الميعاد.</p>
+      <p className="text-sm text-ink-soft">عقد الجواز والطلاق العرفي: إجابات العميل، والورق، والميعاد في المكتب. المستشار يراجع الورق قبل الميعاد.</p>
       <div className="flex flex-wrap gap-2" role="tablist" aria-label="حالات العرفي">
         {tabs.map(([t, text]) => (
           <Button key={t} role="tab" aria-selected={t === show} variant={t === show ? "primary" : "secondary"} onClick={() => setShow(t)}>{text}</Button>

@@ -124,7 +124,8 @@ public sealed class Task08ApiTests(TestDatabase db) : IAsyncLifetime
     private async Task<JsonArray> UpToTheOffer()
     {
         await Say("السلام عليكم");
-        return await Say("محمد أحمد علي حسن");
+        await Say("محمد أحمد علي حسن"); // v1.32: a name on its own is kept (the booking does not ask it again)
+        return await Press("sv:menu"); // the welcome's «خدمات المكتب»: the services list
     }
 
     /// <summary>One round of the worker that tells the clients of appointments the office cancelled.</summary>
@@ -249,7 +250,7 @@ public sealed class Task08ApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal(1, await Notices());
         Assert.Equal("sent", await db.ScalarAsync<string>("SELECT client_notice FROM hazem.appointments"));
         var message = JsonNode.Parse(_factory.N8n.Requests.Skip(sends).Single().Body)!;
-        Assert.Equal(("send_interactive", "الأستاذ عنده ظرف في الميعاد ده، تحب ميعاد تاني ولا استرداد كامل؟"), ((string?)message["type"], (string?)message["text"]));
+        Assert.Equal(("send_interactive", "المستشار عنده ظرف في الميعاد ده، تحب ميعاد تاني ولا استرداد كامل؟"), ((string?)message["type"], (string?)message["text"]));
         var rows = message["interactive"]!["choices"]!.AsArray();
         Assert.StartsWith("bk:f:", (string?)rows[^1]!["id"]); // «استرداد كامل»
         Assert.DoesNotContain(rows, r => ((string?)r!["title"])!.StartsWith("بكرة", StringComparison.Ordinal)); // the 20th is closed

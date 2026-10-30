@@ -130,7 +130,7 @@ public static class PanelMails
         "complaint" => "شكوى",
         "human_requested" => "طلب يكلم موظف",
         "safety_alert" => "تنبيه أمان",
-        "lawyer_direct_message" => "رسالة لقايمة الأستاذ",
+        "lawyer_direct_message" => "رسالة لقايمة المستشار",
         "external_contact" => "زميل أو صحافة أو مورّد",
         "unclear_message" => "رسالة مش واضحة",
         "service_question" => "سؤال عن خدمة معيّنة",

@@ -35,9 +35,9 @@ fields. It never writes a word the client sees: every reply is an approved text
 
 - OpenAI Chat Completions, **Structured Outputs** (`response_format: json_schema`, `strict: true`,
   `additionalProperties: false`, every field required, enums = the lists above), `temperature: 0`.
-- Prompt: `backend/src/Office.Infrastructure/Ai/prompts/classify-v11.md` (v1..v10 kept as history), embedded in the build.
-  Its version (`classify-v11`) is saved with every classification. **Change the prompt = a new
-  file (`classify-v12.md` next) and a new `PromptVersion`**, then run `classify-eval` again.
+- Prompt: `backend/src/Office.Infrastructure/Ai/prompts/classify-v12.md` (v1..v11 kept as history), embedded in the build.
+  Its version (`classify-v12`) is saved with every classification. **Change the prompt = a new
+  file (`classify-v13.md` next) and a new `PromptVersion`**, then run `classify-eval` again.
 - Model: `OPENAI_MODEL`. Empty = `gpt-4.1-mini`, **a starting point only**. The final model is
   chosen by the owner after `classify-eval` (T-08).
 - Key: `HAZEM_OPENAI_API_KEY` in `.env` — the .NET key, separate from n8n's voice key. It may be
@@ -295,3 +295,12 @@ classification log then says `fallback_reason = backstop:<reason>`.
 Three messages or more in one hour that the AI could not read make one system alert «الـ AI اللي بيفهم رسايل العملاء
 مش شغال» for the managers (the bell and an e-mail, one per hour). It happened on 2026-10-30: the Anthropic key was
 deactivated and for twenty minutes nobody knew.
+
+### v1.32: the greeting's kind (`classify-v12`, 2026-10-30)
+
+One more field, `courtesy` (salam, ramadan, jumua, occasion, morning, evening, how_are_you, good_night, goodbye, none): the
+greeting in the message whatever its spelling. The code's list (`Courtesy.cs`) still reads the greeting first; the AI's kind
+is used only when the list found none («صيباح الخير»، «مساء القشطة»), and the answer is always the approved greet_* text.
+The field never changes the intent; a fallback classification (failed call, low confidence) gives no greeting. v12 is v11
+with that section and «المستشار» next to «الأستاذ» for the office's lawyer (B-27). `classify-eval` was not run again for
+v12: the intent rules did not change.

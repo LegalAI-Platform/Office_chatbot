@@ -26,8 +26,8 @@ public sealed record ServiceKind(string Code, string Name)
         _ => null,
     };
 
-    /// <summary>«(ملف هنا على واتساب)» / «(مكالمة من الأستاذ)».</summary>
-    public static string Delivery(string? delivery) => delivery == "call" ? "مكالمة من الأستاذ" : "ملف هنا على واتساب";
+    /// <summary>«(ملف هنا على واتساب)» / «(مكالمة من المستشار)».</summary>
+    public static string Delivery(string? delivery) => delivery == "call" ? "مكالمة من المستشار" : "ملف هنا على واتساب";
 }
 
 /// <summary>I4 (v1.14): what a file from the client is for.</summary>

@@ -514,7 +514,12 @@ public sealed record ServiceRow(string Code, Classification? AsClassification)
     public const string Urf = "urf";
     public const string Tell = "tell";
 
+    /// <summary>v1.32 (B-01.1): the welcome's «خدمات المكتب» button: the services list itself.</summary>
+    public const string Menu = "menu";
+
     public bool IsTell => Code == Tell;
+
+    public bool IsMenu => Code == Menu;
 
     public static string Id(string code) => Prefix + code;
 
@@ -541,7 +546,7 @@ public sealed record ServiceRow(string Code, Classification? AsClassification)
             Tell => null,
             _ => null,
         };
-        return c is null && code != Tell ? null : new ServiceRow(code, c);
+        return c is null && code is not (Tell or Menu) ? null : new ServiceRow(code, c);
     }
 
     /// <summary>The last row pressed in the turn, if it is one of the services list.</summary>

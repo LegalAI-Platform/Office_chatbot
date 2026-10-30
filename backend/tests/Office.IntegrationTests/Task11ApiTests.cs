@@ -147,7 +147,7 @@ public sealed class Task11ApiTests(TestDatabase db) : IAsyncLifetime
         var paid = await Turn(Image("receipt"));
         Assert.Contains("ابعت هنا صور المستندات", Text(paid));
         var ids = await Turn(Image("id-1"), Image("id-2"));
-        Assert.StartsWith("استلمت ✅. الأستاذ هيراجع الورق", Text(ids));
+        Assert.StartsWith("استلمت ✅. المستشار هيراجع الورق", Text(ids));
         Assert.Equal("2|urf_review|0", await db.ScalarAsync<string>("""
             SELECT (SELECT count(*) FROM hazem.urf_files) || '|' || (SELECT string_agg(type, ',') FROM hazem.staff_tasks WHERE type = 'urf_review')
                    || '|' || (SELECT count(*) FROM hazem.classifications c JOIN hazem.turns t ON t.turn_id = c.turn_id
@@ -201,7 +201,7 @@ public sealed class Task11ApiTests(TestDatabase db) : IAsyncLifetime
             """)); // the money came for a refused case: it all goes back
         var sends = _factory.N8n.Requests.Count;
         await Notices();
-        Assert.StartsWith("نعتذر لحضرتك، الأستاذ راجع الورق", (string?)JsonNode.Parse(_factory.N8n.Requests.Skip(sends).First().Body)!["text"]);
+        Assert.StartsWith("نعتذر لحضرتك، المستشار راجع الورق", (string?)JsonNode.Parse(_factory.N8n.Requests.Skip(sends).First().Body)!["text"]);
         Assert.Equal(0L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.appointments WHERE client_notice = 'pending'")); // no B-22 list
     }
 
@@ -247,7 +247,7 @@ public sealed class Task11ApiTests(TestDatabase db) : IAsyncLifetime
         await Press(UrfAnswer.Id(UrfStep.HasCopy, "yes"));
         await Press(UrfAnswer.Id(UrfStep.Agreed, "yes"));
         var offer = await Press(UrfAnswer.Id(UrfStep.Children, "yes"));
-        Assert.StartsWith("الأستاذ يقدر يشوف الموضوع مع حضرتك في استشارة", Text(offer));
+        Assert.StartsWith("المستشار يقدر يشوف الموضوع مع حضرتك في استشارة", Text(offer));
         Assert.Equal("redirected_consultation", await db.ScalarAsync<string>("SELECT state FROM hazem.urf_cases WHERE kind = 'divorce'"));
         Assert.Equal(0L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.appointments"));
     }
