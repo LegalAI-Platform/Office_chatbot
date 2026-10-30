@@ -79,6 +79,7 @@ public static class PanelMails
         {
             AlertKinds.Overdue => ("مهمة اتأخرت", "فيه مهمة عدّى ميعادها ولسه ما خلصتش."),
             AlertKinds.Urgent => ("طلب عاجل", "فيه طلب عاجل جديد محتاج حد يمسكه دلوقتي."),
+            AlertKinds.Rating => ("تقييم ضعيف من عميل", "فيه عميل قيّم الخدمة «يحتاج للتحسين»، ووعدناه إن حد من المكتب هيكلمه."),
             _ => ("عميل عايز يكلم حد", "فيه عميل طلب يكلم حد من المكتب."),
         };
         var due = a.DueAt is { } d ? ArabicTime(TimeZoneInfo.ConvertTime(d, Cairo)) : "";

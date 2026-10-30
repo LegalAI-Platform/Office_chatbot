@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { queryOptions, useQuery, type QueryClient } from "@tanstack/react-query";
 import { api, errorMessage } from "../../shared/api/client";
-import type { MonthReport, ReportRow } from "../../shared/api/types";
-import { APPOINTMENT_STATES, label, SOURCES, TASK_TYPES, CLIENT_TYPES, matterLabel } from "../../shared/lib/labels";
+import type { MonthReport, RatingReport, ReportRow } from "../../shared/api/types";
+import { APPOINTMENT_STATES, BOOKING_SERVICES, label, SERVICE_KINDS, SOURCES, TASK_TYPES, CLIENT_TYPES, matterLabel } from "../../shared/lib/labels";
 import { Card, ErrorState, Loading } from "../../shared/ui/ui";
 
 /** «This month» in Cairo, as YYYY-MM. */
@@ -14,7 +14,8 @@ function thisMonth(): string {
 /**
  * The month's report (TASK 07c, the manager and the lawyer): the tasks (by type and by staff
  * member, and how many were done before their due time) and the new clients (by source, topic and
- * kind). TASK 09: the month's bookings by state and their money as the office marked it.
+ * kind). TASK 09: the month's bookings by state and their money as the office marked it. v1.31 (B-26): «تقييمات العملاء»,
+ * the ratings sent in the month, their average (all and by service) and the low ones («يحتاج للتحسين»).
  */
 const reportQuery = (month: string) => queryOptions({ queryKey: ["report", month], queryFn: () => api<MonthReport>("GET", `/reports?month=${month}`) });
 
@@ -73,9 +74,60 @@ export function ReportsPage() {
             <Number title="اترد (جنيه)" value={r.refunded} />
           </div>
           <p className="text-xs text-ink-soft">«في وقتها» = خلصت قبل الميعاد المطلوب. الفلوس = اللي المكتب علّم إنه وصل فعلًا لحجوزات الشهر.</p>
+          {r.ratings ? <Ratings ratings={r.ratings} /> : null}
         </>
       ) : null}
     </div>
+  );
+}
+
+/** v1.31 (B-26): the service names of the ratings (a booking's service or a written service). */
+const RATED_SERVICES: Record<string, string> = { ...BOOKING_SERVICES, ...SERVICE_KINDS };
+
+function Ratings({ ratings }: { ratings: RatingReport }) {
+  const score = (n: number | null) => (n === null ? "—" : n.toFixed(1));
+  const cairoDay = (at: string) => new Intl.DateTimeFormat("ar-EG", { timeZone: "Africa/Cairo", day: "numeric", month: "numeric" }).format(new Date(at));
+  return (
+    <section className="grid gap-3" aria-labelledby="ratings-title">
+      <h2 id="ratings-title" className="text-xl">تقييمات العملاء</h2>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Card>
+          <h3 className="text-sm text-ink-soft">متوسط التقييم (من 5)</h3>
+          <p className="tabular text-3xl font-bold">{score(ratings.average)}</p>
+        </Card>
+        <Number title="اتبعت" value={ratings.sent} />
+        <Number title="اتقيّمت" value={ratings.answered} note={ratings.sent === 0 ? undefined : `${Math.round((ratings.answered / ratings.sent) * 100)}%`} />
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <h3 className="text-lg">المتوسط حسب الخدمة</h3>
+          {ratings.by_service.length === 0 ? <p className="text-sm text-ink-soft">مفيش تقييمات الشهر ده.</p> : (
+            <table className="w-full text-sm">
+              <thead><tr className="text-ink-soft"><th className="py-1.5 text-start">الخدمة</th><th className="text-start">تقييمات</th><th className="text-start">المتوسط</th></tr></thead>
+              <tbody className="divide-y divide-line">
+                {ratings.by_service.map((s) => (
+                  <tr key={s.key}><td className="py-1.5">{label(RATED_SERVICES, s.key)}</td><td className="tabular">{s.count}</td><td className="tabular">{score(s.average)}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </Card>
+        <Card>
+          <h3 className="text-lg">تقييمات «يحتاج للتحسين»</h3>
+          {ratings.low.length === 0 ? <p className="text-sm text-ink-soft">مفيش تقييمات ضعيفة الشهر ده.</p> : (
+            <table className="w-full text-sm">
+              <thead><tr className="text-ink-soft"><th className="py-1.5 text-start">اليوم</th><th className="text-start">الخدمة</th><th className="text-start">العميل</th></tr></thead>
+              <tbody className="divide-y divide-line">
+                {ratings.low.map((l, i) => (
+                  <tr key={`${l.at}-${i}`}><td className="py-1.5 tabular">{cairoDay(l.at)}</td><td>{label(RATED_SERVICES, l.service)}</td><td>{l.client_name ?? "رقم من غير اسم"}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </Card>
+      </div>
+      <p className="text-xs text-ink-soft">التقييمات اللي اتبعتت الشهر ده. «ليس الآن» مش بيتحسب في المتوسط. سبب التقييم الضعيف في مهمته («كلام العميل»).</p>
+    </section>
   );
 }
 

@@ -88,11 +88,20 @@ describe("TASK 07c tools", () => {
     vi.restoreAllMocks();
     serve({
       "GET /auth/me": { body: lawyer },
-      "GET /reports": { body: { month: "2026-10", tasks: 4, done: 2, done_on_time: 1, late: 1, by_type: [{ key: "urgent_request", count: 2 }], by_staff: [], new_clients: 3, by_source: [{ key: "ad", count: 3 }], by_matter: [], by_client_type: [], by_booking: [], received: 0, missing: 0, refunded: 0 } },
+      "GET /reports": { body: { month: "2026-10", tasks: 4, done: 2, done_on_time: 1, late: 1, by_type: [{ key: "urgent_request", count: 2 }], by_staff: [], new_clients: 3, by_source: [{ key: "ad", count: 3 }], by_matter: [], by_client_type: [], by_booking: [], received: 0, missing: 0, refunded: 0,
+        ratings: { sent: 3, answered: 2, average: 3.5, by_service: [{ key: "consultation_office", count: 1, average: 5 }, { key: "document_review", count: 1, average: 2 }],
+          low: [{ at: "2026-10-12T09:00:00Z", service: "document_review", client_name: "منى سعيد" }] } } },
     });
     renderAt("/reports");
     expect(await screen.findByRole("heading", { name: "التقارير" })).toBeTruthy();
     expect(await screen.findAllByText("50%")).toHaveLength(2); // done of all, and on time of done
+    // v1.31 (B-26): «تقييمات العملاء»: the average, sent and answered, by service, and the low ones with the client's name
+    const ratings = screen.getByRole("region", { name: "تقييمات العملاء" });
+    expect(within(ratings).getByText("3.5")).toBeTruthy();
+    expect(within(ratings).getByText("67%")).toBeTruthy();
+    expect(within(ratings).getByText("مقابلة في المكتب")).toBeTruthy();
+    expect(within(ratings).getByText("منى سعيد")).toBeTruthy();
+    expect(within(ratings).getAllByText("مراجعة عقد")).toHaveLength(2);
   });
 
   it("will not save a text longer than its limit", async () => {

@@ -414,8 +414,10 @@ public sealed class PanelBooking(
             return ErrInvalid;
         }
 
+        // v1.31 (B-26): the time it was marked completed starts the rating's 2 hours.
+        DateTimeOffset? completedAt = state == AppointmentInfo.Completed ? clock.GetUtcNow().ToUniversalTime() : null;
         var changed = await db.Database.ExecuteSqlInterpolatedAsync(
-            $"UPDATE hazem.appointments SET state = {state} WHERE id = {id} AND state = 'confirmed'", ct);
+            $"UPDATE hazem.appointments SET state = {state}, completed_at = {completedAt} WHERE id = {id} AND state = 'confirmed'", ct);
         if (changed == 0)
         {
             return await db.Appointments.AnyAsync(a => a.Id == id, ct) ? "not_confirmed" : ErrNotFound;

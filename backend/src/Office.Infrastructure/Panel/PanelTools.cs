@@ -32,7 +32,21 @@ public sealed record StaffReportRow(string Staff, int Assigned, int Done, int On
 /// </summary>
 public sealed record MonthReport(string Month, int Tasks, int Done, int DoneOnTime, int Late, IReadOnlyList<ReportRow> ByType,
     IReadOnlyList<StaffReportRow> ByStaff, int NewClients, IReadOnlyList<ReportRow> BySource, IReadOnlyList<ReportRow> ByMatter,
-    IReadOnlyList<ReportRow> ByClientType, IReadOnlyList<ReportRow> ByBooking, int Received, int Missing, int Refunded);
+    IReadOnlyList<ReportRow> ByClientType, IReadOnlyList<ReportRow> ByBooking, int Received, int Missing, int Refunded,
+    RatingReport Ratings);
+
+/// <summary>v1.31 (B-26): one service's ratings that month: how many scores and their average (2 to 5).</summary>
+public sealed record RatingServiceRow(string Key, int Count, double Average);
+
+/// <summary>v1.31 (B-26): a rating «يحتاج للتحسين»: when it was answered, the service, and the client's name as written.</summary>
+public sealed record LowRatingRow(DateTimeOffset At, string Service, string? ClientName);
+
+/// <summary>
+/// v1.31 (B-26) «تقييمات العملاء»: the ratings sent in the month (<see cref="Sent"/>), how many of them got a score
+/// (<see cref="Answered"/>; «ليس الآن» is no score), the average score (null: none yet), by service, and the low ones.
+/// </summary>
+public sealed record RatingReport(int Sent, int Answered, double? Average, IReadOnlyList<RatingServiceRow> ByService,
+    IReadOnlyList<LowRatingRow> Low);
 
 public sealed partial class PanelTools(HazemDbContext db, ListImporter importer, TimeProvider clock)
 {
@@ -281,6 +295,13 @@ public sealed partial class PanelTools(HazemDbContext db, ListImporter importer,
             .ToListAsync(ct);
         var refunded = await db.Payments.AsNoTracking().Where(p => p.State == "refunded" && p.RefundedAt >= start && p.RefundedAt < end)
             .SumAsync(p => p.RefundDue ?? 0, ct);
+        // v1.31 (B-26): the ratings sent this month and their answers.
+        var ratings = await (from r in db.ServiceRatings.AsNoTracking()
+                             join p in db.Persons.AsNoTracking() on r.PersonId equals p.Id
+                             where r.State == "sent" && r.SentAt >= start && r.SentAt < end
+                             select new { r.Service, r.Score, r.AnsweredAt, p.NameRaw }).ToListAsync(ct);
+        var scored = ratings.Where(r => r.Score is not null).ToList();
+        static double Average(IEnumerable<short?> scores) => Math.Round(scores.Average(s => (double)s!.Value), 1);
 
         return new MonthReport(
             $"{year:D4}-{month:D2}",
@@ -301,7 +322,15 @@ public sealed partial class PanelTools(HazemDbContext db, ListImporter importer,
             bookings.Sum(b => (b.Came ?? 0) - (b.GaveBack ?? 0)) + orders.Sum(o => (o.Came ?? 0) - (o.GaveBack ?? 0)),
             bookings.Where(b => b.Payment == "partial").Sum(b => b.Due - (b.Came ?? 0))
                 + orders.Where(o => o.Payment == "partial").Sum(o => o.Due - (o.Came ?? 0)),
-            refunded);
+            refunded,
+            new RatingReport(
+                ratings.Count,
+                scored.Count,
+                scored.Count == 0 ? null : Average(scored.Select(r => r.Score)),
+                scored.GroupBy(r => r.Service).Select(g => new RatingServiceRow(g.Key, g.Count(), Average(g.Select(r => r.Score))))
+                    .OrderByDescending(r => r.Count).ToList(),
+                scored.Where(r => r.Score == Application.Ratings.RatingButtons.Low).OrderByDescending(r => r.AnsweredAt)
+                    .Select(r => new LowRatingRow(r.AnsweredAt!.Value, r.Service, r.NameRaw)).ToList()));
     }
 
     private Task Audit(Guid by, string action, string targetType, Guid? targetId, Dictionary<string, string?> detail, CancellationToken ct) =>

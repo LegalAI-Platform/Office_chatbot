@@ -185,6 +185,11 @@ public sealed class HazemDbContext(DbContextOptions<HazemDbContext> options) : D
             e.ToTable("urf_files");
             e.HasKey(x => x.Id);
         });
+        b.Entity<ServiceRatingRow>(e =>
+        {
+            e.ToTable("service_ratings");
+            e.HasKey(x => x.Id);
+        });
     }
 
     public DbSet<BookingWeeklyHourRow> BookingWeeklyHours => Set<BookingWeeklyHourRow>();
@@ -198,6 +203,7 @@ public sealed class HazemDbContext(DbContextOptions<HazemDbContext> options) : D
     public DbSet<ServiceFileRow> ServiceFiles => Set<ServiceFileRow>();
     public DbSet<UrfCaseRow> UrfCases => Set<UrfCaseRow>();
     public DbSet<UrfFileRow> UrfFiles => Set<UrfFileRow>();
+    public DbSet<ServiceRatingRow> ServiceRatings => Set<ServiceRatingRow>(); // 0033 (v1.31, B-26)
 
     public DbSet<StaffRow> Staff => Set<StaffRow>();
     public DbSet<StaffTaskRow> StaffTasks => Set<StaffTaskRow>();
@@ -454,6 +460,30 @@ public sealed class AppointmentRow
     public DateTimeOffset? AttendanceAt { get; set; }   // TASK 12: «هحضر ✅»
     public DateTimeOffset? AttendanceFor { get; set; }  // for this time (a moved appointment is not confirmed again)
     public string? CallApp { get; set; }                // 1.25 (B-23): whatsapp, facetime or meet (a call only)
+    public DateTimeOffset? CompletedAt { get; set; }    // 1.31 (B-26): when the office marked it completed
+}
+
+/// <summary>hazem.service_ratings (0033, v1.31, B-26).</summary>
+public sealed class ServiceRatingRow
+{
+    public Guid Id { get; set; }
+    public Guid PersonId { get; set; }
+    public Guid? AppointmentId { get; set; }
+    public Guid? ServiceOrderId { get; set; }
+    public required string Service { get; set; }
+    public DateTimeOffset FinishedAt { get; set; }
+    public DateTimeOffset DueAt { get; set; }
+    public required string State { get; set; }
+    public string? SkipReason { get; set; }
+    public string? Channel { get; set; }
+    public string? ErrorCode { get; set; }
+    public DateTimeOffset? SentAt { get; set; }
+    public short? Score { get; set; }
+    public DateTimeOffset? AnsweredAt { get; set; }
+    public string? AnsweredTurnId { get; set; }
+    public DateTimeOffset? ReasonAt { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
 }
 
 /// <summary>hazem.appointment_reminders (0017, TASK 12, B-18).</summary>

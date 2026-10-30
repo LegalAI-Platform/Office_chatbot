@@ -155,7 +155,7 @@ export interface Dashboard {
 
 // ---------- TASK 07c ----------
 
-export type AlertKind = "task_overdue" | "task_urgent" | "task_human" | "system";
+export type AlertKind = "task_overdue" | "task_urgent" | "task_human" | "task_rating" | "system";
 
 /** TASK 13: a system alert (the managers only) has no task: `system_what` says what failed. */
 export interface PanelAlert {
@@ -234,4 +234,15 @@ export interface MonthReport {
   received: number;
   missing: number;
   refunded: number;
+  /** v1.31 (B-26) «تقييمات العملاء»: the ratings sent in the month and their answers. */
+  ratings: RatingReport;
+}
+
+export interface RatingReport {
+  sent: number;
+  /** with a score (2 to 5); «ليس الآن» is no score */
+  answered: number;
+  average: number | null;
+  by_service: { key: string; count: number; average: number }[];
+  low: { at: string; service: string; client_name: string | null }[];
 }

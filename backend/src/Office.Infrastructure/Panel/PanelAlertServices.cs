@@ -24,7 +24,8 @@ public sealed class PanelAlertStore(HazemDbContext db) : IPanelAlertStore
           CROSS JOIN LATERAL (VALUES
             (CASE WHEN t.state = 'overdue' THEN {AlertKinds.Overdue} END),
             (CASE WHEN t.type = ANY({Urgent}) AND t.state NOT IN ('done', 'cancelled') THEN {AlertKinds.Urgent} END),
-            (CASE WHEN t.type = 'human_requested' AND t.state NOT IN ('done', 'cancelled') THEN {AlertKinds.Human} END)) AS k(kind)
+            (CASE WHEN t.type = 'human_requested' AND t.state NOT IN ('done', 'cancelled') THEN {AlertKinds.Human} END),
+            (CASE WHEN t.type = 'rating_low' AND t.state NOT IN ('done', 'cancelled') THEN {AlertKinds.Rating} END)) AS k(kind)
          WHERE k.kind IS NOT NULL
            AND t.created_at >= (SELECT value::timestamptz FROM hazem.settings WHERE key = 'alerts.since')
         ON CONFLICT (kind, task_id) DO NOTHING
@@ -160,13 +161,14 @@ public sealed class PanelAlertStore(HazemDbContext db) : IPanelAlertStore
         var managers = viewer.Can(Permissions.UsersManage);
         if (viewer.Can(Permissions.TasksViewAll))
         {
-            return managers ? alerts : alerts.Where(a => a.Kind != AlertKinds.System);
+            // v1.31: a low rating is the managers' too.
+            return managers ? alerts : alerts.Where(a => a.Kind != AlertKinds.System && a.Kind != AlertKinds.Rating);
         }
 
         var staff = viewer.StaffId;
         return from a in alerts
                join t in db.StaffTasks.AsNoTracking() on a.TaskId equals (Guid?)t.Id
-               where t.StaffId == null || (staff != null && t.StaffId == staff)
+               where (t.StaffId == null || (staff != null && t.StaffId == staff)) && a.Kind != AlertKinds.Rating
                select a;
     }
 }

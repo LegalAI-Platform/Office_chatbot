@@ -29,6 +29,7 @@ export const TASK_TYPES: Record<string, string> = {
   office_info_missing: "عميل سأل عن المكتب ومعلومته مش مكتوبة: اكتب العنوان والخريطة وأرقام الدفع (المواعيد ← بيانات المكتب) أو أيام الاستشارات",
   service_question: "عميل بيسأل المكتب بيعمل خدمة معيّنة ولا لأ: رد عليه",
   payment_review_due: "الميعاد قرّب والتحويل لسه ما اتراجعش: راجعه دلوقتي (الإيصالات والمدفوعات)",
+  rating_low: "عميل قيّم الخدمة «يحتاج للتحسين»: كلّمه (سببه في كلام العميل لو كتبه)",
 };
 
 /** TASK 12 (B-18): the reminders before a confirmed appointment. */
@@ -191,6 +192,7 @@ export const ALERT_KINDS: Record<string, string> = {
   task_overdue: "مهمة اتأخرت",
   task_urgent: "طلب عاجل",
   task_human: "عميل عايز يكلم حد",
+  task_rating: "تقييم ضعيف من عميل",
   system: "مشكلة في السيستم",
 };
 
