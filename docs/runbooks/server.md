@@ -76,7 +76,9 @@ bash deploy/deploy.sh 1a2b3c4                      # one commit exactly, or back
 ```
 
 The images of that commit, a backup, the migrations, the stack, the healthcheck; a failed healthcheck puts the
-previous version back. The tunnel is not restarted, so Meta's webhook stays.
+previous version back. The tunnel is not restarted, so Meta's webhook stays. When the commit changed n8n's
+workflows they are imported again (n8n restarts for ~30 s; Meta resends what arrives meanwhile) and Meta's link is
+checked; when it changed the edge's config, the edge restarts.
 
 ## 6. Meta's webhook on the server
 
