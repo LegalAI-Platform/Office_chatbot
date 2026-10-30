@@ -24,6 +24,7 @@ const LOADERS = {
   "/services": pick(() => import("../features/services/ServicesPage"), "ServicesPage"),
   "/urf": pick(() => import("../features/urf/UrfPage"), "UrfPage"),
   "/prices": pick(() => import("../features/prices/PricesPage"), "PricesPage"),
+  "/testing": pick(() => import("../features/testing/TestingPage"), "TestingPage"),
   "/chats": pick(() => import("../features/chats/ChatsPage"), "ChatsPage"),
   "/reports": pick(() => import("../features/reports/ReportsPage"), "ReportsPage"),
   "/lists": pick(() => import("../features/lists/ListsPage"), "ListsPage"),

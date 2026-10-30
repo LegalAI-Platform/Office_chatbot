@@ -107,6 +107,35 @@ public sealed class ChatwootApi(HttpClient http, IOptions<ChatwootOptions> optio
         return (long)c["id"]!;
     }
 
+    public async Task<(int Contacts, int Conversations)> DeleteContactAsync(string waId, CancellationToken ct)
+    {
+        var (account, _, _) = await IdsAsync(ct);
+        var found = await SendAsync(HttpMethod.Get, $"/api/v1/accounts/{account}/contacts/search?q={waId}", O.BotToken, null, ct);
+        int contacts = 0, conversations = 0;
+        foreach (var c in found["payload"]?.AsArray() ?? [])
+        {
+            if ((string?)c?["identifier"] != waId && (string?)c?["phone_number"] != "+" + waId)
+            {
+                continue;
+            }
+
+            var contactId = (long)c!["id"]!;
+            var convs = await SendAsync(HttpMethod.Get, $"/api/v1/accounts/{account}/contacts/{contactId}/conversations", O.BotToken, null, ct,
+                allowNotFound: true);
+            foreach (var conv in convs["payload"]?.AsArray() ?? [])
+            {
+                await SendAsync(HttpMethod.Delete, $"/api/v1/accounts/{account}/conversations/{(long)conv!["id"]!}", O.BotToken, null, ct,
+                    allowNotFound: true);
+                conversations++;
+            }
+
+            await SendAsync(HttpMethod.Delete, $"/api/v1/accounts/{account}/contacts/{contactId}", O.BotToken, null, ct, allowNotFound: true);
+            contacts++;
+        }
+
+        return (contacts, conversations);
+    }
+
     public async Task PostAsync(long conversationId, string content, ChatwootPost kind, CancellationToken ct)
     {
         var (account, _, _) = await IdsAsync(ct);
