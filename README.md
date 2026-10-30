@@ -193,6 +193,9 @@ backups off this disk: `scripts/windows/backup-export.ps1 -To E:\OfficeBackups`.
 
 ## CI and images (TASK 14)
 
+The whole design (CI/CD, the server, the domain, access, backups, and the checklist for production) is in
+[`docs/deployment.md`](docs/deployment.md); the commands on the server in [`docs/runbooks/server.md`](docs/runbooks/server.md).
+
 On GitHub's machines, never on the server (the repo is public):
 
 - **Every pull request** (`.github/workflows/ci.yml`): the backend's unit and integration tests on a throwaway
