@@ -15,6 +15,10 @@ It talks to the .NET API's `/api/panel` only ([docs/panel-api.md](../docs/panel-
 `npm run build` prints the gzipped size of the JS and the CSS (`tools/check-bundle.mjs`); there is no
 limit since 2026-10-24 (the owner removed the 150 KB budget in TASK 09). Fonts are bundled from `@fontsource` (no request leaves the machine).
 
+The landing page (the domain itself, TASK 14) is plain files in `public/landing`. Its buttons' motion is the one
+built part: `landing-fx/` (GSAP for the press and the pull, Three.js for the gold burst of a click), built by
+`vite.landing.config.ts` into `dist/landing/fx/` right after the panel, as part of `npm run build`.
+
 ## Structure (frontend-architecture)
 
 ```text
