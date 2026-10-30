@@ -214,6 +214,30 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task The_ai_down_for_three_messages_in_an_hour_alerts_the_managers_once_that_hour()
+    {
+        // 0032: two failures are no alert; a third in the same hour is one, with its e-mail (no client data). A low
+        // confidence is the AI's own answer and never counts; a message the backstop read still does.
+        await db.ExecAsync("""
+            INSERT INTO hazem.classifications (turn_id, intent, confidence, full_name_present, fallback_reason, created_at) VALUES
+              ('wt:ai-1', 'other', 0, false, 'error', now()),
+              ('wt:ai-2', 'other', 0, false, 'low_confidence', now()),
+              ('wt:ai-3', 'abusive', 0, false, 'backstop:error', now());
+            """);
+        Assert.Equal((0, 0), await RunAlerts());
+
+        await db.ExecAsync("""
+            INSERT INTO hazem.classifications (turn_id, intent, confidence, full_name_present, fallback_reason, created_at)
+            SELECT 'wt:ai-4', 'other', 0, false, 'no_key', created_at FROM hazem.classifications WHERE turn_id = 'wt:ai-1';
+            """);
+        Assert.Equal((1, 1), await RunAlerts());
+        Assert.Equal((0, 0), await RunAlerts()); // one an hour
+        var mail = Assert.Single(_factory.Mail.Sent);
+        Assert.StartsWith("الـ AI اللي بيفهم رسايل العملاء مش شغال |", mail.Subject);
+        Assert.StartsWith("ai:", await db.ScalarAsync<string>("SELECT system_ref FROM hazem.panel_alerts WHERE system_what = 'ai'"));
+    }
+
+    [Fact]
     public async Task The_api_reads_the_nightly_jobs_but_never_writes_them_nor_n8n_s_errors()
     {
         await using var c = new Npgsql.NpgsqlConnection(db.ApiConnectionString);

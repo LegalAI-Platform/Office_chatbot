@@ -183,8 +183,15 @@ public sealed record Classification(
     MatterSubtype? Subtype = null,
     SenderRole Role = SenderRole.Client,
     InfoTopic? Topic = null,
-    Scope Scope = Scope.Office)
+    Scope Scope = Scope.Office,
+    string? BackstopFor = null)
 {
+    /// <summary>
+    /// 0032: the AI failed for this reason and <see cref="Backstop"/> read the message by code instead (the intent is
+    /// what it read; not a fallback). The classification log says <c>backstop:&lt;reason&gt;</c>.
+    /// </summary>
+    public string? LoggedReason => FallbackReason ?? (BackstopFor is { } b ? Backstop.Prefix + b : null);
+
     public const string UnknownValue = "unknown_value";
     public const string LowConfidence = "low_confidence";
     public const string MinConfidenceKey = "ai.min_confidence";

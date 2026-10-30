@@ -252,7 +252,9 @@ public sealed class HazemResponder(
                 {
                     if (aiText is not null)
                     {
-                        classification = Classification.From(await classifier.ClassifyAsync(aiText, settings, ct), settings);
+                        // 0032: the AI down → an insult or a plain thanks is still read by code (Backstop)
+                        classification = Backstop.Apply(
+                            Classification.From(await classifier.ClassifyAsync(aiText, settings, ct), settings), aiText);
                     }
 
                     var office = classification is { Intent: Intent.OfficeInfo } asked
@@ -298,6 +300,10 @@ public sealed class HazemResponder(
         if (classification is { IsFallback: true })
         {
             notes.Add($"classification fell back to other: {classification.FallbackReason}");
+        }
+        else if (classification?.BackstopFor is { } failed)
+        {
+            notes.Add($"classification {failed}: read by code as {Classification.Code(classification.Intent)}");
         }
 
         var effects = new TurnEffects(state, plan.Tasks,
