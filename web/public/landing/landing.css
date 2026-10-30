@@ -23,10 +23,13 @@
   --dark: #17140f;
   --shadow: 0 1px 2px rgb(30 26 20 / 0.04), 0 12px 30px rgb(120 92 50 / 0.10);
   --radius: 16px;
+  --top-h: 84px;
 }
 
 * { box-sizing: border-box; }
-html { scroll-behavior: smooth; scroll-padding-top: 90px; }
+/* no scrollbar on the side (the owner's call, 2026-10-30): the page still scrolls by wheel, touch and keys */
+html { scroll-behavior: smooth; scroll-padding-top: 90px; scrollbar-width: none; }
+html::-webkit-scrollbar { display: none; }
 body { margin: 0; overflow-x: clip; background: var(--page); color: var(--ink); font: 400 16px/1.75 "Cairo", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
 img, svg { display: block; max-width: 100%; }
 a { color: inherit; text-decoration: none; }
@@ -56,8 +59,18 @@ svg .fill { fill: currentColor; stroke: none; }
 .btn-line:hover { background: var(--gold-tint); }
 
 /* ---------- header ---------- */
-.top { position: sticky; top: 0; z-index: 20; background: rgb(250 247 242 / .94); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
-.top-row { display: flex; align-items: center; gap: 24px; min-height: 84px; }
+/* Fixed over the page: clear on the hero at the top, frosted glass once the page moves (landing.js sets .at-top and
+   .hide); it slides away while scrolling down and comes back on the way up. Without the script: frosted, always. */
+.top {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 20;
+  background: rgb(250 247 242 / .72); -webkit-backdrop-filter: blur(14px) saturate(1.4); backdrop-filter: blur(14px) saturate(1.4);
+  border-bottom: 1px solid rgb(236 228 214 / .85); box-shadow: 0 8px 24px rgb(60 45 20 / .06);
+}
+/* moves only after the first frame, so the page never opens on a fading header */
+.top.ready { transition: transform .35s ease, background-color .3s ease, border-color .3s ease, box-shadow .3s ease; }
+.top.at-top { background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; border-bottom-color: transparent; box-shadow: none; }
+.top.hide { transform: translateY(-100%); }
+.top-row { display: flex; align-items: center; gap: 24px; min-height: var(--top-h); }
 .brand { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
 .brand img { width: 58px; height: 58px; border-radius: 50%; }
 .brand strong { display: block; font-size: 19px; font-weight: 800; line-height: 1.35; }
@@ -72,14 +85,18 @@ svg .fill { fill: currentColor; stroke: none; }
 /* As the design: the picture (the room and the laptop) fills the right of the hero to the edge of the window and
    fades into the cream on its left; the text stands on the left. */
 .hero {
-  position: relative; overflow: hidden; min-height: clamp(500px, 38.5vw, 640px); padding: 0;
+  position: relative; overflow: hidden; min-height: clamp(500px, 38.5vw, 640px); padding: var(--top-h) 0 0;
   background:
     radial-gradient(700px 420px at 20% 35%, #fffdf9 0%, rgb(255 253 249 / 0) 70%),
     linear-gradient(90deg, #f7f1e7 0%, #faf6ef 40%, #efe4d3 100%);
 }
 .hero-bg {
-  position: absolute; top: 0; bottom: 0; right: 0; width: 60%; height: 100%; object-fit: cover; object-position: left center;
-  -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 22%); mask-image: linear-gradient(to right, transparent 0%, #000 22%);
+  position: absolute; top: var(--top-h); right: 0; width: 60%; height: calc(100% - var(--top-h)); object-fit: cover; object-position: left center;
+  /* fades into the cream on its left, and softly under the clear header on its top */
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 22%), linear-gradient(to bottom, transparent 0, #000 56px);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(to right, transparent 0%, #000 22%), linear-gradient(to bottom, transparent 0, #000 56px);
+  mask-composite: intersect;
 }
 .hero-row { position: relative; display: flex; align-items: center; min-height: inherit; padding-bottom: 64px; }
 .hero-text { width: 39%; margin-inline-start: auto; }
@@ -131,11 +148,15 @@ svg .fill { fill: currentColor; stroke: none; }
 .head p, .lead { margin-top: 4px; font-size: 17px; color: var(--ink-soft); }
 
 /* ---------- features ---------- */
-/* As the design: the screens picture fills the left of the section to the edge of the window. */
+/* The screens picture (the owner's, 2:1) stands on the left of the section from the edge of the window, whole, and
+   fades into the cream on its other three sides. */
 .features { position: relative; overflow: hidden; }
 .features-bg {
-  position: absolute; top: 0; bottom: 0; left: 0; width: 49%; height: 100%; object-fit: cover; object-position: right center;
-  -webkit-mask-image: linear-gradient(to left, transparent 0%, #000 12%); mask-image: linear-gradient(to left, transparent 0%, #000 12%);
+  position: absolute; top: 50%; left: 0; width: 52%; height: auto; transform: translateY(-50%);
+  -webkit-mask-image: linear-gradient(to left, transparent 0%, #000 9%), linear-gradient(to bottom, transparent 0%, #000 8%, #000 92%, transparent 100%);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(to left, transparent 0%, #000 9%), linear-gradient(to bottom, transparent 0%, #000 8%, #000 92%, transparent 100%);
+  mask-composite: intersect;
 }
 .features-row { position: relative; display: flex; padding: 22px 0 22px; min-height: clamp(440px, 36vw, 575px); align-items: center; }
 .features-text { width: 50%; }
@@ -214,7 +235,7 @@ svg .fill { fill: currentColor; stroke: none; }
   .menu nav a:hover { background: var(--gold-tint); }
   .menu nav .btn { margin-top: 6px; }
   .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .features-bg { position: static; width: 100%; height: auto; max-width: 640px; margin-inline: auto; -webkit-mask-image: none; mask-image: none; }
+  .features-bg { position: static; width: 100%; height: auto; max-width: 860px; margin-inline: auto; transform: none; -webkit-mask-image: none; mask-image: none; }
   .features-row { min-height: 0; padding-top: 10px; }
   .features-text { width: 100%; }
   .hero-text { width: 50%; }
@@ -225,7 +246,7 @@ svg .fill { fill: currentColor; stroke: none; }
   .foot-brand { justify-content: flex-start; }
 }
 @media (max-width: 900px) {
-  .hero { min-height: 0; padding: 0 0 90px; }
+  .hero { min-height: 0; padding: var(--top-h) 0 90px; }
   .hero-bg { position: static; width: 100%; height: auto; -webkit-mask-image: none; mask-image: none; }
   .hero-row { min-height: 0; padding: 28px 0 0; }
   .hero-text { width: 100%; }
@@ -238,7 +259,8 @@ svg .fill { fill: currentColor; stroke: none; }
 }
 @media (max-width: 620px) {
   body { font-size: 15.5px; }
-  .top-row { min-height: 72px; gap: 12px; }
+  :root { --top-h: 72px; }
+  .top-row { gap: 12px; }
   .brand img { width: 46px; height: 46px; }
   .brand strong { font-size: 16px; }
   .brand small { font-size: 12.5px; }
@@ -255,6 +277,6 @@ svg .fill { fill: currentColor; stroke: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
-  .btn { transition: none; }
+  .btn, .top.ready { transition: none; }
   .btn:hover { transform: none; }
 }

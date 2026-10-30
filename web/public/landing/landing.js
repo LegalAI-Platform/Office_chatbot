@@ -1,5 +1,28 @@
-// The screens' arrows and dots (the landing page's only script; the page works without it, the row scrolls by hand).
+// The landing page's only script; the page works without it (the header stays frosted, the row scrolls by hand).
 document.addEventListener("DOMContentLoaded", () => {
+  // The header: clear on the hero at the top, frosted below it; it slides away while scrolling down and comes back
+  // on the way up (never while its menu is open or the keyboard is on one of its links).
+  const top = document.querySelector(".top");
+  const menu = top?.querySelector(".menu");
+  if (top) {
+    let last = window.scrollY;
+    const place = () => {
+      const y = window.scrollY;
+      top.classList.toggle("at-top", y < 8);
+      if (Math.abs(y - last) < 6) return;
+      const down = y > last && y > top.offsetHeight;
+      top.classList.toggle("hide", down && !menu?.open && !top.querySelector(":focus-visible"));
+      last = y;
+    };
+    window.addEventListener("scroll", place, { passive: true });
+    top.addEventListener("focusin", () => top.classList.remove("hide"));
+    // a link in the small screens' menu closes it
+    menu?.addEventListener("click", (e) => { if (e.target.closest("a")) menu.open = false; });
+    place();
+    requestAnimationFrame(() => requestAnimationFrame(() => top.classList.add("ready")));
+  }
+
+  // The screens' arrows and dots.
   const track = document.querySelector(".track");
   const dots = [...document.querySelectorAll(".dots span")];
   if (!track) return;
