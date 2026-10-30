@@ -122,7 +122,8 @@ Before `panel` and `chat` get a route, Cloudflare's free plan guards them (no ca
 - **Security → WAF → Custom rules**, a rule *«Egypt only for the panel»*: when `Hostname is in {panel.<domain>
   chat.<domain>}` **and** `Country does not equal Egypt` → **Block**. `wa.<domain>` stays open (Meta sends from
   abroad). Someone travelling cannot sign in until the rule is paused.
-- **Security → Bots → Bot Fight Mode**: on.
+- **Not** Bot Fight Mode: on the free plan it cannot be skipped for `wa.<domain>`, and it may challenge Meta's
+  webhook calls (WhatsApp would stop arriving, silently).
 - The panel's own guards stay: password, the authenticator (optional since v1.16; `PANEL_MANAGERS_NEED_2FA=true`
   makes it a must for managers), the sign-in limits, new accounts waiting for a manager's approval; Chatwoot's
   sign-up is off.
