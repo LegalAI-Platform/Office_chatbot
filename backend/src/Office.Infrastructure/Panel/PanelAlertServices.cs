@@ -56,11 +56,11 @@ public sealed class PanelAlertStore(HazemDbContext db) : IPanelAlertStore
         // messages or more in one hour it could not read at all, one alert that hour. Counts only.
         var ai = await db.Database.ExecuteSqlRawAsync($"""
             INSERT INTO hazem.panel_alerts (kind, system_what, system_ref)
-            SELECT 'system', 'ai', 'ai:' || to_char(date_trunc('hour', c.created_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24')
-              FROM hazem.classifications c
-             WHERE c.created_at >= {Since}
-               AND c.fallback_reason ~ '^(backstop:)?(no_key|timeout|error|invalid_output)$'
-             GROUP BY 1 HAVING count(*) >= 3
+            SELECT 'system', 'ai', 'ai:' || to_char(h.hour AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24')
+              FROM (SELECT date_trunc('hour', c.created_at) AS hour FROM hazem.classifications c
+                     WHERE c.created_at >= {Since}
+                       AND c.fallback_reason ~ '^(backstop:)?(no_key|timeout|error|invalid_output)$'
+                     GROUP BY 1 HAVING count(*) >= 3) h
             ON CONFLICT (system_ref) DO NOTHING
             """, ct);
         // A night with no backup at all (the PC or Docker off at 03:00, the scheduled task gone, a run killed half way):
