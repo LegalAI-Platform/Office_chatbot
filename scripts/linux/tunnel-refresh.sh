@@ -5,6 +5,8 @@
 #   2. Meta credentials and settings  6. publish META-WA-INBOUND and restart n8n: on start-up the
 #   3. start the tunnel, read its URL    WhatsApp Trigger registers the new URL at Meta
 #   4. delete the old subscription     7. verify the callback URL Meta now has
+# TASK 14, the office's domain on a Named Tunnel: the link never changes, so this runs once with it:
+#   tunnel-refresh.sh --url https://wa.<domain>     (step 3 then only waits for that link to answer)
 source "$(dirname "$0")/_common.sh"
 check_no_placeholders
 
@@ -15,11 +17,17 @@ echo "[2/7] Meta credentials and settings"
 run_workflow WaSubCheck000001 >/dev/null \
   || die "META-WA-SUBSCRIPTION-CHECK failed: check the credentials (docs/meta-setup.md part 3) and app.settings (whatsapp.*)"
 
-echo "[3/7] Quick Tunnel"
-docker compose --profile tunnel up -d --wait tunnel >/dev/null
-url=""
-for _ in $(seq 1 30); do url="$(tunnel_url_from_logs)"; [[ -n "$url" ]] && break; sleep 2; done
-[[ -n "$url" ]] || die "could not read the tunnel URL (docker compose --profile tunnel logs tunnel)"
+if [[ "${1:-}" == "--url" ]]; then
+  url="${2%/}"
+  [[ "$url" =~ ^https://[a-z0-9.-]+$ ]] || die "usage: tunnel-refresh.sh --url https://wa.<domain>"
+  echo "[3/7] Named Tunnel link"
+else
+  echo "[3/7] Quick Tunnel"
+  docker compose --profile tunnel up -d --wait tunnel >/dev/null
+  url=""
+  for _ in $(seq 1 30); do url="$(tunnel_url_from_logs)"; [[ -n "$url" ]] && break; sleep 2; done
+  [[ -n "$url" ]] || die "could not read the tunnel URL (docker compose --profile tunnel logs tunnel)"
+fi
 expected="$url/webhook/$INBOUND_WEBHOOK_ID/webhook"
 echo "      $url"
 

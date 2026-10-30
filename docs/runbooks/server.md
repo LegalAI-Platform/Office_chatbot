@@ -103,3 +103,28 @@ addresses as on the PC (stop the PC's own stack first, or its ports are taken).
 crontab -e     # as office
 0 3 * * * /opt/office/scripts/linux/nightly.sh >> /home/office/nightly.log 2>&1
 ```
+
+## 9. The office's domain (a fixed link, and the panel for the staff)
+
+The domain's DNS is on Cloudflare (Free plan; its nameservers set at Hostinger). A **Named Tunnel** (Cloudflare →
+Networking → Tunnels) runs on the server as `tunnel-named`; its token is in `.env` as `CLOUDFLARE_TUNNEL_TOKEN`,
+typed by the owner (`read -rsp`, never on screen). All its routes go to the edge, which picks by name
+(`infra/edge/nginx.conf`):
+
+| Route (Published application) | Service URL | Reaches |
+|---|---|---|
+| `wa.<domain>` | `http://edge:8081` | Meta's webhook only (everything else 404) |
+| `panel.<domain>` | `http://edge:8081` | the panel |
+| `chat.<domain>` | `http://edge:8081` | Chatwoot |
+
+Before `panel` and `chat` get a route, each gets a **Cloudflare Access** application (Zero Trust → Access →
+Applications → Self-hosted) with an Allow policy for the staff's e-mails only (One-time PIN): nobody else even
+sees the panel's sign-in. Then, in `.env` (not secrets): `PANEL_URL=https://panel.<domain>` (links in e-mails) and
+`CHATWOOT_URL=https://chat.<domain>`, and `bash deploy/deploy.sh` (or `docker compose up -d`).
+
+Meta, once, on the fixed link (it never changes again, so no tunnel-refresh after a restart):
+
+```bash
+bash scripts/linux/tunnel-refresh.sh --url https://wa.<domain>
+docker compose --profile tunnel stop tunnel      # the Quick Tunnel is no longer needed
+```
