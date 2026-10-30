@@ -103,3 +103,39 @@ addresses as on the PC (stop the PC's own stack first, or its ports are taken).
 crontab -e     # as office
 0 3 * * * /opt/office/scripts/linux/nightly.sh >> /home/office/nightly.log 2>&1
 ```
+
+## 9. The office's domain (a fixed link, and the panel for the staff)
+
+The domain's DNS is on Cloudflare (Free plan; its nameservers set at Hostinger). A **Named Tunnel** (Cloudflare →
+Networking → Tunnels) runs on the server as `tunnel-named`; its token is in `.env` as `CLOUDFLARE_TUNNEL_TOKEN`,
+typed by the owner (`read -rsp`, never on screen). All its routes go to the edge, which picks by name
+(`infra/edge/nginx.conf`):
+
+| Route (Published application) | Service URL | Reaches |
+|---|---|---|
+| `wa.<domain>` | `http://edge:8081` | Meta's webhook only (everything else 404) |
+| `panel.<domain>` | `http://edge:8081` | the panel |
+| `chat.<domain>` | `http://edge:8081` | Chatwoot |
+
+Before `panel` and `chat` get a route, Cloudflare's free plan guards them (no card needed):
+
+- **Security → WAF → Custom rules**, a rule *«Egypt only for the panel»*: when `Hostname is in {panel.<domain>
+  chat.<domain>}` **and** `Country does not equal Egypt` → **Block**. `wa.<domain>` stays open (Meta sends from
+  abroad). Someone travelling cannot sign in until the rule is paused.
+- **Not** Bot Fight Mode: on the free plan it cannot be skipped for `wa.<domain>`, and it may challenge Meta's
+  webhook calls (WhatsApp would stop arriving, silently).
+- The panel's own guards stay: password, the authenticator (optional since v1.16; `PANEL_MANAGERS_NEED_2FA=true`
+  makes it a must for managers), the sign-in limits, new accounts waiting for a manager's approval; Chatwoot's
+  sign-up is off.
+- Later, with a card on the Cloudflare account (Zero Trust stays free up to 50 people): a **Cloudflare Access**
+  application on both names, the staff's e-mails only, so nobody else even sees the sign-in.
+
+Then, in `.env` (not secrets): `PANEL_URL=https://panel.<domain>` (links in e-mails) and
+`CHATWOOT_URL=https://chat.<domain>`, and `docker compose up -d`.
+
+Meta, once, on the fixed link (it never changes again, so no tunnel-refresh after a restart):
+
+```bash
+bash scripts/linux/tunnel-refresh.sh --url https://wa.<domain>
+docker compose --profile tunnel stop tunnel      # the Quick Tunnel is no longer needed
+```
