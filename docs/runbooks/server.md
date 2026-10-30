@@ -117,10 +117,20 @@ typed by the owner (`read -rsp`, never on screen). All its routes go to the edge
 | `panel.<domain>` | `http://edge:8081` | the panel |
 | `chat.<domain>` | `http://edge:8081` | Chatwoot |
 
-Before `panel` and `chat` get a route, each gets a **Cloudflare Access** application (Zero Trust → Access →
-Applications → Self-hosted) with an Allow policy for the staff's e-mails only (One-time PIN): nobody else even
-sees the panel's sign-in. Then, in `.env` (not secrets): `PANEL_URL=https://panel.<domain>` (links in e-mails) and
-`CHATWOOT_URL=https://chat.<domain>`, and `bash deploy/deploy.sh` (or `docker compose up -d`).
+Before `panel` and `chat` get a route, Cloudflare's free plan guards them (no card needed):
+
+- **Security → WAF → Custom rules**, a rule *«Egypt only for the panel»*: when `Hostname is in {panel.<domain>
+  chat.<domain>}` **and** `Country does not equal Egypt` → **Block**. `wa.<domain>` stays open (Meta sends from
+  abroad). Someone travelling cannot sign in until the rule is paused.
+- **Security → Bots → Bot Fight Mode**: on.
+- The panel's own guards stay: password, the authenticator (optional since v1.16; `PANEL_MANAGERS_NEED_2FA=true`
+  makes it a must for managers), the sign-in limits, new accounts waiting for a manager's approval; Chatwoot's
+  sign-up is off.
+- Later, with a card on the Cloudflare account (Zero Trust stays free up to 50 people): a **Cloudflare Access**
+  application on both names, the staff's e-mails only, so nobody else even sees the sign-in.
+
+Then, in `.env` (not secrets): `PANEL_URL=https://panel.<domain>` (links in e-mails) and
+`CHATWOOT_URL=https://chat.<domain>`, and `docker compose up -d`.
 
 Meta, once, on the fixed link (it never changes again, so no tunnel-refresh after a restart):
 
