@@ -222,6 +222,24 @@ svg .fill { fill: currentColor; stroke: none; }
 .social span { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: #2b251c; color: #e9dfcc; }
 .social svg { width: 18px; height: 18px; }
 
+/* ---------- the buttons' motion (fx/fx.js sets html.fx) ---------- */
+/* GSAP moves the buttons, so their own transform transition is off (it would drag behind); the light of a touch
+   (.fx-ripple) and the sheen that crosses the gold on hover sit between the button's colour and its text. */
+.fx .btn, .fx .arrow { position: relative; overflow: hidden; isolation: isolate; transition: box-shadow .2s ease, background-color .2s ease; will-change: transform; }
+.fx .btn:hover { transform: none; }
+.fx .card a, .fx .menu summary { will-change: transform; }
+.fx-ripple { position: absolute; z-index: -1; border-radius: 50%; pointer-events: none; background: radial-gradient(circle, rgb(255 255 255 / .7) 0%, rgb(255 244 214 / .35) 35%, rgb(255 255 255 / 0) 70%); }
+.btn-line .fx-ripple, .arrow .fx-ripple { background: radial-gradient(circle, rgb(195 154 78 / .45) 0%, rgb(195 154 78 / .15) 40%, rgb(195 154 78 / 0) 70%); }
+.fx .btn-gold::after, .fx .btn-dark::after {
+  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: linear-gradient(110deg, transparent 30%, rgb(255 255 255 / .5) 48%, rgb(255 255 255 / .15) 55%, transparent 68%);
+  transform: translateX(-130%); transition: transform .9s cubic-bezier(.2, .7, .2, 1);
+}
+.fx .btn-dark::after { background: linear-gradient(110deg, transparent 30%, rgb(232 196 138 / .38) 48%, rgb(232 196 138 / .1) 55%, transparent 68%); }
+.fx .btn-gold:hover::after, .fx .btn-dark:hover::after { transform: translateX(130%); }
+/* the gold burst of a click (Three.js): over everything, never in the way */
+.fx-layer { position: fixed; inset: 0; z-index: 40; width: 100%; height: 100%; pointer-events: none; }
+
 /* ---------- smaller screens ---------- */
 @media (max-width: 1180px) {
   .nav { display: none; }
