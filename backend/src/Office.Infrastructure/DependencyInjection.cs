@@ -129,6 +129,8 @@ public static class DependencyInjection
         services.AddScoped<Booking.NoticeSender>();
         services.AddScoped<Booking.BookingNotices>();
         services.AddScoped<Booking.ReminderNotices>(); // TASK 12
+        services.AddScoped<Booking.UrgentNotices>(); // v1.33 (B-09): the lawyer's alert, the escalation and «هكلمه»
+        services.AddScoped<Application.Booking.IUrgentCalls>(sp => sp.GetRequiredService<Booking.UrgentNotices>());
         services.AddScoped<Booking.PanelBooking>();
         services.AddScoped<Booking.PanelPayments>();
 

@@ -224,7 +224,7 @@ public sealed class BookingChoiceAndComposerTests
 /// The booking in the conversation (B-08, B-09, B-15, B-22; v1.13: the hold until the receipt image) with an
 /// in-memory store and calendar.
 /// </summary>
-public sealed class BookingFlowTests
+public sealed partial class BookingFlowTests
 {
     private const string Number = "201000000088";
     private static readonly DateTimeOffset Now = AvailabilityTests.At(19, 12);
@@ -290,9 +290,9 @@ public sealed class BookingFlowTests
 
     private bool _aiDown;
 
-    private HazemResponder Hazem => new(new Store(_rows), new Scripted(_script, () => _aiDown), new Texts(_texts), new NoLists(), new Clock(_now),
+    private HazemResponder Hazem => new(new Store(_rows), new Scripted(_script, () => _aiDown), new Texts(_texts), _lists, new Clock(_now),
         new BookingDesk(_booking, _calendar), new Office.Application.Services.ServiceDesk(_booking),
-        new Office.Application.Urf.UrfDesk(new MemoryUrf(_booking, () => _now)));
+        new Office.Application.Urf.UrfDesk(new MemoryUrf(_booking, () => _now)), urgentCalls: _acks);
 
     private Task<TurnDecision> Send(IncomingMessage m) => Send(new Turn($"wt:{++_turn}", Number, null, [m]));
 
@@ -1719,7 +1719,8 @@ public sealed class BookingFlowTests
                 mine.FirstOrDefault(a => a.State == AppointmentInfo.PendingPayment)
                 ?? mine.Where(a => a.State == AppointmentInfo.Confirmed && a.End > at
                                    && Waits(a, PaymentInfo.Requested, PaymentInfo.Partial, PaymentInfo.NotReceived)).OrderBy(a => a.Start).FirstOrDefault()
-                ?? mine.LastOrDefault(a => a.State == AppointmentInfo.Expired && a.Start > at && Waits(a, PaymentInfo.Requested)));
+                ?? mine.LastOrDefault(a => a.State == AppointmentInfo.Expired && (a.Start > at || a.Service == BookingService.Urgent.Code) // v1.33
+                                           && Waits(a, PaymentInfo.Requested)));
         }
 
         public async Task<ReceiptOutcome> AttachReceiptAsync(ReceiptRequest r, bool lateFree, int bufferMinutes, CancellationToken ct)
@@ -1752,6 +1753,22 @@ public sealed class BookingFlowTests
 
         public Task<PaymentInfo?> PaymentAsync(Guid appointmentId, CancellationToken ct) =>
             Task.FromResult(Payments.TryGetValue(appointmentId, out var p) ? p : null);
+
+        /// <summary>v1.33 (B-09): hazem.retime_urgent (0035): an urgent call moved, clear of the others with the buffer.</summary>
+        public Task<bool> RetimeUrgentAsync(Guid id, DateTimeOffset start, DateTimeOffset end, int bufferMinutes, CancellationToken ct)
+        {
+            var i = Appointments.FindIndex(a => a.Id == id);
+            var buffer = TimeSpan.FromMinutes(bufferMinutes);
+            if (i < 0 || Appointments[i].Service != BookingService.Urgent.Code
+                || Appointments[i].State is not (AppointmentInfo.PendingPayment or AppointmentInfo.Expired or AppointmentInfo.Confirmed)
+                || Appointments.Any(a => a.Id != id && a.IsOpen && a.Start - buffer < end && start < a.End + buffer))
+            {
+                return Task.FromResult(false);
+            }
+
+            Appointments[i] = Appointments[i] with { Start = start, End = end };
+            return Task.FromResult(true);
+        }
 
         public Task<int?> RequestRefundAsync(Guid appointmentId, string reason, CancellationToken ct)
         {

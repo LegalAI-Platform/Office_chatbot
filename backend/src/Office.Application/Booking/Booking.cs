@@ -116,11 +116,14 @@ public sealed record BookingSettings(bool Enabled, BookingRules Rules, string Ca
             Int(HoldGapKey, h.GapMinutes));
         return new(s.Flag(EnabledKey), rules.Problem() is null ? rules : d, s.Get(CalendarIdKey), OfficeInfo.From(s),
             hold.Problem() is null ? hold : h, UrfMinutesValid(Int(UrfMinutesKey, 60)) ? Int(UrfMinutesKey, 60) : 60,
-            PriceList.From(s));
+            PriceList.From(s)) { Urgent = UrgentRules.From(s) };
     }
 
     /// <summary>B-23 as the panel has it now (TASK 06); the 1.4 values when it was not read.</summary>
     public PriceList Prices => PriceList ?? PriceList.Default;
+
+    /// <summary>v1.33 (B-09): the urgent call-back's settings and the lawyer's and the manager's numbers.</summary>
+    public UrgentRules Urgent { get; init; } = UrgentRules.Default;
 
     /// <summary>
     /// The service as it is booked now: its price from the panel (TASK 06) and, for an Urfi appointment, its length
@@ -247,8 +250,11 @@ public enum ReceiptStatus
     Exists,        // the same message again
 }
 
-/// <summary><see cref="OrderId"/> and <see cref="OrderKind"/> (TASK 10): the receipt was for a service order, not a booking.</summary>
-public sealed record ReceiptOutcome(ReceiptStatus Status, Guid? AppointmentId, Guid? OrderId = null, string? OrderKind = null);
+/// <summary>
+/// <see cref="OrderId"/> and <see cref="OrderKind"/> (TASK 10): the receipt was for a service order, not a booking.
+/// <see cref="Retimed"/> (v1.33, B-09): an urgent call set again at the first free moment from the receipt.
+/// </summary>
+public sealed record ReceiptOutcome(ReceiptStatus Status, Guid? AppointmentId, Guid? OrderId = null, string? OrderKind = null, bool Retimed = false);
 
 public enum MoveStatus
 {
@@ -290,6 +296,12 @@ public interface IBookingStore
     Task<AppointmentInfo?> ReceiptTargetAsync(Guid personId, DateTimeOffset now, CancellationToken ct);
 
     Task<ReceiptOutcome> AttachReceiptAsync(ReceiptRequest receipt, bool lateFree, int bufferMinutes, CancellationToken ct);
+
+    /// <summary>
+    /// v1.33 (B-09): an urgent call (held, its hold run out, or confirmed) to [start, end), off the slot grid; the SQL keeps it
+    /// clear of the others with the buffer. Not the client's free change (B-15). False when the time is taken.
+    /// </summary>
+    Task<bool> RetimeUrgentAsync(Guid id, DateTimeOffset start, DateTimeOffset end, int bufferMinutes, CancellationToken ct);
 
     Task<PaymentInfo?> PaymentAsync(Guid appointmentId, CancellationToken ct);
 
@@ -401,20 +413,94 @@ public sealed class BookingDesk(IBookingStore store, IBusyCalendar calendar)
     }
 
     /// <summary>
+    /// v1.33 (B-09): the first moment the lawyer is free for the urgent call from <paramref name="now"/>, over today and the
+    /// next days up to the horizon (<see cref="Availability.FirstFree"/>). <paramref name="except"/>: the call itself.
+    /// </summary>
+    public async Task<UrgentFree> FirstFreeAsync(BookingSettings booking, HazemSettings settings, DateTimeOffset now, Guid? except,
+        CancellationToken ct)
+    {
+        var rules = booking.Rules;
+        var today = Today(now);
+        var last = today.AddDays(rules.HorizonDays);
+        var margin = TimeSpan.FromMinutes(rules.BufferMinutes);
+        var from = Instant(today) - margin;
+        var to = Instant(last.AddDays(1)) + margin;
+        var busy = await calendar.BusyAsync(from, to, settings, ct);
+        if (!busy.Available)
+        {
+            return new UrgentFree(false, null);
+        }
+
+        var schedule = await store.LoadScheduleAsync(today, last, ct);
+        var booked = (await store.TakenBetweenAsync(from, to, ct)).Where(a => a.Id != except).Select(a => a.Interval).ToList();
+        return new UrgentFree(true, Availability.FirstFree(schedule, rules, BookingService.Urgent.Minutes, booked, busy.Busy, now, Zone));
+    }
+
+    /// <summary>
+    /// v1.33 (B-09): the urgent call held at the first free moment just found. Off the slot grid, so straight to the store:
+    /// hazem.book_appointment still keeps it clear of the others (with the buffer) inside its lock.
+    /// </summary>
+    public Task<BookOutcome> BookUrgentAsync(BookingSettings booking, BookRequest request, CancellationToken ct) =>
+        store.BookAsync(request with { Service = booking.Fit(request.Service) }, ct);
+
+    /// <summary>
     /// B-05 (1.13): a receipt image. A hold whose time ran out is confirmed again only if its time is
     /// still free now (the calendar and the panel's hours, then the database inside the SQL function).
+    /// v1.33 (B-09, <paramref name="urgentCall"/>): an urgent call's receipt books the first free moment from now instead.
     /// Null: nothing of this client waits for a receipt.
     /// </summary>
     public async Task<ReceiptOutcome?> ReceiptAsync(BookingSettings booking, HazemSettings settings, ReceiptRequest receipt, DateTimeOffset now,
-        CancellationToken ct)
+        CancellationToken ct, bool urgentCall = false)
     {
         // The booking the receipt is for, if it is for one (TASK 10: it may be for a service order).
         var target = await store.ReceiptTargetAsync(receipt.PersonId, now, ct);
+        if (urgentCall && target is { State: AppointmentInfo.PendingPayment or AppointmentInfo.Expired } call
+            && BookingService.ByCode(call.Service) is { IsUrgent: true })
+        {
+            var urgent = await UrgentReceiptAsync(booking, settings, receipt, call, now, ct);
+            return urgent.Status == ReceiptStatus.None ? null : urgent;
+        }
+
+        // v1.33 (B-09): a new receipt after «فيه مشكلة» (the payment not received): the call is set again from now, as the first.
+        if (urgentCall && target is { State: AppointmentInfo.Confirmed } again && BookingService.ByCode(again.Service) is { IsUrgent: true }
+            && await store.PaymentAsync(again.Id, ct) is { State: PaymentInfo.NotReceived })
+        {
+            var outcome2 = await store.AttachReceiptAsync(receipt, false, booking.Rules.BufferMinutes, ct);
+            var free = await FirstFreeAsync(booking, settings, now, again.Id, ct);
+            var minutes = booking.Fit(BookingService.Urgent).Minutes;
+            var moved = outcome2.AppointmentId == again.Id && free.Start is { } s
+                        && await store.RetimeUrgentAsync(again.Id, s, s.AddMinutes(minutes), booking.Rules.BufferMinutes, ct);
+            return outcome2.Status == ReceiptStatus.None ? null : outcome2 with { Retimed = moved };
+        }
+
         var lateFree = target is { State: AppointmentInfo.Expired }
                        && await StillFreeAsync(booking, settings, BookingService.ByCode(target.Service) ?? BookingService.PhoneVideo, target.Start, now,
                            target.Id, ct, holdCheck: false);
         var outcome = await store.AttachReceiptAsync(receipt, lateFree, booking.Rules.BufferMinutes, ct);
         return outcome.Status == ReceiptStatus.None ? null : outcome;
+    }
+
+    /// <summary>
+    /// v1.33 (B-09): the receipt is attached as for any hold (the payment waits for the panel's review), and the call is set at
+    /// the first free moment from now (never the grid's check: a late receipt is booked whenever a time is found). Its hold ran
+    /// out: moved first, then confirmed at the new time. The calendar down: attached as it is, at its own time.
+    /// </summary>
+    private async Task<ReceiptOutcome> UrgentReceiptAsync(BookingSettings booking, HazemSettings settings, ReceiptRequest receipt,
+        AppointmentInfo call, DateTimeOffset now, CancellationToken ct)
+    {
+        var free = await FirstFreeAsync(booking, settings, now, call.Id, ct);
+        var minutes = booking.Fit(BookingService.Urgent).Minutes;
+        var buffer = booking.Rules.BufferMinutes;
+        if (call.State == AppointmentInfo.Expired)
+        {
+            var moved = free.Start is { } s && await store.RetimeUrgentAsync(call.Id, s, s.AddMinutes(minutes), buffer, ct);
+            return await store.AttachReceiptAsync(receipt, moved, buffer, ct) with { Retimed = moved };
+        }
+
+        var outcome = await store.AttachReceiptAsync(receipt, false, buffer, ct);
+        var retimed = outcome.Status == ReceiptStatus.Confirmed && outcome.AppointmentId == call.Id && free.Start is { } start
+                      && await store.RetimeUrgentAsync(call.Id, start, start.AddMinutes(minutes), buffer, ct);
+        return outcome with { Retimed = retimed };
     }
 
     public Task<PaymentInfo?> PaymentAsync(Guid appointmentId, CancellationToken ct) => store.PaymentAsync(appointmentId, ct);
