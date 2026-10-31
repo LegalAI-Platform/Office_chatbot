@@ -230,7 +230,7 @@
 {"id":230,"text":"بحبك","intent":"abusive"}
 {"id":231,"text":"هل المكتب يقدر يعمل بطاقة شخصية","intent":"off_topic"}
 {"id":232,"text":"اسمك ايه","intent":"office_info","info_topic":"assistant"}
-{"id":233,"text":"انت فاكرني؟","intent":"office_info","info_topic":"assistant"}
+{"id":233,"text":"انت فاكرني؟","intent":"my_status"}
 {"id":234,"text":"مين هو استاذ سعد","intent":"office_info","info_topic":"lawyer"}
 {"id":235,"text":"مين هو المحامي صاحب المكتب ده","intent":"office_info","info_topic":"lawyer"}
 {"id":236,"text":"مين احسن محامي في مصر","intent":"office_info","info_topic":"lawyer"}
@@ -249,3 +249,17 @@
 {"id":249,"text":"عايز اطلع فيش وتشبيه","intent":"off_topic"}
 {"id":250,"text":"عايز اجدد رخصة العربية","intent":"off_topic"}
 {"id":251,"text":"عايز ارفع قضية خلع","intent":"service_by_name","service":"case_representation","matter_type":"personal_status"}
+{"id":252,"text":"خدمات","intent":"show_services"}
+{"id":253,"text":"اي خدمات المكتب","intent":"show_services"}
+{"id":254,"text":"عندكم ايه","intent":"show_services"}
+{"id":255,"text":"ممكن اعرف بتقدموا ايه","intent":"show_services"}
+{"id":256,"text":"عاوز احكي مشكلتي","intent":"tell_problem"}
+{"id":257,"text":"عندي مشكلة","intent":"tell_problem"}
+{"id":258,"text":"ممكن اشرحلك موضوعي؟","intent":"tell_problem"}
+{"id":259,"text":"فاكرني؟","intent":"my_status"}
+{"id":260,"text":"ميعادي امتى؟","intent":"my_status"}
+{"id":261,"text":"التحويل وصل ولا لسه؟","intent":"my_status"}
+{"id":262,"text":"المستشار هيكلمني امتى","intent":"my_status"}
+{"id":263,"text":"السلام عليكم انت فاكرني","intent":"my_status","courtesy":"salam"}
+{"id":264,"text":"اسمي منى سعيد","intent":"provide_name","full_name":true,"name_gender":"female"}
+{"id":265,"text":"محمد عبد الرحمن","intent":"provide_name","full_name":true,"name_gender":"male"}

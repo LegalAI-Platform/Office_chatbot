@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Office.Application.Booking;
 using Office.Application.Conversations;
 using Office.Application.Ratings;
 using Office.Infrastructure.Persistence;
@@ -75,5 +76,33 @@ public sealed class RatingStore(HazemDbContext db) : IRatingStore, IIntakeHistor
                         || db.ServiceOrders.Any(o => o.Id == p.ServiceOrderId && o.PersonId == personId))
             .Select(p => new RequestItem(RequestItem.Payment, p.State, false, null)).ToListAsync(ct));
         return new IntakeFacts(last, items);
+    }
+
+    /// <summary>
+    /// v1.39 (TASK 16): his appointment still to come (a paid urgent call first, then a hold, then the nearest confirmed
+    /// one), his newest order not delivered yet, and the texts of the last turn Hazem answered.
+    /// </summary>
+    public async Task<SituationFacts> SituationAsync(Guid personId, string waId, DateTimeOffset now, CancellationToken ct)
+    {
+        var n = now.ToUniversalTime();
+        var a = await db.Appointments.AsNoTracking()
+            .Where(x => x.PersonId == personId && (x.State == AppointmentInfo.Confirmed || x.State == AppointmentInfo.PendingPayment) && x.EndsAt > n)
+            .OrderBy(x => x.State == AppointmentInfo.Confirmed && x.Service == BookingService.Urgent.Code ? 0
+                : x.State == AppointmentInfo.PendingPayment ? 1 : 2)
+            .ThenBy(x => x.StartsAt)
+            .Select(x => new OpenAppointment(x.Service, x.State, x.StartsAt, x.HoldUntil)).FirstOrDefaultAsync(ct);
+        var o = await db.ServiceOrders.AsNoTracking()
+            .Where(x => x.PersonId == personId && (x.State == "collecting" || x.State == "awaiting_price" || x.State == "awaiting_payment"
+                                                   || x.State == "in_progress"))
+            .OrderByDescending(x => x.UpdatedAt)
+            .Select(x => new OpenOrder(x.Kind, x.State)).FirstOrDefaultAsync(ct);
+        var keys = await db.Database.SqlQuery<string>($"""
+            SELECT r.text_key AS "Value" FROM hazem.turn_replies r
+             WHERE r.turn_id = (SELECT t.turn_id FROM hazem.turns t
+                                 WHERE t.wa_id = {waId} AND EXISTS (SELECT 1 FROM hazem.turn_replies x WHERE x.turn_id = t.turn_id)
+                                 ORDER BY t.created_at DESC LIMIT 1)
+             ORDER BY r.idempotency_key
+            """).ToListAsync(ct);
+        return new SituationFacts(a, o, keys);
     }
 }

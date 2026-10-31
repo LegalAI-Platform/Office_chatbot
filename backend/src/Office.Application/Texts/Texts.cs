@@ -252,6 +252,19 @@ public static class TextKeys
     public const string BtnUrgentSee = "btn_urgent_see"; // the template's quick reply «شوف التحويل»
     public const string BtnUrgentOk = "btn_urgent_ok";   // under the receipt: «التحويل تمام، هكلمه»
     public const string BtnUrgentBad = "btn_urgent_bad"; // under the receipt: «فيه مشكلة»
+
+    // v1.39 (TASK 16): the client's situation answered first ({{call}}: « يا أستاذ محمد», « يا أبو عماد» or nothing).
+    public const string SituationUrgent = "situation_urgent";       // a paid urgent call waiting: {{when}}
+    public const string SituationHeld = "situation_held";           // a time held for the transfer
+    public const string SituationConfirmed = "situation_confirmed"; // a confirmed appointment to come
+    public const string SituationOrder = "situation_order";         // a written service order: {{status}}
+    public const string SituationTopic = "situation_topic";         // the topic told for an open item
+    public const string RepeatChoice = "repeat_choice";             // the same answer again: the services or a person
+    public const string BtnTalkToOffice = "btn_talk_to_office";     // «أكلم حد من المكتب»
+    public const string Greeting2 = "greeting_2";                   // more wordings, taken in turn (3.6)
+    public const string Greeting3 = "greeting_3";
+    public const string TopicReceived2 = "topic_received_2";
+    public const string TopicReceived3 = "topic_received_3";
 }
 
 /// <summary>

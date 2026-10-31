@@ -34,8 +34,17 @@ public sealed class Person
 
     public DateTimeOffset? FirstSeenAt { get; private set; }
 
+    /// <summary>
+    /// v1.39 (TASK 16): «male» or «female», as the AI read it from the name he typed (never his WhatsApp name); null = not
+    /// clear, and Hazem then says «حضرتك» without a name.
+    /// </summary>
+    public string? NameGender { get; private set; }
+
+    public const string Male = "male";
+    public const string Female = "female";
+
     public static Person Load(Guid id, WaId waId, PersonName? name, bool? fullNameProvided, string? preferredCallPhone,
-        string? source = null, string? sourceRaw = null, DateTimeOffset? firstSeenAt = null) =>
+        string? source = null, string? sourceRaw = null, DateTimeOffset? firstSeenAt = null, string? nameGender = null) =>
         new(id, waId)
         {
             Name = name,
@@ -44,6 +53,7 @@ public sealed class Person
             Source = source,
             SourceRaw = sourceRaw,
             FirstSeenAt = firstSeenAt,
+            NameGender = nameGender,
         };
 
     /// <summary>B-13: the first contact only; later turns never change the source.</summary>
@@ -61,10 +71,11 @@ public sealed class Person
     /// Records the name. v1.29 (the owner: «ثنائي رباعي براحته»): any name the client gives settles it, however many parts;
     /// <see cref="FullNameProvided"/> keeps saying whether it is four-part (for the office).
     /// </summary>
-    public bool GiveName(PersonName name)
+    public bool GiveName(PersonName name, string? gender = null)
     {
         Name = name;
         FullNameProvided = name.IsFull;
+        NameGender = gender is Male or Female ? gender : null; // v1.39: a new name comes with its own gender, or none
         return true;
     }
 

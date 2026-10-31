@@ -172,16 +172,23 @@ public sealed class BookingNotices(HazemDbContext db, BookingStore store, Bookin
         }
     }
 
-    /// <summary>1.25 (B-08): a confirmed appointment starting soon whose transfer is still waiting for its review.</summary>
+    /// <summary>
+    /// 1.25 (B-08): a confirmed appointment starting soon whose transfer is still waiting for its review. v1.38: not an urgent
+    /// call while the call-back runs (v1.33): the lawyer checks its transfer himself before he calls; the panel's review stays
+    /// for the accounts, without a task.
+    /// </summary>
     private async Task AlertUnreviewedAsync(CancellationToken ct)
     {
         var now = clock.GetUtcNow();
         var settings = await settingsReader.GetAsync(ct);
         var minutes = int.TryParse(settings.Get(BookingSettings.ReviewAlertKey), out var m) && m > 0 ? m : BookingSettings.DefaultReviewAlertMinutes;
         var soon = now.AddMinutes(minutes);
+        var active = await texts.GetActiveAsync(settings, ct);
+        var callBack = UrgentTexts.Keys.All(active.ContainsKey);
         var late = await (from a in db.Appointments.AsNoTracking()
                           join pay in db.Payments.AsNoTracking() on (Guid?)a.Id equals pay.AppointmentId
                           where a.State == AppointmentInfo.Confirmed && a.StartsAt > now && a.StartsAt <= soon
+                                && (!callBack || a.Service != BookingService.Urgent.Code)
                                 && (pay.State == PaymentInfo.ProofReceived || pay.State == PaymentInfo.DuplicateSuspected)
                           select new { a.Id, a.PersonId }).Take(Batch).ToListAsync(ct);
         foreach (var x in late)

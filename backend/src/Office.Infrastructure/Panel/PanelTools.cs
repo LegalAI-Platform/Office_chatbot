@@ -33,7 +33,20 @@ public sealed record StaffReportRow(string Staff, int Assigned, int Done, int On
 public sealed record MonthReport(string Month, int Tasks, int Done, int DoneOnTime, int Late, IReadOnlyList<ReportRow> ByType,
     IReadOnlyList<StaffReportRow> ByStaff, int NewClients, IReadOnlyList<ReportRow> BySource, IReadOnlyList<ReportRow> ByMatter,
     IReadOnlyList<ReportRow> ByClientType, IReadOnlyList<ReportRow> ByBooking, int Received, int Missing, int Refunded,
-    RatingReport Ratings);
+    RatingReport Ratings)
+{
+    /// <summary>v1.39 (TASK 16, 3.4): «محادثات محتاجة مراجعة», the month's turns flagged by the system.</summary>
+    public IReadOnlyList<ReviewRow> Review { get; init; } = [];
+}
+
+/// <summary>
+/// v1.39 (TASK 16, 3.4): one conversation to review: when, the client (his name as the office sees it, else the last two
+/// digits of his key), and why: repeated (Hazem had to say «معلش لو مش واضح»), unclear_twice (two unclear in a row),
+/// asked_status («فاكرني؟»، «ميعادي امتى؟»), offer_after_payment (a paid offer to a client who had paid: the alarm,
+/// it should never happen), left_after_price (the price or the offer was the last thing he got, a day ago, and he never
+/// booked).
+/// </summary>
+public sealed record ReviewRow(DateTimeOffset At, string? Client, string Reason);
 
 /// <summary>v1.31 (B-26): one service's ratings that month: how many scores and their average (2 to 5).</summary>
 public sealed record RatingServiceRow(string Key, int Count, double Average);
@@ -330,7 +343,59 @@ public sealed partial class PanelTools(HazemDbContext db, ListImporter importer,
                 scored.GroupBy(r => r.Service).Select(g => new RatingServiceRow(g.Key, g.Count(), Average(g.Select(r => r.Score))))
                     .OrderByDescending(r => r.Count).ToList(),
                 scored.Where(r => r.Score == Application.Ratings.RatingButtons.Low).OrderByDescending(r => r.AnsweredAt)
-                    .Select(r => new LowRatingRow(r.AnsweredAt!.Value, r.Service, r.NameRaw)).ToList()));
+                    .Select(r => new LowRatingRow(r.AnsweredAt!.Value, r.Service, r.NameRaw)).ToList()))
+        {
+            Review = await ReviewAsync(start, end, ct),
+        };
+    }
+
+    public const int ReviewMax = 100;
+
+    /// <summary>The paid offers and payment requests the forbidden rule 1 keeps from a client who paid (v1.39).</summary>
+    private const string PaidOffers = "'consultation_offer', 'case_offer', 'urgent_price', 'urgent_pay', 'booking_hold'";
+
+    /// <summary>v1.39 (TASK 16, 3.4): the month's flagged turns, newest first (keys and reasons only, never a message).</summary>
+    private async Task<IReadOnlyList<ReviewRow>> ReviewAsync(DateTimeOffset start, DateTimeOffset end, CancellationToken ct)
+    {
+        var json = await db.Database.SqlQueryRaw<string>($$"""
+            WITH r AS (
+              SELECT t.wa_id, t.turn_id, x.text_key, x.created_at
+                FROM hazem.turn_replies x JOIN hazem.turns t ON t.turn_id = x.turn_id
+               WHERE x.created_at >= {0} AND x.created_at < {1} AND x.part = 0),
+            flagged AS (
+              SELECT r.wa_id, min(r.created_at) AS at, 'repeated' AS reason FROM r WHERE r.text_key = 'repeat_choice' GROUP BY r.wa_id, r.turn_id
+              UNION ALL
+              SELECT r.wa_id, min(r.created_at), 'unclear_twice' FROM r WHERE r.text_key = 'unclear_again' GROUP BY r.wa_id, r.turn_id
+              UNION ALL
+              SELECT t.wa_id, c.created_at, 'asked_status' FROM hazem.classifications c JOIN hazem.turns t ON t.turn_id = c.turn_id
+               WHERE c.intent = 'my_status' AND c.created_at >= {0} AND c.created_at < {1}
+              UNION ALL
+              SELECT r.wa_id, min(r.created_at), 'offer_after_payment' FROM r
+               WHERE r.text_key IN ({{PaidOffers}})
+                 AND EXISTS (SELECT 1 FROM hazem.appointments a JOIN hazem.payments p ON p.appointment_id = a.id
+                               JOIN hazem.persons pe ON pe.id = a.person_id
+                              WHERE pe.wa_id = r.wa_id AND p.proof_at < r.created_at AND a.ends_at > r.created_at
+                                AND a.state IN ('confirmed', 'completed'))
+               GROUP BY r.wa_id, r.turn_id
+              UNION ALL
+              SELECT r.wa_id, r.created_at, 'left_after_price' FROM r
+               WHERE r.text_key IN ({{PaidOffers}}, 'services_menu')
+                 AND r.created_at < now() - interval '24 hours'
+                 AND NOT EXISTS (SELECT 1 FROM hazem.turns l WHERE l.wa_id = r.wa_id AND l.created_at > r.created_at)
+                 AND NOT EXISTS (SELECT 1 FROM hazem.persons pe JOIN hazem.appointments a ON a.person_id = pe.id
+                                  WHERE pe.wa_id = r.wa_id AND a.created_at >= r.created_at)
+                 AND NOT EXISTS (SELECT 1 FROM hazem.persons pe JOIN hazem.service_orders o ON o.person_id = pe.id
+                                  WHERE pe.wa_id = r.wa_id AND o.created_at >= r.created_at)
+                 AND r.created_at = (SELECT max(y.created_at) FROM r y WHERE y.wa_id = r.wa_id))
+            SELECT coalesce(json_agg(json_build_object('at', f.at, 'client', coalesce(pe.office_name, '…' || right(f.wa_id, 2)),
+                                                       'reason', f.reason) ORDER BY f.at DESC), '[]')::text AS "Value"
+              FROM (SELECT DISTINCT ON (wa_id, reason, date_trunc('hour', at)) * FROM flagged ORDER BY wa_id, reason, date_trunc('hour', at), at) f
+              LEFT JOIN hazem.persons pe ON pe.wa_id = f.wa_id
+            """, start, end).SingleAsync(ct);
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        return doc.RootElement.EnumerateArray().Take(ReviewMax)
+            .Select(e => new ReviewRow(e.GetProperty("at").GetDateTimeOffset(), e.GetProperty("client").GetString(), e.GetProperty("reason").GetString()!))
+            .ToList();
     }
 
     private Task Audit(Guid by, string action, string targetType, Guid? targetId, Dictionary<string, string?> detail, CancellationToken ct) =>

@@ -77,6 +77,52 @@ public sealed class HazemResponder(
         TextKeys.BookingConfirmedCall, TextKeys.BookingConfirmedOffice,
     ];
 
+    /// <summary>v1.39 (TASK 16): the situation replies run only when every one of their texts is approved.</summary>
+    public static IReadOnlyList<string> SituationTextKeys { get; } =
+    [
+        TextKeys.SituationUrgent, TextKeys.SituationHeld, TextKeys.SituationConfirmed, TextKeys.SituationOrder, TextKeys.SituationTopic,
+    ];
+
+    /// <summary>v1.39 (the forbidden rule 2): the answers to a general message, never the same twice in a row.</summary>
+    private static readonly HashSet<string> RepeatWatched =
+    [
+        TextKeys.Greeting, TextKeys.Greeting2, TextKeys.Greeting3, TextKeys.Unclear, TextKeys.ConsultationOffer, TextKeys.CaseOffer,
+        TextKeys.LegalQuestion, TextKeys.ServicesMenu, TextKeys.Welcome, TextKeys.WelcomeChoose, TextKeys.AboutHazem, TextKeys.OffTopic,
+        TextKeys.ServicesTell, TextKeys.OfficePracticeAreas, TextKeys.OfficePrices,
+        TextKeys.SituationUrgent, TextKeys.SituationHeld, TextKeys.SituationConfirmed, TextKeys.SituationOrder,
+    ];
+
+    /// <summary>
+    /// v1.39 (TASK 16, the forbidden rule 2): a typed message whose answer is exactly what the client got last time (the same
+    /// approved texts) gets «معلش لو مش واضح…» with the services and a person instead, never the same words again. A client
+    /// asking his situation («فاكرني؟») is told it again: he asked for it.
+    /// </summary>
+    private static void NotTwiceInARow(Plan plan, ClientSituation situation, IReadOnlyDictionary<string, ApprovedText> texts)
+    {
+        // The whole answer (the greeting in kind aside) is what he got last time, and it is a general answer: a new part (the
+        // address he asked) makes it a new answer.
+        var said = plan.Steps.Where(s => !s.Key.StartsWith("greet_", StringComparison.Ordinal)).ToList();
+        if (!said.Any(s => RepeatWatched.Contains(s.Key)) || !said.All(s => situation.RepliedLast(s.Key))
+            || !texts.TryGetValue(TextKeys.RepeatChoice, out var t) || !t.Active)
+        {
+            return;
+        }
+
+        plan.Steps.RemoveAll(s => RepeatWatched.Contains(s.Key));
+        plan.Ask(TextKeys.RepeatChoice, new ReplyChoices(InteractivePayload.Buttons,
+        [
+            new ReplyChoice(ServiceRow.Id(ServiceRow.Menu), TextKeys.BtnServicesList),
+            new ReplyChoice(ServiceRow.Id(ServiceRow.Human), TextKeys.BtnTalkToOffice),
+        ]));
+    }
+
+    /// <summary>v1.39 (3.6): the next of a text's wordings after the one the client got last (the first one otherwise).</summary>
+    private static string InTurn(ClientSituation situation, params string[] wordings)
+    {
+        var last = Array.FindLastIndex(wordings, situation.RepliedLast);
+        return wordings[(last + 1) % wordings.Length];
+    }
+
     public const string ResponderName = "hazem";
 
     /// <summary>Numbers Hazem answers while hazem.open_to_all is false (CLAUDE.md: test numbers only).</summary>
@@ -184,8 +230,15 @@ public sealed class HazemResponder(
             var ageRefusal = urfOn && texts.TryGetValue(TextKeys.UrfAgeClosed, out var closing) && closing.Active
                 ? await urf!.AgeRefusalAsync(state.Person.Id, now, ct)
                 : null;
+            // v1.39 (TASK 16): what the client has with the office, read before every reply (his last answer too, for the
+            // forbidden rule 2 and the wordings in turn); the situation replies only when their texts are approved.
+            var facts = !firstContact && history is not null ? await history.SituationAsync(state.Person.Id, turn.WaId, now, ct) : SituationFacts.Empty;
+            var situation = SituationTextKeys.All(k => texts.TryGetValue(k, out var st) && st.Active)
+                ? ClientSituation.From(facts)
+                : new ClientSituation(SituationKind.None, facts);
             var flow = new Flow(turn, state, list, null, plan, settings.Flag(HandoffEnabledKey), bookingOn ? bookingSettings : null, servicesOn,
-                urfOn, urfOpen, ageRefusal: ageRefusal, urgentOn: urgentOn);
+                urfOn, urfOpen, ageRefusal: ageRefusal, urgentOn: urgentOn, situation: situation);
+            var freeText = false;
             // TASK 08: a button or a list row Hazem sent is read without the AI. TASK 12: a reminder's two buttons
             // whenever the reminders run (an appointment booked before the booking was switched off still gets them).
             var pressed = ChoiceIn(turn);
@@ -245,7 +298,7 @@ public sealed class HazemResponder(
                 else
                 {
                     flow = new Flow(turn, state, list, row.AsClassification, plan, settings.Flag(HandoffEnabledKey),
-                        bookingOn ? bookingSettings : null, servicesOn, urfOn, urfOpen, null, ageRefusal, returning, urgentOn);
+                        bookingOn ? bookingSettings : null, servicesOn, urfOn, urfOpen, null, ageRefusal, returning, urgentOn, situation);
                     flow.Respond(firstContact);
                 }
             }
@@ -306,7 +359,8 @@ public sealed class HazemResponder(
                         ? await OfficeDetailsAsync(settings, asked.Topic == InfoTopic.Hours, now, ct)
                         : null;
                     flow = new Flow(turn, state, list, classification, plan, settings.Flag(HandoffEnabledKey), bookingOn ? bookingSettings : null,
-                        servicesOn, urfOn, urfOpen, office, ageRefusal, returning, urgentOn);
+                        servicesOn, urfOn, urfOpen, office, ageRefusal, returning, urgentOn, situation);
+                    freeText = aiText is not null;
                     // v1.32: the list did not know the greeting («صباحين الخير»): the kind the AI read, answered the same way
                     if (greet is null && classification is { IsFallback: false, Courtesy: not CourtesyKind.None } read
                         && new CourtesyMatch(read.Courtesy, false).TextKey is { } ak && texts.TryGetValue(ak, out var at) && at.Active)
@@ -340,6 +394,11 @@ public sealed class HazemResponder(
             if (flow.UrfChanged && flow.Urf is { } changed)
             {
                 await urf!.SaveAsync(changed, flow.State.Intake.Id, ct);
+            }
+
+            if (freeText && !flow.AskedStatus)
+            {
+                NotTwiceInARow(plan, situation, texts);
             }
 
             state = flow.State;
@@ -530,8 +589,18 @@ public sealed class HazemResponder(
     /// <summary>The decisions for one turn. Changes the state in memory; the store saves it with the turn.</summary>
     private sealed class Flow(Turn turn, ClientState state, ListMatch list, Classification? c, Plan plan, bool handoffEnabled,
         BookingSettings? booking, bool servicesOn, bool urfOn = false, IReadOnlyList<UrfCase>? urfOpen = null,
-        IReadOnlyDictionary<string, string>? office = null, AgeRefusal? ageRefusal = null, bool returning = false, bool urgentOn = false)
+        IReadOnlyDictionary<string, string>? office = null, AgeRefusal? ageRefusal = null, bool returning = false, bool urgentOn = false,
+        ClientSituation? situation = null)
     {
+        /// <summary>v1.39 (TASK 16): what the client has with the office before this turn.</summary>
+        private readonly ClientSituation situation = situation ?? ClientSituation.None;
+
+        /// <summary>v1.39: the client asked for his situation («فاكرني؟»، or «مستعجل» while his paid call waits): no forbidden rule 2 on it.</summary>
+        public bool AskedStatus { get; private set; }
+
+        /// <summary>v1.39 (3.6): {{call}}, how Hazem calls him in the texts that have it.</summary>
+        private Dictionary<string, string> CallFill() => new() { ["call"] = Salutation.Call(State.Person) };
+
         /// <summary>TASK 11: the client's Urfi case (B-11) this turn is about (the newest running one), as the turn leaves it.</summary>
         public UrfCase? Urf { get; private set; } = urfOpen?.FirstOrDefault();
 
@@ -658,7 +727,7 @@ public sealed class HazemResponder(
 
             if (name is not null)
             {
-                State.Person.GiveName(name);
+                State.Person.GiveName(name, c.GenderCode); // v1.39: the gender the AI read from that name
             }
             else if (Intake.MayAskNameAgain)
             {
@@ -1037,12 +1106,19 @@ public sealed class HazemResponder(
                 return;
             }
 
+            // v1.39 (TASK 16): a general message from a client with something open: his situation first, never a new offer.
+            if (AnswerSituation())
+            {
+                AnswerMediaProblems();
+                return;
+            }
+
             // v1.32 (B-01.1): the first message from an unknown number: no name question any more (it is asked at the
             // booking). A request is answered at once; anything else (a greeting, «ألو», a name, a photo) gets the welcome
             // with its two buttons. A name said on the way is kept.
             // v1.32: a name the client tells on the way (any message, before the booking asks it) is kept
             var named = !State.Person.NameSettled && Intake.State != IntakeState.AwaitingName
-                        && c?.FullName is { } said && PersonName.TryParse(said, out var given, minWords: 1) && State.Person.GiveName(given);
+                        && c?.FullName is { } said && PersonName.TryParse(said, out var given, minWords: 1) && State.Person.GiveName(given, c.GenderCode);
             if ((firstContact || Intake.State == IntakeState.New) && (!State.Person.NameSettled || named))
             {
                 Check(Intake.Classify(TypeOf()));
@@ -1126,6 +1202,57 @@ public sealed class HazemResponder(
             }
 
             AnswerTurn();
+        }
+
+        /// <summary>
+        /// v1.39 (TASK 16, 3.1): a greeting, «عايز استشارة», an unclear message, «فاكرني؟» or «ميعادي امتى؟» from a client with
+        /// something open is answered with his situation; the topic he then tells reaches the office for that item
+        /// («وصلت ✅ وهتبقى قدام المستشار»); «عاوز احكي مشكلتي» asks for it. A precise request (another service, a price,
+        /// cancel, a person) goes on as before. True when the turn was answered here.
+        /// </summary>
+        private bool AnswerSituation()
+        {
+            if (!situation.HasOpenItem || c is null || list.LawyerDirect || Intake.ClientType is ClientType.Colleague or ClientType.Press
+                    or ClientType.Vendor)
+            {
+                return false;
+            }
+
+            switch (c.Intent)
+            {
+                case Intent.DescribeMatter:
+                    plan.Say(TextKeys.SituationTopic, TextKeys.TopicReceived, CallFill());
+                    plan.Task(PendingTask.ExistingClientMessage, list.ExistingClient?.StaffId);
+                    return true;
+                case Intent.TellProblem:
+                    plan.Say(TextKeys.ServicesTell);
+                    return true;
+                case Intent.Urgent when situation.Kind == SituationKind.UrgentWaiting:
+                    AskedStatus = true; // waiting for the call: when it comes is what he needs, even twice
+                    SaySituation();
+                    plan.Task(PendingTask.UrgentRequest); // he paid and writes it is urgent: the office sees it at once
+                    return true;
+                case Intent.MyStatus:
+                    AskedStatus = true;
+                    SaySituation();
+                    return true;
+                case Intent.Greeting or Intent.ConsultationRequest or Intent.Other:
+                case Intent.Urgent when situation.BlocksPaidOffer:
+                    SaySituation();
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        /// <summary>v1.39: the situation reply (texts 1–4), with his name where it is known.</summary>
+        private void SaySituation()
+        {
+            if (situation.Reply(Salutation.Call(State.Person), plan.Now, booking?.Urgent.CallWithinMinutes ?? UrgentRules.Default.CallWithinMinutes)
+                is { } step)
+            {
+                plan.Say(step.Key, null, step.Fill);
+            }
         }
 
         /// <summary>B-14 order: blocked (handled before) ← lawyer direct ← existing client ← colleague / press / vendor ← new client.</summary>
@@ -1260,7 +1387,7 @@ public sealed class HazemResponder(
                 name = typed;
             }
 
-            if (name is not null && State.Person.GiveName(name))
+            if (name is not null && State.Person.GiveName(name, turnClass.GenderCode))
             {
                 return true;
             }
@@ -1318,7 +1445,9 @@ public sealed class HazemResponder(
                     // B-25: the client told the topic. After the question: «تمام، وصلت ✅» only.
                     if (Intake.MatterAsked)
                     {
-                        plan.Say(TextKeys.TopicReceived);
+                        // v1.39 (3.6): its three wordings in turn
+                        var said = InTurn(situation, TextKeys.TopicReceived, TextKeys.TopicReceived2, TextKeys.TopicReceived3);
+                        plan.Say(said, said == TextKeys.TopicReceived ? null : TextKeys.TopicReceived, CallFill());
                     }
                     else
                     {
@@ -1357,11 +1486,31 @@ public sealed class HazemResponder(
                     break;
                 case Intent.ProvideName when MayOrder:
                     // v1.32: a name told on its own (kept in Respond), after the welcome or an answer: «تحت أمرك، محتاج إيه؟»
-                    plan.Say(TextKeys.Greeting, TextKeys.ConsultationOffer);
+                    SayGreeting();
                     break;
                 case Intent.Greeting:
                 case Intent.ProvideName:
-                    plan.Say(TextKeys.Greeting, TextKeys.ConsultationOffer);
+                    SayGreeting();
+                    break;
+                case Intent.ShowServices:
+                    ServicesMenu(); // v1.39: «خدمات»، «عندكم إيه؟»: the list, as the welcome's button
+                    break;
+                case Intent.TellProblem:
+                    plan.Say(TextKeys.ServicesTell); // v1.39: as the «أحكي مشكلتي» button
+                    break;
+                case Intent.MyStatus:
+                    // v1.39: «فاكرني؟» with nothing open (an open item was answered in Respond): his name when he gave one,
+                    // else who Hazem is, as before
+                    if (ReturningClient.FirstName(State.Person) is { } first)
+                    {
+                        plan.Say(TextKeys.WelcomeBack, Fill: new Dictionary<string, string> { ["first_name"] = first });
+                        Welcome(back: true);
+                    }
+                    else
+                    {
+                        plan.Say(TextKeys.AboutHazem);
+                    }
+
                     break;
                 case Intent.ThanksOrClosing:
                     plan.Say(TextKeys.Thanks);
@@ -1381,6 +1530,13 @@ public sealed class HazemResponder(
 
                     break;
             }
+        }
+
+        /// <summary>v1.39 (3.6): «تحت أمرك، محتاج إيه؟» and its two other wordings in turn, with his name in them.</summary>
+        private void SayGreeting()
+        {
+            var said = InTurn(situation, TextKeys.Greeting, TextKeys.Greeting2, TextKeys.Greeting3);
+            plan.Say(said, said == TextKeys.Greeting ? TextKeys.ConsultationOffer : TextKeys.Greeting, CallFill());
         }
 
         private void AnswerService(Service? service)
@@ -1525,10 +1681,17 @@ public sealed class HazemResponder(
         /// </summary>
         private void Urgent()
         {
+            if (situation.BlocksPaidOffer)
+            {
+                SaySituation(); // v1.39 (the forbidden rule 1): never a second paid call or a payment while one is held or paid
+                return;
+            }
+
             plan.Say(TextKeys.UrgentPrice);
-            plan.Task(PendingTask.UrgentRequest);
             if (MayBook && urgentOn)
             {
+                // v1.38: the office's urgent task (its bell and e-mail) waits for the receipt (SayUrgentPaid): a client who
+                // only pressed «عاجلة» and never paid is no urgent work for the office.
                 Check(Intake.MoveTo(IntakeState.OfferSent));
                 if (!State.Person.NameSettled)
                 {
@@ -1540,6 +1703,7 @@ public sealed class HazemResponder(
                 return;
             }
 
+            plan.Task(PendingTask.UrgentRequest); // the 1.32 paths: the office takes the urgent request at once, as before
             if (MayBook)
             {
                 work = new OfferTimes(BookingService.Urgent, null, TextKeys.BookingChooseSlot, null);
@@ -1560,6 +1724,14 @@ public sealed class HazemResponder(
             if (UrfWaitsForTime)
             {
                 return; // v1.22: the Urfi times are waiting for a pick; a consultation offer would replace them
+            }
+
+            if (situation.BlocksPaidOffer)
+            {
+                // v1.39 (TASK 16, the forbidden rule 1): a consultation held, paid or waiting for its call: what he has, never
+                // a new paid offer (the price he asked, the address… were said before this)
+                SaySituation();
+                return;
             }
 
             var known = MayBook ? KindAsked() : null;
@@ -1986,6 +2158,7 @@ public sealed class HazemResponder(
         /// </summary>
         private void SayUrgentPaid(AppointmentInfo a, BookingSettings b)
         {
+            plan.Task(PendingTask.UrgentRequest); // v1.38: the office's urgent task once he has paid, not when he pressed the row
             if (a.Start <= plan.Now.AddMinutes(b.Urgent.CallWithinMinutes))
             {
                 plan.Say(TextKeys.UrgentNow);

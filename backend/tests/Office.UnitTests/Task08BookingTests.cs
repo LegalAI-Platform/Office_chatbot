@@ -292,7 +292,11 @@ public sealed partial class BookingFlowTests
 
     private HazemResponder Hazem => new(new Store(_rows), new Scripted(_script, () => _aiDown), new Texts(_texts), _lists, new Clock(_now),
         new BookingDesk(_booking, _calendar), new Office.Application.Services.ServiceDesk(_booking),
-        new Office.Application.Urf.UrfDesk(new MemoryUrf(_booking, () => _now)), urgentCalls: _acks);
+        new Office.Application.Urf.UrfDesk(new MemoryUrf(_booking, () => _now)), history: new MemorySituation(_booking, _lastReplies),
+        urgentCalls: _acks);
+
+    /// <summary>v1.39: the texts of each client's last answered turn, as hazem.turn_replies.</summary>
+    private readonly Dictionary<string, List<string>> _lastReplies = [];
 
     private Task<TurnDecision> Send(IncomingMessage m) => Send(new Turn($"wt:{++_turn}", Number, null, [m]));
 
@@ -302,6 +306,11 @@ public sealed partial class BookingFlowTests
         if (d.Effects is { } e)
         {
             _rows[turn.WaId] = e.State; // v1.37: per client key (a number or a BSUID)
+            if (e.Replies.Count > 0)
+            {
+                _lastReplies[turn.WaId] = e.Replies.Select(r => r.Key).ToList();
+            }
+
             // as hazem.turn_replies: the closing texts sent after the age refusal, and any other reply since (v1.20)
             _booking.AgeClosingReplies += e.Replies.Count(r => r.Key == TextKeys.UrfAgeClosed);
             _booking.AgeMovedOn |= _booking.AgeRefusedAt is not null

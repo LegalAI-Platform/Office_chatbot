@@ -79,3 +79,10 @@
 {"id":1079,"text":"عايز استخرج قيد عائلي","intent":"off_topic"}
 {"id":1080,"text":"ابني محتاج شهادة تأدية الخدمة العسكرية","intent":"off_topic"}
 {"id":1081,"text":"عايزة نفقة لعيالي من جوزي","intent":"describe_matter","matter_type":"personal_status"}
+{"id":1082,"text":"وريني الخدمات اللي عندكم","intent":"show_services"}
+{"id":1083,"text":"بتعملوا ايه بالظبط","intent":"show_services"}
+{"id":1084,"text":"عايز احكيلك على حاجة حصلتلي","intent":"tell_problem"}
+{"id":1085,"text":"انا عندي موضوع عايز اقولهولك","intent":"tell_problem"}
+{"id":1086,"text":"هو الميعاد بتاعي اتأكد؟","intent":"my_status"}
+{"id":1087,"text":"انا دفعت امبارح اتأكدتوا؟","intent":"my_status"}
+{"id":1088,"text":"انت عارفني؟","intent":"my_status"}

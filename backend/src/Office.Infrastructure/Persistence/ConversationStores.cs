@@ -21,7 +21,7 @@ public sealed class ConversationStore(HazemDbContext db) : IConversationStore
 
         var person = Person.Load(p.Id, WaId.From(p.WaId),
             p.NameRaw is null ? null : PersonName.Restore(p.NameRaw, p.NameNormalized), // never re-validated
-            p.FullNameProvided, p.PreferredCallPhone, p.Source, p.SourceRaw, p.FirstSeenAt);
+            p.FullNameProvided, p.PreferredCallPhone, p.Source, p.SourceRaw, p.FirstSeenAt, p.NameGender);
 
         var c = await db.Conversations.AsNoTracking().FirstOrDefaultAsync(x => x.PersonId == p.Id, ct);
         var conversation = c is null
@@ -57,13 +57,14 @@ public sealed class ConversationStore(HazemDbContext db) : IConversationStore
         var (person, conversation, intake) = (e.State.Person, e.State.Conversation, e.State.Intake);
         await db.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO hazem.persons (id, wa_id, name_raw, name_normalized, full_name_provided, preferred_call_phone,
-                                       source, source_raw, first_seen_at)
+                                       source, source_raw, first_seen_at, name_gender)
             VALUES ({person.Id}, {person.WaId.Value}, {person.Name?.Raw}, {person.Name?.Normalized}, {person.FullNameProvided},
-                    {person.PreferredCallPhone}, {person.Source}, {person.SourceRaw}::jsonb, {Utc(person.FirstSeenAt)})
+                    {person.PreferredCallPhone}, {person.Source}, {person.SourceRaw}::jsonb, {Utc(person.FirstSeenAt)}, {person.NameGender})
             ON CONFLICT (id) DO UPDATE SET
               name_raw = EXCLUDED.name_raw, name_normalized = EXCLUDED.name_normalized,
               full_name_provided = EXCLUDED.full_name_provided, preferred_call_phone = EXCLUDED.preferred_call_phone,
-              source = EXCLUDED.source, source_raw = EXCLUDED.source_raw, first_seen_at = EXCLUDED.first_seen_at
+              source = EXCLUDED.source, source_raw = EXCLUDED.source_raw, first_seen_at = EXCLUDED.first_seen_at,
+              name_gender = EXCLUDED.name_gender
             """, ct);
 
         await SaveConversation(db, conversation, ct);

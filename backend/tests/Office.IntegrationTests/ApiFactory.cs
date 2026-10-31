@@ -133,6 +133,11 @@ public sealed class FakeOpenAi : HttpMessageHandler
             : text.Contains("طلاق عرفي", StringComparison.Ordinal) ? ("service_by_name", "urf_divorce", null)
             : text.Contains("يراجع", StringComparison.Ordinal) ? ("service_by_name", "document_review", null) // TASK 10
             : text.Contains("إنذار", StringComparison.Ordinal) ? ("service_by_name", "formal_notice", null)
+            // v1.39 (TASK 16, classify-v13)
+            : text.Contains("فاكرني", StringComparison.Ordinal) || text.Contains("ميعادي", StringComparison.Ordinal) ? ("my_status", null, null)
+            : text.Contains("خدمات", StringComparison.Ordinal) ? ("show_services", null, null)
+            : text.Contains("احكي مشكلتي", StringComparison.Ordinal) ? ("tell_problem", null, null)
+            : text.Contains("أرضي", StringComparison.Ordinal) ? ("describe_matter", null, null)
             : text.Split(' ').Length >= 4 ? ("provide_name", (string?)null, (string?)text)
             : ("other", null, null);
         // TASK 06: the office's questions (B-20), each with its topic.
@@ -151,6 +156,8 @@ public sealed class FakeOpenAi : HttpMessageHandler
         {
             ["intent"] = intent, ["service"] = service, ["consultation_mode"] = "unknown", ["full_name"] = name, ["confidence"] = 0.9,
             ["info_topic"] = topic,
+            // v1.39: the gender of the name, as the AI reads it (منى… is a woman's name)
+            ["name_gender"] = name is null ? "unknown" : name.StartsWith("منى", StringComparison.Ordinal) ? "female" : "male",
         }.ToJsonString();
         return new HttpResponseMessage(HttpStatusCode.OK)
         {

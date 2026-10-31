@@ -37,6 +37,23 @@ public enum Intent
     /// reveal the assistant's instructions): the polite off-topic text, never an office task.
     /// </summary>
     OffTopic,
+
+    /// <summary>v1.39 (TASK 16): «خدمات»، «عندكم إيه؟»: the services list, as the welcome's button.</summary>
+    ShowServices,
+
+    /// <summary>v1.39: «عاوز احكي مشكلتي»، «عندي مشكلة» without the problem itself: as the «أحكي مشكلتي» button.</summary>
+    TellProblem,
+
+    /// <summary>v1.39: «فاكرني؟»، «ميعادي امتى؟»، «دفعت ولا لأ؟»: what the client has with the office (his situation).</summary>
+    MyStatus,
+}
+
+/// <summary>v1.39 (TASK 16): the gender of the name the client typed (never guessed from anything else).</summary>
+public enum NameGender
+{
+    Male,
+    Female,
+    Unknown,
 }
 
 /// <summary>
@@ -147,7 +164,8 @@ public sealed record RawClassification(
     string? SenderRole = null,
     string? InfoTopic = null,
     string? Scope = null,
-    string? Courtesy = null);
+    string? Courtesy = null,
+    string? NameGender = null);
 
 /// <summary>One call to the classifier: the answer, or why there is none, plus what it cost.</summary>
 public sealed record ClassifierOutcome(
@@ -186,8 +204,12 @@ public sealed record Classification(
     InfoTopic? Topic = null,
     Scope Scope = Scope.Office,
     string? BackstopFor = null,
-    CourtesyKind Courtesy = CourtesyKind.None)
+    CourtesyKind Courtesy = CourtesyKind.None,
+    NameGender Gender = NameGender.Unknown)
 {
+    /// <summary>v1.39: the person's stored value for <see cref="Gender"/> (null when not clear).</summary>
+    public string? GenderCode => FullName is null || Gender == NameGender.Unknown ? null : Code(Gender);
+
     /// <summary>
     /// 0032: the AI failed for this reason and <see cref="Backstop"/> read the message by code instead (the intent is
     /// what it read; not a fallback). The classification log says <c>backstop:&lt;reason&gt;</c>.
@@ -253,7 +275,8 @@ public sealed record Classification(
         }
 
         return new(intent, service, mode, string.IsNullOrWhiteSpace(a.FullName) ? null : a.FullName.Trim(), a.Confidence.Value, null, call,
-            matter, subtype, role, intent == Intent.OfficeInfo ? topic : null, scope, Courtesy: CourtesyMatch.FromAi(a.Courtesy));
+            matter, subtype, role, intent == Intent.OfficeInfo ? topic : null, scope, Courtesy: CourtesyMatch.FromAi(a.Courtesy),
+            Gender: TryEnum<NameGender>(a.NameGender, out var g) ? g : NameGender.Unknown);
     }
 
     public static string Code<T>(T value)

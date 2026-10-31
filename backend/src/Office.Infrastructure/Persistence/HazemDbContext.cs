@@ -249,6 +249,9 @@ public sealed class PersonRow
 
     /// <summary>v1.37 (TASK 15): his WhatsApp username, when he has one (his key may then be a BSUID).</summary>
     public string? WhatsAppUsername { get; set; }
+
+    /// <summary>v1.39 (TASK 16): «male» / «female» from the name he typed, or null.</summary>
+    public string? NameGender { get; set; }
 }
 
 public sealed class ConversationRow
