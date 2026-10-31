@@ -67,29 +67,44 @@ export function Layout() {
       </a>
 
       {/* computer: the black side bar */}
+      {/* computer: the black side bar, as «liquid glass» (the owner: modern, clearly worked on): the links are glass
+          pills with their icons in small glass tiles, over the scales behind */}
       <aside className="sticky top-0 hidden h-dvh flex-col overflow-hidden bg-side text-side-ink lg:flex">
-        <div className="relative z-10 grid justify-items-center gap-1 px-3 pt-5 pb-4 text-center">
-          <OwnerImg name="logo_emblem" className="size-[5.5rem]" />
+        {/* a warm light at the top, and a thin gold line along the bar's inner edge */}
+        <span aria-hidden className="pointer-events-none absolute -top-24 start-1/2 size-72 -translate-x-1/2 rounded-full bg-gold/20 blur-3xl rtl:translate-x-1/2" />
+        <span aria-hidden className="pointer-events-none absolute inset-y-0 end-0 z-20 w-px bg-gradient-to-b from-transparent via-gold/45 to-transparent" />
+        <div className="relative z-10 grid justify-items-center gap-1 px-3 pt-5 pb-3 text-center">
+          <span className="relative grid place-items-center">
+            <span aria-hidden className="absolute size-[5.5rem] rounded-full bg-gold/25 blur-xl" />
+            <OwnerImg name="logo_emblem" className="relative size-[5.5rem] drop-shadow-[0_6px_14px_rgb(0_0_0/0.6)]" />
+          </span>
           <p className="mt-1 text-[16px] leading-tight font-bold text-white">مكتب سعد فتحي سعد</p>
           <p className="text-[12px] text-side-ink/80">للمحاماة والاستشارات القانونية</p>
+          <span aria-hidden className="mt-2 h-px w-3/4 bg-gradient-to-l from-transparent via-gold/50 to-transparent" />
         </div>
         <nav aria-label="التنقل" className="relative z-10 flex min-h-0 flex-1 flex-col px-2.5 pb-3">
-          <div className="grid min-h-0 content-start gap-1 overflow-y-auto">
+          <div className="soft-scroll grid min-h-0 content-start gap-1 overflow-x-hidden overflow-y-auto pe-0.5">
             <SideLink item={home} />
             {shownGroups.map((g) => (
               <section key={g.title} aria-label={g.title} className="mt-2.5 grid gap-1">
-                <h2 className="px-4 pb-0.5 text-[12px] font-semibold text-side-ink/60">{g.title}</h2>
+                <h2 className="flex items-center gap-2 px-3 pb-0.5 text-[11.5px] font-semibold tracking-wide text-gold/85 [text-shadow:0_1px_3px_rgb(0_0_0/0.8)]">
+                  {g.title}
+                  <span aria-hidden className="h-px flex-1 bg-gradient-to-l from-gold/40 to-transparent" />
+                </h2>
                 {g.items.map((i) => <SideLink key={i.to} item={i} />)}
               </section>
             ))}
           </div>
-          <div className="mt-auto border-t border-white/10 pt-2.5">
-            <SideLink item={settings} />
+          <div className="mt-auto pt-2.5">
+            <div className="rounded-[16px] border border-white/10 bg-white/[0.04] p-1 shadow-[inset_0_1px_0_rgb(255_255_255/0.08)] backdrop-blur-md">
+              <SideLink item={settings} />
+            </div>
           </div>
         </nav>
-        {/* the scales and the law books, fading into the bar, behind the links */}
+        {/* the scales and the law books, fading into the bar, behind the links; darker under the words so they read */}
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[45%]" aria-hidden>
           <OwnerImg name="sidebar_art" className="fade-top absolute bottom-0 left-0 w-full max-w-none" />
+          <span className="absolute inset-0 bg-gradient-to-l from-side/75 via-side/30 to-transparent" />
         </div>
       </aside>
 
@@ -123,18 +138,30 @@ function SideLink({ item: i }: { item: Item }) {
   const prefetch = usePrefetch();
   return (
     <NavLink to={i.to} end={i.end} onMouseEnter={() => prefetch(i.to)} onFocus={() => prefetch(i.to)}
-      className={({ isActive }) => `flex min-h-[2.75rem] items-center gap-3.5 whitespace-nowrap rounded-[10px] px-4 text-[15px] transition ${isActive ? "nav-active font-bold" : "text-side-ink hover:bg-white/5"}`}>
-      <NavIcon icon={i.icon} />
-      <span className="flex-1">{i.text}</span>
-      {i.badge ? <span className="grid size-6 place-items-center rounded-full bg-red text-[12px] font-bold text-white">{i.badge}</span> : null}
-      {i.dot ? <span className="size-2 rounded-full bg-red" aria-label="فيه مهام متأخرة" role="img" /> : null}
+      className={({ isActive }) => `group relative flex min-h-[2.85rem] items-center gap-3 whitespace-nowrap rounded-[14px] border ps-1.5 pe-3 text-[15px] transition ${isActive
+        ? "nav-active border-[#e8cf9c]/40 font-bold"
+        : "border-transparent text-side-ink hover:border-white/10 hover:bg-white/[0.06] hover:shadow-[inset_0_1px_0_rgb(255_255_255/0.08)] hover:backdrop-blur-md"}`}>
+      {({ isActive }) => (
+        <>
+          {/* the icon in its own small glass tile; gold-lit on the open page */}
+          <span className={`grid size-9 shrink-0 place-items-center rounded-[11px] border transition ${isActive
+            ? "border-white/30 bg-white/15 shadow-[inset_0_1px_0_rgb(255_255_255/0.35)]"
+            : "border-white/10 bg-white/[0.05] shadow-[inset_0_1px_0_rgb(255_255_255/0.06)] group-hover:border-gold/40 group-hover:bg-gold/10"}`}>
+            <NavIcon icon={i.icon} />
+          </span>
+          <span className="min-w-0 flex-1 truncate [text-shadow:0_1px_3px_rgb(0_0_0/0.7)]">{i.text}</span>
+          {i.badge ? <span className="grid size-6 place-items-center rounded-full bg-red text-[12px] font-bold text-white">{i.badge}</span> : null}
+          {i.dot ? <span className="size-2 rounded-full bg-red shadow-[0_0_0_3px_rgb(239_68_68/0.2),0_0_10px_rgb(239_68_68/0.8)]" aria-label="فيه مهام متأخرة" role="img" /> : null}
+          {isActive ? null : <Icon name="chevron-start" className="size-3.5 shrink-0 text-side-soft opacity-0 transition group-hover:opacity-100" />}
+        </>
+      )}
     </NavLink>
   );
 }
 
 /** The owner's white line icons; «الرئيسية» is the filled cream house of the mockup. */
 function NavIcon({ icon, small = false }: { icon: Item["icon"]; small?: boolean }) {
-  const size = small ? "size-5" : "size-[26px]";
+  const size = small ? "size-5" : "size-[22px]";
   if (icon === "home") {
     return (
       <svg viewBox="0 0 24 24" className={`${size} shrink-0`} aria-hidden>
