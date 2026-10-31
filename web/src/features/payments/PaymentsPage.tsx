@@ -7,7 +7,8 @@ import { cairoWhen } from "../../shared/lib/time";
 import { useUrlState } from "../../shared/lib/url";
 import { ActionBar, CaseCard, CaseHead, CaseNote, Facts, Files, Meta, Phone } from "../../shared/ui/caseCard";
 import { toast } from "../../shared/ui/feedback";
-import { Button, Card, Chip, Empty, ErrorState, Field, Loading } from "../../shared/ui/ui";
+import { Icon, type IconName } from "../../shared/ui/Icon";
+import { Button, Chip, ErrorState, Field, Loading } from "../../shared/ui/ui";
 import { payments, pounds, receiptUrl, type Payment, type Review, type Show } from "./api";
 
 const TONE: Record<string, string> = {
@@ -24,34 +25,127 @@ export function prefetchData(qc: QueryClient) {
   void qc.prefetchQuery(listQuery("refunds"));
 }
 
+// each tab with the words that tell a new person what it shows
+const TABS: { value: Show; label: string; hint: string; icon: IconName }[] = [
+  { value: "review", label: "مستني مراجعتك", hint: "إيصالات العملاء بعتوها ومحدش راجعها لسه: ابدأ بيها.", icon: "receipt" },
+  { value: "refunds", label: "استرداد مطلوب", hint: "فلوس لازم ترجع لعميل: حوّلها له، وبعدين سجّل هنا إنك حوّلت.", icon: "refresh" },
+  { value: "all", label: "الكل", hint: "كل الإيصالات، اللي اتراجعت واللي لسه، للرجوع ليها.", icon: "document" },
+];
+
+const STEPS: { title: string; text: string }[] = [
+  { title: "افتح صورة التحويل", text: "من «فتح الإيصال» في كارت العميل." },
+  { title: "اتأكد إن الفلوس وصلت", text: "بص في InstaPay أو المحفظة بتاعة المكتب." },
+  { title: "اكتب المبلغ واختار", text: "«تمام» أو «ناقص» أو «ما وصلش»، وحازم يبلّغ العميل." },
+];
+
 /**
  * «الإيصالات والمدفوعات» (TASK 09, DECISIONS v1.13): the system never confirms a payment. Whoever checks
  * the office's InstaPay or wallet opens the receipt and marks what really came (P1: the lawyer, the manager or
  * the staff); a refund due is transferred by a person, who records it here (P2). Hazem tells the client.
+ * Made to explain itself as «liquid glass»: what the page is for and its steps at the top, a line under the
+ * tabs saying what each shows, and on a card the next step when it needs one.
  */
 export function PaymentsPage() {
   const [show, setShow] = useUrlState<Show>("show", "review", SHOWS);
   const list = useQuery(listQuery(show));
-  const tabs: [Show, string][] = [["review", "مستني مراجعتك"], ["refunds", "استرداد مطلوب"], ["all", "الكل"]];
 
   return (
-    <div className="grid gap-4">
-      <h1 className="text-2xl">الإيصالات والمدفوعات</h1>
-      <p className="text-sm text-ink-soft">
-        حازم بيأكد الميعاد بصورة التحويل بس. افتح الإيصال، اتأكد إن الفلوس وصلت، وعلّم اللي لقيته.
-      </p>
-      <div className="flex flex-wrap gap-2" role="tablist" aria-label="المدفوعات">
-        {tabs.map(([t, text]) => (
-          <Button key={t} role="tab" aria-selected={t === show} variant={t === show ? "primary" : "secondary"} onClick={() => setShow(t)}>{text}</Button>
-        ))}
+    <div className="relative isolate grid gap-5 pb-4">
+      {/* the soft light the glass shows through */}
+      <div aria-hidden className="pointer-events-none absolute inset-x-0 -top-6 -z-10 h-[30rem] overflow-hidden">
+        <span className="absolute -top-16 end-[4%] size-[24rem] rounded-full bg-gold/30 blur-[100px]" />
+        <span className="absolute top-24 start-[10%] size-[20rem] rounded-full bg-green/10 blur-[100px]" />
       </div>
+
+      <Intro count={list.data?.length} />
+
+      <section aria-label="الفلاتر" className="liquid grid gap-2 rounded-[22px] p-4 sm:p-5">
+        <p className="text-[12.5px] font-bold text-gold-ink">عايز تشوف إيه؟</p>
+        <div className="flex gap-1 overflow-x-auto rounded-full border border-line/60 bg-card/45 p-1 shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)]" role="tablist" aria-label="المدفوعات">
+          {TABS.map((t) => {
+            const on = t.value === show;
+            return (
+              <button key={t.value} type="button" role="tab" aria-selected={on} onClick={() => setShow(t.value)}
+                className={`flex min-h-9 shrink-0 grow items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-3.5 text-[13.5px] transition ${on
+                  ? "btn-gold font-bold shadow-[inset_0_1px_0_rgb(255_255_255/0.4),0_6px_14px_-6px_rgb(140_98_58/0.8)]"
+                  : "text-ink hover:bg-card/80"}`}>
+                <Icon name={t.icon} className="size-4" />
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+        <p className="flex items-start gap-1.5 text-[12.5px] text-ink-soft" aria-live="polite">
+          <Icon name="info" className="mt-0.5 size-3.5 shrink-0 text-gold-ink" />
+          {TABS.find((t) => t.value === show)?.hint}
+        </p>
+      </section>
+
       {list.isPending ? <Loading /> : list.isError ? <ErrorState message={errorMessage(list.error)} onRetry={() => void list.refetch()} /> : (
         list.data.length === 0 ? (
-          <Card><Empty title="مفيش حاجة هنا" icon="check-circle" /></Card>
+          <Nothing show={show} />
         ) : (
-          <ul className="grid gap-3">{list.data.map((p) => <PaymentCard key={p.appointment_id} p={p} />)}</ul>
+          <ul className={GLASS_LIST}>{list.data.map((p) => <PaymentCard key={p.appointment_id} p={p} />)}</ul>
         )
       )}
+    </div>
+  );
+}
+
+/** The shared case cards as glass: see-through over the page's light, a lit edge, a lift under the pointer. */
+const GLASS_LIST = "grid gap-3 [&>li>article]:rounded-[20px] [&>li>article]:border-line/60 [&>li>article]:bg-card/60 [&>li>article]:shadow-[inset_0_1px_0_rgb(255_255_255/0.45),0_8px_24px_-14px_rgb(60_44_20/0.4)] [&>li>article]:backdrop-blur-md [&>li>article]:transition [&>li>article:hover]:-translate-y-px [&>li>article:hover]:bg-card/80 motion-reduce:[&>li>article]:transition-none motion-reduce:[&>li>article:hover]:translate-y-0 [&_dl>div]:border [&_dl>div]:border-line/50 [&_dl>div]:bg-card/55";
+
+function Intro({ count }: { count?: number | undefined }) {
+  return (
+    <header className="liquid relative overflow-hidden rounded-[26px] p-5 sm:p-6">
+      <span aria-hidden className="absolute -top-20 -start-16 size-64 rounded-full bg-gradient-to-br from-gold/30 to-transparent blur-2xl" />
+      <span aria-hidden className="absolute inset-x-8 top-0 h-px bg-gradient-to-l from-transparent via-gold to-transparent opacity-70" />
+      <div className="relative grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)] xl:items-center">
+        <div className="flex items-start gap-4">
+          <span aria-hidden className="grid size-14 shrink-0 place-items-center rounded-[18px] bg-gradient-to-br from-gold-tint to-card text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.6),0_8px_20px_-10px_rgb(140_98_58/0.7)]">
+            <Icon name="receipt" className="size-7" />
+          </span>
+          <div className="grid min-w-0 gap-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-[26px] leading-tight font-bold">الإيصالات والمدفوعات</h1>
+              {count !== undefined ? (
+                <span className="tabular rounded-full border border-gold-line bg-gold-tint px-2.5 py-0.5 text-[12.5px] font-bold text-gold-ink">{count} إيصال</span>
+              ) : null}
+            </div>
+            <p className="text-[14px] leading-relaxed text-ink-soft">
+              حازم بيأكد الميعاد بصورة التحويل بس، <strong className="text-ink">ومش بيعرف الفلوس وصلت ولا لأ</strong>.
+              افتح الإيصال، اتأكد إن الفلوس وصلت، وعلّم اللي لقيته.
+            </p>
+          </div>
+        </div>
+        <ol className="grid gap-2 sm:grid-cols-3" aria-label="إزاي تراجع إيصال">
+          {STEPS.map((s, i) => (
+            <li key={s.title} className="relative flex items-start gap-3 rounded-[16px] border border-line/60 bg-card/55 p-3 shadow-[inset_0_1px_0_rgb(255_255_255/0.45)]">
+              <span className="tabular grid size-7 shrink-0 place-items-center rounded-full bg-gradient-to-b from-[#dcb98c] to-[#a87a48] text-[13px] font-bold text-[#2a2117] shadow-[inset_0_1px_0_rgb(255_255_255/0.6)]">
+                {i + 1}
+              </span>
+              <span className="grid gap-0.5">
+                <span className="text-[13.5px] font-bold">{s.title}</span>
+                <span className="text-[12px] leading-snug text-ink-soft">{s.text}</span>
+              </span>
+            </li>
+          ))}
+        </ol>
+      </div>
+    </header>
+  );
+}
+
+function Nothing({ show }: { show: Show }) {
+  return (
+    <div className="liquid grid justify-items-center gap-2 rounded-[22px] px-6 py-10 text-center">
+      <span className="grid size-14 place-items-center rounded-full bg-gradient-to-br from-green-bg to-card text-green-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.6)]">
+        <Icon name="check-circle" className="size-7" />
+      </span>
+      <p className="text-[16px] font-bold">مفيش حاجة هنا</p>
+      <p className="max-w-sm text-[13px] text-ink-soft">
+        {show === "review" ? "كل الإيصالات اتراجعت. أول ما عميل يبعت صورة تحويل هتظهر هنا." : show === "refunds" ? "مفيش فلوس لازم ترجع لحد دلوقتي." : "لسه مفيش إيصالات."}
+      </p>
     </div>
   );
 }
@@ -106,6 +200,10 @@ function PaymentCard({ p }: { p: Payment }) {
       <ActionBar>
         {reviewable ? (
           <div className="grid gap-2">
+            <p className="flex items-start gap-1.5 text-[12.5px] text-ink-soft">
+              <Icon name="info" className="mt-0.5 size-3.5 shrink-0 text-gold-ink" />
+              افتح الإيصال، اتأكد في InstaPay أو المحفظة، واكتب اللي وصل فعلًا. «تمام» لو وصل كامل أو أكتر، «ناقص» لو أقل.
+            </p>
             <div className="flex flex-wrap items-end gap-2">
               <Field label="المبلغ اللي وصل فعلًا (جنيه)" type="number" min={1} inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value)} />
               <Button variant="primary" disabled={!(received >= p.amount_due)} onClick={() => setAsk("verified")}>تمام</Button>
@@ -129,6 +227,10 @@ function PaymentCard({ p }: { p: Payment }) {
               <Field label="حوّلته على إيه" hint="مثلًا فودافون كاش أو InstaPay" maxLength={100} value={method} onChange={(e) => setMethod(e.target.value)} />
               <Field label="ملاحظة (اختياري)" maxLength={200} value={note} onChange={(e) => setNote(e.target.value)} />
             </div>
+            <p className="flex items-start gap-1.5 text-[12.5px] text-ink-soft">
+              <Icon name="info" className="mt-0.5 size-3.5 shrink-0 text-gold-ink" />
+              حوّل المبلغ للعميل الأول، وبعدين اكتب حوّلته على إيه واضغط «اتحوّل».
+            </p>
             <div><Button variant="primary" disabled={method.trim() === ""} onClick={() => setAsk("refunded")}>اتحوّل</Button></div>
             {ask === "refunded" ? (
               <Sure text={`إنت حوّلت ${pounds(p.refund_due ?? 0)} جنيه فعلًا على ${method}؟ حازم هيبلّغ العميل إن المبلغ اترد.`} busy={refunded.isPending}
@@ -144,7 +246,7 @@ function PaymentCard({ p }: { p: Payment }) {
 
 function Sure({ text, busy, onYes, onNo }: { text: string; busy: boolean; onYes: () => void; onNo: () => void }) {
   return (
-    <div className="grid gap-2 rounded-lg border border-gold-line bg-gold-tint p-3 text-sm" role="alertdialog" aria-label="تأكيد">
+    <div className="grid gap-2 rounded-[14px] border border-gold-line bg-gold-tint/85 p-3 text-sm shadow-[inset_0_1px_0_rgb(255_255_255/0.5)]" role="alertdialog" aria-label="تأكيد">
       <p>{text}</p>
       <div className="flex gap-2">
         <Button variant="primary" busy={busy} onClick={onYes}>أيوه، أكّد</Button>

@@ -30,7 +30,7 @@ export function AccountPage() {
       {/* the soft light the glass shows through */}
       <div aria-hidden className="pointer-events-none absolute inset-x-0 -top-6 -z-10 h-[34rem] overflow-hidden">
         <span className="absolute -top-20 start-[4%] size-[26rem] rounded-full bg-gold/40 blur-[90px]" />
-        <span className="absolute top-10 end-[2%] size-[22rem] rounded-full bg-[#f3cf8a]/60 blur-[90px]" />
+        <span className="absolute top-10 end-[2%] size-[22rem] rounded-full bg-[#d9b48a]/60 blur-[90px]" />
         <span className="absolute top-72 start-[38%] size-[18rem] rounded-full bg-blue/15 blur-[90px]" />
       </div>
 

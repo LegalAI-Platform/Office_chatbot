@@ -135,7 +135,7 @@ function SideLink({ item: i }: { item: Item }) {
   return (
     <NavLink to={i.to} end={i.end} onMouseEnter={() => prefetch(i.to)} onFocus={() => prefetch(i.to)}
       className={({ isActive }) => `group relative flex min-h-[2.85rem] items-center gap-2.5 whitespace-nowrap rounded-[14px] border ps-1.5 pe-2.5 text-[14.5px] transition ${isActive
-        ? "nav-active border-[#e8cf9c]/40 font-bold"
+        ? "nav-active border-[#d6b088]/40 font-bold"
         : "border-transparent text-side-ink hover:border-white/10 hover:bg-white/[0.06] hover:shadow-[inset_0_1px_0_rgb(255_255_255/0.08)] hover:backdrop-blur-md"}`}>
       {({ isActive }) => (
         <>
@@ -400,7 +400,7 @@ function Search() {
   return (
     <form role="search" onSubmit={submit}
       className="group/search flex min-h-[2.9rem] min-w-0 flex-1 items-center gap-2.5 rounded-full border border-line/80 bg-card/70 ps-4 pe-2 shadow-[inset_0_1px_2px_rgb(0_0_0/0.04)] transition duration-200
-        hover:border-gold-line focus-within:border-gold focus-within:bg-card focus-within:shadow-[0_0_0_4px_rgb(201_169_106/0.16)] lg:max-w-[36rem]">
+        hover:border-gold-line focus-within:border-gold focus-within:bg-card focus-within:shadow-[0_0_0_4px_rgb(176_133_82/0.16)] lg:max-w-[36rem]">
       <Icon name="search" className="size-[18px] shrink-0 text-ink-soft transition-colors group-focus-within/search:text-gold-ink" />
       <input ref={input} type="search" aria-label="بحث" placeholder="ابحث عن عميل، ميعاد، مهمة، أو رقم قضية..."
         className="min-h-10 min-w-0 flex-1 bg-transparent text-[14px] outline-none placeholder:text-ink-soft/80" />

@@ -116,7 +116,7 @@ function Intro({ total }: { total?: number | undefined }) {
       <span aria-hidden className="absolute inset-x-8 top-0 h-px bg-gradient-to-l from-transparent via-gold to-transparent opacity-70" />
       <div className="relative grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)] xl:items-center">
         <div className="flex items-start gap-4">
-          <span aria-hidden className="grid size-14 shrink-0 place-items-center rounded-[18px] bg-gradient-to-br from-gold-tint to-card text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.6),0_8px_20px_-10px_rgb(168_131_79/0.7)]">
+          <span aria-hidden className="grid size-14 shrink-0 place-items-center rounded-[18px] bg-gradient-to-br from-gold-tint to-card text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.6),0_8px_20px_-10px_rgb(140_98_58/0.7)]">
             <Icon name="tasks" className="size-7" />
           </span>
           <div className="grid min-w-0 gap-1">
@@ -135,7 +135,7 @@ function Intro({ total }: { total?: number | undefined }) {
         <ol className="grid gap-2 sm:grid-cols-3" aria-label="إزاي تشتغل على مهمة">
           {STEPS.map((s, i) => (
             <li key={s.title} className="relative flex items-start gap-3 rounded-[16px] border border-line/60 bg-card/55 p-3 shadow-[inset_0_1px_0_rgb(255_255_255/0.45)]">
-              <span className="tabular grid size-7 shrink-0 place-items-center rounded-full bg-gradient-to-b from-[#ecd5a6] to-[#c9a46a] text-[13px] font-bold text-[#2a2117] shadow-[inset_0_1px_0_rgb(255_255_255/0.6)]">
+              <span className="tabular grid size-7 shrink-0 place-items-center rounded-full bg-gradient-to-b from-[#dcb98c] to-[#a87a48] text-[13px] font-bold text-[#2a2117] shadow-[inset_0_1px_0_rgb(255_255_255/0.6)]">
                 {i + 1}
               </span>
               <span className="grid gap-0.5">
@@ -165,7 +165,7 @@ function FilterRow<T extends string>({ title, label: name, value, options, onCha
           return (
             <button key={o.value} type="button" aria-pressed={on} onClick={() => onChange(o.value)}
               className={`flex min-h-9 shrink-0 grow items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-3.5 text-[13.5px] transition ${on
-                ? "btn-gold font-bold shadow-[inset_0_1px_0_rgb(255_255_255/0.4),0_6px_14px_-6px_rgb(168_131_79/0.8)]"
+                ? "btn-gold font-bold shadow-[inset_0_1px_0_rgb(255_255_255/0.4),0_6px_14px_-6px_rgb(140_98_58/0.8)]"
                 : "text-ink hover:bg-card/80"}`}>
               <Icon name={o.icon} className="size-4" />
               {o.label}

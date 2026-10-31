@@ -74,7 +74,7 @@ export function HomePage() {
           <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
             <span className="absolute -top-10 end-[2%] size-[22rem] rounded-full bg-gold/25 blur-[100px]" />
             <span className="absolute top-1/3 start-[30%] size-[20rem] rounded-full bg-blue/10 blur-[100px]" />
-            <span className="absolute -bottom-10 start-[2%] size-[18rem] rounded-full bg-[#f3cf8a]/30 blur-[100px]" />
+            <span className="absolute -bottom-10 start-[2%] size-[18rem] rounded-full bg-[#d9b48a]/30 blur-[100px]" />
           </div>
           <CalendarPanel now={now} items={todayList} />
           <div className="grid min-w-0 grid-rows-[auto_1fr] gap-4 xl:h-0 xl:min-h-full xl:grid-rows-[auto_minmax(9rem,1fr)] 2xl:gap-5">
@@ -239,7 +239,7 @@ function CalendarPanel({ now, items }: { now: Date; items?: Appointment[] | unde
         {week.map((d) => (
           <li key={d.key} className="grid min-w-0 justify-items-center gap-1.5" aria-current={d.today ? "date" : undefined}>
             <span className={`max-w-full truncate text-[10.5px] ${d.today ? "font-bold text-gold-ink" : "text-ink-soft"}`}>{DAY_NAMES[d.weekday] ?? d.weekday}</span>
-            <span className={`tabular grid size-8 place-items-center rounded-full text-[14px] font-semibold ${d.today ? "bg-gradient-to-b from-[#ecd5a6] to-[#c9a46a] text-[#2a2117] shadow-[inset_0_1px_0_rgb(255_255_255/0.6),0_0_0_4px_rgb(201_169_106/0.22),0_6px_14px_-4px_rgb(201_169_106/0.7)]" : ""}`}>{d.day}</span>
+            <span className={`tabular grid size-8 place-items-center rounded-full text-[14px] font-semibold ${d.today ? "bg-gradient-to-b from-[#dcb98c] to-[#a87a48] text-[#2a2117] shadow-[inset_0_1px_0_rgb(255_255_255/0.6),0_0_0_4px_rgb(176_133_82/0.22),0_6px_14px_-4px_rgb(176_133_82/0.7)]" : ""}`}>{d.day}</span>
           </li>
         ))}
       </ol>
@@ -266,7 +266,7 @@ function CalendarPanel({ now, items }: { now: Date; items?: Appointment[] | unde
         )}
         {/* at the foot of the column, level with the other two */}
         <div className="mt-auto p-3">
-          <Link to="/appointments" className="btn-gold flex min-h-10 items-center justify-center gap-2 rounded-full border text-[14px] font-semibold shadow-[inset_0_1px_0_rgb(255_255_255/0.4),0_8px_18px_-8px_rgb(168_131_79/0.8)] transition hover:brightness-105">
+          <Link to="/appointments" className="btn-gold flex min-h-10 items-center justify-center gap-2 rounded-full border text-[14px] font-semibold shadow-[inset_0_1px_0_rgb(255_255_255/0.4),0_8px_18px_-8px_rgb(140_98_58/0.8)] transition hover:brightness-105">
             <Icon name="calendar" className="size-4" />
             عرض كل المواعيد
           </Link>
