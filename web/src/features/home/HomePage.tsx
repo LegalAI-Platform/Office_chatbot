@@ -67,11 +67,11 @@ export function HomePage() {
 
         {/* the mockup's three columns: the calendar on the right, today's and the next appointments in the middle, the
             alerts and the tasks on the left, from a laptop's width (1280 px, a 1920 screen at 150% too). A tablet: the
-            calendar beside today, the rest under it; a phone: one column. The three columns end on one line: the last
-            panel of each stretches down to the tallest one. */}
+            calendar beside today, the rest under it; a phone: one column. The three columns end on one line: the calendar
+            and the left column set the height, and «أقرب المواعيد» scrolls inside what is left (the owner's choice). */}
         <div className="grid gap-4 md:grid-cols-[17rem_minmax(0,1fr)] xl:grid-cols-[17.5rem_minmax(0,1.5fr)_minmax(0,1fr)] 2xl:grid-cols-[19rem_minmax(0,1.45fr)_minmax(0,1fr)] 2xl:gap-5">
           <CalendarPanel now={now} items={todayList} />
-          <div className="grid min-w-0 grid-rows-[auto_1fr] gap-4 2xl:gap-5">
+          <div className="grid min-w-0 grid-rows-[auto_1fr] gap-4 xl:h-0 xl:min-h-full xl:grid-rows-[auto_minmax(9rem,1fr)] 2xl:gap-5">
             <TodayPanel items={todayList} pending={appointments.isPending} failed={appointments.isError} />
             <UpcomingPanel now={now} />
           </div>
@@ -168,7 +168,7 @@ function Panel({ title, action, children, className = "", flush = false }: {
         <h2 id={id} className="min-w-0 truncate text-[16px] font-bold 2xl:text-[19px]">{title}</h2>
         {action}
       </header>
-      <div className={`flex flex-1 flex-col ${flush ? "" : "px-4 pb-4"}`}>{children}</div>
+      <div className={`flex min-h-0 flex-1 flex-col ${flush ? "" : "px-4 pb-4"}`}>{children}</div>
     </section>
   );
 }
@@ -424,13 +424,13 @@ function UpcomingPanel({ now }: { now: Date }) {
   });
   const items = next.data?.filter(isOpen).sort(byStart).slice(0, 4);
   return (
-    <Panel title="أقرب المواعيد القادمة" action={<SeeAll to="/appointments" />} flush>
+    <Panel title="أقرب المواعيد القادمة" action={<SeeAll to="/appointments" />} className="min-h-0 overflow-hidden" flush>
       {next.isPending ? <Rows n={4} /> : next.isError ? (
         <Quiet icon="top_calendar" title="المواعيد الجاية مش متاحة دلوقتي">جرّب تاني بعد شوية.</Quiet>
       ) : !items?.length ? (
         <Quiet icon="top_calendar" title="مفيش مواعيد جاية">أقرب الاستشارات والمقابلات هتظهر هنا بالترتيب.</Quiet>
       ) : (
-        <ul className="grid grid-cols-[minmax(0,1fr)] divide-y divide-line border-t border-line" aria-label="أقرب المواعيد">
+        <ul className="grid min-h-0 grid-cols-[minmax(0,1fr)] content-start divide-y divide-line overflow-y-auto border-t border-line" aria-label="أقرب المواعيد">
           {items.map((a) => {
             const k = kindOf(a);
             return (
