@@ -123,8 +123,24 @@ public sealed partial class BookingFlowTests
         }
     }
 
-    /// <summary>«السلام عليكم» (the welcome), then the services list's urgent row: no name asked on the way.</summary>
+    /// <summary>
+    /// «السلام عليكم» (the welcome), then the services list's urgent row. v1.35: the name is asked first (as at any booking);
+    /// this answers it and returns that turn, where the call is held and the payment told (the 1.32 path returns the row's).
+    /// </summary>
     private async Task<TurnDecision> UrgentRow()
+    {
+        var row = await UrgentPressed();
+        if (!Keys(row).Contains(TextKeys.AskNameBooking))
+        {
+            return row;
+        }
+
+        _script["محمد أحمد"] = new("provide_name", null, "unknown", "محمد أحمد", 0.95);
+        return await Say("محمد أحمد");
+    }
+
+    /// <summary>«السلام عليكم», then the urgent row itself (v1.35: its price and the name question).</summary>
+    private async Task<TurnDecision> UrgentPressed()
     {
         _script["السلام عليكم"] = new("greeting", null, "unknown", null, 0.9);
         var t = _now;
@@ -140,15 +156,41 @@ public sealed partial class BookingFlowTests
     public async Task Urgent_with_the_booking_on_holds_the_first_free_moment_and_says_where_to_pay()
     {
         UrgentOn();
-        var d = await UrgentRow();
-        Assert.Equal([TextKeys.UrgentPrice, TextKeys.UrgentPay], Keys(d));
+        var row = await UrgentPressed();
+        Assert.Equal([TextKeys.UrgentPrice, TextKeys.AskNameBooking], Keys(row)); // v1.35: the name first, nothing held yet
+        Assert.Contains(PendingTask.UrgentRequest, TaskKinds(row));
+        Assert.Empty(_booking.Appointments);
+        _script["محمد أحمد"] = new("provide_name", null, "unknown", "محمد أحمد", 0.95);
+        var d = await Say("محمد أحمد");
+        Assert.Equal([TextKeys.UrgentPay], Keys(d));
         Assert.All(d.Actions, a => Assert.Null(a.Interactive)); // no list of times
-        Assert.Equal("ادفع 1,000 office@instapay 01000000000 (فودافون كاش)", d.Actions[1].Text);
-        Assert.DoesNotContain(TextKeys.AskNameBooking, Keys(d));
-        Assert.Contains(PendingTask.UrgentRequest, TaskKinds(d));
+        Assert.Equal("ادفع 1,000 office@instapay 01000000000 (فودافون كاش)", d.Actions[0].Text);
+        Assert.Equal("محمد أحمد", _rows[Number].Person.Name?.Raw);
         var call = TheCall;
         Assert.Equal((AppointmentInfo.PendingPayment, Now, Now.AddMinutes(15), CallApp.WhatsApp), (call.State, call.Start, call.End, call.CallApp));
         Assert.Equal(Now.AddMinutes(60), call.HoldUntil); // the short hold (booking.hold_short_minutes)
+    }
+
+    [Fact]
+    public async Task V135_a_photo_instead_of_the_name_holds_the_call_at_once_without_asking_again()
+    {
+        UrgentOn();
+        await UrgentPressed();
+        var photo = await Send(new IncomingMessage($"wamid.{++_turn}", MessageType.Image, null, null, null,
+            Media: new MediaRef(MediaStatus.Stored, "office-sensitive", $"k{_turn}", "image/jpeg", 1000)));
+        Assert.Equal([TextKeys.UrgentPay], Keys(photo)); // no «لو سمحت، ممكن اسم حضرتك؟» for someone in a hurry
+        Assert.Equal(AppointmentInfo.PendingPayment, TheCall.State);
+        Assert.Null(_rows[Number].Person.Name);
+    }
+
+    [Fact]
+    public async Task V135_a_name_already_known_is_not_asked_again()
+    {
+        UrgentOn();
+        await UrgentRow(); // the name the first time
+        _booking.Appointments.Clear();
+        var again = await Press("sv:urgent");
+        Assert.Equal([TextKeys.UrgentPrice, TextKeys.UrgentPay], Keys(again));
     }
 
     [Fact]
@@ -157,8 +199,8 @@ public sealed partial class BookingFlowTests
         UrgentOn();
         _now = AvailabilityTests.At(19, 23, 55);
         var d = await UrgentRow();
-        Assert.Equal([TextKeys.UrgentPrice, TextKeys.UrgentNight, TextKeys.UrgentPay], Keys(d));
-        Assert.Equal("من الساعة 10 الصبح", d.Actions[1].Text);
+        Assert.Equal([TextKeys.UrgentNight, TextKeys.UrgentPay], Keys(d)); // after the name (v1.35)
+        Assert.Equal("من الساعة 10 الصبح", d.Actions[0].Text);
         Assert.Equal(AvailabilityTests.At(20, 10), TheCall.Start);
         Assert.Equal(AvailabilityTests.At(20, 10), TheCall.HoldUntil); // held until the lawyer's first moment itself
     }
@@ -232,7 +274,7 @@ public sealed partial class BookingFlowTests
         UrgentOn();
         _settings.Remove(OfficeInfo.InstaPayKey);
         var d = await UrgentRow();
-        Assert.Equal([TextKeys.UrgentPrice], Keys(d));
+        Assert.Empty(Keys(d)); // the price was said with the name question (v1.35)
         Assert.Contains(PendingTask.BookingMessageFailed, TaskKinds(d));
         Assert.Equal(AppointmentInfo.PendingPayment, TheCall.State); // the time is still held
     }
@@ -243,7 +285,7 @@ public sealed partial class BookingFlowTests
         UrgentOn();
         _calendar.Down = true;
         var d = await UrgentRow();
-        Assert.Equal([TextKeys.UrgentPrice, TextKeys.BookingUnavailable], Keys(d));
+        Assert.Equal([TextKeys.BookingUnavailable], Keys(d)); // after the name (v1.35)
         Assert.Contains(PendingTask.BookingUnavailable, TaskKinds(d));
         Assert.Empty(_booking.Appointments);
     }
