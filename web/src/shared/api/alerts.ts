@@ -11,6 +11,7 @@ export function useAlerts() {
     queryKey: alertsKey,
     queryFn: () => api<AlertList>("GET", "/alerts"),
     refetchInterval: 60_000,
+    refetchIntervalInBackground: true, // an urgent request must reach a person who is in another tab (shared/lib/notify)
     staleTime: 30_000,
   });
 }

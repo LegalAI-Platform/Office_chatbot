@@ -421,6 +421,13 @@ public sealed class PanelBooking(
         }).ToList();
     }
 
+    /// <summary>The client's WhatsApp key of one appointment (the home page opens their conversation), null when there is none.</summary>
+    public async Task<string?> WaIdAsync(Guid id, CancellationToken ct) =>
+        await (from a in db.Appointments.AsNoTracking()
+               join p in db.Persons.AsNoTracking() on a.PersonId equals p.Id
+               where a.Id == id
+               select p.WaId).FirstOrDefaultAsync(ct);
+
     /// <summary>S-03 from the panel: completed or no_show (the lawyer or the staff).</summary>
     public async Task<string?> MarkAsync(Guid by, Guid id, string? state, CancellationToken ct)
     {

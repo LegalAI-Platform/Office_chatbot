@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using Office.Api.Panel;
 using Office.Application.Chatwoot;
 using Office.Application.Panel;
+using Office.Infrastructure.Booking;
 using Office.Infrastructure.Chatwoot;
 
 namespace Office.Api.Chatwoot;
@@ -63,9 +64,9 @@ public static class ChatwootEndpoints
         });
 
         // The panel opens Chatwoot already signed in (Chatwoot's one-time link), at the client's
-        // conversation when it is a task the person may see.
+        // conversation when it is a task the person may see, or an appointment (for whoever manages the schedule).
         app.MapPost("/api/panel/chatwoot/open", async (OpenRequest? body, HttpContext ctx, ChatwootAccounts accounts,
-            PanelTasks tasks, IChatwootStore store, IChatwootApi api, ILoggerFactory loggers, CancellationToken ct) =>
+            PanelTasks tasks, PanelBooking booking, IChatwootStore store, IChatwootApi api, ILoggerFactory loggers, CancellationToken ct) =>
         {
             if (!accounts.Configured)
             {
@@ -82,6 +83,16 @@ public static class ChatwootEndpoints
                 }
 
                 thread = await store.FindThreadAsync(task.Value!.Task.WaId, ct);
+            }
+            else if (body?.AppointmentId is { } appointmentId)
+            {
+                var wa = ctx.CurrentUser().AsViewer().Can(Permissions.ScheduleManage) ? await booking.WaIdAsync(appointmentId, ct) : null;
+                if (wa is null)
+                {
+                    return Results.NotFound(new { error = "not_found" });
+                }
+
+                thread = await store.FindThreadAsync(wa, ct);
             }
 
             try
@@ -128,5 +139,5 @@ public static class ChatwootEndpoints
         return CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(sent), Encoding.ASCII.GetBytes(expected));
     }
 
-    public sealed record OpenRequest(Guid? TaskId);
+    public sealed record OpenRequest(Guid? TaskId, Guid? AppointmentId);
 }

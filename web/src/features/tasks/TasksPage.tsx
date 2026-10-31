@@ -19,6 +19,7 @@ const SCOPES: { value: Scope; label: string; icon: IconName; needsAll?: boolean 
 
 const STATES: { value: StateFilter; label: string; icon: IconName }[] = [
   { value: "active", label: "محتاجة شغل", icon: "play" },
+  { value: "urgent", label: "عاجلة", icon: "alert-circle" },
   { value: "overdue", label: "متأخرة", icon: "clock" },
   { value: "done", label: "خلصت", icon: "check-circle" },
   { value: "cancelled", label: "اتلغت", icon: "x" },

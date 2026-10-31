@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Dashboard, Me, TaskPage } from "../shared/api/types";
@@ -109,6 +109,19 @@ describe("routing and permissions", () => {
     const table = screen.getByRole("heading", { name: "المهام العاجلة والمتأخرة" }).closest("section")!;
     expect(within(table).getByText("عاجلة")).toBeTruthy();
     expect(within(table).getByRole("link", { name: "افتح مهمة سارة محمد" }).getAttribute("href")).toBe("/tasks/t1");
+  });
+
+  it("opens the urgent tasks from «أمور عاجلة», and the calendar's arrows move the week", async () => {
+    serve(me());
+    renderAt("/");
+    const urgent = await screen.findByRole("heading", { name: "أمور عاجلة" });
+    expect(within(urgent.closest("section")!).getByRole("link").getAttribute("href")).toBe("/tasks?state=urgent");
+    const calendar = screen.getByRole("heading", { name: "تقويم المواعيد" }).closest("section")!;
+    expect(within(calendar).getByRole("list", { name: "الأسبوع ده" })).toBeTruthy();
+    fireEvent.click(within(calendar).getByRole("button", { name: "الأسبوع الجاي" }));
+    expect(within(calendar).getByRole("list", { name: "أسبوع تاني" })).toBeTruthy();
+    fireEvent.click(within(calendar).getByRole("button", { name: "ارجع للأسبوع ده" }));
+    expect(within(calendar).getByRole("list", { name: "الأسبوع ده" })).toBeTruthy();
   });
 
   it("opens the overdue tasks from a link", async () => {

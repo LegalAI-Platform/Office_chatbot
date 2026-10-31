@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { ApiError, errorMessage } from "../../shared/api/client";
 import { can, useMe } from "../../shared/api/session";
@@ -52,7 +52,9 @@ export function BookingPage() {
   const { data: me } = useMe();
   // opens on today (idea from PR #14): the first question every morning is «who is coming today»
   const today = cairoDate(new Date());
-  const [picked, setPicked] = useState(today);
+  // ?day=2026-11-05 (the home page's links) opens on that day
+  const asked = useSearchParams()[0].get("day");
+  const [picked, setPicked] = useState(asked && /^\d{4}-\d{2}-\d{2}$/.test(asked) ? asked : today);
   const [view, setView] = useUrlState<View>("show", "day", ["day", "all"]);
   const mayChange = can(me, "schedule.manage");
 
