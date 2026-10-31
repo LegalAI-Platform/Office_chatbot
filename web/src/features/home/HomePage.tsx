@@ -43,7 +43,9 @@ export function HomePage() {
   const name = me?.role === "lawyer" ? "أستاذ سعد" : me?.display_name.split(/\s+/)[0] ?? "";
 
   return (
-    <div className="-mx-4 -mt-4 grid gap-5 pb-2 lg:-mx-7 lg:-mt-5">
+    // from a laptop's width the page fills the screen to its foot (the owner: the space under the cards looked empty):
+    // the screen less the top bar (4.9rem) and the main area's foot padding (2rem)
+    <div className="-mx-4 -mt-4 flex flex-col gap-5 pb-2 lg:-mx-7 lg:-mt-5 xl:min-h-[calc(100dvh-6.9rem)]">
       {/* the banner: the library, the scales and the lamp, fading into the page under the greeting */}
       <section className="relative isolate overflow-hidden">
         <OwnerImg name="hero" className="fade-right absolute inset-y-0 left-0 -z-10 h-full w-auto max-w-[75%] object-cover object-left" />
@@ -54,7 +56,7 @@ export function HomePage() {
         </div>
       </section>
 
-      <div className="grid gap-5 px-4 lg:px-7">
+      <div className="flex flex-1 flex-col gap-5 px-4 lg:px-7">
         {dash.isError ? <ErrorState message={errorMessage(dash.error)} onRetry={() => void dash.refetch()} /> : null}
 
         {/* the four numbers */}
@@ -68,8 +70,9 @@ export function HomePage() {
         {/* the mockup's three columns: the calendar on the right, today's and the next appointments in the middle, the
             alerts and the tasks on the left, from a laptop's width (1280 px, a 1920 screen at 150% too). A tablet: the
             calendar beside today, the rest under it; a phone: one column. The three columns end on one line: the calendar
-            and the left column set the height, and «أقرب المواعيد» scrolls inside what is left (the owner's choice). */}
-        <div className="relative isolate grid gap-4 md:grid-cols-[17rem_minmax(0,1fr)] xl:grid-cols-[17.5rem_minmax(0,1.5fr)_minmax(0,1fr)] 2xl:grid-cols-[19rem_minmax(0,1.45fr)_minmax(0,1fr)] 2xl:gap-5">
+            and the left column set the height, and «أقرب المواعيد» scrolls inside what is left (the owner's choice); from
+            a laptop's width the row also grows to the screen's foot. */}
+        <div className="relative isolate grid flex-1 gap-4 md:grid-cols-[17rem_minmax(0,1fr)] xl:grid-cols-[17.5rem_minmax(0,1.5fr)_minmax(0,1fr)] 2xl:grid-cols-[19rem_minmax(0,1.45fr)_minmax(0,1fr)] 2xl:gap-5">
           {/* the soft light the glass shows through */}
           <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
             <span className="absolute -top-10 end-[2%] size-[22rem] rounded-full bg-gold/25 blur-[100px]" />
@@ -77,8 +80,8 @@ export function HomePage() {
             <span className="absolute -bottom-10 start-[2%] size-[18rem] rounded-full bg-[#d9b48a]/30 blur-[100px]" />
           </div>
           <CalendarPanel now={now} items={todayList} />
-          <div className="grid min-w-0 grid-rows-[auto_1fr] gap-4 xl:h-0 xl:min-h-full xl:grid-rows-[auto_minmax(9rem,1fr)] 2xl:gap-5">
-            <TodayPanel items={todayList} pending={appointments.isPending} failed={appointments.isError} />
+          <div className="grid min-w-0 grid-rows-[auto_1fr] gap-4 xl:h-0 xl:min-h-full xl:grid-rows-[auto_minmax(13rem,1fr)] 2xl:gap-5">
+            <TodayPanel items={todayList} pending={appointments.isPending} failed={appointments.isError} now={now} />
             <UpcomingPanel now={now} />
           </div>
           <div className="grid min-w-0 gap-4 md:col-span-2 md:grid-cols-2 xl:col-span-1 xl:grid-cols-1 xl:grid-rows-[auto_1fr] 2xl:gap-5">
@@ -305,14 +308,20 @@ function paidOf(a: Appointment): { tone: string; text: string; paid: boolean } {
   }
 }
 
-function TodayPanel({ items, pending, failed }: { items?: Appointment[] | undefined; pending: boolean; failed: boolean }) {
+function TodayPanel({ items, pending, failed, now }: { items?: Appointment[] | undefined; pending: boolean; failed: boolean; now: Date }) {
   const heads = ["الوقت", "العميل", "النوع", "حالة الدفع", "الإجراءات"];
   return (
     <Panel title="مواعيد اليوم" icon="clock" count={items?.length} action={<SeeAll to="/appointments" />} flush>
       {pending ? <Rows n={4} /> : failed ? (
         <Quiet icon="stat_calendar_blue" title="مواعيد اليوم مش متاحة دلوقتي">جرّب تاني بعد شوية.</Quiet>
       ) : !items?.length ? (
-        <Quiet icon="stat_calendar_blue" title="مفيش مواعيد النهارده">مواعيد اليوم وحالة الدفع بتاعتها هتظهر هنا.</Quiet>
+        <>
+          <p className="flex items-center gap-2 px-4 pb-1 text-[13.5px] font-semibold">
+            <OwnerImg name="stat_calendar_blue" className="size-6 object-contain" />
+            مفيش مواعيد النهارده
+          </p>
+          <DayLine items={[]} now={now} />
+        </>
       ) : (
         <>
           {/* a phone: one row of two lines per appointment */}
@@ -359,11 +368,64 @@ function TodayPanel({ items, pending, failed }: { items?: Appointment[] | undefi
               </tbody>
             </table>
           </div>
+          <DayLine items={items} now={now} />
         </>
       )}
     </Panel>
   );
 }
+
+/**
+ * The day at a glance under today's list: the working hours as one glass track (the day's start on the right), each
+ * appointment a dot at its hour in its kind's colour, the hours gone shaded, and a gold line at «دلوقتي».
+ */
+function DayLine({ items, now }: { items: Appointment[]; now: Date }) {
+  const hours = items.map((a) => hourOf(a.start));
+  const from = Math.min(9, ...hours.map(Math.floor));
+  const to = Math.max(21, ...hours.map((h) => Math.ceil(h + 0.5)));
+  const at = (h: number) => `${((h - from) / (to - from)) * 100}%`;
+  const nowH = hourOf(now.toISOString());
+  const live = nowH >= from && nowH <= to;
+  const ticks = Array.from({ length: Math.floor((to - from) / 3) + 1 }, (_, i) => from + i * 3);
+  return (
+    <div className="mt-auto px-4 pt-2 pb-4" role="group" aria-label={`اليوم من ${from} لـ ${to}، ${items.length ? `${items.length} ${items.length === 1 ? "ميعاد" : "مواعيد"}` : "من غير مواعيد"}`}>
+      <div className="relative h-9 rounded-full border border-line/60 bg-card/45 shadow-[inset_0_1px_0_rgb(255_255_255/0.45),inset_0_-6px_12px_-10px_rgb(60_44_20/0.25)]">
+        {/* the hours gone */}
+        <span aria-hidden className="absolute inset-y-0 start-0 rounded-full bg-gradient-to-l from-gold-tint/90 to-gold-tint/30"
+          style={{ width: live ? at(nowH) : nowH > to ? "100%" : "0%" }} />
+        {ticks.map((h) => (
+          <span key={h} aria-hidden className="absolute inset-y-2 w-px bg-line/70" style={{ insetInlineStart: at(h) }} />
+        ))}
+        {items.map((a) => {
+          const k = kindOf(a), t = TINT[k.icon] ?? TINT.phone!;
+          return (
+            <Link key={a.id} to="/appointments" title={`${clock(a.start)} - ${client(a)}`} aria-label={`${clock(a.start)} ${client(a)}`}
+              className={`absolute top-1/2 grid size-5 -translate-y-1/2 translate-x-1/2 place-items-center rounded-full ring-[3px] ring-card/90 ${t.bar} shadow-[0_4px_10px_-3px_rgb(60_44_20/0.5)] transition hover:scale-125 motion-reduce:transition-none motion-reduce:hover:scale-100`}
+              style={{ insetInlineStart: at(hourOf(a.start)) }}>
+              <span className="size-1.5 rounded-full bg-white/90" />
+            </Link>
+          );
+        })}
+        {live ? (
+          <span aria-hidden className="absolute -inset-y-1.5 w-0.5 translate-x-1/2 rounded-full bg-gradient-to-b from-[#dcb98c] to-[#a87a48] shadow-[0_0_10px_rgb(176_133_82/0.8)]" style={{ insetInlineStart: at(nowH) }}>
+            <span className="absolute -top-1 left-1/2 size-2 -translate-x-1/2 rounded-full bg-[#a87a48]" />
+          </span>
+        ) : null}
+      </div>
+      <div aria-hidden className="relative mt-1.5 h-4 text-[10.5px] text-ink-soft">
+        {ticks.map((h) => (
+          <span key={h} className="tabular absolute translate-x-1/2" style={{ insetInlineStart: at(h) }}>{h > 12 ? h - 12 : h}{h < 12 ? "ص" : "م"}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// an appointment's hour in Cairo as a number (10:30 → 10.5)
+const hourOf = (iso: string) => {
+  const [h, m] = clock(iso).split(":").map(Number);
+  return (h ?? 0) + (m ?? 0) / 60;
+};
 
 /** «التفاصيل» for a paid one, «التواصل» (the office's chats, in Chatwoot) for one still waiting for the money; ⋮ the day. */
 function Actions({ paid }: { paid: boolean }) {
@@ -469,7 +531,7 @@ const TINT: Partial<Record<IconName, { tile: string; ink: string; bar: string }>
 };
 
 /**
- * The next four open appointments after today (two weeks ahead), nearest first: each one a small glass card with its
+ * The seven days ahead at a glance, then the next six open appointments (two weeks ahead), nearest first: each one a small glass card with its
  * date tile; the list scrolls inside the row with a thin gold bar.
  */
 function UpcomingPanel({ now }: { now: Date }) {
@@ -479,13 +541,15 @@ function UpcomingPanel({ now }: { now: Date }) {
     queryKey: ["booking", "appointments", "next", from, to],
     queryFn: () => api<Appointment[]>("GET", `/booking/appointments?from=${from}&to=${to}`),
   });
-  const items = next.data?.filter(isOpen).sort(byStart).slice(0, 4);
+  const open = next.data?.filter(isOpen).sort(byStart);
+  const items = open?.slice(0, 6);
   return (
     <Panel title="أقرب المواعيد القادمة" icon="calendar" count={items?.length} action={<SeeAll to="/appointments" />} className="min-h-0" flush>
+      {open ? <WeekAhead now={now} items={open} /> : null}
       {next.isPending ? <Rows n={4} /> : next.isError ? (
         <Quiet icon="top_calendar" title="المواعيد الجاية مش متاحة دلوقتي">جرّب تاني بعد شوية.</Quiet>
       ) : !items?.length ? (
-        <Quiet icon="top_calendar" title="مفيش مواعيد جاية">أقرب الاستشارات والمقابلات هتظهر هنا بالترتيب.</Quiet>
+        <Quiet icon="top_calendar" title="مفيش مواعيد جاية">الأسبوعين الجايين فاضيين لحد دلوقتي.</Quiet>
       ) : (
         <ul className={`${LIST} soft-scroll overflow-y-auto`} aria-label="أقرب المواعيد">
           {items.map((a) => {
@@ -520,6 +584,39 @@ function UpcomingPanel({ now }: { now: Date }) {
         </ul>
       )}
     </Panel>
+  );
+}
+
+/**
+ * The seven days after today as a row of glass cells: each day's name and number, and how full it is (a bar that grows
+ * with its appointments, and their count); a free day stays plain.
+ */
+function WeekAhead({ now, items }: { now: Date; items: Appointment[] }) {
+  const days = Array.from({ length: 7 }, (_, i) => new Date(now.getTime() + (i + 1) * 86_400_000));
+  const count = (d: Date) => items.filter((a) => cairoDate(new Date(a.start)) === cairoDate(d)).length;
+  const counts = days.map(count);
+  const most = Math.max(1, ...counts);
+  return (
+    <ol className="mx-3 mb-2.5 grid grid-cols-7 gap-1 rounded-[16px] border border-line/60 bg-card/45 p-1.5 shadow-[inset_0_1px_0_rgb(255_255_255/0.45)]" aria-label="الأسبوع الجاي">
+      {days.map((d, i) => {
+        const n = counts[i] ?? 0;
+        const name = dayName.format(d);
+        return (
+          <li key={i} className="min-w-0">
+            <Link to="/appointments" aria-label={`${name} ${dayNum.format(d)}: ${n === 0 ? "فاضي" : n === 1 ? "ميعاد واحد" : n === 2 ? "ميعادين" : `${n} مواعيد`}`}
+              className={`grid h-full justify-items-center gap-1 rounded-[12px] px-0.5 pt-1.5 pb-1 transition hover:bg-gold-tint/70 ${n ? "bg-card/60 shadow-[inset_0_1px_0_rgb(255_255_255/0.5)]" : ""}`}>
+              <span className="max-w-full truncate text-[10.5px] text-ink-soft">{DAY_NAMES[name] ?? name}</span>
+              <span className="tabular text-[15px] font-bold leading-none">{dayNum.format(d)}</span>
+              <span aria-hidden className="flex h-7 w-full items-end justify-center">
+                <span className={`w-2.5 rounded-full ${n ? "bg-gradient-to-t from-[#a87a48] to-[#dcb98c]" : "bg-line/70"}`}
+                  style={{ height: n ? `${30 + (70 * n) / most}%` : "3px" }} />
+              </span>
+              <span aria-hidden className={`tabular text-[10.5px] font-bold ${n ? "text-gold-ink" : "text-ink-soft/60"}`}>{n || "–"}</span>
+            </Link>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
