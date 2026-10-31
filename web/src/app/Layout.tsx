@@ -150,13 +150,15 @@ function NavIcon({ icon, small = false }: { icon: Item["icon"]; small?: boolean 
 
 function TopBar({ late }: { late: number }) {
   return (
-    <header className="sticky top-0 z-20 border-b border-line bg-top" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
-      <div className="flex min-h-[4.6rem] items-center gap-3 px-4 lg:gap-6 lg:px-7">
+    // glass: the page scrolls under a blurred, see-through bar with a thin gold line at its foot
+    <header className="sticky top-0 z-20 border-b border-line/60 bg-[color-mix(in_oklab,var(--top)_78%,transparent)] backdrop-blur-xl backdrop-saturate-150"
+      style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
+      <span aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-l from-transparent via-gold/50 to-transparent" />
+      <div className="flex min-h-[4.6rem] items-center gap-3 px-4 lg:gap-4 lg:px-7">
         <Link to="/" className="lg:hidden" aria-label="الرئيسية">
           <OwnerImg name="logo_emblem" className="size-11" />
         </Link>
         <Clock />
-        <span className="hidden h-9 w-px bg-line md:block" aria-hidden />
         <Bell late={late} />
         <Search />
         <UserMenu />
@@ -191,11 +193,15 @@ function Bell({ late }: { late: number }) {
   return (
     <div ref={box} className="relative shrink-0">
       <button type="button" aria-expanded={open} aria-haspopup="dialog" onClick={() => setOpen((v) => !v)}
-        className="relative grid size-11 place-items-center rounded-full text-ink hover:bg-muted"
+        className={`relative grid size-11 place-items-center rounded-full border text-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.4),0_2px_8px_rgb(0_0_0/0.04)] transition duration-200
+          ${open ? "border-gold-line bg-card text-gold-ink" : "border-line/80 bg-card/70 hover:border-gold-line hover:bg-card hover:text-gold-ink"}`}
         aria-label={unread > 0 ? `${unread} تنبيهات جديدة` : late > 0 ? `${late} مهام متأخرة` : "التنبيهات"}>
-        <Icon name="bell" className="size-7" />
+        <Icon name="bell" className="size-[22px]" />
         {unread > 0 ? (
-          <span className="absolute top-0 right-0 grid size-[1.35rem] place-items-center rounded-full bg-red text-[12px] font-bold text-white ring-2 ring-top">{unread > 9 ? "9+" : unread}</span>
+          <>
+            <span aria-hidden className="absolute -top-0.5 -right-0.5 size-[1.3rem] animate-ping rounded-full bg-red/40 motion-reduce:hidden" />
+            <span className="absolute -top-0.5 -right-0.5 grid size-[1.3rem] place-items-center rounded-full bg-gradient-to-b from-[#f05252] to-[#c81e1e] text-[11px] font-bold text-white shadow-sm ring-2 ring-card">{unread > 9 ? "9+" : unread}</span>
+          </>
         ) : null}
       </button>
       {open ? (
@@ -334,11 +340,15 @@ function Clock() {
     return () => clearInterval(t);
   }, []);
   return (
-    <div className="hidden shrink-0 items-center gap-3 md:flex">
-      <OwnerImg name="top_calendar" className="size-9 object-contain" />
+    <div className="hidden shrink-0 items-center gap-2.5 rounded-2xl border border-line/80 bg-card/60 py-1.5 ps-1.5 pe-3.5 shadow-[inset_0_1px_0_rgb(255_255_255/0.4)] md:flex">
+      <span className="grid size-9 place-items-center rounded-xl bg-gradient-to-br from-gold-tint to-card text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.6)]">
+        <Icon name="calendar" className="size-5" />
+      </span>
       <span className="grid leading-tight">
-        <span className="text-[15px] font-bold">{cairoLongDate(now)}</span>
-        <span className="tabular text-[13px] text-ink-soft">القاهرة • {cairoTime(now)}</span>
+        <span className="text-[14px] font-bold">{cairoLongDate(now)}</span>
+        <span className="tabular flex items-center gap-1.5 text-[12px] text-ink-soft">
+          <span className="size-1.5 rounded-full bg-green" aria-hidden />القاهرة • {cairoTime(now)}
+        </span>
       </span>
     </div>
   );
@@ -366,12 +376,16 @@ function Search() {
   };
   return (
     <form role="search" onSubmit={submit}
-      className="flex min-h-[3.1rem] min-w-0 flex-1 items-center gap-3 rounded-[12px] border border-line-strong bg-card px-4 focus-within:border-gold lg:max-w-[38rem]">
-      <OwnerImg name="top_search" className="size-6 shrink-0 object-contain" />
+      className="group/search flex min-h-[2.9rem] min-w-0 flex-1 items-center gap-2.5 rounded-full border border-line/80 bg-card/70 ps-4 pe-2 shadow-[inset_0_1px_2px_rgb(0_0_0/0.04)] transition duration-200
+        hover:border-gold-line focus-within:border-gold focus-within:bg-card focus-within:shadow-[0_0_0_4px_rgb(201_169_106/0.16)] lg:max-w-[36rem]">
+      <Icon name="search" className="size-[18px] shrink-0 text-ink-soft transition-colors group-focus-within/search:text-gold-ink" />
       <input ref={input} type="search" aria-label="بحث" placeholder="ابحث عن عميل، ميعاد، مهمة، أو رقم قضية..."
-        className="min-h-10 min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-ink-soft" />
+        className="min-h-10 min-w-0 flex-1 bg-transparent text-[14px] outline-none placeholder:text-ink-soft/80" />
       <button type="button" onClick={() => setPalette(true)} aria-label="اختصارات وبحث (Ctrl K)"
-        className="hidden shrink-0 rounded-md border border-line bg-card-2 px-2.5 py-0.5 font-sans text-sm text-ink-soft hover:border-gold-line sm:block" dir="ltr">Ctrl K</button>
+        className="hidden shrink-0 items-center gap-1 rounded-full px-1.5 py-1 font-sans text-[11px] font-semibold text-ink-soft transition hover:bg-card-2 sm:flex" dir="ltr">
+        <kbd className="rounded-md border border-line border-b-2 bg-card px-1.5 py-0.5 font-sans">Ctrl</kbd>
+        <kbd className="rounded-md border border-line border-b-2 bg-card px-1.5 py-0.5 font-sans">K</kbd>
+      </button>
       <CommandPalette open={palette} onClose={() => setPalette(false)} />
     </form>
   );
