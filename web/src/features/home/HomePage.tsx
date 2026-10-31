@@ -69,7 +69,13 @@ export function HomePage() {
             alerts and the tasks on the left, from a laptop's width (1280 px, a 1920 screen at 150% too). A tablet: the
             calendar beside today, the rest under it; a phone: one column. The three columns end on one line: the calendar
             and the left column set the height, and «أقرب المواعيد» scrolls inside what is left (the owner's choice). */}
-        <div className="grid gap-4 md:grid-cols-[17rem_minmax(0,1fr)] xl:grid-cols-[17.5rem_minmax(0,1.5fr)_minmax(0,1fr)] 2xl:grid-cols-[19rem_minmax(0,1.45fr)_minmax(0,1fr)] 2xl:gap-5">
+        <div className="relative isolate grid gap-4 md:grid-cols-[17rem_minmax(0,1fr)] xl:grid-cols-[17.5rem_minmax(0,1.5fr)_minmax(0,1fr)] 2xl:grid-cols-[19rem_minmax(0,1.45fr)_minmax(0,1fr)] 2xl:gap-5">
+          {/* the soft light the glass shows through */}
+          <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
+            <span className="absolute -top-10 end-[2%] size-[22rem] rounded-full bg-gold/25 blur-[100px]" />
+            <span className="absolute top-1/3 start-[30%] size-[20rem] rounded-full bg-blue/10 blur-[100px]" />
+            <span className="absolute -bottom-10 start-[2%] size-[18rem] rounded-full bg-[#f3cf8a]/30 blur-[100px]" />
+          </div>
           <CalendarPanel now={now} items={todayList} />
           <div className="grid min-w-0 grid-rows-[auto_1fr] gap-4 xl:h-0 xl:min-h-full xl:grid-rows-[auto_minmax(9rem,1fr)] 2xl:gap-5">
             <TodayPanel items={todayList} pending={appointments.isPending} failed={appointments.isError} />
@@ -102,14 +108,19 @@ function Kpi({ tone, icon, title, value, series, to, more }: {
 }) {
   const k = KPI[tone];
   return (
-    <section className={`grid min-h-[8.5rem] grid-cols-[1fr_auto] rounded-[12px] border px-5 pt-4 pb-3 text-kpi-ink shadow-[0_6px_20px_rgb(0_0_0/0.06)] ${k.card}`}>
+    <section className={`relative isolate grid min-h-[8.5rem] grid-cols-[1fr_auto] overflow-hidden rounded-[18px] border px-5 pt-4 pb-3 text-kpi-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.7),0_12px_30px_-14px_rgb(60_44_20/0.3)] transition hover:-translate-y-0.5 hover:shadow-[inset_0_1px_0_rgb(255_255_255/0.7),0_18px_36px_-14px_rgb(60_44_20/0.38)] motion-reduce:transition-none motion-reduce:hover:translate-y-0 ${k.card}`}>
+      {/* the glass's sheen: light from the top corner, a bright edge */}
+      <span aria-hidden className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-br from-white/55 via-white/10 to-transparent" />
+      <span aria-hidden className="pointer-events-none absolute -top-12 -start-10 -z-10 size-36 rounded-full bg-white/50 blur-2xl" />
       <div className="grid content-start">
         <h2 className="text-[18px] leading-snug font-bold">{title}</h2>
         <p className={`tabular text-[38px] leading-tight font-bold ${k.ink}`}>
           {value === null ? "—" : value === undefined ? <span className="inline-block h-9 w-7 animate-pulse rounded bg-white/70" /> : value}
         </p>
       </div>
-      <OwnerImg name={icon} className="size-14 object-contain" />
+      <span className="grid size-16 place-items-center rounded-full border border-white/70 bg-white/45 shadow-[inset_0_1px_0_rgb(255_255_255/0.9),0_6px_16px_-8px_rgb(0_0_0/0.25)] backdrop-blur-sm">
+        <OwnerImg name={icon} className="size-12 object-contain" />
+      </span>
       <div className="col-span-2 flex items-end justify-between gap-2">
         <Link to={to} className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap text-[14px] font-bold ${k.ink} hover:underline`}>
           {more}
@@ -158,14 +169,28 @@ function Sparkline({ values, stroke }: { values?: number[] | undefined; stroke: 
 
 // ---------- the mockup's panel ----------
 
-function Panel({ title, action, children, className = "", flush = false }: {
-  title: string; action?: ReactNode; children: ReactNode; className?: string; flush?: boolean;
+/**
+ * Every card of the page as «liquid glass» (the owner: modern, clearly worked on): see-through over the page's soft
+ * light, a warm glow inside, a lit top edge, and its icon in a small gold tile beside the title (and the count, if any).
+ */
+function Panel({ title, icon, count, action, children, className = "", flush = false }: {
+  title: string; icon: IconName; count?: number | undefined; action?: ReactNode; children: ReactNode; className?: string; flush?: boolean;
 }) {
   const id = useId();
   return (
-    <section aria-labelledby={id} className={`flex min-w-0 flex-col rounded-[12px] border border-line bg-card shadow-[0_6px_20px_rgb(0_0_0/0.05)] ${className}`}>
-      <header className="flex items-center justify-between gap-2 px-4 pt-3.5 pb-2.5">
-        <h2 id={id} className="min-w-0 truncate text-[16px] font-bold 2xl:text-[19px]">{title}</h2>
+    <section aria-labelledby={id} className={`liquid relative isolate flex min-w-0 flex-col overflow-hidden rounded-[18px] ${className}`}>
+      <span aria-hidden className="pointer-events-none absolute -top-16 -end-10 -z-10 size-48 rounded-full bg-gold/20 blur-3xl" />
+      <span aria-hidden className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-l from-transparent via-gold/70 to-transparent" />
+      <header className="flex items-center justify-between gap-2 px-3.5 pt-3.5 pb-2.5">
+        <span className="flex min-w-0 items-center gap-2">
+          <span aria-hidden className="grid size-7 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-gold-tint to-card text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.5),0_2px_6px_-2px_rgb(60_44_20/0.2)]">
+            <Icon name={icon} className="size-4" />
+          </span>
+          <h2 id={id} className="min-w-0 truncate text-[16px] font-bold 2xl:text-[19px]">{title}</h2>
+          {count ? (
+            <span className="tabular shrink-0 rounded-full border border-gold-line bg-gold-tint px-2 py-0.5 text-[11px] font-bold text-gold-ink">{count}</span>
+          ) : null}
+        </span>
         {action}
       </header>
       <div className={`flex min-h-0 flex-1 flex-col ${flush ? "" : "px-4 pb-4"}`}>{children}</div>
@@ -175,17 +200,24 @@ function Panel({ title, action, children, className = "", flush = false }: {
 
 function SeeAll({ to }: { to: string }) {
   return (
-    <Link to={to} className="shrink-0 whitespace-nowrap rounded-[8px] border border-gold-line bg-gold-tint px-3 py-1 text-[12px] font-semibold text-gold-ink hover:brightness-95">
+    <Link to={to} className="shrink-0 whitespace-nowrap rounded-full border border-gold-line bg-card/60 px-2.5 py-1 text-[12px] font-semibold text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.5)] backdrop-blur-sm transition hover:bg-gold-tint">
       عرض الكل
     </Link>
   );
 }
 
+// a row of a card's list: a small glass card of its own that lifts a little under the pointer
+const ROW = "group relative flex items-center gap-2.5 overflow-hidden rounded-[14px] border border-line/60 bg-card/55 shadow-[inset_0_1px_0_rgb(255_255_255/0.45),0_4px_14px_-8px_rgb(60_44_20/0.25)] transition hover:-translate-y-px hover:border-gold-line hover:bg-card/80 hover:shadow-[0_10px_24px_-12px_rgb(60_44_20/0.35)] motion-reduce:transition-none motion-reduce:hover:translate-y-0";
+const LIST = "grid min-h-0 grid-cols-[minmax(0,1fr)] content-start gap-2 px-3 pb-3";
+
 const TH = "px-2 py-2 text-start text-[12px] font-semibold text-ink-soft";
 
 // ---------- calendar ----------
 
-const DAY_NAMES: Record<string, string> = { الإثنين: "الإثنين", الاثنين: "الإثنين" };
+// the week's short day names, so all seven fit a narrow column whole
+const DAY_NAMES: Record<string, string> = {
+  السبت: "سبت", الأحد: "أحد", الإثنين: "اتنين", الاثنين: "اتنين", الثلاثاء: "تلات", الأربعاء: "أربع", الخميس: "خميس", الجمعة: "جمعة",
+};
 // a dot per kind of appointment in the day's list (the mockup's colors)
 const DOT: Partial<Record<IconName, string>> = { phone: "bg-red", video: "bg-blue", office: "bg-orange" };
 
@@ -193,39 +225,39 @@ const DOT: Partial<Record<IconName, string>> = { phone: "bg-red", video: "bg-blu
 function CalendarPanel({ now, items }: { now: Date; items?: Appointment[] | undefined }) {
   const week = cairoWeek(now);
   return (
-    <Panel title="تقويم المواعيد" action={<SeeAll to="/appointments" />} flush>
+    <Panel title="تقويم المواعيد" icon="calendar" action={<SeeAll to="/appointments" />} flush>
       <div className="flex items-center justify-between px-4 py-1.5">
-        <button type="button" disabled aria-label="الأسبوع اللي فات" className="text-gold-ink disabled:opacity-50">
+        <button type="button" disabled aria-label="الأسبوع اللي فات" className="grid size-8 place-items-center rounded-full border border-line/60 bg-card/55 text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.45)] disabled:opacity-50">
           <Icon name="back" className="size-5" />
         </button>
         <p className="text-[16px] font-bold">{cairoMonth(now)}</p>
-        <button type="button" disabled aria-label="الأسبوع الجاي" className="text-gold-ink disabled:opacity-50">
+        <button type="button" disabled aria-label="الأسبوع الجاي" className="grid size-8 place-items-center rounded-full border border-line/60 bg-card/55 text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.45)] disabled:opacity-50">
           <Icon name="forward" className="size-5" />
         </button>
       </div>
-      <ol className="grid grid-cols-7 px-1.5 pb-3 text-center" aria-label="الأسبوع ده">
+      <ol className="mx-3 mb-3 grid grid-cols-7 rounded-[16px] border border-line/60 bg-card/45 px-1 py-2 text-center shadow-[inset_0_1px_0_rgb(255_255_255/0.45)]" aria-label="الأسبوع ده">
         {week.map((d) => (
           <li key={d.key} className="grid min-w-0 justify-items-center gap-1.5" aria-current={d.today ? "date" : undefined}>
-            <span className="max-w-full truncate text-[10px] text-ink-soft">{DAY_NAMES[d.weekday] ?? d.weekday}</span>
-            <span className={`tabular grid size-8 place-items-center rounded-full text-[14px] font-semibold ${d.today ? "bg-[#e3c896] text-[#2a2117] shadow-[0_0_0_4px_rgb(201_169_106/0.25)]" : ""}`}>{d.day}</span>
+            <span className={`max-w-full truncate text-[10.5px] ${d.today ? "font-bold text-gold-ink" : "text-ink-soft"}`}>{DAY_NAMES[d.weekday] ?? d.weekday}</span>
+            <span className={`tabular grid size-8 place-items-center rounded-full text-[14px] font-semibold ${d.today ? "bg-gradient-to-b from-[#ecd5a6] to-[#c9a46a] text-[#2a2117] shadow-[inset_0_1px_0_rgb(255_255_255/0.6),0_0_0_4px_rgb(201_169_106/0.22),0_6px_14px_-4px_rgb(201_169_106/0.7)]" : ""}`}>{d.day}</span>
           </li>
         ))}
       </ol>
-      <div className="flex flex-1 flex-col border-t border-line">
-        <h3 className="px-4 pt-3 pb-1 text-[14px] font-bold">مواعيد اليوم{items ? ` (${items.length})` : ""}</h3>
+      <div className="flex flex-1 flex-col">
+        <h3 className="px-4 pb-2 text-[14px] font-bold">مواعيد اليوم{items ? ` (${items.length})` : ""}</h3>
         {!items?.length ? (
           <p className="px-4 pt-1 pb-3 text-[13px] text-ink-soft">{items ? "مفيش مواعيد النهارده." : "…"}</p>
         ) : (
-          <ul className="grid grid-cols-[minmax(0,1fr)] divide-y divide-line px-2">
+          <ul className={`${LIST} gap-1.5 pb-0`}>
             {items.map((a) => {
               const k = kindOf(a);
               return (
                 <li key={a.id}>
-                  <Link to="/appointments" className="flex items-center gap-2 rounded-md px-2 py-2.5 text-[12.5px] hover:bg-card-2">
+                  <Link to="/appointments" className={`${ROW} gap-2 rounded-[12px] px-2.5 py-2 text-[12.5px]`}>
                     <span className={`size-2 shrink-0 rounded-full ${DOT[k.icon] ?? "bg-blue"}`} aria-hidden />
                     <span className="tabular shrink-0 font-semibold" dir="ltr">{clock(a.start)}</span>
                     <span className="min-w-0 flex-1 truncate">{k.text} - {client(a)}</span>
-                    <Icon name="chevron-start" className="size-3.5 shrink-0 text-ink-soft" />
+                    <Icon name="chevron-start" className="size-3.5 shrink-0 text-ink-soft transition group-hover:-translate-x-0.5 group-hover:text-gold-ink" />
                   </Link>
                 </li>
               );
@@ -234,7 +266,8 @@ function CalendarPanel({ now, items }: { now: Date; items?: Appointment[] | unde
         )}
         {/* at the foot of the column, level with the other two */}
         <div className="mt-auto p-3">
-          <Link to="/appointments" className="grid min-h-10 place-items-center rounded-[10px] border border-gold-line bg-gold-tint text-[14px] font-semibold text-gold-ink hover:brightness-95">
+          <Link to="/appointments" className="btn-gold flex min-h-10 items-center justify-center gap-2 rounded-full border text-[14px] font-semibold shadow-[inset_0_1px_0_rgb(255_255_255/0.4),0_8px_18px_-8px_rgb(168_131_79/0.8)] transition hover:brightness-105">
+            <Icon name="calendar" className="size-4" />
             عرض كل المواعيد
           </Link>
         </div>
@@ -275,7 +308,7 @@ function paidOf(a: Appointment): { tone: string; text: string; paid: boolean } {
 function TodayPanel({ items, pending, failed }: { items?: Appointment[] | undefined; pending: boolean; failed: boolean }) {
   const heads = ["الوقت", "العميل", "النوع", "حالة الدفع", "الإجراءات"];
   return (
-    <Panel title="مواعيد اليوم" action={<SeeAll to="/appointments" />} flush>
+    <Panel title="مواعيد اليوم" icon="clock" count={items?.length} action={<SeeAll to="/appointments" />} flush>
       {pending ? <Rows n={4} /> : failed ? (
         <Quiet icon="stat_calendar_blue" title="مواعيد اليوم مش متاحة دلوقتي">جرّب تاني بعد شوية.</Quiet>
       ) : !items?.length ? (
@@ -283,12 +316,12 @@ function TodayPanel({ items, pending, failed }: { items?: Appointment[] | undefi
       ) : (
         <>
           {/* a phone: one row of two lines per appointment */}
-          <ul className="grid grid-cols-[minmax(0,1fr)] divide-y divide-line border-t border-line sm:hidden">
+          <ul className={`${LIST} sm:hidden`}>
             {items.map((a) => {
               const k = kindOf(a), p = paidOf(a);
               return (
-                <li key={a.id} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-4 py-3">
-                  <span className="tabular row-span-2 text-[15px] font-bold" dir="ltr">{clock(a.start)}</span>
+                <li key={a.id} className={`${ROW} grid grid-cols-[auto_minmax(0,1fr)_auto] gap-x-3 gap-y-1 px-3 py-2.5 hover:translate-y-0`}>
+                  <span className="tabular row-span-2 rounded-[10px] bg-gold-tint px-2 py-1 text-[14px] font-bold text-gold-ink" dir="ltr">{clock(a.start)}</span>
                   <span className="truncate font-bold">{client(a)}</span>
                   <Pill tone={p.tone}>{p.text}</Pill>
                   <span className="flex min-w-0 items-center gap-1.5 text-[13px] text-ink-soft"><Icon name={k.icon} className="size-4 shrink-0" /><span className="truncate">{k.text}</span></span>
@@ -298,23 +331,28 @@ function TodayPanel({ items, pending, failed }: { items?: Appointment[] | undefi
             })}
           </ul>
           {/* wider: the mockup's table */}
-          <div className="hidden overflow-x-auto px-2 pb-2 sm:block">
-            <table className="w-full text-[12.5px] 2xl:text-[13.5px]">
+          <div className="hidden overflow-x-auto px-3 pb-3 sm:block">
+            <table className="w-full border-separate border-spacing-y-0.5 text-[12.5px] 2xl:text-[13.5px]">
               <thead>
-                <tr className="bg-card-2">{heads.map((h) => <th key={h} className={`${TH} first:rounded-s-lg last:rounded-e-lg`}>{h}</th>)}</tr>
+                <tr>{heads.map((h) => <th key={h} className={`${TH} border-y border-line/60 bg-card/55 first:rounded-s-[12px] first:border-s last:rounded-e-[12px] last:border-e`}>{h}</th>)}</tr>
               </thead>
-              <tbody className="divide-y divide-line">
+              <tbody>
                 {items.map((a) => {
-                  const k = kindOf(a), p = paidOf(a);
+                  const k = kindOf(a), p = paidOf(a), t = TINT[k.icon] ?? TINT.phone!;
                   return (
-                    <tr key={a.id} className="hover:bg-card-2">
-                      <td className="tabular whitespace-nowrap px-2 py-2 font-semibold" dir="ltr">{clock(a.start)}</td>
-                      <td className="max-w-[7rem] truncate px-2 py-2 2xl:max-w-[10rem]">{client(a)}</td>
-                      <td className="whitespace-nowrap px-2 py-2">
-                        <span className="flex items-center gap-1.5"><Icon name={k.icon} className="size-4 text-ink-soft" />{k.text}</span>
+                    <tr key={a.id} className="[&>td]:border-y [&>td]:border-transparent [&>td]:transition [&>td:first-child]:rounded-s-[12px] [&>td:last-child]:rounded-e-[12px] hover:[&>td]:border-gold-line/60 hover:[&>td]:bg-gold-tint/45">
+                      <td className="whitespace-nowrap px-2 py-1" dir="ltr">
+                        <span className="tabular inline-block rounded-full border border-line/70 bg-card/70 px-2 py-0.5 font-bold">{clock(a.start)}</span>
                       </td>
-                      <td className="px-2 py-2"><Pill tone={p.tone}>{p.text}</Pill></td>
-                      <td className="px-2 py-2"><Actions paid={p.paid} /></td>
+                      <td className="max-w-[7rem] truncate px-2 py-1 font-semibold 2xl:max-w-[10rem]">{client(a)}</td>
+                      <td className="whitespace-nowrap px-2 py-1">
+                        <span className="flex items-center gap-1.5">
+                          <span className={`grid size-6 place-items-center rounded-lg bg-gradient-to-b ${t.tile} ${t.ink}`}><Icon name={k.icon} className="size-3.5" /></span>
+                          {k.text}
+                        </span>
+                      </td>
+                      <td className="px-2 py-1"><Pill tone={p.tone}>{p.text}</Pill></td>
+                      <td className="px-2 py-1"><Actions paid={p.paid} /></td>
                     </tr>
                   );
                 })}
@@ -329,12 +367,12 @@ function TodayPanel({ items, pending, failed }: { items?: Appointment[] | undefi
 
 /** «التفاصيل» for a paid one, «التواصل» (the office's chats, in Chatwoot) for one still waiting for the money; ⋮ the day. */
 function Actions({ paid }: { paid: boolean }) {
-  const button = "grid min-h-7 place-items-center whitespace-nowrap rounded-[7px] border border-line px-2.5 text-[12px] font-semibold text-ink hover:border-gold-line";
+  const button = "grid min-h-7 place-items-center whitespace-nowrap rounded-full border border-line/70 bg-card/70 px-3 text-[12px] font-semibold text-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.5)] transition hover:border-gold-line hover:bg-gold-tint hover:text-gold-ink";
   return (
     <span className="flex items-center justify-end gap-1">
       {paid ? <Link to="/appointments" className={button}>التفاصيل</Link>
         : <button type="button" onClick={() => void openChatwoot()} className={button}>التواصل</button>}
-      <Link to="/appointments" aria-label="افتح المواعيد" className="grid size-7 place-items-center rounded-[7px] text-ink-soft hover:bg-card-2">
+      <Link to="/appointments" aria-label="افتح المواعيد" className="grid size-7 place-items-center rounded-full text-ink-soft transition hover:bg-gold-tint hover:text-gold-ink">
         <Icon name="more" className="size-5" />
       </Link>
     </span>
@@ -352,22 +390,24 @@ function alertLook(t: DashboardTask): { icon: OwnerImage; title: string } {
 
 function AlertsPanel({ items, pending, now }: { items?: DashboardTask[] | undefined; pending: boolean; now: Date }) {
   return (
-    <Panel title="التنبيهات الأخيرة" action={<SeeAll to="/tasks" />} flush>
+    <Panel title="التنبيهات الأخيرة" icon="bell" count={items?.length} action={<SeeAll to="/tasks" />} flush>
       {pending ? <Rows n={4} /> : !items?.length ? (
         <Quiet icon="alert_message_blue" title="مفيش تنبيهات جديدة">أي مهمة حازم يفتحها هتظهر هنا.</Quiet>
       ) : (
-        <ul className="grid grid-cols-[minmax(0,1fr)] divide-y divide-line border-t border-line">
+        <ul className={LIST}>
           {items.map((t) => {
             const a = alertLook(t);
             return (
               <li key={t.id}>
-                <Link to={`/tasks/${t.id}`} className="flex items-center gap-2.5 px-4 py-2.5 hover:bg-card-2">
-                  <OwnerImg name={a.icon} className="size-8 shrink-0 object-contain" />
+                <Link to={`/tasks/${t.id}`} className={`${ROW} px-2.5 py-2`}>
+                  <span className="grid size-9 shrink-0 place-items-center rounded-full border border-line/60 bg-card/70 shadow-[inset_0_1px_0_rgb(255_255_255/0.6)]">
+                    <OwnerImg name={a.icon} className="size-7 object-contain" />
+                  </span>
                   <span className="grid min-w-0 flex-1 gap-0.5 leading-snug">
                     <span className="truncate text-[13.5px] font-bold">{a.title}</span>
                     <span className="truncate text-[12px] text-ink-soft">{who(t)}{t.staff_name ? ` - مع ${t.staff_name}` : ""}</span>
                   </span>
-                  <span className="shrink-0 text-[11px] text-ink-soft">{timeAgo(t.created_at, now)}</span>
+                  <span className="shrink-0 rounded-full bg-card-2/70 px-2 py-0.5 text-[10.5px] text-ink-soft">{timeAgo(t.created_at, now)}</span>
                 </Link>
               </li>
             );
@@ -380,6 +420,9 @@ function AlertsPanel({ items, pending, now }: { items?: DashboardTask[] | undefi
 
 // ---------- urgent and late tasks ----------
 
+// the thin line at a task's start, in its priority's color
+const BAR: Record<string, string> = { orange: "bg-orange", red: "bg-red", blue: "bg-blue" };
+
 function priority(t: DashboardTask): { tone: string; text: string } {
   if (URGENT.has(t.type)) return { tone: "orange", text: "عاجلة" };
   if (t.late) return { tone: "red", text: "متأخرة" };
@@ -388,17 +431,18 @@ function priority(t: DashboardTask): { tone: string; text: string } {
 
 function PriorityPanel({ items, pending, now }: { items?: DashboardTask[] | undefined; pending: boolean; now: Date }) {
   return (
-    <Panel title="المهام العاجلة والمتأخرة" action={<SeeAll to="/tasks" />} flush>
+    <Panel title="المهام العاجلة والمتأخرة" icon="tasks" count={items?.length} action={<SeeAll to="/tasks" />} flush>
       {pending ? <Rows n={4} /> : !items?.length ? (
         <Quiet icon="alert_receipt_green" title="مفيش مهام مستنياك">كل المهام اتعملت في وقتها.</Quiet>
       ) : (
-        <ul className="grid grid-cols-[minmax(0,1fr)] divide-y divide-line border-t border-line">
+        <ul className={LIST}>
           {items.map((t) => {
             const p = priority(t);
             return (
               <li key={t.id}>
-                <Link to={`/tasks/${t.id}`} aria-label={`افتح مهمة ${who(t)}`} className="flex items-center gap-2.5 px-4 py-2.5 text-[13px] hover:bg-card-2">
-                  <span className="grid size-4 shrink-0 place-items-center rounded-[4px] border border-ink-soft/50" aria-hidden />
+                <Link to={`/tasks/${t.id}`} aria-label={`افتح مهمة ${who(t)}`} className={`${ROW} px-3 py-2.5 text-[13px]`}>
+                  <span aria-hidden className={`absolute inset-y-2 start-0 w-[3px] rounded-full ${BAR[p.tone] ?? "bg-blue"}`} />
+                  <span className="grid size-[18px] shrink-0 place-items-center rounded-[6px] border border-ink-soft/40 bg-card/70 shadow-[inset_0_1px_0_rgb(255_255_255/0.6)] transition group-hover:border-gold" aria-hidden />
                   <span className="min-w-0 flex-1 truncate">{label(TASK_TYPES, t.type)}{t.client_name ? ` - ${t.client_name}` : ""}</span>
                   <Pill tone={p.tone}>{p.text}</Pill>
                   <span className="w-14 shrink-0 text-end text-[11.5px] text-ink-soft">{cairoDayWord(t.due_at, now)}</span>
@@ -425,11 +469,10 @@ const TINT: Partial<Record<IconName, { tile: string; ink: string; bar: string }>
 };
 
 /**
- * The next four open appointments after today (two weeks ahead), nearest first, as «liquid glass» (the owner: modern,
- * clearly worked on): each one a small glass card with its date tile; the list scrolls inside the row with a thin gold bar.
+ * The next four open appointments after today (two weeks ahead), nearest first: each one a small glass card with its
+ * date tile; the list scrolls inside the row with a thin gold bar.
  */
 function UpcomingPanel({ now }: { now: Date }) {
-  const id = useId();
   const from = cairoDate(new Date(now.getTime() + 86_400_000));
   const to = cairoDate(new Date(now.getTime() + 14 * 86_400_000));
   const next = useQuery({
@@ -438,29 +481,13 @@ function UpcomingPanel({ now }: { now: Date }) {
   });
   const items = next.data?.filter(isOpen).sort(byStart).slice(0, 4);
   return (
-    <section aria-labelledby={id} className="liquid relative isolate flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[18px]">
-      {/* the glass's warm light and its lit top edge */}
-      <span aria-hidden className="pointer-events-none absolute -top-16 -end-10 -z-10 size-48 rounded-full bg-gold/25 blur-3xl" />
-      <span aria-hidden className="pointer-events-none absolute -bottom-20 start-10 -z-10 size-40 rounded-full bg-blue/10 blur-3xl" />
-      <span aria-hidden className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-l from-transparent via-gold/70 to-transparent" />
-      <header className="flex items-center justify-between gap-2 px-4 pt-3.5 pb-2.5">
-        <span className="flex min-w-0 items-center gap-2.5">
-          <span aria-hidden className="grid size-8 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-gold-tint to-card text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.5)]">
-            <Icon name="calendar" className="size-[18px]" />
-          </span>
-          <h2 id={id} className="min-w-0 truncate text-[16px] font-bold 2xl:text-[19px]">أقرب المواعيد القادمة</h2>
-          {items?.length ? (
-            <span className="tabular shrink-0 rounded-full border border-gold-line bg-gold-tint px-2 py-0.5 text-[11px] font-bold text-gold-ink">{items.length}</span>
-          ) : null}
-        </span>
-        <SeeAll to="/appointments" />
-      </header>
+    <Panel title="أقرب المواعيد القادمة" icon="calendar" count={items?.length} action={<SeeAll to="/appointments" />} className="min-h-0" flush>
       {next.isPending ? <Rows n={4} /> : next.isError ? (
         <Quiet icon="top_calendar" title="المواعيد الجاية مش متاحة دلوقتي">جرّب تاني بعد شوية.</Quiet>
       ) : !items?.length ? (
         <Quiet icon="top_calendar" title="مفيش مواعيد جاية">أقرب الاستشارات والمقابلات هتظهر هنا بالترتيب.</Quiet>
       ) : (
-        <ul className="soft-scroll grid min-h-0 grid-cols-[minmax(0,1fr)] content-start gap-2 overflow-y-auto px-3 pb-3" aria-label="أقرب المواعيد">
+        <ul className={`${LIST} soft-scroll overflow-y-auto`} aria-label="أقرب المواعيد">
           {items.map((a) => {
             const k = kindOf(a);
             const t = TINT[k.icon] ?? TINT.phone!;
@@ -468,7 +495,7 @@ function UpcomingPanel({ now }: { now: Date }) {
             return (
               <li key={a.id}>
                 <Link to="/appointments"
-                  className="group relative flex items-center gap-3 overflow-hidden rounded-[14px] border border-line/60 bg-card/55 py-2 ps-2 pe-3 shadow-[inset_0_1px_0_rgb(255_255_255/0.45),0_4px_14px_-8px_rgb(60_44_20/0.25)] transition hover:-translate-y-px hover:border-gold-line hover:bg-card/80 hover:shadow-[0_10px_24px_-12px_rgb(60_44_20/0.35)] motion-reduce:transition-none motion-reduce:hover:translate-y-0">
+                  className={`${ROW} gap-3 py-2 ps-2 pe-3`}>
                   <span aria-hidden className={`absolute inset-y-2 start-0 w-[3px] rounded-full ${t.bar}`} />
                   <span className={`grid w-12 shrink-0 place-items-center rounded-[11px] bg-gradient-to-b ${t.tile} py-1 leading-none shadow-[inset_0_1px_0_rgb(255_255_255/0.5)]`}>
                     <span className="tabular text-[17px] font-bold">{dayNum.format(at)}</span>
@@ -492,7 +519,7 @@ function UpcomingPanel({ now }: { now: Date }) {
           })}
         </ul>
       )}
-    </section>
+    </Panel>
   );
 }
 
