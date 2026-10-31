@@ -1,4 +1,4 @@
-import { useId, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router";
 import { api, errorMessage } from "../../shared/api/client";
@@ -20,6 +20,9 @@ interface Appointment {
   call_app: "whatsapp" | "facetime" | "meet" | null;
 }
 const who = (t: DashboardTask) => t.client_name ?? "رقم من غير اسم";
+// every card of the page asks again each minute, like the tasks and the bell, so a booking made on WhatsApp shows up
+// on a screen left open
+const LIVE = 60_000;
 
 /**
  * «الرئيسية» exactly as the owner's mockups lay it out. Tasks are real (TASK 07a); appointments and
@@ -29,13 +32,14 @@ export function HomePage() {
   const { data: me } = useMe();
   const dash = useDashboard();
   // TASK 09: the receipts waiting for a person's review (the system never confirms a payment).
-  const receipts = useQuery({ queryKey: ["payments", "review"], queryFn: () => api<unknown[]>("GET", "/payments?show=review") });
+  const receipts = useQuery({ queryKey: ["payments", "review"], queryFn: () => api<unknown[]>("GET", "/payments?show=review"), refetchInterval: LIVE });
   const now = new Date();
   // TASK 12: today's appointments (held or confirmed) are a real number now.
   const today = cairoDate(now);
   const appointments = useQuery({
     queryKey: ["booking", "appointments", "today", today],
     queryFn: () => api<Appointment[]>("GET", `/booking/appointments?from=${today}&to=${today}`),
+    refetchInterval: LIVE,
   });
   const todayList = appointments.data?.filter(isOpen).sort(byStart);
   const todays = todayList?.length;
@@ -45,6 +49,7 @@ export function HomePage() {
   const next = useQuery({
     queryKey: ["booking", "appointments", "next", from, to],
     queryFn: () => api<Appointment[]>("GET", `/booking/appointments?from=${from}&to=${to}`),
+    refetchInterval: LIVE,
   });
   const nextList = next.data?.filter(isOpen).sort(byStart);
   // «الشهر ده» for whoever sees the reports; it takes the room the appointments leave (a quiet week leaves a lot)
@@ -76,7 +81,7 @@ export function HomePage() {
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <Kpi tone="blue" icon="stat_calendar_blue" title="مواعيد اليوم" value={appointments.isError ? null : todays} to="/appointments" more="عرض المواعيد" />
           <Kpi tone="green" icon="stat_card_green" title="إيصالات تحتاج تأكيد" value={receipts.isError ? null : receipts.data?.length} to="/receipts" more="من الإيصالات" />
-          <Kpi tone="orange" icon="stat_alert_yellow" title="أمور عاجلة" value={dash.data?.urgent} series={dash.data?.urgent_by_day} to="/tasks" more="عرض التفاصيل" />
+          <Kpi tone="orange" icon="stat_alert_yellow" title="أمور عاجلة" value={dash.data?.urgent} series={dash.data?.urgent_by_day} to="/tasks?state=urgent" more="عرض التفاصيل" />
           <Kpi tone="red" icon="stat_clock_red" title="مهام متأخرة" value={dash.data?.overdue} series={dash.data?.overdue_by_day} to="/tasks?state=overdue" more="عرض المهام" />
         </div>
 
@@ -237,26 +242,36 @@ const DAY_NAMES: Record<string, string> = {
 };
 // a dot per kind of appointment in the day's list (the mockup's colors)
 const DOT: Partial<Record<IconName, string>> = { phone: "bg-red", video: "bg-blue", office: "bg-orange" };
+const ARROW = "grid size-8 place-items-center rounded-full border border-line/60 bg-card/55 text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.45)] transition hover:border-gold-line hover:bg-gold-tint";
 
-/** The week with today marked, then today's appointments in order, and «عرض كل المواعيد». */
+/**
+ * A week with today marked (the arrows move it a week at a time, a day opens on «المواعيد»), then today's appointments
+ * in order, and «عرض كل المواعيد».
+ */
 function CalendarPanel({ now, items }: { now: Date; items?: Appointment[] | undefined }) {
-  const week = cairoWeek(now);
+  const [shift, setShift] = useState(0);
+  const shown = new Date(now.getTime() + shift * 7 * 86_400_000);
+  const today = cairoDate(now);
+  const week = cairoWeek(shown).map((d) => ({ ...d, today: d.key === today }));
   return (
     <Panel title="تقويم المواعيد" icon="calendar" action={<SeeAll to="/appointments" />} flush>
       <div className="flex items-center justify-between px-4 py-1.5">
-        <button type="button" disabled aria-label="الأسبوع اللي فات" className="grid size-8 place-items-center rounded-full border border-line/60 bg-card/55 text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.45)] disabled:opacity-50">
+        <button type="button" onClick={() => setShift((w) => w - 1)} aria-label="الأسبوع اللي فات" className={ARROW}>
           <Icon name="back" className="size-5" />
         </button>
-        <p className="text-[16px] font-bold">{cairoMonth(now)}</p>
-        <button type="button" disabled aria-label="الأسبوع الجاي" className="grid size-8 place-items-center rounded-full border border-line/60 bg-card/55 text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.45)] disabled:opacity-50">
+        <button type="button" onClick={() => setShift(0)} disabled={shift === 0} aria-label="ارجع للأسبوع ده"
+          className="rounded-full px-2 text-[16px] font-bold transition enabled:hover:bg-gold-tint enabled:hover:text-gold-ink">{cairoMonth(shown)}</button>
+        <button type="button" onClick={() => setShift((w) => w + 1)} aria-label="الأسبوع الجاي" className={ARROW}>
           <Icon name="forward" className="size-5" />
         </button>
       </div>
-      <ol className="mx-3 mb-3 grid grid-cols-7 rounded-[16px] border border-line/60 bg-card/45 px-1 py-2 text-center shadow-[inset_0_1px_0_rgb(255_255_255/0.45)]" aria-label="الأسبوع ده">
+      <ol className="mx-3 mb-3 grid grid-cols-7 rounded-[16px] border border-line/60 bg-card/45 px-1 py-2 text-center shadow-[inset_0_1px_0_rgb(255_255_255/0.45)]" aria-label={shift === 0 ? "الأسبوع ده" : "أسبوع تاني"}>
         {week.map((d) => (
-          <li key={d.key} className="grid min-w-0 justify-items-center gap-1.5" aria-current={d.today ? "date" : undefined}>
+          <li key={d.key} className="min-w-0" aria-current={d.today ? "date" : undefined}>
+            <Link to={`/appointments?day=${d.key}`} aria-label={`مواعيد ${d.weekday} ${d.day}`} className="grid justify-items-center gap-1.5 rounded-[12px] py-0.5 transition hover:bg-gold-tint/60">
             <span className={`max-w-full truncate text-[10.5px] ${d.today ? "font-bold text-gold-ink" : "text-ink-soft"}`}>{DAY_NAMES[d.weekday] ?? d.weekday}</span>
             <span className={`tabular grid size-8 place-items-center rounded-full text-[14px] font-semibold ${d.today ? "bg-gradient-to-b from-[#dcb98c] to-[#a87a48] text-[#2a2117] shadow-[inset_0_1px_0_rgb(255_255_255/0.6),0_0_0_4px_rgb(176_133_82/0.22),0_6px_14px_-4px_rgb(176_133_82/0.7)]" : ""}`}>{d.day}</span>
+            </Link>
           </li>
         ))}
       </ol>
@@ -342,7 +357,7 @@ function TodayPanel({ items, pending, failed }: { items?: Appointment[] | undefi
                   <span className="truncate font-bold">{client(a)}</span>
                   <Pill tone={p.tone}>{p.text}</Pill>
                   <span className="flex min-w-0 items-center gap-1.5 text-[13px] text-ink-soft"><Icon name={k.icon} className="size-4 shrink-0" /><span className="truncate">{k.text}</span></span>
-                  <Actions paid={p.paid} />
+                  <Actions a={a} paid={p.paid} />
                 </li>
               );
             })}
@@ -369,7 +384,7 @@ function TodayPanel({ items, pending, failed }: { items?: Appointment[] | undefi
                         </span>
                       </td>
                       <td className="px-2 py-1"><Pill tone={p.tone}>{p.text}</Pill></td>
-                      <td className="px-2 py-1"><Actions paid={p.paid} /></td>
+                      <td className="px-2 py-1"><Actions a={a} paid={p.paid} /></td>
                     </tr>
                   );
                 })}
@@ -382,14 +397,18 @@ function TodayPanel({ items, pending, failed }: { items?: Appointment[] | undefi
   );
 }
 
-/** «التفاصيل» for a paid one, «التواصل» (the office's chats, in Chatwoot) for one still waiting for the money; ⋮ the day. */
-function Actions({ paid }: { paid: boolean }) {
+/**
+ * «التفاصيل» for a paid one, «التواصل» (this client's conversation in Chatwoot) for one still waiting for the money;
+ * ⋮ opens its day on «المواعيد».
+ */
+function Actions({ a, paid }: { a: Appointment; paid: boolean }) {
+  const day = `/appointments?day=${cairoDate(new Date(a.start))}`;
   const button = "grid min-h-7 place-items-center whitespace-nowrap rounded-full border border-line/70 bg-card/70 px-3 text-[12px] font-semibold text-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.5)] transition hover:border-gold-line hover:bg-gold-tint hover:text-gold-ink";
   return (
     <span className="flex items-center justify-end gap-1">
-      {paid ? <Link to="/appointments" className={button}>التفاصيل</Link>
-        : <button type="button" onClick={() => void openChatwoot()} className={button}>التواصل</button>}
-      <Link to="/appointments" aria-label="افتح المواعيد" className="grid size-7 place-items-center rounded-full text-ink-soft transition hover:bg-gold-tint hover:text-gold-ink">
+      {paid ? <Link to={day} className={button}>التفاصيل</Link>
+        : <button type="button" onClick={() => void openChatwoot({ appointmentId: a.id })} className={button}>التواصل</button>}
+      <Link to={day} aria-label="افتح يوم الميعاد" className="grid size-7 place-items-center rounded-full text-ink-soft transition hover:bg-gold-tint hover:text-gold-ink">
         <Icon name="more" className="size-5" />
       </Link>
     </span>
@@ -492,7 +511,7 @@ const TINT: Partial<Record<IconName, { tile: string; ink: string; bar: string }>
 function UpcomingPanel({ now, items: open, pending, failed }: { now: Date; items?: Appointment[] | undefined; pending: boolean; failed: boolean }) {
   const items = open?.slice(0, 6);
   return (
-    <Panel title="أقرب المواعيد القادمة" icon="calendar" count={items?.length} action={<SeeAll to="/appointments" />} className="min-h-0" flush>
+    <Panel title="أقرب المواعيد القادمة" icon="calendar" count={open?.length} action={<SeeAll to="/appointments" />} className="min-h-0" flush>
       {pending ? <Rows n={4} /> : failed ? (
         <Quiet icon="top_calendar" title="المواعيد الجاية مش متاحة دلوقتي">جرّب تاني بعد شوية.</Quiet>
       ) : !items?.length ? (
@@ -511,7 +530,7 @@ function UpcomingPanel({ now, items: open, pending, failed }: { now: Date; items
             const at = new Date(a.start);
             return (
               <li key={a.id}>
-                <Link to="/appointments"
+                <Link to={`/appointments?day=${cairoDate(at)}`}
                   className={`${ROW} gap-3 py-2 ps-2 pe-3`}>
                   <span aria-hidden className={`absolute inset-y-2 start-0 w-[3px] rounded-full ${t.bar}`} />
                   <span className={`grid w-12 shrink-0 place-items-center rounded-[11px] bg-gradient-to-b ${t.tile} py-1 leading-none shadow-[inset_0_1px_0_rgb(255_255_255/0.5)]`}>
@@ -551,7 +570,7 @@ const egp = new Intl.NumberFormat("en-US");
 /** «الشهر ده» (the manager and the lawyer): the month's report in four numbers, as «التقارير» counts them. */
 function MonthPanel({ now }: { now: Date }) {
   const month = cairoDate(now).slice(0, 7);
-  const report = useQuery({ queryKey: ["report", month], queryFn: () => api<MonthReport>("GET", `/reports?month=${month}`) });
+  const report = useQuery({ queryKey: ["report", month], queryFn: () => api<MonthReport>("GET", `/reports?month=${month}`), refetchInterval: LIVE });
   const r = report.data;
   const onTime = r && r.done ? Math.round((r.done_on_time / r.done) * 100) : null;
   const tiles: { icon: IconName; tone: string; title: string; value: string; sub?: string }[] = r ? [

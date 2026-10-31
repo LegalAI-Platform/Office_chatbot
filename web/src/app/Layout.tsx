@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link, NavLink, Outlet, useNavigate } from "react-router";
 import { useAlerts, useMarkAlertsRead } from "../shared/api/alerts";
 import { useDashboard } from "../shared/api/dashboard";
 import { avatarUrl, can, useLogout, useMe } from "../shared/api/session";
 import { ALERT_KINDS, label, ROLES, SYSTEM_WHAT, TASK_TYPES } from "../shared/lib/labels";
+import { mayAskToNotify, useAlertNotifications } from "../shared/lib/notify";
 import { cairoLongDate, cairoTime, timeAgo } from "../shared/lib/time";
 import { Avatar } from "../shared/ui/Avatar";
 import { Icon, type IconName } from "../shared/ui/Icon";
@@ -212,6 +213,9 @@ function Bell({ late }: { late: number }) {
   const unread = alerts.data?.unread ?? 0;
   const items = alerts.data?.items ?? [];
   const now = new Date();
+  const openTask = useCallback((id: string) => void navigate(`/tasks/${id}`), [navigate]);
+  useAlertNotifications(alerts.data?.items, unread, openTask);
+  const [ask, setAsk] = useState(mayAskToNotify);
 
   return (
     <div ref={box} className="relative shrink-0">
@@ -237,6 +241,13 @@ function Bell({ late }: { late: number }) {
               </button>
             ) : null}
           </div>
+          {ask ? (
+            <button type="button" onClick={() => void Notification.requestPermission().then(() => setAsk(mayAskToNotify()))}
+              className="mx-1 flex items-center gap-2 rounded-lg border border-gold-line bg-gold-tint px-2.5 py-2 text-start text-xs font-semibold text-gold-ink hover:brightness-105">
+              <Icon name="bell" className="size-4 shrink-0" />
+              شغّل إشعارات الطلبات العاجلة وإنت في تاب تاني
+            </button>
+          ) : null}
           {items.length === 0 ? (
             <p className="px-2 py-6 text-center text-sm text-ink-soft">مفيش تنبيهات.</p>
           ) : (

@@ -11,13 +11,15 @@ public enum TaskScope
     All,
 }
 
-/// <summary>Active = open, in progress or overdue (by due time); the others by their last change.</summary>
+/// <summary>Active = open, in progress or overdue (by due time); Urgent = the active urgent ones (the home page's «أمور
+/// عاجلة»); the others by their last change.</summary>
 public enum TaskStateFilter
 {
     Active,
     Overdue,
     Done,
     Cancelled,
+    Urgent,
 }
 
 /// <summary><paramref name="Search"/>: part of the client's name, or the last digits of the number.</summary>
@@ -242,7 +244,7 @@ public sealed class PanelTasks(IPanelTaskStore store, TimeProvider clock)
 
     public Task<IReadOnlyList<StaffRef>> StaffAsync(CancellationToken ct) => store.ActiveStaffAsync(ct);
 
-    private static readonly string[] UrgentTypes = ["urgent_request", "safety_alert"];
+    public static readonly string[] UrgentTypes = ["urgent_request", "safety_alert"];
     private static readonly string[] Unfinished = ["open", "in_progress", "overdue"];
     public const int DashboardDays = 7;
 

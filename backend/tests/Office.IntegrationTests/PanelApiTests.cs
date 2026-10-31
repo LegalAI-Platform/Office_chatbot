@@ -352,6 +352,19 @@ public sealed class PanelApiTests(TestDatabase db) : IAsyncLifetime
 
 
     [Fact]
+    public async Task The_urgent_filter_lists_the_unfinished_urgent_tasks_only()
+    {
+        var urgent = await NewTask(type: "urgent_request");
+        await NewTask(type: "safety_alert", state: "done");
+        await NewTask();
+        var c = await SignIn("lawyer");
+
+        var page = (await c.GetFromJsonAsync<JsonNode>("/api/panel/tasks?scope=all&state=urgent", Ct))!;
+        Assert.Equal(1, (int)page["total"]!);
+        Assert.Equal(urgent.ToString(), (string?)page["items"]![0]!["id"]);
+    }
+
+    [Fact]
     public async Task A_staff_member_sees_own_and_unassigned_tasks_and_never_learns_about_others()
     {
         var mine = await NewTask(staff: _staffA);

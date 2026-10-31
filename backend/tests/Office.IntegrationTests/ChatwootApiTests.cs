@@ -325,6 +325,42 @@ public sealed class ChatwootApiTests(TestDatabase db) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task An_appointment_opens_its_clients_conversation_for_whoever_manages_the_schedule()
+    {
+        Assert.NotEmpty(await Turn(Text("السلام عليكم")));
+        Assert.Equal(1, await Sync());
+        var appointment = Guid.NewGuid();
+        await db.ExecAsync($"""
+            INSERT INTO hazem.appointments (id, person_id, service, starts_at, ends_at, amount, booked_turn_id)
+            SELECT '{appointment}', id, 'consultation_office', now() + interval '3 days', now() + interval '3 days 30 minutes', 1000, 'cw-open'
+              FROM hazem.persons WHERE wa_id = '{Client}'
+            """);
+        try
+        {
+            using var scope = _factory.Services.CreateScope();
+            await scope.ServiceProvider.GetRequiredService<PanelAccounts>()
+                .CreateAsync(null, new PanelAccounts.NewAccount("sara", "سارة", "sara@example.test", Permissions.Staff, null), Password, Ct);
+            var c = _factory.CreateClient();
+            await Token(c);
+            await c.PostAsJsonAsync("/api/panel/auth/login", new { username = "sara", password = Password }, Ct);
+            await Token(c);
+
+            // «التواصل» on the home page: the sign-in link, then this client's conversation.
+            var open = await c.PostAsJsonAsync("/api/panel/chatwoot/open", new { appointment_id = appointment }, Ct);
+            Assert.Equal(HttpStatusCode.OK, open.StatusCode);
+            var url = (string)(await open.Content.ReadFromJsonAsync<JsonNode>(Ct))!["conversation_url"]!;
+            Assert.EndsWith($"/conversations/{await Conversation()}", url);
+
+            var none = await c.PostAsJsonAsync("/api/panel/chatwoot/open", new { appointment_id = Guid.NewGuid() }, Ct);
+            Assert.Equal(HttpStatusCode.NotFound, none.StatusCode);
+        }
+        finally
+        {
+            await db.ExecAsync($"DELETE FROM hazem.appointments WHERE id = '{appointment}'");
+        }
+    }
+
+    [Fact]
     public async Task One_account_chatwoot_refuses_does_not_stop_the_others()
     {
         using var scope = _factory.Services.CreateScope();

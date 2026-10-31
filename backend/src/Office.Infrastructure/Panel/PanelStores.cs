@@ -225,10 +225,11 @@ public sealed class PanelTaskStore(HazemDbContext db, TimeProvider clock) : IPan
             TaskStateFilter.Overdue => rows.Where(x => x.t.State == "overdue" || (ActiveStates.Contains(x.t.State) && x.t.DueAt < now)),
             TaskStateFilter.Done => rows.Where(x => x.t.State == "done"),
             TaskStateFilter.Cancelled => rows.Where(x => x.t.State == "cancelled"),
+            TaskStateFilter.Urgent => rows.Where(x => ActiveStates.Contains(x.t.State) && PanelTasks.UrgentTypes.Contains(x.t.Type)),
             _ => rows.Where(x => ActiveStates.Contains(x.t.State)),
         };
         var total = await rows.CountAsync(ct);
-        rows = q.State is TaskStateFilter.Active or TaskStateFilter.Overdue
+        rows = q.State is TaskStateFilter.Active or TaskStateFilter.Overdue or TaskStateFilter.Urgent
             ? rows.OrderBy(x => x.t.DueAt).ThenBy(x => x.t.CreatedAt)
             : rows.OrderByDescending(x => x.t.UpdatedAt);
         var page = Math.Max(1, q.Page);

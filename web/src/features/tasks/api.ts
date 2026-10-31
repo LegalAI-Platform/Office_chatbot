@@ -3,7 +3,7 @@ import { api } from "../../shared/api/client";
 import type { StaffRef, TaskDetail, TaskPage } from "../../shared/api/types";
 
 export type Scope = "mine" | "unassigned" | "all";
-export type StateFilter = "active" | "overdue" | "done" | "cancelled";
+export type StateFilter = "active" | "urgent" | "overdue" | "done" | "cancelled";
 
 export interface TaskFilter {
   scope: Scope;
