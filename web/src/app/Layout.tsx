@@ -4,13 +4,13 @@ import { useAlerts, useMarkAlertsRead } from "../shared/api/alerts";
 import { useDashboard } from "../shared/api/dashboard";
 import { can, useLogout, useMe } from "../shared/api/session";
 import { ALERT_KINDS, label, ROLES, SYSTEM_WHAT, TASK_TYPES } from "../shared/lib/labels";
-import { setTheme, useTheme, type Theme } from "../shared/lib/theme";
 import { cairoLongDate, cairoTime, timeAgo } from "../shared/lib/time";
 import { Icon } from "../shared/ui/Icon";
 import { ConfirmHost, Toaster } from "../shared/ui/feedback";
 import { CommandPalette } from "./CommandPalette";
 import { prefetchAll, usePrefetch } from "./lazyPages";
 import { OwnerImg, type OwnerImage } from "../shared/ui/Owner";
+import { ThemePicker } from "../shared/ui/ThemePicker";
 
 type Item = { to: string; text: string; short: string; icon: OwnerImage | "home" | "chat" | "receipt" | "document"; dot?: boolean; badge?: number; end?: boolean };
 
@@ -280,37 +280,16 @@ function UserMenu() {
           <Row onClick={() => go("/change-password")}><Icon name="key" className="size-4" />تغيير كلمة السر</Row>
           {can(me, "users.manage") ? <Row onClick={() => go("/users")}><Icon name="users" className="size-4" />الحسابات</Row> : null}
           <hr className="my-1 border-line" />
-          <ThemePicker />
+          <div className="grid gap-2 px-3 pt-1 pb-2">
+            <span className="text-xs font-semibold text-ink-soft" id="look-label">الشكل</span>
+            <ThemePicker labelledBy="look-label" />
+          </div>
           <hr className="my-1 border-line" />
           <Row danger onClick={async () => { await logout(); navigate("/login", { replace: true }); }}>
             <Icon name="logout" className="size-4" />تسجيل الخروج
           </Row>
         </div>
       ) : null}
-    </div>
-  );
-}
-
-const LOOKS: [Theme, string][] = [["light", "فاتح"], ["dark", "غامق"]];
-
-/** «الشكل»: two equal buttons with a sliding mark; the new look spreads from the pressed one (theme.ts). */
-function ThemePicker() {
-  const theme = useTheme();
-  const at = LOOKS.findIndex(([v]) => v === theme);
-  return (
-    <div className="grid gap-2 px-3 pt-1 pb-2">
-      <span className="text-xs font-semibold text-ink-soft" id="look-label">الشكل</span>
-      <div role="radiogroup" aria-labelledby="look-label" className="relative grid grid-cols-2 rounded-full bg-muted p-1">
-        <span aria-hidden className="absolute inset-y-1 w-[calc(50%-4px)] rounded-full bg-card shadow-sm transition-[inset-inline-start] duration-300 ease-out"
-          style={{ insetInlineStart: at === 1 ? "50%" : "4px" }} />
-        {LOOKS.map(([v, text]) => (
-          <button key={v} type="button" role="radio" aria-checked={v === theme}
-            onClick={(e) => setTheme(v, e.currentTarget)}
-            className={`relative z-10 min-h-9 rounded-full text-sm ${v === theme ? "font-semibold text-ink" : "text-ink-soft hover:text-ink"}`}>
-            {text}
-          </button>
-        ))}
-      </div>
     </div>
   );
 }
