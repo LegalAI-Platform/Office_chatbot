@@ -268,13 +268,19 @@ function UserMenu() {
     // ms-auto: toward the far end of the bar (the left, in Arabic), with some room before the edge
     <div ref={box} className="relative ms-auto shrink-0 lg:me-24 2xl:me-40">
       <button type="button" aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-3 rounded-[10px] p-1 hover:bg-muted">
-        <Avatar name={me.display_name} photo={avatarUrl(me)} className="size-12 text-base" />
-        <span className="hidden min-w-0 text-start leading-tight sm:grid">
-          <span className="truncate text-[15px] font-bold">{me.display_name}</span>
-          <span className="truncate text-xs text-ink-soft">{label(ROLES, me.role)}</span>
+        className={`group flex items-center gap-2.5 rounded-full border py-1 ps-1 pe-1 shadow-[0_1px_2px_rgb(0_0_0/0.04)] transition duration-200 sm:pe-3
+          focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold
+          ${open ? "border-gold-line bg-card shadow-[0_6px_18px_rgb(0_0_0/0.08)]" : "border-line bg-card hover:border-gold-line hover:shadow-[0_4px_14px_rgb(0_0_0/0.07)]"}`}>
+        {/* the photo (or the initials) with a soft gold ring and a small «signed in» dot */}
+        <span className="relative shrink-0">
+          <Avatar name={me.display_name} photo={avatarUrl(me)} className="size-10 text-sm ring-2 ring-gold-tint ring-offset-1 ring-offset-card" />
+          <span className="absolute -bottom-0.5 -start-0.5 size-3 rounded-full bg-green ring-2 ring-card" aria-hidden />
         </span>
-        <Icon name="chevron-down" className="hidden size-5 text-ink-soft sm:block" />
+        <span className="hidden min-w-0 max-w-[11rem] text-start leading-tight sm:grid">
+          <span className="truncate text-[14px] font-bold">{me.display_name}</span>
+          <span className="truncate text-[11.5px] font-medium text-gold-ink">{label(ROLES, me.role)}</span>
+        </span>
+        <Icon name="chevron-down" className={`hidden size-4 text-ink-soft transition-transform duration-200 sm:block ${open ? "rotate-180" : "group-hover:translate-y-0.5"}`} />
       </button>
       {open ? (
         <div role="menu" className="surface absolute top-[calc(100%+0.5rem)] left-0 z-30 grid w-56 gap-0.5 rounded-xl p-1.5">
