@@ -134,13 +134,13 @@ function SideLink({ item: i }: { item: Item }) {
   const prefetch = usePrefetch();
   return (
     <NavLink to={i.to} end={i.end} onMouseEnter={() => prefetch(i.to)} onFocus={() => prefetch(i.to)}
-      className={({ isActive }) => `group relative flex min-h-[2.85rem] items-center gap-3 whitespace-nowrap rounded-[14px] border ps-1.5 pe-3 text-[15px] transition ${isActive
+      className={({ isActive }) => `group relative flex min-h-[2.85rem] items-center gap-2.5 whitespace-nowrap rounded-[14px] border ps-1.5 pe-2.5 text-[14.5px] transition ${isActive
         ? "nav-active border-[#e8cf9c]/40 font-bold"
         : "border-transparent text-side-ink hover:border-white/10 hover:bg-white/[0.06] hover:shadow-[inset_0_1px_0_rgb(255_255_255/0.08)] hover:backdrop-blur-md"}`}>
       {({ isActive }) => (
         <>
           {/* the icon in its own small glass tile; gold-lit on the open page */}
-          <span className={`grid size-9 shrink-0 place-items-center rounded-[11px] border transition ${isActive
+          <span className={`grid size-8 shrink-0 place-items-center rounded-[10px] border transition ${isActive
             ? "border-white/30 bg-white/15 shadow-[inset_0_1px_0_rgb(255_255_255/0.35)]"
             : "border-white/10 bg-white/[0.05] shadow-[inset_0_1px_0_rgb(255_255_255/0.06)] group-hover:border-gold/40 group-hover:bg-gold/10"}`}>
             <NavIcon icon={i.icon} />
@@ -156,8 +156,8 @@ function SideLink({ item: i }: { item: Item }) {
 }
 
 /** The owner's white line icons; «الرئيسية» is the filled cream house of the mockup. */
-function NavIcon({ icon, small = false }: { icon: Item["icon"]; small?: boolean }) {
-  const size = small ? "size-5" : "size-[22px]";
+function NavIcon({ icon }: { icon: Item["icon"]; small?: boolean }) {
+  const size = "size-5";
   if (icon === "home") {
     return (
       <svg viewBox="0 0 24 24" className={`${size} shrink-0`} aria-hidden>
