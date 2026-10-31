@@ -182,7 +182,7 @@ public static class PanelEndpoints
             return r.Outcome == PanelOutcome.Ok ? Results.Ok(new { recovery_codes = r.Value }) : Refused(r);
         }).RequireRateLimiting(PanelAuth.SensitiveLimiter);
 
-        // ---------- the account's photo, from «حسابي» (migration 0036) ----------
+        // ---------- the account's photo, from «حسابي» (migration 0040) ----------
         // The body is the image itself with its Content-Type (the panel sends a 256×256 JPEG).
         var account = work.MapGroup("/account").RequireAuthorization(PanelAuth.Policy(Permissions.AccountSelf));
 

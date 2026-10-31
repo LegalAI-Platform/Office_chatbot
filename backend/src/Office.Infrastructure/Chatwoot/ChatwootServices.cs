@@ -86,11 +86,13 @@ public sealed class ChatwootApi(HttpClient http, IOptions<ChatwootOptions> optio
             return (contactId, (string)linked["source_id"]!);
         }
 
+        // v1.37 (TASK 15): a client with a WhatsApp username has a BSUID, not a number: the identifier only.
+        var phone = Office.Domain.Common.WaId.IsPhoneNumber(waId) ? $"+{waId}" : null;
         var made = await SendAsync(HttpMethod.Post, $"/api/v1/accounts/{account}/contacts", O.BotToken, new
         {
             inbox_id = inbox,
-            name = string.IsNullOrWhiteSpace(name) ? $"+{waId}" : name.Trim(),
-            phone_number = $"+{waId}",
+            name = string.IsNullOrWhiteSpace(name) ? phone ?? Office.Application.Booking.UrgentTexts.NoNumber : name.Trim(),
+            phone_number = phone,
             identifier = waId,
         }, ct);
         var contact = made["payload"]?["contact"] ?? made;

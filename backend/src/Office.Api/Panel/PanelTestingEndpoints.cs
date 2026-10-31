@@ -4,7 +4,8 @@ using Office.Infrastructure.Panel;
 namespace Office.Api.Panel;
 
 /// <summary>
-/// «أدوات التجربة» (the owner, 2026-10-30): Hazem forgets one of his test numbers from the panel (PanelTesting).
+/// «أدوات التجربة» (the owner, 2026-10-30): Hazem forgets one of his test numbers from the panel (PanelTesting), and
+/// (v1.34, B-09.6) the switch for the urgent alert inside the 24-hour window.
 /// The manager and the lawyer only (testing.forget), the same filters as the rest of /api/panel, and in the test
 /// environment only: anywhere else every path here answers 404, as if it did not exist.
 /// </summary>
@@ -22,6 +23,21 @@ public static class PanelTestingEndpoints
             .AddEndpointFilter<MustChangePasswordFilter>()
             .AddEndpointFilter<TwoFactorRequiredFilter>()
             .RequireAuthorization(PanelAuth.Policy(Permissions.TestingForget));
+
+        // v1.34 (B-09.6): the urgent alert as a normal message inside the 24-hour window, until Meta approves urgent_alert.
+        testing.MapGet("/urgent-window", async (PanelTesting t, CancellationToken ct) => Results.Ok(new { on = await t.UrgentWindowAsync(ct) }));
+
+        testing.MapPut("/urgent-window", async (UrgentWindowRequest? body, HttpContext ctx, PanelTesting t, CancellationToken ct) =>
+        {
+            if (body?.On is not { } on)
+            {
+                return Results.BadRequest(new { error = "invalid" });
+            }
+
+            var me = ctx.CurrentUser();
+            await t.SetUrgentWindowAsync(me.Id, me.Username, on, ct);
+            return Results.Ok(new { on });
+        });
 
         testing.MapGet("/numbers", async (PanelTesting t, CancellationToken ct) =>
             Results.Ok(new { numbers = (await t.NumbersAsync(ct)).Select(n => new { key = n.Key, masked = n.Masked }) }));
@@ -49,4 +65,6 @@ public static class PanelTestingEndpoints
     }
 
     private sealed record ForgetRequest(string? Key);
+
+    private sealed record UrgentWindowRequest(bool? On);
 }

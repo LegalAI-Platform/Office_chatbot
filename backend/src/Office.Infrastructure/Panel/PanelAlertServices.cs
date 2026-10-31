@@ -124,7 +124,7 @@ public sealed class PanelAlertStore(HazemDbContext db) : IPanelAlertStore
                           orderby a.CreatedAt descending, a.Id descending
                           select new
                           {
-                              a.Id, a.Kind, a.TaskId, Type = t == null ? null : t.Type, Name = p == null ? null : p.NameRaw,
+                              a.Id, a.Kind, a.TaskId, Type = t == null ? null : t.Type, Name = p == null ? null : p.OfficeName,
                               DueAt = t == null ? (DateTimeOffset?)null : t.DueAt, a.CreatedAt, a.SystemWhat,
                               Read = db.PanelAlertReads.Any(r => r.AlertId == a.Id && r.UserId == viewer.UserId),
                           }).Take(limit).ToListAsync(ct);

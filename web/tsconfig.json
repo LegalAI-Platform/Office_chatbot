@@ -16,7 +16,7 @@
     "noEmit": true,
     "types": ["vite/client", "vitest/globals"]
   },
-  "include": ["src", "vite.config.ts"],
+  "include": ["src", "vite.config.ts", "vite.landing.config.ts"],
   // Runs under Node in Vitest (reads the source files); typed by Vitest, not by this browser config.
   "exclude": ["src/architecture.test.ts"]
 }

@@ -58,7 +58,7 @@ server, these answer `503 { error: "not_configured" }`.
 | `POST /auth/2fa/disable` | `{ password, code }` (app or recovery code) → `204`. Every other session ends |
 | `POST /auth/2fa/recovery-codes` | `{ code }` → ten new codes; the old ones stop working |
 
-## The account's photo (migration 0036, `account.self`)
+## The account's photo (migration 0040, `account.self`)
 
 | Endpoint | What |
 |---|---|

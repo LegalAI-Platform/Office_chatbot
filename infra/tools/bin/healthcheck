@@ -329,6 +329,14 @@ if [[ "$(psql_super office -c "SELECT count(DISTINCT key) FROM hazem.approved_te
 elif [[ "$(psql_super office -c "SELECT count(*) FROM hazem.settings WHERE key = 'office.lawyer_whatsapp' AND value ~ '^[0-9]{8,15}$'")" != "1" ]]; then
   warn "the lawyer's WhatsApp number is empty: a paid urgent call is an alert in the panel only (المواعيد ← بيانات المكتب)"
 fi
+# v1.34 (B-09.6): the alert as a normal message inside the 24 hours is for testing only; never while Hazem may answer anyone.
+check "the urgent alert's test switch is off whenever sends are not restricted to the test numbers (urgent.alert_in_window, v1.34)" \
+  sql_equals office "SELECT count(*) FROM hazem.settings s WHERE s.key = 'urgent.alert_in_window' AND s.value = 'true'
+    AND (EXISTS (SELECT 1 FROM app.settings WHERE key = 'whatsapp.send_restricted' AND value <> 'true')
+         OR EXISTS (SELECT 1 FROM hazem.settings WHERE key = 'hazem.open_to_all' AND value = 'true'))" "0"
+if [[ "$(psql_super office -c "SELECT value FROM hazem.settings WHERE key = 'urgent.alert_in_window'")" == "true" ]]; then
+  warn "the urgent alert goes as a normal message inside the 24 hours (TEST ONLY, v1.34): switch it off in «أدوات التجربة» before production"
+fi
 
 echo "== The prices and the office's questions (TASK 06, DECISIONS v1.17 B-20 / B-23)"
 check "the price list has its 10 lines, each a whole number from 1 to 1,000,000 (price.*)" \
@@ -401,6 +409,14 @@ fi
 echo "== Migrations"
 check "migration 0035 (the urgent call-back, v1.33 B-09) is applied" \
   sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0035'" "1"
+check "migration 0036 (the urgent alert's test switch, v1.34 B-09.6) is applied" \
+  sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0036'" "1"
+check "migration 0037 (the name on the urgent path, two texts, forgetting after an urgent alert, v1.35) is applied" \
+  sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0037'" "1"
+check "migration 0038 (the WhatsApp name for the office, v1.36) is applied" \
+  sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0038'" "1"
+check "migration 0039 (clients with a WhatsApp username, v1.37 TASK 15) is applied" \
+  sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0039'" "1"
 check "migration 0033 (the returning client and the service rating) is applied" \
   sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0033'" "1"
 check "migration 0025 (forget one test number) is applied" \

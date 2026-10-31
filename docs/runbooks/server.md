@@ -120,6 +120,7 @@ typed by the owner (`read -rsp`, never on screen). All its routes go to the edge
 | `wa.<domain>` | `http://edge:8081` | Meta's webhook only (everything else 404) |
 | `panel.<domain>` | `http://edge:8081` | the panel |
 | `chat.<domain>` | `http://edge:8081` | Chatwoot |
+| `<domain>` (no subdomain) | `http://edge:8081` | the landing page (open to everyone, not in the Egypt-only rule) |
 
 Before `panel` and `chat` get a route, Cloudflare's free plan guards them (no card needed):
 

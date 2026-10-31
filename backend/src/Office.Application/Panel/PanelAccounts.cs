@@ -39,7 +39,7 @@ public sealed class PanelUser
     /// <summary>The Chatwoot user this account opens (TASK 07b); made on the first sync.</summary>
     public long? ChatwootUserId { get; set; }
 
-    /// <summary>When the account's photo was set (migration 0036), null without one. The photo itself is never loaded here.</summary>
+    /// <summary>When the account's photo was set (migration 0040), null without one. The photo itself is never loaded here.</summary>
     public DateTimeOffset? AvatarAt { get; init; }
 
     public const string ApprovalPending = "pending";
@@ -83,7 +83,7 @@ public interface IPanelUserStore
 
     Task AuditAsync(Guid? userId, string action, Guid? targetUserId, IReadOnlyDictionary<string, string?> detail, CancellationToken ct);
 
-    /// <summary>The account's photo (migration 0036), null when there is none.</summary>
+    /// <summary>The account's photo (migration 0040), null when there is none.</summary>
     Task<PanelAvatar?> AvatarAsync(Guid id, CancellationToken ct);
 
     /// <summary>A null <paramref name="avatar"/> removes the photo (and its time).</summary>

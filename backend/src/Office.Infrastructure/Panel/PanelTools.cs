@@ -158,7 +158,7 @@ public sealed partial class PanelTools(HazemDbContext db, ListImporter importer,
                join p in db.Persons.AsNoTracking() on c.PersonId equals p.Id
                where c.State == "muted"
                orderby c.UpdatedAt descending
-               select new MutedView(p.WaId, p.NameRaw, c.UpdatedAt)).Take(200).ToListAsync(ct);
+               select new MutedView(p.WaId, p.OfficeName, c.UpdatedAt)).Take(200).ToListAsync(ct);
 
     public Task AuditUnmuteAsync(Guid by, string waId, CancellationToken ct) =>
         Audit(by, "conversation.unmute", "conversation", null, new() { ["wa_id"] = LogMask.Phone(waId) }, ct);
@@ -299,7 +299,7 @@ public sealed partial class PanelTools(HazemDbContext db, ListImporter importer,
         var ratings = await (from r in db.ServiceRatings.AsNoTracking()
                              join p in db.Persons.AsNoTracking() on r.PersonId equals p.Id
                              where r.State == "sent" && r.SentAt >= start && r.SentAt < end
-                             select new { r.Service, r.Score, r.AnsweredAt, p.NameRaw }).ToListAsync(ct);
+                             select new { r.Service, r.Score, r.AnsweredAt, NameRaw = p.OfficeName }).ToListAsync(ct);
         var scored = ratings.Where(r => r.Score is not null).ToList();
         static double Average(IEnumerable<short?> scores) => Math.Round(scores.Average(s => (double)s!.Value), 1);
 

@@ -301,7 +301,7 @@ public sealed partial class BookingFlowTests
         var d = await Hazem.DecideAsync(turn, new HazemSettings(_settings), CancellationToken.None);
         if (d.Effects is { } e)
         {
-            _rows[Number] = e.State;
+            _rows[turn.WaId] = e.State; // v1.37: per client key (a number or a BSUID)
             // as hazem.turn_replies: the closing texts sent after the age refusal, and any other reply since (v1.20)
             _booking.AgeClosingReplies += e.Replies.Count(r => r.Key == TextKeys.UrfAgeClosed);
             _booking.AgeMovedOn |= _booking.AgeRefusedAt is not null

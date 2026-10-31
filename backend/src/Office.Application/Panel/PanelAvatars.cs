@@ -1,6 +1,6 @@
 namespace Office.Application.Panel;
 
-/// <summary>An account's photo (migration 0036): the bytes and their checked type.</summary>
+/// <summary>An account's photo (migration 0040): the bytes and their checked type.</summary>
 public sealed record PanelAvatar(byte[] Bytes, string Type);
 
 /// <summary>

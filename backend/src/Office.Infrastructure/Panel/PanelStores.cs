@@ -198,7 +198,7 @@ public sealed class PanelTaskStore(HazemDbContext db, TimeProvider clock) : IPan
                    from s in ss.DefaultIfEmpty()
                    join i in db.Intakes.AsNoTracking() on t.IntakeId equals i.Id into ii
                    from i in ii.DefaultIfEmpty()
-                   select new { t, p.NameRaw, p.WaId, StaffName = s == null ? null : s.Name, ClientType = i == null ? null : i.ClientType, Matter = i == null ? null : i.MatterType };
+                   select new { t, NameRaw = p.OfficeName, p.WaId, StaffName = s == null ? null : s.Name, ClientType = i == null ? null : i.ClientType, Matter = i == null ? null : i.MatterType };
 
         if (onlyStaff is { } staff)
         {
@@ -248,7 +248,7 @@ public sealed class PanelTaskStore(HazemDbContext db, TimeProvider clock) : IPan
                    join p in db.Persons.AsNoTracking() on t.PersonId equals p.Id
                    join s in db.Staff.AsNoTracking() on t.StaffId equals s.Id into ss
                    from s in ss.DefaultIfEmpty()
-                   select new { t, p.NameRaw, StaffName = s == null ? null : s.Name };
+                   select new { t, NameRaw = p.OfficeName, StaffName = s == null ? null : s.Name };
         if (restricted)
         {
             rows = mineOrUnassigned is { } mine
@@ -274,7 +274,7 @@ public sealed class PanelTaskStore(HazemDbContext db, TimeProvider clock) : IPan
         var staff = t.StaffId is { } sid ? await db.Staff.AsNoTracking().FirstOrDefaultAsync(s => s.Id == sid, ct) : null;
         var turn = await db.Turns.AsNoTracking().FirstOrDefaultAsync(x => x.TurnId == t.TurnId, ct);
         return new TaskRecord(t.Id, t.Type, t.State, t.DueAt, t.CreatedAt, staff is null ? null : new StaffRef(staff.Id, staff.Name),
-            person.NameRaw, person.WaId, intake?.ClientType, person.Source, conversation?.State,
+            person.OfficeName, person.WaId, intake?.ClientType, person.Source, conversation?.State,
             intake?.MatterType, intake?.MatterSubtype, turn is null ? [] : ClientWords(turn.Messages));
     }
 

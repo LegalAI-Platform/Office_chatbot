@@ -37,12 +37,12 @@ public sealed class CalendarSync(HazemDbContext db, GoogleCalendar google, ISett
                          from pay in pays.DefaultIfEmpty()
                          where (a.CalendarState == "create" || a.CalendarState == "update" || a.CalendarState == "remove") && a.CalendarNextAt <= now
                          orderby a.CalendarNextAt
-                         select new { a, p.NameRaw, p.WaId, Payment = pay == null ? null : pay.State }).Take(Batch).ToListAsync(ct);
+                         select new { a, NameRaw = p.OfficeName, p.WaId, p.PreferredCallPhone, Payment = pay == null ? null : pay.State }).Take(Batch).ToListAsync(ct);
         var done = 0;
         foreach (var x in due)
         {
             var a = x.a;
-            var summary = Summary(a, x.NameRaw, x.WaId, x.Payment);
+            var summary = Summary(a, x.NameRaw, x.WaId, x.Payment, x.PreferredCallPhone);
             // ok = Google did what was asked. The state moves only if nothing changed it meanwhile (Mark).
             bool ok;
             switch (a.CalendarState)
@@ -168,9 +168,15 @@ public sealed class CalendarSync(HazemDbContext db, GoogleCalendar google, ISett
     /// B-24: «[الخدمة] – [الاسم] – [الرقم] – [نوع الموضوع] – الدفع: …». P6 (TASK 09): a confirmed booking always
     /// has its receipt (1.13), so the event shows the office's review instead, and is updated with it.
     /// </summary>
-    public static string Summary(AppointmentRow a, string? name, string waId, string? payment) =>
-        $"{BookingService.ByCode(a.Service)?.Name ?? a.Service}{(a.CallApp is { } app ? $" ({CallApp.Name(app)})" : "")} – {name ?? "من غير اسم"} – +{waId} – {MatterName(a.MatterType)} – {PaymentWords(payment)}"
+    public static string Summary(AppointmentRow a, string? name, string waId, string? payment, string? givenPhone = null) =>
+        $"{BookingService.ByCode(a.Service)?.Name ?? a.Service}{(a.CallApp is { } app ? $" ({CallApp.Name(app)})" : "")} – {name ?? "من غير اسم"} – {Number(waId, givenPhone)} – {MatterName(a.MatterType)} – {PaymentWords(payment)}"
         + (a.AttendanceFor is { } at && at == a.StartsAt ? " – الحضور: ✅ أكّد" : ""); // TASK 12 (B-18): «هحضر ✅»
+
+    /// <summary>v1.37 (TASK 15): «+201…»; a client with a username (key = BSUID): the number he gave, else «من غير رقم».</summary>
+    private static string Number(string waId, string? givenPhone) =>
+        Office.Domain.Common.WaId.IsPhoneNumber(waId) ? "+" + waId
+        : Office.Domain.Common.WaId.IsPhoneNumber(givenPhone) ? "+" + givenPhone
+        : Office.Application.Booking.UrgentTexts.NoNumber;
 
     public static string PaymentWords(string? state) => state switch
     {

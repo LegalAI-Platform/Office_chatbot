@@ -5,6 +5,7 @@ import { errorMessage } from "../../shared/api/client";
 import type { ClientWord, TaskDetail } from "../../shared/api/types";
 import { CLIENT_TYPES, label, matterLabel, MEDIA_TYPES, SOURCES, TASK_STATES, TASK_TYPES } from "../../shared/lib/labels";
 import { cairoWhen } from "../../shared/lib/time";
+import { phoneOf } from "../../shared/ui/caseCard";
 import { Icon, type IconName } from "../../shared/ui/Icon";
 import { Avatar, Button, Chip, ErrorState, Loading } from "../../shared/ui/ui";
 import { useAssign, useStaff, useTask, useTaskAction, type TaskAction } from "./api";
@@ -88,7 +89,7 @@ function Detail({ task }: { task: TaskDetail }) {
           <Actions task={task} />
           <Section icon="account" title="العميل">
             <dl className="grid gap-1.5">
-              <Row icon="whatsapp" term="الرقم"><span className="tabular" dir="ltr">+{task.client.phone}</span></Row>
+              <Row icon="whatsapp" term="الرقم"><span className="tabular" dir="ltr">{phoneOf(task.client.phone) ?? "من غير رقم"}</span></Row>
               <Row icon="users" term="النوع">{label(CLIENT_TYPES, task.client.client_type) || "—"}</Row>
               <Row icon="trend-up" term="جه منين">{label(SOURCES, task.client.source) || "مش معروف"}</Row>
               <Row icon="chat" term="حازم">{hazemState(task.client.conversation_state)}</Row>

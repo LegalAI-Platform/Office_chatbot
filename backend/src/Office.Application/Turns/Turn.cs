@@ -7,7 +7,9 @@ namespace Office.Application.Turns;
 // the contract's, so the stored copy in hazem.turns keeps the exact JSON shape n8n sent.
 
 /// <summary>What the client said that needs one answer.</summary>
-public sealed record Turn(string TurnId, string WaId, string? ContactName, IReadOnlyList<IncomingMessage> Messages);
+/// <param name="ContactUsername">v1.37 (TASK 15): his WhatsApp username, when he has one (Meta may then hide his number).</param>
+public sealed record Turn(string TurnId, string WaId, string? ContactName, IReadOnlyList<IncomingMessage> Messages,
+    string? ContactUsername = null);
 
 public enum MessageType
 {
@@ -136,4 +138,5 @@ public sealed record StoredTurn(
     string? ContactName,
     IReadOnlyList<IncomingMessage> Messages,
     string Responder,
-    IReadOnlyList<OutboundAction> Actions);
+    IReadOnlyList<OutboundAction> Actions,
+    string? ContactUsername = null); // v1.37 (TASK 15): kept on the client row

@@ -5,6 +5,7 @@ import { can, useMe } from "../../shared/api/session";
 import type { ListEntry, ListKind, MutedConversation, StaffRef } from "../../shared/api/types";
 import { label, LIST_KINDS } from "../../shared/lib/labels";
 import { cairoWhen } from "../../shared/lib/time";
+import { phoneOf } from "../../shared/ui/caseCard";
 import { Icon, type IconName } from "../../shared/ui/Icon";
 import { Avatar, Button, ErrorState, Field, Loading } from "../../shared/ui/ui";
 
@@ -301,7 +302,7 @@ function Muted() {
                   <Avatar name={m.name ?? "؟"} className="size-9 shrink-0 text-[11px]" />
                   <span className="grid min-w-0">
                     <span className="font-semibold">{m.name ?? "من غير اسم"}</span>
-                    <span className="tabular text-xs text-ink-soft" dir="ltr" style={{ textAlign: "right" }}>+{m.wa_id}</span>
+                    <span className="tabular text-xs text-ink-soft" dir="ltr" style={{ textAlign: "right" }}>{phoneOf(m.wa_id) ?? "من غير رقم"}</span>
                   </span>
                 </span>
                 <span className="flex items-center gap-1 text-xs text-ink-soft">

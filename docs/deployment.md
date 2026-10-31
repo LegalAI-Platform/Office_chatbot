@@ -122,6 +122,7 @@ token is `CLOUDFLARE_TUNNEL_TOKEN` in the server's `.env`. Its routes ("Publishe
 | `wa.hazem-office.tech` | `http://edge:8081` | Meta's webhook only; `/healthz`; every other path 404 (n8n's login and API are never exposed) |
 | `panel.hazem-office.tech` | `http://edge:8081` | the panel (`web`), which itself forwards `/api/panel` only to the API |
 | `chat.hazem-office.tech` | `http://edge:8081` | Chatwoot, with its `/cable` WebSocket |
+| `hazem-office.tech` (and `www.`) | `http://edge:8081` | the landing page (`web/public/landing`, served by `web` under `/landing/`); open to everyone; `/login` → `panel.…/login` |
 
 The edge takes the visitor's address from Cloudflare's `CF-Connecting-IP`; the panel's nginx trusts the edge's
 `X-Forwarded-For`/`-Proto` from the Docker networks only (`real_ip`), so the API's rate limits count each visitor and

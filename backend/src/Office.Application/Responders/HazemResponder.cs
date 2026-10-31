@@ -82,6 +82,17 @@ public sealed class HazemResponder(
     /// <summary>Numbers Hazem answers while hazem.open_to_all is false (CLAUDE.md: test numbers only).</summary>
     public const string RecipientsKey = "hazem.recipients";
 
+    /// <summary>
+    /// While Hazem answers test numbers only: the client's key (a number or a BSUID) or, v1.37 (TASK 15), his WhatsApp
+    /// username written as «@username» (a BSUID cannot be read on the phone).
+    /// </summary>
+    public static bool IsTestRecipient(HazemSettings settings, Turn turn)
+    {
+        var list = settings.List(RecipientsKey);
+        return list.Contains(turn.WaId)
+               || turn.ContactUsername is { Length: > 0 } u && list.Any(x => string.Equals(x, "@" + u, StringComparison.OrdinalIgnoreCase));
+    }
+
     /// <summary>true only when the owner opens Hazem to every client.</summary>
     public const string OpenToAllKey = "hazem.open_to_all";
 
@@ -104,7 +115,7 @@ public sealed class HazemResponder(
             return new TurnDecision(ResponderName, [], null, [$"urgent press {press.Kind}: {(decided ? "decided" : "no decision")}"]);
         }
 
-        if (!settings.Flag(OpenToAllKey) && !settings.List(RecipientsKey).Contains(turn.WaId))
+        if (!settings.Flag(OpenToAllKey) && !IsTestRecipient(settings, turn))
         {
             return new TurnDecision(ResponderName, []);
         }
@@ -577,7 +588,7 @@ public sealed class HazemResponder(
                 'm' => new OfferTimes(choice.Service!, null, TextKeys.BookingChooseSlot, null),
                 'v' => new OfferTimes(BookingService.PhoneVideo, null, TextKeys.BookingChooseSlot, null, App: choice.App),
                 's' when !State.Person.NameSettled => AskNameFor(BookingChoice.Pick(choice.Service!, choice.At!.Value, choice.App)),
-                's' => new PickTime(choice.Service!, choice.At!.Value, choice.App),
+                's' => ContinuePick(BookingChoice.Pick(choice.Service!, choice.At!.Value, choice.App)), // v1.37: the number first, if needed
                 'n' => new OfferTimes(choice.Service!, choice.At, TextKeys.BookingChooseSlot, null, App: choice.App),
                 'r' => new StartChange(choice.AppointmentId!.Value),
                 't' => new ChangeTo(choice.AppointmentId!.Value, choice.At!.Value),
@@ -588,6 +599,9 @@ public sealed class HazemResponder(
                 _ => new RefundIt(choice.AppointmentId!.Value),
             };
         }
+
+        /// <summary>v1.35 (B-09): what waits for the name on the urgent path (not a time: the first free moment once it comes).</summary>
+        private const string UrgentPick = "urgent";
 
         /// <summary>v1.32 (B-02): a time picked before the name: the name is asked, the time waits for it (no hold yet).</summary>
         private BookingWork? AskNameFor(string pickId)
@@ -603,6 +617,17 @@ public sealed class HazemResponder(
         /// </summary>
         private void AnswerNameForPick(string pickId)
         {
+            if (c is null && pickId == UrgentPick)
+            {
+                // v1.35 (B-09): a photo instead of the name on the urgent path: no second ask, the call is held without it, and
+                // the payment message follows (no receipt can be for this call yet: it had no payment details).
+                AnswerMediaProblems();
+                State.Person.ContinueWithoutFullName();
+                Intake.TakePending();
+                work = ContinuePick(UrgentPick); // v1.37: his number first, if his WhatsApp hides it
+                return;
+            }
+
             if (c is null)
             {
                 // A photo or file instead of the name is not a refusal (B-02): answer the file and ask again without
@@ -647,8 +672,80 @@ public sealed class HazemResponder(
             }
 
             Intake.TakePending();
+            work = ContinuePick(pickId); // v1.35: the urgent call's first free moment, or the time picked; v1.37: the number first
+        }
+
+        /// <summary>
+        /// v1.37 (TASK 15, B-02): a client whose WhatsApp hides his number (his key is a BSUID) is asked for it before the
+        /// pick is held, once, then again; with it (or for him not needed) the pick goes on: the urgent call's first free
+        /// moment (v1.35) or the time picked.
+        /// </summary>
+        private BookingWork? ContinuePick(string pickId)
+        {
+            if (!State.Person.WaId.IsPhone && State.Person.PreferredCallPhone is null)
+            {
+                Intake.AskPhoneFor(pickId, again: false);
+                plan.Say(TextKeys.AskPhone);
+                return null;
+            }
+
+            return HoldPick(pickId);
+        }
+
+        private static BookingWork HoldPick(string pickId)
+        {
+            if (pickId == UrgentPick)
+            {
+                return new UrgentHold();
+            }
+
             var pick = BookingChoice.Parse(pickId)!;
-            work = new PickTime(pick.Service!, pick.At!.Value, pick.App);
+            return new PickTime(pick.Service!, pick.At!.Value, pick.App);
+        }
+
+        /// <summary>
+        /// v1.37 (TASK 15): the answer to the number asked at the booking. A number books the pick; another request answers
+        /// it and lets the pick go; anything else asks once more, then: a phone or urgent call needs the number, so the office
+        /// meeting is offered instead; an office meeting goes on without it.
+        /// </summary>
+        private void AnswerPhoneForPick(string pickId)
+        {
+            if (Office.Domain.Common.PhoneNumbers.TryToWaId(PlainText(), out var phone) && State.Person.SetPreferredCallPhone(phone).IsOk)
+            {
+                Intake.TakePending();
+                work = HoldPick(pickId);
+                return;
+            }
+
+            if (c is not null && IsRequest(c.Intent))
+            {
+                Intake.TakePending();
+                AnswerTurn();
+                return;
+            }
+
+            if (!Intake.PhoneAskedTwice)
+            {
+                if (c is null)
+                {
+                    AnswerMediaProblems();
+                }
+
+                Intake.AskPhoneFor(pickId, again: true);
+                plan.Say(TextKeys.AskPhoneAgain, TextKeys.AskPhone);
+                return;
+            }
+
+            Intake.TakePending();
+            var call = pickId == UrgentPick || BookingChoice.Parse(pickId)?.Service == BookingService.PhoneVideo;
+            if (!call)
+            {
+                work = HoldPick(pickId);
+                return;
+            }
+
+            plan.Ask(TextKeys.PhoneNeededForCall, new ReplyChoices(InteractivePayload.Buttons,
+                [new ReplyChoice(BookingChoice.Mode(BookingService.Office), TextKeys.BtnBookOffice)]));
         }
 
         /// <summary>
@@ -930,6 +1027,13 @@ public sealed class HazemResponder(
             if (Intake.PickWaitingForName is { } pickId && !State.Person.NameSettled)
             {
                 AnswerNameForPick(pickId);
+                return;
+            }
+
+            // v1.37 (TASK 15): the number asked at the booking (his WhatsApp hides it).
+            if (Intake.PickWaitingForPhone is { } phonePick)
+            {
+                AnswerPhoneForPick(phonePick);
                 return;
             }
 
@@ -1416,7 +1520,8 @@ public sealed class HazemResponder(
         /// <summary>
         /// B-09 first sentence and, by the owner's decision, the offer (never the topic question).
         /// TASK 08: the first sentence, then today's free times (B-09.2).
-        /// v1.33 (B-09): the first sentence, then the first free moment held at once and where to pay (no times, no name).
+        /// v1.33 (B-09): the first sentence, then the first free moment held at once and where to pay (no times).
+        /// v1.35 (B-09, B-02): the name first when it is not known, as for any booking; the hold and the payment follow it.
         /// </summary>
         private void Urgent()
         {
@@ -1424,8 +1529,14 @@ public sealed class HazemResponder(
             plan.Task(PendingTask.UrgentRequest);
             if (MayBook && urgentOn)
             {
-                work = new UrgentHold();
                 Check(Intake.MoveTo(IntakeState.OfferSent));
+                if (!State.Person.NameSettled)
+                {
+                    AskNameFor(UrgentPick);
+                    return;
+                }
+
+                work = ContinuePick(UrgentPick); // v1.37: his number first, if his WhatsApp hides it
                 return;
             }
 

@@ -1,4 +1,4 @@
--- 0036_panel_avatar: each panel account can set its own photo (the owner: «أنا ممكن أحط صورتي عادي»).
+-- 0040_panel_avatar: each panel account can set its own photo (the owner: «أنا ممكن أحط صورتي عادي»).
 --   hazem.panel_users  + avatar: the photo itself, kept in the database (no storage bucket: the panel
 --                        makes it a 256×256 JPEG before upload, so it is a few dozen KB; 300 KB at most),
 --                        its type (JPEG, PNG or WebP only, the bytes checked by the API) and when it was

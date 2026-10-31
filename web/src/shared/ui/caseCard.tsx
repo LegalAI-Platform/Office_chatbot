@@ -55,7 +55,16 @@ async function copy(text: string) {
 }
 
 /** The client's WhatsApp number and «انسخ» next to it (idea from PR #14): the number is copied many times a day. */
+/**
+ * v1.37 (TASK 15): a client's key is his number, or a WhatsApp user id (BSUID, «EG.123…») when his account has a username
+ * and hides the number. «+201…» for a number, null for a user id.
+ */
+export function phoneOf(wa: string | null | undefined): string | null {
+  return wa && /^[0-9]{8,15}$/.test(wa) ? `+${wa}` : null;
+}
+
 export function Phone({ wa }: { wa: string }) {
+  if (!phoneOf(wa)) return <span className="text-ink-soft">من غير رقم</span>;
   return (
     <span className="inline-flex items-center gap-1.5">
       <span dir="ltr" className="tabular">+{wa}</span>

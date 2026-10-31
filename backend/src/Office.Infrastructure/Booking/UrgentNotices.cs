@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
 using Office.Application.Booking;
 using Office.Application.Conversations;
 using Office.Application.Ports;
@@ -28,7 +29,7 @@ namespace Office.Infrastructure.Booking;
 /// The numbers are never logged (the healthcheck scans the logs): only ids go in a key or a task.
 /// </summary>
 public sealed class UrgentNotices(HazemDbContext db, BookingStore store, ISettingsReader settingsReader, IApprovedTexts texts,
-    SendOutbound send, NoticeSender notices, IDeliverables deliverables, TimeProvider clock) : IUrgentCalls
+    SendOutbound send, NoticeSender notices, IDeliverables deliverables, TimeProvider clock, IHostEnvironment env) : IUrgentCalls
 {
     public const int Batch = 20;
     private const string Requester = "urgent";
@@ -44,11 +45,11 @@ public sealed class UrgentNotices(HazemDbContext db, BookingStore store, ISettin
         }
 
         var now = clock.GetUtcNow().ToUniversalTime(); // the database takes UTC only
-        var rules = UrgentRules.From(await settingsReader.GetAsync(ct));
-        return await AlertAsync(rules, now, ct) + await EscalateAsync(rules, active, now, ct);
+        var rules = UrgentRules.From(await settingsReader.GetAsync(ct), env.IsEnvironment("test"));
+        return await AlertAsync(rules, active, now, ct) + await EscalateAsync(rules, active, now, ct);
     }
 
-    private async Task<int> AlertAsync(UrgentRules rules, DateTimeOffset now, CancellationToken ct)
+    private async Task<int> AlertAsync(UrgentRules rules, IReadOnlyDictionary<string, ApprovedText> active, DateTimeOffset now, CancellationToken ct)
     {
         var soon = now.AddMinutes(rules.CallWithinMinutes);
         var day = now.AddDays(-1);
@@ -77,7 +78,7 @@ public sealed class UrgentNotices(HazemDbContext db, BookingStore store, ISettin
             }
 
             var ok = rules.LawyerWhatsApp.Length > 0
-                     && await TemplateAsync(rules.LawyerWhatsApp, $"urgent:{a.Receipt:N}:lawyer", a.Id, ct);
+                     && await AlertOneAsync(rules, rules.LawyerWhatsApp, $"urgent:{a.Receipt:N}:lawyer", a.Id, active, ct);
             if (!ok)
             {
                 // B-09.6: until Meta approves the template, or without the lawyer's number: the panel's bell (and e-mail) only.
@@ -112,7 +113,7 @@ public sealed class UrgentNotices(HazemDbContext db, BookingStore store, ISettin
             }
 
             if (rules.ManagerWhatsApp.Length > 0
-                && !await TemplateAsync(rules.ManagerWhatsApp, $"urgent:{a.Receipt:N}:manager", a.Id, ct))
+                && !await AlertOneAsync(rules, rules.ManagerWhatsApp, $"urgent:{a.Receipt:N}:manager", a.Id, active, ct))
             {
                 await store.AddTaskAsync(a.PersonId, $"urgent:{a.Receipt:N}:manager", PendingTask.UrgentCallFailed, now, ct);
             }
@@ -241,6 +242,27 @@ public sealed class UrgentNotices(HazemDbContext db, BookingStore store, ISettin
         }
     }
 
+    /// <summary>
+    /// The alert to one number. v1.34 (B-09.6, test only): with <see cref="UrgentRules.AlertInWindow"/>, first the same words
+    /// with «شوف التحويل» as a normal message, which Meta delivers when that number wrote to the bot in the last 24 hours;
+    /// refused (outside the window, or anything else), the template as always. False when both were refused.
+    /// </summary>
+    private async Task<bool> AlertOneAsync(UrgentRules rules, string waId, string key, Guid appointmentId,
+        IReadOnlyDictionary<string, ApprovedText> active, CancellationToken ct)
+    {
+        if (rules.AlertInWindow)
+        {
+            var step = new ReplyStep(TextKeys.UrgentAlert, null, await FillAsync(appointmentId, ct), new ReplyChoices(InteractivePayload.Buttons,
+                [new ReplyChoice(UrgentButtons.See(appointmentId), TextKeys.BtnUrgentSee)]));
+            if (await notices.SendAsync(waId, $"{key}:message", Requester, step, active, ct))
+            {
+                return true;
+            }
+        }
+
+        return await TemplateAsync(waId, key, appointmentId, ct);
+    }
+
     /// <summary>The template urgent_alert, «شوف التحويل» carrying the call's id. False when n8n or Meta refused it.</summary>
     private async Task<bool> TemplateAsync(string waId, string key, Guid appointmentId, CancellationToken ct)
     {
@@ -264,21 +286,20 @@ public sealed class UrgentNotices(HazemDbContext db, BookingStore store, ISettin
         return r.Ok;
     }
 
-    /// <summary>{{name}} (the stored name, else the WhatsApp contact name, else «عميل»), {{phone}} (as the lawyer dials it), {{time}}.</summary>
+    /// <summary>
+    /// {{name}} (the office's name for him, v1.36: the name he gave, else his WhatsApp name marked «(اسم الواتساب)», else
+    /// «عميل»), {{phone}} (as the lawyer dials it), {{time}}.
+    /// </summary>
     private async Task<Dictionary<string, string>> FillAsync(Guid appointmentId, CancellationToken ct)
     {
         var a = await (from x in db.Appointments.AsNoTracking()
                        join p in db.Persons.AsNoTracking() on x.PersonId equals p.Id
                        where x.Id == appointmentId
-                       select new { x.StartsAt, p.WaId, p.NameRaw }).SingleAsync(ct);
-        var contact = a.NameRaw is { Length: > 0 }
-            ? null
-            : await db.Turns.AsNoTracking().Where(t => t.WaId == a.WaId && t.ContactName != null)
-                .OrderByDescending(t => t.CreatedAt).Select(t => t.ContactName).FirstOrDefaultAsync(ct);
+                       select new { x.StartsAt, p.WaId, p.OfficeName, p.PreferredCallPhone }).SingleAsync(ct);
         return new Dictionary<string, string>
         {
-            ["name"] = UrgentTexts.Name(a.NameRaw, contact),
-            ["phone"] = UrgentTexts.LocalNumber(a.WaId),
+            ["name"] = UrgentTexts.Name(a.OfficeName, null),
+            ["phone"] = UrgentTexts.CallNumber(a.WaId, a.PreferredCallPhone), // v1.37: a username client, the number he gave
             ["time"] = BookingWords.Time(a.StartsAt),
         };
     }

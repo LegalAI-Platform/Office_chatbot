@@ -49,7 +49,7 @@ public sealed class PanelUrf(HazemDbContext db, BookingStore store, TimeProvider
                           orderby c.CreatedAt
                           select new
                           {
-                              c, p.NameRaw, p.WaId, Files = db.UrfFiles.Count(f => f.CaseId == c.Id),
+                              c, NameRaw = p.OfficeName, p.WaId, Files = db.UrfFiles.Count(f => f.CaseId == c.Id),
                               Start = a == null ? (DateTimeOffset?)null : a.StartsAt, Appointment = a == null ? null : a.State,
                               Payment = pay == null ? null : pay.State, DecidedBy = u == null ? null : u.DisplayName,
                           }).Take(300).ToListAsync(ct);
