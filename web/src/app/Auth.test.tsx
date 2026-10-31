@@ -15,6 +15,7 @@ const boss: Me = {
   must_change_password: false,
   two_factor: true,
   two_factor_required: false,
+  avatar_at: null,
 };
 
 type Answer = { status?: number; body?: unknown };

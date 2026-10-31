@@ -1,5 +1,5 @@
-// Sign-up, e-mail codes, a forgotten password and the authenticator (DECISIONS v1.9 T-23).
-import { api } from "../../shared/api/client";
+// Sign-up, e-mail codes, a forgotten password and the authenticator (DECISIONS v1.9 T-23), and the account's photo.
+import { api, upload } from "../../shared/api/client";
 import type { TwoFactorStatus } from "../../shared/api/types";
 
 export const signupAvailable = () => api<{ available: boolean }>("GET", "/auth/signup");
@@ -27,3 +27,8 @@ export const twoFactorEnable = (code: string) => api<{ recovery_codes: string[] 
 export const twoFactorDisable = (password: string, code: string) => api<void>("POST", "/auth/2fa/disable", { password, code });
 
 export const newRecoveryCodes = (code: string) => api<{ recovery_codes: string[] }>("POST", "/auth/2fa/recovery-codes", { code });
+
+/** The body is the photo itself (squareJpeg); /auth/me then carries its new avatar_at. */
+export const setAvatar = (photo: Blob) => upload<{ avatar_at: string }>("PUT", "/account/avatar", photo);
+
+export const removeAvatar = () => api<void>("DELETE", "/account/avatar");

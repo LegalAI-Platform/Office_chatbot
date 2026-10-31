@@ -163,13 +163,5 @@ export function Panel({ title, action, children, className = "" }: { title: stri
   );
 }
 
-/** Initials in a gold-ringed circle: no client photos are kept. */
-export function Avatar({ name, className = "size-9 text-sm" }: { name: string; className?: string }) {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  const initials = parts.length === 0 ? "؟" : parts.length === 1 ? parts[0]!.slice(0, 2) : `${parts[0]![0]} ${parts[1]![0]}`;
-  return (
-    <span className={`grid shrink-0 place-items-center rounded-full border border-gold-line bg-gold-tint font-bold text-gold-ink ${className}`} aria-hidden>
-      {initials}
-    </span>
-  );
-}
+/** Initials in a gold-ringed circle, or an account's photo: shared/ui/Avatar.tsx. */
+export { Avatar } from "./Avatar";

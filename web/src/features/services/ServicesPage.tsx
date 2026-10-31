@@ -7,9 +7,9 @@ import { label, PAYMENT_STATES, SERVICE_KINDS, SERVICE_STATES } from "../../shar
 import { cairoDate, cairoWhen } from "../../shared/lib/time";
 import { useUrlState } from "../../shared/lib/url";
 import { ActionBar, CaseCard, CaseHead, CaseNote, Facts, Files, Meta, Phone } from "../../shared/ui/caseCard";
-import { Icon } from "../../shared/ui/Icon";
+import { Icon, type IconName } from "../../shared/ui/Icon";
 import { confirmAction, toast } from "../../shared/ui/feedback";
-import { Button, Card, Chip, Empty, ErrorState, Field, Loading } from "../../shared/ui/ui";
+import { Button, Chip, ErrorState, Field, Loading } from "../../shared/ui/ui";
 import { priceMap, usePrices } from "../../shared/api/prices";
 import { ACCEPT, deliverFile, fileUrl, inRange, services, startPrice, type ServiceOrder, type Show } from "./api";
 
@@ -26,6 +26,11 @@ export function prefetchData(qc: QueryClient) {
   void qc.prefetchQuery(listQuery("open"));
 }
 
+const TABS: { value: Show; label: string; icon: IconName }[] = [
+  { value: "open", label: "شغالة", icon: "play" },
+  { value: "done", label: "اتسلّمت أو اتقفلت", icon: "check-circle" },
+];
+
 /**
  * «طلبات الخدمات» (TASK 10, DECISIONS v1.14 B-16 / B-17): a written service from the client's documents to the
  * delivered file. The lawyer or the manager prices it; the work starts once a person found the money (الإيصالات);
@@ -34,22 +39,75 @@ export function prefetchData(qc: QueryClient) {
 export function ServicesPage() {
   const [show, setShow] = useUrlState<Show>("show", "open", SHOWS);
   const list = useQuery(listQuery(show));
-  const tabs: [Show, string][] = [["open", "شغالة"], ["done", "اتسلّمت أو اتقفلت"]];
 
   return (
-    <div className="grid gap-4">
-      <h1 className="text-2xl">طلبات الخدمات</h1>
-      <p className="text-sm text-ink-soft">مراجعة وصياغة العقود، والإنذار، والرأي المكتوب: من الورق لحد ما الملف يوصل للعميل.</p>
-      <div className="flex flex-wrap gap-2" role="tablist" aria-label="طلبات الخدمات">
-        {tabs.map(([t, text]) => (
-          <Button key={t} role="tab" aria-selected={t === show} variant={t === show ? "primary" : "secondary"} onClick={() => setShow(t)}>{text}</Button>
-        ))}
+    <div className="relative isolate grid gap-5 pb-4">
+      {/* the soft light the glass shows through */}
+      <div aria-hidden className="pointer-events-none absolute inset-x-0 -top-6 -z-10 h-[30rem] overflow-hidden">
+        <span className="absolute -top-16 end-[4%] size-[24rem] rounded-full bg-gold/30 blur-[100px]" />
+        <span className="absolute top-24 start-[10%] size-[20rem] rounded-full bg-blue/10 blur-[100px]" />
       </div>
+
+      <Intro count={list.data?.length} />
+
+      <section aria-label="الفلاتر" className="liquid grid gap-2 rounded-[22px] p-4 sm:p-5">
+        <div className="flex gap-1 overflow-x-auto rounded-full border border-line/60 bg-card/45 p-1 shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)]" role="tablist" aria-label="طلبات الخدمات">
+          {TABS.map((t) => {
+            const on = t.value === show;
+            return (
+              <button key={t.value} type="button" role="tab" aria-selected={on} onClick={() => setShow(t.value)}
+                className={`flex min-h-9 shrink-0 grow items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-3.5 text-[13.5px] transition ${on
+                  ? "btn-gold font-bold shadow-[inset_0_1px_0_rgb(255_255_255/0.4),0_6px_14px_-6px_rgb(140_98_58/0.8)]"
+                  : "text-ink hover:bg-card/80"}`}>
+                <Icon name={t.icon} className="size-4" />
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
       {list.isPending ? <Loading /> : list.isError ? <ErrorState message={errorMessage(list.error)} onRetry={() => void list.refetch()} /> : (
-        list.data.length === 0 ? <Card><Empty title="مفيش طلبات هنا" icon="check-circle" /></Card> : (
-          <ul className="grid gap-3">{list.data.map((o) => <OrderCard key={o.id} o={o} />)}</ul>
+        list.data.length === 0 ? <Nothing /> : (
+          <ul className={GLASS_LIST}>{list.data.map((o) => <OrderCard key={o.id} o={o} />)}</ul>
         )
       )}
+    </div>
+  );
+}
+
+/** The shared case cards as glass: see-through over the page's light, a lit edge, a lift under the pointer. */
+const GLASS_LIST = "grid gap-3 [&>li>article]:rounded-[20px] [&>li>article]:border-line/60 [&>li>article]:bg-card/60 [&>li>article]:shadow-[inset_0_1px_0_rgb(255_255_255/0.45),0_8px_24px_-14px_rgb(60_44_20/0.4)] [&>li>article]:backdrop-blur-md [&>li>article]:transition [&>li>article:hover]:-translate-y-px [&>li>article:hover]:bg-card/80 motion-reduce:[&>li>article]:transition-none motion-reduce:[&>li>article:hover]:translate-y-0 [&_dl>div]:border [&_dl>div]:border-line/50 [&_dl>div]:bg-card/55";
+
+function Intro({ count }: { count?: number | undefined }) {
+  return (
+    <header className="relative">
+      <div className="relative">
+        <div className="flex items-start gap-4">
+          <span aria-hidden className="grid size-11 shrink-0 place-items-center rounded-[14px] bg-gradient-to-br from-gold-tint to-card text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.6),0_8px_20px_-10px_rgb(140_98_58/0.7)]">
+            <Icon name="document" className="size-6" />
+          </span>
+          <div className="grid min-w-0 gap-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-[26px] leading-tight font-bold">طلبات الخدمات</h1>
+              {count !== undefined ? (
+                <span className="tabular rounded-full border border-gold-line bg-gold-tint px-2.5 py-0.5 text-[12.5px] font-bold text-gold-ink">{count} طلب</span>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+function Nothing() {
+  return (
+    <div className="liquid grid justify-items-center gap-2 rounded-[22px] px-6 py-10 text-center">
+      <span className="grid size-14 place-items-center rounded-full bg-gradient-to-br from-green-bg to-card text-green-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.6)]">
+        <Icon name="check-circle" className="size-7" />
+      </span>
+      <p className="text-[16px] font-bold">مفيش طلبات هنا</p>
     </div>
   );
 }
@@ -81,6 +139,9 @@ function OrderCard({ o }: { o: ServiceOrder }) {
       {facts.length > 0 ? <Facts items={facts} /> : null}
       <Files label="ورق العميل" count={o.files} href={(i) => fileUrl(o.id, i)} word="مستند" />
       {o.files === 0 && o.state === "collecting" ? <CaseNote>مستنيين العميل يبعت الورق.</CaseNote> : null}
+      {(o.state === "awaiting_price" || (o.state === "collecting" && o.files > 0)) && !can(me, "services.price")
+        ? <CaseNote>مستني المستشار أو المدير يحدّد السعر.</CaseNote>
+        : null}
       {o.state === "awaiting_payment" ? <CaseNote>حازم بعت السعر وبيانات الدفع. لما الإيصال يوصل، راجعه من «الإيصالات والمدفوعات».</CaseNote> : null}
       {o.notice === "failed" ? (
         <CaseNote tone="bad">

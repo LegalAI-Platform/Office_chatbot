@@ -327,6 +327,8 @@ public sealed class PanelUserRow
     public bool TotpEnabled { get; set; }
     public long? TotpLastStep { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
+    /// <summary>Migration 0040; the photo's bytes are not mapped (PanelUserStore.AvatarAsync reads them).</summary>
+    public DateTimeOffset? AvatarAt { get; set; }
 }
 
 public sealed class PanelCodeRow

@@ -20,6 +20,7 @@ const LOADERS = {
   "/tasks": pick(() => import("../features/tasks/TasksPage"), "TasksPage"),
   "/tasks/:id": pick(() => import("../features/tasks/TaskDetailPage"), "TaskDetailPage"),
   "/appointments": pick(() => import("../features/booking/BookingPage"), "BookingPage"),
+  "/appointments/settings": pick(() => import("../features/booking/BookingSettingsPage"), "BookingSettingsPage"),
   "/receipts": pick(() => import("../features/payments/PaymentsPage"), "PaymentsPage"),
   "/services": pick(() => import("../features/services/ServicesPage"), "ServicesPage"),
   "/urf": pick(() => import("../features/urf/UrfPage"), "UrfPage"),
