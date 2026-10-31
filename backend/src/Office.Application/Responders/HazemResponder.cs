@@ -32,7 +32,8 @@ public sealed class HazemResponder(
     ServiceDesk? services = null,
     UrfDesk? urf = null,
     IIntakeHistory? history = null,
-    IRatingStore? ratings = null) : ITurnResponder
+    IRatingStore? ratings = null,
+    IUrgentCalls? urgentCalls = null) : ITurnResponder
 {
     /// <summary>
     /// TASK 10 (v1.14): the written services run (an order from the request to the delivery) only when every
@@ -94,6 +95,15 @@ public sealed class HazemResponder(
 
     public async Task<TurnDecision> DecideAsync(Turn turn, HazemSettings settings, CancellationToken ct)
     {
+        // v1.33 (B-09): the urgent alert's buttons («شوف التحويل», then «التحويل تمام، هكلمه» or «فيه مشكلة»), from whoever got the
+        // template (the lawyer or the manager, on the lawyer's list or not a client at all): read by code before anything else,
+        // never the AI, and no reply in this turn: the urgent desk sends what each press needs (IUrgentCalls).
+        if (urgentCalls is not null && UrgentButtons.In(turn) is { } press)
+        {
+            var decided = await urgentCalls.PressAsync(press, turn.WaId, turn.TurnId, ct);
+            return new TurnDecision(ResponderName, [], null, [$"urgent press {press.Kind}: {(decided ? "decided" : "no decision")}"]);
+        }
+
         if (!settings.Flag(OpenToAllKey) && !settings.List(RecipientsKey).Contains(turn.WaId))
         {
             return new TurnDecision(ResponderName, []);
@@ -123,6 +133,8 @@ public sealed class HazemResponder(
         var texts = await approvedTexts.GetActiveAsync(settings, ct);
         var bookingSettings = BookingSettings.From(settings);
         var bookingOn = booking is not null && bookingSettings.Enabled && BookingTextKeys.All(k => texts.TryGetValue(k, out var t) && t.Active);
+        // v1.33 (B-09): the urgent call-back with the booking on and every one of its texts approved; otherwise urgent as in 1.32.
+        var urgentOn = bookingOn && UrgentTexts.Keys.All(k => texts.TryGetValue(k, out var t) && t.Active);
         // TASK 12 (B-18): the reminders run whenever their texts are approved, the booking from WhatsApp on or off.
         var remindersOn = booking is not null && ReminderTexts.Keys.All(k => texts.TryGetValue(k, out var t) && t.Active);
         var servicesOn = services is not null && ServiceTextKeys.All(k => texts.TryGetValue(k, out var t) && t.Active);
@@ -162,7 +174,7 @@ public sealed class HazemResponder(
                 ? await urf!.AgeRefusalAsync(state.Person.Id, now, ct)
                 : null;
             var flow = new Flow(turn, state, list, null, plan, settings.Flag(HandoffEnabledKey), bookingOn ? bookingSettings : null, servicesOn,
-                urfOn, urfOpen, ageRefusal: ageRefusal);
+                urfOn, urfOpen, ageRefusal: ageRefusal, urgentOn: urgentOn);
             // TASK 08: a button or a list row Hazem sent is read without the AI. TASK 12: a reminder's two buttons
             // whenever the reminders run (an appointment booked before the booking was switched off still gets them).
             var pressed = ChoiceIn(turn);
@@ -191,7 +203,8 @@ public sealed class HazemResponder(
                     case FileTarget.OrderPayment when servicesOn && booking is not null:
                     case FileTarget.Hold or FileTarget.BookingPayment or FileTarget.LateHold when bookingOn:
                         receipt = await booking!.ReceiptAsync(bookingSettings, settings,
-                            new ReceiptRequest(state.Person.Id, m.Wamid, m.Media!.Bucket!, m.Media.Key!, m.Media.Sha256!, m.Media.MimeType), now, ct);
+                            new ReceiptRequest(state.Person.Id, m.Wamid, m.Media!.Bucket!, m.Media.Key!, m.Media.Sha256!, m.Media.MimeType), now, ct,
+                            urgentCall: urgentOn);
                         break;
                     case FileTarget.OrderDocuments when servicesOn:
                         documents = await services.AddFilesAsync(state.Person.Id, StoredFiles(turn), ct);
@@ -221,7 +234,7 @@ public sealed class HazemResponder(
                 else
                 {
                     flow = new Flow(turn, state, list, row.AsClassification, plan, settings.Flag(HandoffEnabledKey),
-                        bookingOn ? bookingSettings : null, servicesOn, urfOn, urfOpen, null, ageRefusal, returning);
+                        bookingOn ? bookingSettings : null, servicesOn, urfOn, urfOpen, null, ageRefusal, returning, urgentOn);
                     flow.Respond(firstContact);
                 }
             }
@@ -282,7 +295,7 @@ public sealed class HazemResponder(
                         ? await OfficeDetailsAsync(settings, asked.Topic == InfoTopic.Hours, now, ct)
                         : null;
                     flow = new Flow(turn, state, list, classification, plan, settings.Flag(HandoffEnabledKey), bookingOn ? bookingSettings : null,
-                        servicesOn, urfOn, urfOpen, office, ageRefusal, returning);
+                        servicesOn, urfOn, urfOpen, office, ageRefusal, returning, urgentOn);
                     // v1.32: the list did not know the greeting («صباحين الخير»): the kind the AI read, answered the same way
                     if (greet is null && classification is { IsFallback: false, Courtesy: not CourtesyKind.None } read
                         && new CourtesyMatch(read.Courtesy, false).TextKey is { } ak && texts.TryGetValue(ak, out var at) && at.Active)
@@ -506,7 +519,7 @@ public sealed class HazemResponder(
     /// <summary>The decisions for one turn. Changes the state in memory; the store saves it with the turn.</summary>
     private sealed class Flow(Turn turn, ClientState state, ListMatch list, Classification? c, Plan plan, bool handoffEnabled,
         BookingSettings? booking, bool servicesOn, bool urfOn = false, IReadOnlyList<UrfCase>? urfOpen = null,
-        IReadOnlyDictionary<string, string>? office = null, AgeRefusal? ageRefusal = null, bool returning = false)
+        IReadOnlyDictionary<string, string>? office = null, AgeRefusal? ageRefusal = null, bool returning = false, bool urgentOn = false)
     {
         /// <summary>TASK 11: the client's Urfi case (B-11) this turn is about (the newest running one), as the turn leaves it.</summary>
         public UrfCase? Urf { get; private set; } = urfOpen?.FirstOrDefault();
@@ -1403,11 +1416,19 @@ public sealed class HazemResponder(
         /// <summary>
         /// B-09 first sentence and, by the owner's decision, the offer (never the topic question).
         /// TASK 08: the first sentence, then today's free times (B-09.2).
+        /// v1.33 (B-09): the first sentence, then the first free moment held at once and where to pay (no times, no name).
         /// </summary>
         private void Urgent()
         {
             plan.Say(TextKeys.UrgentPrice);
             plan.Task(PendingTask.UrgentRequest);
+            if (MayBook && urgentOn)
+            {
+                work = new UrgentHold();
+                Check(Intake.MoveTo(IntakeState.OfferSent));
+                return;
+            }
+
             if (MayBook)
             {
                 work = new OfferTimes(BookingService.Urgent, null, TextKeys.BookingChooseSlot, null);
@@ -1537,6 +1558,9 @@ public sealed class HazemResponder(
                 case OfferTimes o:
                     await OfferTimesAsync(desk, b, settings, o.Service, o.After ?? plan.Now, o.IntroKey, o.Moving, ct, o.Fill, o.App);
                     break;
+                case UrgentHold:
+                    await UrgentHoldAsync(desk, b, settings, ct);
+                    break;
                 case PickTime p:
                     await PickAsync(desk, b, settings, p.Service, p.At, ct, p.App);
                     break;
@@ -1590,6 +1614,26 @@ public sealed class HazemResponder(
             {
                 plan.Say(TextKeys.ProofReceivedAgain);
                 return;
+            }
+
+            if (urgentOn && ServiceOf(a).IsUrgent)
+            {
+                // v1.33 (B-09): the call set at the first free moment from the receipt (the same receipt again: as it is now).
+                if (outcome is { Status: ReceiptStatus.Confirmed or ReceiptStatus.ConfirmedLate, Retimed: true }
+                    || outcome.Status == ReceiptStatus.Exists && a.State == AppointmentInfo.Confirmed
+                                                              && await desk.PaymentAsync(a.Id, ct) is not { State: PaymentInfo.Verified })
+                {
+                    SayUrgentPaid(a, b);
+                    return;
+                }
+
+                if (outcome.Status == ReceiptStatus.LateTaken)
+                {
+                    // No free moment within the horizon: the receipt is kept and the office calls (never a list of times).
+                    plan.Say(TextKeys.BookingNoSlots);
+                    plan.Task(PendingTask.BookingUnavailable);
+                    return;
+                }
             }
 
             switch (outcome.Status)
@@ -1743,6 +1787,106 @@ public sealed class HazemResponder(
             }
 
             plan.Say(TextKeys.BookingHold, Fill: fill);
+        }
+
+        /// <summary>
+        /// v1.33 (B-09): the urgent call held at the first moment the lawyer is free (off the slot grid, no minimum notice), and
+        /// where to pay; not today → first when the lawyer answers urgent calls (urgent_night). No calendar → as any booking.
+        /// </summary>
+        private async Task UrgentHoldAsync(BookingDesk desk, BookingSettings b, HazemSettings settings, CancellationToken ct)
+        {
+            // Asked again while his urgent hold waits: that hold is no obstacle (book_appointment replaces it).
+            var mine = await desk.UpcomingForAsync(State.Person.Id, plan.Now, ct) is { State: AppointmentInfo.PendingPayment } h && ServiceOf(h).IsUrgent
+                ? h.Id
+                : (Guid?)null;
+            BookOutcome? outcome = null;
+            for (var attempt = 0; attempt < 2 && outcome is null or { Status: BookStatus.Taken }; attempt++) // taken a moment ago: once more
+            {
+                var free = await desk.FirstFreeAsync(b, settings, plan.Now, mine, ct);
+                if (!free.CalendarAvailable)
+                {
+                    plan.Say(TextKeys.BookingUnavailable);
+                    plan.Task(PendingTask.BookingUnavailable);
+                    return;
+                }
+
+                if (free.Start is not { } start)
+                {
+                    break;
+                }
+
+                outcome = await desk.BookUrgentAsync(b, new BookRequest(Guid.NewGuid(), State.Person.Id, Intake.Id, BookingService.Urgent, start,
+                    turn.TurnId, b.Rules.BufferMinutes, Intake.MatterType, UrgentRules.HoldUntil(b.Hold, plan.Now, start), CallApp.WhatsApp), ct);
+            }
+
+            var a = outcome?.AppointmentId is { } id ? await OwnAsync(desk, id, ct) : null;
+            switch (outcome?.Status)
+            {
+                case BookStatus.Held or BookStatus.Exists when a is { State: AppointmentInfo.PendingPayment }:
+                    SayUrgentPay(a, b);
+                    break;
+                case BookStatus.BookedPaid or BookStatus.Exists when a is { State: AppointmentInfo.Confirmed } && ServiceOf(a).IsUrgent:
+                    SayUrgentPaid(a, b); // a receipt he already sent pays for it (B-05)
+                    break;
+                case BookStatus.HasHold when a is { HoldUntil: { } until }:
+                    plan.Say(TextKeys.BookingHoldOne, Fill: new Dictionary<string, string>(Describe(a))
+                    {
+                        ["deadline"] = BookingWords.Deadline(until, plan.Now),
+                    });
+                    break;
+                case BookStatus.AlreadyBooked or BookStatus.Exists:
+                    await ShowExistingAsync(desk, outcome.AppointmentId, ct);
+                    break;
+                default:
+                    plan.Say(TextKeys.BookingNoSlots);
+                    plan.Task(PendingTask.BookingUnavailable);
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// v1.33 (B-09): urgent_pay with the amount and where to pay (as the hold, P1: without the office's details it is not
+        /// sent and the office gets a task); before it urgent_night when the first free moment is not today.
+        /// </summary>
+        private void SayUrgentPay(AppointmentInfo a, BookingSettings b)
+        {
+            if (BookingDesk.Today(a.Start) != BookingDesk.Today(plan.Now))
+            {
+                plan.Say(TextKeys.UrgentNight, Fill: new Dictionary<string, string> { ["opens"] = UrgentTexts.Opens(a.Start) });
+            }
+
+            var fill = new Dictionary<string, string> { ["amount"] = BookingWords.Money(a.Amount) };
+            if (b.Office.HasPayment)
+            {
+                fill["instapay"] = b.Office.InstaPay;
+                fill["wallet"] = b.Office.Wallet;
+            }
+            else
+            {
+                plan.Task(PendingTask.BookingMessageFailed);
+            }
+
+            plan.Say(TextKeys.UrgentPay, Fill: fill);
+        }
+
+        /// <summary>
+        /// v1.33 (B-09): the receipt came and the call has its time: within urgent.call_within_minutes → urgent_now; later today
+        /// (the lawyer is in a call) → urgent_after; not today → B-08's booking_paid.
+        /// </summary>
+        private void SayUrgentPaid(AppointmentInfo a, BookingSettings b)
+        {
+            if (a.Start <= plan.Now.AddMinutes(b.Urgent.CallWithinMinutes))
+            {
+                plan.Say(TextKeys.UrgentNow);
+            }
+            else if (BookingDesk.Today(a.Start) == BookingDesk.Today(plan.Now))
+            {
+                plan.Say(TextKeys.UrgentAfter, Fill: new Dictionary<string, string> { ["time"] = BookingWords.Time(a.Start) });
+            }
+            else
+            {
+                plan.Say(TextKeys.BookingPaid, Fill: Describe(a));
+            }
         }
 
         /// <summary>The client's booking with «change» and «cancel»; none → the office, as before TASK 08.</summary>
@@ -2042,6 +2186,9 @@ public sealed class HazemResponder(
         IReadOnlyDictionary<string, string>? Fill = null, string? App = null) : BookingWork;
 
     private sealed record PickTime(BookingService Service, DateTimeOffset At, string? App = null) : BookingWork;
+
+    /// <summary>v1.33 (B-09): the urgent call held at the first free moment, then where to pay.</summary>
+    private sealed record UrgentHold : BookingWork;
 
     /// <summary>1.25 (B-23): «تحب المكالمة تبقى على إيه؟» before the times of a phone or video consultation.</summary>
     private sealed record AskCallApp : BookingWork;

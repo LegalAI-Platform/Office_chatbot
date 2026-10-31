@@ -220,6 +220,7 @@ public sealed class CalendarWorker(IServiceScopeFactory scopes, IConfiguration c
                            + await scope.ServiceProvider.GetRequiredService<Services.ServiceNotices>().RunAsync(stop) // TASK 10
                            + await scope.ServiceProvider.GetRequiredService<Urf.UrfNotices>().RunAsync(stop) // TASK 11
                            + await scope.ServiceProvider.GetRequiredService<ReminderNotices>().RunAsync(stop) // TASK 12
+                           + await scope.ServiceProvider.GetRequiredService<UrgentNotices>().RunAsync(stop) // v1.33 (B-09)
                            + await scope.ServiceProvider.GetRequiredService<Ratings.RatingNotices>().RunAsync(stop); // v1.31 (B-26)
                 var sync = scope.ServiceProvider.GetRequiredService<CalendarSync>();
                 var synced = await sync.SyncAsync(stop);

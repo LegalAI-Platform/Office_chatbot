@@ -49,8 +49,9 @@ public sealed record ChangeView(long Id, DateTimeOffset At, string What, string?
 
 public sealed record PreviewView(string Calendar, IReadOnlyList<DateTimeOffset> Slots);
 
+/// <summary>1.33 (B-09): <see cref="LawyerWhatsapp"/> and <see cref="ManagerWhatsapp"/>, where the urgent alert goes.</summary>
 public sealed record OfficeView(string Instapay, string WalletNumber, string WalletProvider, string Address, string MapUrl,
-    string? MeetLink = null, string? Phone = null);
+    string? MeetLink = null, string? Phone = null, string? LawyerWhatsapp = null, string? ManagerWhatsapp = null);
 
 /// <summary>
 /// What a change did: Error null = done (<see cref="Cancelled"/> appointments cancelled by the office;
@@ -236,8 +237,10 @@ public sealed class PanelBooking(
 
     public async Task<OfficeView> OfficeAsync(CancellationToken ct)
     {
-        var o = OfficeInfo.From(await settingsReader.GetAsync(ct));
-        return new OfficeView(o.InstaPay, o.WalletNumber, o.WalletProvider, o.Address, o.MapUrl, o.MeetLink, o.Phone);
+        var s = await settingsReader.GetAsync(ct);
+        var o = OfficeInfo.From(s);
+        return new OfficeView(o.InstaPay, o.WalletNumber, o.WalletProvider, o.Address, o.MapUrl, o.MeetLink, o.Phone,
+            s.Get(UrgentRules.LawyerWhatsAppKey), s.Get(UrgentRules.ManagerWhatsAppKey));
     }
 
     public async Task<string?> SaveOfficeAsync(Guid by, string username, OfficeView body, CancellationToken ct)
@@ -252,6 +255,18 @@ public sealed class PanelBooking(
             [OfficeInfo.MeetLinkKey] = (body.MeetLink ?? "").Trim(),
             [OfficeInfo.PhoneKey] = (body.Phone ?? "").Trim(),
         };
+        // 1.33 (B-09): the lawyer's and the manager's WhatsApp numbers, kept as WhatsApp writes them (digits, «01…» as «201…»).
+        foreach (var (key, raw) in new[] { (UrgentRules.LawyerWhatsAppKey, body.LawyerWhatsapp), (UrgentRules.ManagerWhatsAppKey, body.ManagerWhatsapp) })
+        {
+            var typed = (raw ?? "").Trim();
+            if (typed.Length > 0 && UrgentRules.Digits(typed) is null)
+            {
+                return ErrInvalid;
+            }
+
+            values[key] = UrgentRules.Digits(typed) ?? "";
+        }
+
         // The details go into Hazem's messages: plain values within B-21, no slots, real https links (1.25: the Meet link
         // is a meet.google.com one), a phone of digits.
         if (values.Values.Any(v => v.Length > 200 || TextRenderer.HasOpenSlot(v))

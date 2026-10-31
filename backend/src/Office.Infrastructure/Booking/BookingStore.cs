@@ -133,6 +133,12 @@ public sealed class BookingStore(HazemDbContext db) : IBookingStore
         };
     }
 
+    /// <summary>v1.33 (B-09): hazem.retime_urgent (migration 0035): one lock, the buffer, never the client's free change.</summary>
+    public async Task<bool> RetimeUrgentAsync(Guid id, DateTimeOffset start, DateTimeOffset end, int bufferMinutes, CancellationToken ct) =>
+        await db.Database.SqlQuery<bool>($"""
+            SELECT hazem.retime_urgent({id}, {start.ToUniversalTime()}, {end.ToUniversalTime()}, {bufferMinutes}) AS "Value"
+            """).SingleAsync(ct);
+
     public async Task<bool> CancelAsync(Guid id, string state, CancellationToken ct) =>
         await db.Database.ExecuteSqlInterpolatedAsync($"""
             UPDATE hazem.appointments

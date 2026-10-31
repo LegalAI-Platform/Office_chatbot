@@ -261,7 +261,8 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
                         + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.29.md"), Ct) // B-01 / B-02 of 1.29
                         + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.30.md"), Ct) // the services list of 1.30
                         + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.31.md"), Ct) // B-01.7 and B-26 of 1.31
-                        + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.32.md"), Ct); // the welcome and «المستشار» of 1.32
+                        + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.32.md"), Ct) // the welcome and «المستشار» of 1.32
+                        + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.33.md"), Ct); // B-09's urgent call-back of 1.33
         await using var c = new NpgsqlConnection(db.ApiConnectionString);
         await c.OpenAsync(Ct);
         await using var cmd = new NpgsqlCommand("SELECT key, text FROM hazem.approved_texts WHERE active AND source LIKE 'DECISIONS%'", c);
@@ -274,6 +275,8 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
             ["{{attendees}}"] = "الزوج والزوجة والولي [والشاهدين]", // TASK 11: B-11.7, filled from the answers (a divorce: «الطرفين»)
             ["{{details}}"] = "[التفاصيل]", // TASK 12: B-18's details line (the office, the call, or who comes)
             ["{{first_name}}"] = "[الاسم الأول]", // 1.31 (B-01.7): the first word of the stored name
+            // 1.33 (B-09): when the lawyer answers urgent calls, and the urgent alert's client.
+            ["{{opens}}"] = "[بداية الشغل]", ["{{name}}"] = "[الاسم]", ["{{phone}}"] = "[الرقم]",
             // 1.25: where the lawyer calls, and the office's details in the meeting's confirmation.
             ["{{call_app}}"] = "[واتساب على نفس الرقم ده / FaceTime على نفس الرقم ده / لينك Google Meet ده: …]",
             ["{{address}}"] = "[العنوان]", ["{{map}}"] = "[الخريطة]", ["{{office_phone}}"] = "[رقم تليفون المكتب]",
@@ -290,7 +293,7 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
             Assert.True(decisions.Contains(text, StringComparison.Ordinal), $"{r.GetString(0)} is not word for word in DECISIONS");
         }
 
-        Assert.Equal(87, count); // 8 (TASK 04) + B-04 question + the two B-25 texts (TASK 05a) + B-08 and B-22 (TASK 08) + B-11 (TASK 11) + B-18 (TASK 12) + B-11.1 (v1.20) + 9 greetings B-01.6 (v1.21) + 5 of v1.22 + 8 of v1.25 + 3 of v1.28 + ask_name_again of v1.29 (welcome_ask_name's v2 replaced its v1) + the 22 of the services list (v1.30: 13 texts and 9 price lines) + 11 of v1.31 (welcome_back and the 10 of the rating) + 2 of v1.32 (welcome, welcome_choose and ask_name_booking added, welcome_ask_name switched off; services_menu's v2 replaced its v1, and every «المستشار» text replaced its own «الأستاذ» version one for one)
+        Assert.Equal(97, count); // 8 (TASK 04) + B-04 question + the two B-25 texts (TASK 05a) + B-08 and B-22 (TASK 08) + B-11 (TASK 11) + B-18 (TASK 12) + B-11.1 (v1.20) + 9 greetings B-01.6 (v1.21) + 5 of v1.22 + 8 of v1.25 + 3 of v1.28 + ask_name_again of v1.29 (welcome_ask_name's v2 replaced its v1) + the 22 of the services list (v1.30: 13 texts and 9 price lines) + 11 of v1.31 (welcome_back and the 10 of the rating) + 2 of v1.32 (welcome, welcome_choose and ask_name_booking added, welcome_ask_name switched off; services_menu's v2 replaced its v1, and every «المستشار» text replaced its own «الأستاذ» version one for one) + the 10 of v1.33 (B-09: 6 texts, the alert and its 3 buttons)
     }
 
     [Fact]

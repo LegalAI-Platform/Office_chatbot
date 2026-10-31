@@ -15,7 +15,7 @@ namespace Office.Infrastructure.Panel;
 /// </summary>
 public sealed class PanelAlertStore(HazemDbContext db) : IPanelAlertStore
 {
-    private static readonly string[] Urgent = ["urgent_request", "safety_alert"];
+    private static readonly string[] Urgent = ["urgent_request", "safety_alert", "urgent_call_failed", "urgent_call_unanswered"]; // 1.33 (B-09)
 
     public Task<int> MakeAsync(CancellationToken ct) => db.Database.ExecuteSqlInterpolatedAsync($"""
         INSERT INTO hazem.panel_alerts (kind, task_id)
