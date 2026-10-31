@@ -231,7 +231,9 @@ svg .fill { fill: currentColor; stroke: none; }
 .foot-brand small { display: block; font-size: 14px; color: #b9ae9b; }
 .foot-bottom { border-top: 1px solid #2a241b; padding: 9px 0 12px; font-size: 13px; color: #a99e8b; text-align: end; }
 .social { display: flex; gap: 10px; margin-top: 8px; }
-.social span { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: #2b251c; color: #e9dfcc; }
+.social { flex-wrap: wrap; }
+.social a { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: #2b251c; color: #e9dfcc; transition: background-color .2s ease, color .2s ease; }
+.social a:hover { background: #3a3124; color: #e8c48a; }
 .social svg { width: 18px; height: 18px; }
 
 /* ---------- the buttons' motion (fx/fx.js sets html.fx) ---------- */

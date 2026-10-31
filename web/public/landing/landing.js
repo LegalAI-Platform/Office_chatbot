@@ -20,6 +20,24 @@ document.addEventListener("DOMContentLoaded", () => {
     menu?.addEventListener("click", (e) => { if (e.target.closest("a")) menu.open = false; });
     place();
     requestAnimationFrame(() => requestAnimationFrame(() => top.classList.add("ready")));
+
+    // the header's link of the section in view is the lit one (the last section once the page is at its end); a link
+    // just clicked stays lit while the page glides to it, until the visitor moves the page themselves (the last
+    // sections end the page together, so they all stop at the same place)
+    const links = new Map([...top.querySelectorAll('.nav a[href^="#"]')].map((a) => [a.getAttribute("href").slice(1), a]));
+    const parts = [...links.keys()].map((id) => document.getElementById(id)).filter(Boolean);
+    let held = null;
+    const spy = () => {
+      const end = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4;
+      let on = parts[0];
+      for (const p of parts) if (p.getBoundingClientRect().top <= window.innerHeight * 0.35) on = p;
+      if (end) on = parts.at(-1);
+      for (const [id, a] of links) a.classList.toggle("on", held ? a === held : id === on?.id);
+    };
+    for (const a of top.querySelectorAll('.nav a[href^="#"]')) a.addEventListener("click", () => { held = links.get(a.hash.slice(1)); spy(); });
+    for (const type of ["wheel", "touchstart", "keydown"]) window.addEventListener(type, () => { held = null; }, { passive: true });
+    window.addEventListener("scroll", spy, { passive: true });
+    spy();
   }
 
   // The screens: a ring. An arrow (or a swipe on a phone) slides the row by one screen; the one that leaves at one end
