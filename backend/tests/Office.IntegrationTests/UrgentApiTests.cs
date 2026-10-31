@@ -129,12 +129,12 @@ public sealed class UrgentApiTests(TestDatabase db) : IAsyncLifetime
     }
 
     /// <summary>What «شوف التحويل» (or a stale press) sends the presser: the receipt as a document, then the two buttons.</summary>
-    private static void IsReceiptFor(List<JsonNode> sent, string to, Guid receipt, string key)
+    private static void IsReceiptFor(List<JsonNode> sent, string to, Guid receipt, string key, string time = "12:05 م")
     {
         Assert.Equal(2, sent.Count);
         Assert.Equal(("send_document", to), ((string)sent[0]["type"]!, (string)sent[0]["wa_id"]!));
         Assert.Contains(key, (string)sent[0]["document"]!["link"]!, StringComparison.Ordinal);
-        Assert.Equal("🚨 استشارة عاجلة مدفوعة: Ahmed، 01000000113. المكالمة الساعة 12:05 م. اتأكد من التحويل في الصورة.", (string)sent[0]["text"]!);
+        Assert.Equal($"🚨 استشارة عاجلة مدفوعة: Ahmed، 01000000113. المكالمة الساعة {time}. اتأكد من التحويل في الصورة.", (string)sent[0]["text"]!);
         Assert.Equal(("send_interactive", to), ((string)sent[1]["type"]!, (string)sent[1]["wa_id"]!));
         Assert.Equal([$"ug:ok:{receipt:N}", $"ug:bad:{receipt:N}"],
             sent[1]["interactive"]!["choices"]!.AsArray().Select(c => (string)c!["id"]!));
@@ -211,7 +211,8 @@ public sealed class UrgentApiTests(TestDatabase db) : IAsyncLifetime
         // «تمام» on receipt 1 (the owner's friend's case): refused, nothing to the client, receipt 2 is sent to the presser instead.
         before = _factory.N8n.Requests.Count;
         Assert.Empty(await Press($"ug:ok:{first:N}", Lawyer));
-        IsReceiptFor(SentSince(before), Lawyer, second, await db.ScalarAsync<string>($"SELECT key FROM hazem.payment_receipts WHERE id = '{second}'") ?? "");
+        IsReceiptFor(SentSince(before), Lawyer, second, await db.ScalarAsync<string>($"SELECT key FROM hazem.payment_receipts WHERE id = '{second}'") ?? "",
+            "12:08 م");
         Assert.Equal("bad", await db.ScalarAsync<string>($"SELECT urgent_decision FROM hazem.payment_receipts WHERE id = '{first}'"));
         Assert.Null(await db.ScalarAsync<string>($"SELECT urgent_decision FROM hazem.payment_receipts WHERE id = '{second}'"));
         Assert.False(await db.ScalarAsync<bool>($"SELECT urgent_acked_at IS NOT NULL FROM hazem.appointments WHERE id = '{call}'"));
