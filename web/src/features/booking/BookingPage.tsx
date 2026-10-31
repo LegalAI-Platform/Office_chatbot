@@ -158,6 +158,9 @@ function Calendar({ today, picked, onPick }: { today: string; picked: string; on
 
 // ---------- one day ----------
 
+// a booking's three actions: small coloured pills (done green, no-show orange, cancel red)
+const ACT = "!min-h-9 !gap-1.5 !rounded-full !px-3.5 text-[13px] shadow-[inset_0_1px_0_rgb(255_255_255/0.4)]";
+
 /** The picked day: its name and hours, «تعديل اليوم ده», and its bookings as cards. */
 function DayPanel({ day, today, mayChange }: { day: string; today: string; mayChange: boolean }) {
   const month = useQuery(monthQuery(monthOf(day)));
@@ -397,15 +400,19 @@ function BookingCard({ a, now }: { a: Appointment; now: Date }) {
         <span className="flex w-full flex-wrap justify-end gap-1">
           {a.state === "confirmed" ? (
             <>
-              <Button variant="ghost" className="!min-h-9 !px-3" busy={mark.isPending && mark.variables === "completed"} onClick={() => mark.mutate("completed")}>خلص</Button>
-              <Button variant="ghost" className="!min-h-9 !px-3" busy={mark.isPending && mark.variables === "no_show"} onClick={() => mark.mutate("no_show")}>ماحضرش</Button>
+              <Button variant="ghost" className={`${ACT} !border-green/30 !bg-green-bg !text-green-ink hover:!bg-green/15`} busy={mark.isPending && mark.variables === "completed"} onClick={() => mark.mutate("completed")}>
+                <Icon name="check-circle" className="size-4" />خلص
+              </Button>
+              <Button variant="ghost" className={`${ACT} !border-orange/30 !bg-orange-bg !text-orange-ink hover:!bg-orange/15`} busy={mark.isPending && mark.variables === "no_show"} onClick={() => mark.mutate("no_show")}>
+                <Icon name="alert-circle" className="size-4" />ماحضرش
+              </Button>
             </>
           ) : null}
-          <Button variant="danger" className="!min-h-9 !px-3" busy={cancel.isPending}
+          <Button variant="ghost" className={`${ACT} !border-red/30 !bg-red-bg !text-red-ink hover:!bg-red/15`} busy={cancel.isPending}
             onClick={async () => {
               if (await confirmAction({ title: "تلغي الحجز ده؟", body: "حازم هيبعت للعميل يختار ميعاد تاني، أو استرداد كامل لو كان دفع.", yes: "أيوه، الغيه", danger: true })) cancel.mutate();
             }}>
-            إلغاء
+            <Icon name="x" className="size-4" />إلغاء
           </Button>
         </span>
       ) : null}
