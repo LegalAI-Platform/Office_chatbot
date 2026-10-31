@@ -39,6 +39,9 @@ public sealed class PanelUser
     /// <summary>The Chatwoot user this account opens (TASK 07b); made on the first sync.</summary>
     public long? ChatwootUserId { get; set; }
 
+    /// <summary>When the account's photo was set (migration 0036), null without one. The photo itself is never loaded here.</summary>
+    public DateTimeOffset? AvatarAt { get; init; }
+
     public const string ApprovalPending = "pending";
     public const string ApprovalApproved = "approved";
 
@@ -79,6 +82,12 @@ public interface IPanelUserStore
     Task<Guid> EnsureStaffAsync(string name, CancellationToken ct);
 
     Task AuditAsync(Guid? userId, string action, Guid? targetUserId, IReadOnlyDictionary<string, string?> detail, CancellationToken ct);
+
+    /// <summary>The account's photo (migration 0036), null when there is none.</summary>
+    Task<PanelAvatar?> AvatarAsync(Guid id, CancellationToken ct);
+
+    /// <summary>A null <paramref name="avatar"/> removes the photo (and its time).</summary>
+    Task SetAvatarAsync(Guid id, PanelAvatar? avatar, DateTimeOffset? at, CancellationToken ct);
 }
 
 /// <summary>Hashing (ASP.NET Core Identity's PasswordHasher) and random secrets.</summary>

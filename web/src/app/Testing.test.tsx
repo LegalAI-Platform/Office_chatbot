@@ -9,7 +9,7 @@ import { makeQueryClient, routes } from "./App";
 const person = (over: Partial<Me>): Me => ({
   id: "u1", username: "u", display_name: "شخص", email: "u@example.test", role: "staff",
   permissions: ["tasks.view_own", "tasks.update", "account.self"], must_change_password: false, two_factor: false,
-  two_factor_required: false, ...over,
+  two_factor_required: false, avatar_at: null, ...over,
 });
 const lawyer = person({ role: "lawyer", permissions: ["tasks.view_own", "tasks.view_all", "account.self", "testing.forget"] });
 const numbers = { numbers: [{ key: "aaaaaaaaaaaaaaaa", masked: "*********589" }, { key: "bbbbbbbbbbbbbbbb", masked: "*********471" }] };

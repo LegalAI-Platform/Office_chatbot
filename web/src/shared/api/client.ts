@@ -75,6 +75,10 @@ const MESSAGES: Record<string, string> = {
   no_file: "الملف ما اترفعش. ارفعه تاني.",
   too_large: "الملف أكبر من 20 ميجا.",
   urf_minutes: "مدة ميعاد العرفي من 15 لـ 480 دقيقة.",
+  // the account's photo (migration 0036)
+  avatar_type: "الصورة لازم تبقى JPG أو PNG أو WebP.",
+  avatar_too_large: "الصورة أكبر من 300 كيلو. اختار صورة أصغر.",
+  avatar_not_image: "الملف ده مش صورة سليمة. جرّب صورة تانية.",
 };
 
 export function errorMessage(error: unknown): string {
@@ -157,28 +161,27 @@ export async function read<T>(res: Response): Promise<T> {
   return (text ? JSON.parse(text) : undefined) as T;
 }
 
-export async function api<T>(method: Method, path: string, body?: unknown): Promise<T> {
+export function api<T>(method: Method, path: string, body?: unknown): Promise<T> {
+  return send<T>(method, path, body === undefined ? undefined : { type: "application/json", data: JSON.stringify(body) });
+}
+
+/** A file as the whole body, with its own Content-Type (the account's photo), never JSON. */
+export function upload<T>(method: Method, path: string, file: Blob): Promise<T> {
+  return send<T>(method, path, { type: file.type, data: file });
+}
+
+async function send<T>(method: Method, path: string, body?: { type: string; data: BodyInit }): Promise<T> {
   const headers: Record<string, string> = { Accept: "application/json" };
-  if (body !== undefined) headers["Content-Type"] = "application/json";
+  if (body !== undefined) headers["Content-Type"] = body.type;
   if (method !== "GET") headers[CSRF_HEADER] = await getCsrf();
 
-  let res = await fetch(`${API_BASE}${path}`, {
-    method,
-    headers,
-    credentials: "same-origin",
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  let res = await fetch(`${API_BASE}${path}`, { method, headers, credentials: "same-origin", body: body?.data });
 
   // A token from before a login/logout is refused once: fetch a fresh one and retry.
   if (res.status === 400 && method !== "GET" && res.headers.get("X-Antiforgery-Failed") === "1") {
     resetCsrf();
     headers[CSRF_HEADER] = await getCsrf();
-    res = await fetch(`${API_BASE}${path}`, {
-      method,
-      headers,
-      credentials: "same-origin",
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
+    res = await fetch(`${API_BASE}${path}`, { method, headers, credentials: "same-origin", body: body?.data });
   }
 
   // A success with no body (204, or 202 «accepted» as /auth/forgot answers) is no error: reading it as JSON

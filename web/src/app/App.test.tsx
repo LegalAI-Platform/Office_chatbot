@@ -15,6 +15,7 @@ const me = (over: Partial<Me> = {}): Me => ({
   must_change_password: false,
   two_factor: false,
   two_factor_required: false,
+  avatar_at: null,
   ...over,
 });
 

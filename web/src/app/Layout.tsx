@@ -2,9 +2,10 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "rea
 import { Link, NavLink, Outlet, useNavigate } from "react-router";
 import { useAlerts, useMarkAlertsRead } from "../shared/api/alerts";
 import { useDashboard } from "../shared/api/dashboard";
-import { can, useLogout, useMe } from "../shared/api/session";
+import { avatarUrl, can, useLogout, useMe } from "../shared/api/session";
 import { ALERT_KINDS, label, ROLES, SYSTEM_WHAT, TASK_TYPES } from "../shared/lib/labels";
 import { cairoLongDate, cairoTime, timeAgo } from "../shared/lib/time";
+import { Avatar } from "../shared/ui/Avatar";
 import { Icon } from "../shared/ui/Icon";
 import { ConfirmHost, Toaster } from "../shared/ui/feedback";
 import { CommandPalette } from "./CommandPalette";
@@ -264,10 +265,11 @@ function UserMenu() {
     </button>
   );
   return (
-    <div ref={box} className="relative shrink-0">
+    // ms-auto: the far end of the bar (the left, in Arabic), whatever the search box's width
+    <div ref={box} className="relative ms-auto shrink-0">
       <button type="button" aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen((v) => !v)}
         className="flex items-center gap-3 rounded-[10px] p-1 hover:bg-muted">
-        <OwnerImg name="user_profile" className="size-12 rounded-full object-cover" />
+        <Avatar name={me.display_name} photo={avatarUrl(me)} className="size-12 text-base" />
         <span className="hidden min-w-0 text-start leading-tight sm:grid">
           <span className="truncate text-[15px] font-bold">{me.display_name}</span>
           <span className="truncate text-xs text-ink-soft">{label(ROLES, me.role)}</span>
