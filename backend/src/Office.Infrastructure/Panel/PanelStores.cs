@@ -107,6 +107,31 @@ public sealed class PanelUserStore(HazemDbContext db, TimeProvider clock) : IPan
     public Task AuditAsync(Guid? userId, string action, Guid? targetUserId, IReadOnlyDictionary<string, string?> detail, CancellationToken ct) =>
         PanelAudit.WriteAsync(db, clock, userId, action, targetUserId is null ? null : "user", targetUserId, detail, ct);
 
+    // The bytes are read only here (not in PanelUserRow): every request loads its account, never its photo.
+    public async Task<PanelAvatar?> AvatarAsync(Guid id, CancellationToken ct)
+    {
+        var json = await db.Database.SqlQuery<string>($"""
+            SELECT json_build_object('type', avatar_type, 'data', encode(avatar, 'base64'))::text AS "Value"
+              FROM hazem.panel_users WHERE id = {id} AND avatar IS NOT NULL
+            """).SingleOrDefaultAsync(ct);
+        if (json is null)
+        {
+            return null;
+        }
+
+        using var doc = JsonDocument.Parse(json);
+        // encode() breaks the base64 into lines; FromBase64String skips the white space.
+        return new PanelAvatar(Convert.FromBase64String(doc.RootElement.GetProperty("data").GetString()!),
+            doc.RootElement.GetProperty("type").GetString()!);
+    }
+
+    public Task SetAvatarAsync(Guid id, PanelAvatar? avatar, DateTimeOffset? at, CancellationToken ct) =>
+        db.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE hazem.panel_users SET avatar = {avatar?.Bytes}, avatar_type = {avatar?.Type},
+                   avatar_at = {(avatar is null ? null : at?.ToUniversalTime())}
+             WHERE id = {id}
+            """, ct);
+
     /// <summary>Filter first, then the staff name: EF translates this shape.</summary>
     private async Task<List<PanelUser>> LoadAsync(System.Linq.Expressions.Expression<Func<PanelUserRow, bool>> filter, CancellationToken ct)
     {
@@ -142,6 +167,7 @@ public sealed class PanelUserStore(HazemDbContext db, TimeProvider clock) : IPan
         TotpLastStep = r.TotpLastStep,
         CreatedAt = r.CreatedAt,
         ChatwootUserId = r.ChatwootUserId,
+        AvatarAt = r.AvatarAt,
     };
 }
 

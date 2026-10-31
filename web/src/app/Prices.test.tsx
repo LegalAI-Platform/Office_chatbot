@@ -11,7 +11,7 @@ import { makeQueryClient, routes } from "./App";
 const me = (role: "staff" | "lawyer"): Me => ({
   id: "u1", username: "u", display_name: "x", email: "u@example.test", role,
   permissions: ["tasks.view_own", "tasks.update", "account.self", ...(role === "lawyer" ? ["prices.manage" as const] : [])],
-  must_change_password: false, two_factor: false, two_factor_required: false,
+  must_change_password: false, two_factor: false, two_factor_required: false, avatar_at: null,
 });
 const list = [
   { key: "price.phone_video", name: "استشارة بالتليفون أو الفيديو (ربع ساعة)", value: 500, default: 500 },

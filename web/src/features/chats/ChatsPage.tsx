@@ -7,20 +7,35 @@ import { Button } from "../../shared/ui/ui";
 
 /**
  * «المحادثات» (TASK 07b, T-24): the conversations live in Chatwoot. This page opens it already
- * signed in, and says what happens there.
+ * signed in, and says what happens there. As «liquid glass»: a glass header and one glass card with the button.
  */
 export function ChatsPage() {
   const [state, setState] = useState<{ busy: boolean; error?: unknown }>({ busy: false });
 
   return (
-    <div className="grid gap-4">
-      <h1 className="text-2xl">المحادثات</h1>
-      <section className="surface relative grid justify-items-center gap-4 overflow-hidden rounded-[var(--radius-card)] px-6 py-12 text-center">
-        <OwnerImg name="sidebar_art" className="pointer-events-none absolute bottom-0 left-0 w-44 opacity-25" />
-        <span className="grid size-14 place-items-center rounded-2xl bg-side text-gold">
-          <Icon name="chat" className="size-7" />
+    <div className="relative isolate grid gap-5 pb-4">
+      {/* the soft light the glass shows through */}
+      <div aria-hidden className="pointer-events-none absolute inset-x-0 -top-6 -z-10 h-[30rem] overflow-hidden">
+        <span className="absolute -top-16 end-[4%] size-[24rem] rounded-full bg-gold/30 blur-[100px]" />
+        <span className="absolute top-24 start-[10%] size-[20rem] rounded-full bg-green/10 blur-[100px]" />
+      </div>
+
+      <header className="relative">
+        <div className="relative flex items-center gap-4">
+          <span aria-hidden className="grid size-11 shrink-0 place-items-center rounded-[14px] bg-gradient-to-br from-gold-tint to-card text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.6),0_8px_20px_-10px_rgb(140_98_58/0.7)]">
+            <Icon name="chat" className="size-6" />
+          </span>
+          <h1 className="text-[26px] leading-tight font-bold">المحادثات</h1>
+        </div>
+      </header>
+
+      <section aria-label="افتح Chatwoot" className="liquid relative isolate grid justify-items-center gap-4 overflow-hidden rounded-[22px] px-6 py-10 text-center">
+        <OwnerImg name="sidebar_art" className="pointer-events-none absolute bottom-0 left-0 -z-10 hidden w-44 opacity-20 sm:block" />
+        <span aria-hidden className="pointer-events-none absolute -top-16 -end-10 -z-10 size-56 rounded-full bg-gold/20 blur-3xl" />
+        <span className="grid size-16 place-items-center rounded-[20px] bg-gradient-to-br from-green-bg to-card text-green-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.6),0_8px_20px_-10px_rgb(7_138_93/0.5)]">
+          <Icon name="whatsapp" className="size-8" />
         </span>
-        <p className="max-w-md text-sm text-ink-soft">
+        <p className="max-w-md text-[14px] leading-relaxed text-ink-soft">
           محادثات العملاء والرد عليهم في <strong className="text-ink">Chatwoot</strong>. بيفتح في تاب جديد وانت داخل على طول،
           من غير كلمة سر تانية.
         </p>
@@ -32,11 +47,6 @@ export function ChatsPage() {
           افتح المحادثات
         </Button>
         {state.error ? <p className="text-sm text-bad" role="alert">{errorMessage(state.error)}</p> : null}
-        <ul className="grid max-w-md gap-1.5 text-start text-sm text-ink-soft">
-          <li>• ردك بيوصل للعميل على واتساب، وحازم بيسكت في المحادثة دي.</li>
-          <li>• لما تخلص، اقفل المحادثة (Resolve)، وحازم يرجع يرد على العميل.</li>
-          <li>• الصور والملفات بتظهر نوعها بس، وبتتفتح من لوحة المكتب.</li>
-        </ul>
       </section>
     </div>
   );

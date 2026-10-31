@@ -36,6 +36,8 @@ export interface Me {
   two_factor: boolean;
   /** A manager without the authenticator: nothing else works until it is on. */
   two_factor_required: boolean;
+  /** When the account's photo was set (its cache key), null without one: /users/{id}/avatar?v=… */
+  avatar_at: string | null;
 }
 
 /** The right password of an account with the authenticator on: the code comes next. */

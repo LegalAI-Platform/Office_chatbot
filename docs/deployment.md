@@ -226,7 +226,7 @@ A checklist, in order. Each item is the owner's decision where it says so.
    24-hour window), the webhook on the production `wa.` link (`tunnel-refresh.sh --url`).
 4. **Open to clients** — owner's explicit decision only: `whatsapp.send_restricted=false` (and Hazem's own
    recipients setting), with the healthcheck's warning acknowledged.
-5. **Real office details** in the panel (المواعيد ← بيانات المكتب): InstaPay, wallet, address, map, Meet link,
+5. **Real office details** in the panel (إعدادات المواعيد ← بيانات المكتب والدفع): InstaPay, wallet, address, map, Meet link,
    phone (the healthcheck warns while they are test values).
 6. **Off-site backups** (R2) and a restore tested from them.
 7. **Access:** Cloudflare Access on `panel.`/`chat.`; a decision on the authenticator (managers at least).

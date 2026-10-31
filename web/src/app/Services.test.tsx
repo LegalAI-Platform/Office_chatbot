@@ -10,7 +10,7 @@ import { makeQueryClient, routes } from "./App";
 const me = (role: "staff" | "lawyer"): Me => ({
   id: "u1", username: "u", display_name: "x", email: "u@example.test", role,
   permissions: ["tasks.view_own", "tasks.update", "account.self", "services.manage", ...(role === "lawyer" ? ["services.price" as const] : [])],
-  must_change_password: false, two_factor: false, two_factor_required: false,
+  must_change_password: false, two_factor: false, two_factor_required: false, avatar_at: null,
 });
 const order = (over: object = {}) => ({
   id: "o1", kind: "document_review", state: "awaiting_price", name: "محمد أحمد علي حسن", wa_id: "201000000093",

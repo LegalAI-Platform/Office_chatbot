@@ -1,7 +1,7 @@
 // Who is signed in. Shared because the layout and every feature need it (features never import
 // each other). Server state lives in TanStack Query only.
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, ApiError, read, resetCsrf, takeEarlyMe } from "./client";
+import { api, API_BASE, ApiError, read, resetCsrf, takeEarlyMe } from "./client";
 import type { Me, Permission, SecondStep } from "./types";
 
 export const meKey = ["me"] as const;
@@ -23,6 +23,13 @@ export function useMe() {
     retry: false,
   });
 }
+
+/**
+ * An account's photo (migration 0036), null without one. ?v= changes with every new photo: the browser keeps
+ * one for a day and never shows an old one.
+ */
+export const avatarUrl = (u: { id: string; avatar_at: string | null }): string | null =>
+  u.avatar_at ? `${API_BASE}/users/${encodeURIComponent(u.id)}/avatar?v=${encodeURIComponent(u.avatar_at)}` : null;
 
 export const can = (me: Me | null | undefined, permission: Permission): boolean =>
   !!me && me.permissions.includes(permission);

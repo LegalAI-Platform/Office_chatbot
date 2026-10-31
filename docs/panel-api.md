@@ -18,7 +18,7 @@ endpoints (`/api/hazem/*`, `X-Hazem-Token`) are never reachable from the panel.
 | `POST /auth/login` | anyone | `{ username, password }` → `200` + the user (as `/auth/me`). Wrong name, wrong password, a disabled account and a locked account all answer the **same** `401 { error: "invalid_credentials" }`. 5 wrong passwords lock the account for 15 minutes. At most 10 attempts per minute per address (`429`). **v1.9:** with the authenticator on, `200 { two_factor: true, ticket }` and no session yet; a registered account that still waits answers, only after the right password, `403 { error: "email_not_verified", email }` or `403 { error: "pending_approval" }` |
 | `POST /auth/login/2fa` | anyone | `{ ticket, code }`: the six digits from the app, or a recovery code (`xxxx-xxxx`, once each). The ticket lives 5 minutes (`401 { error: "expired_ticket" }`). A wrong code → `401 { error: "invalid_code" }` and counts towards the lockout |
 | `POST /auth/logout` | signed in | ends this session |
-| `GET /auth/me` | signed in | `{ id, username, display_name, email, role, permissions[], must_change_password, two_factor, two_factor_required }` |
+| `GET /auth/me` | signed in | `{ id, username, display_name, email, role, permissions[], must_change_password, two_factor, two_factor_required, avatar_at }` (`avatar_at`: null without a photo) |
 | `POST /auth/change-password` | signed in | `{ current_password, new_password }`. At least 12 characters (no symbol rules, NIST). Signs every other session out; this one gets a new cookie |
 
 - Cookie `hazem_panel`: HttpOnly, SameSite=Strict, Secure (except plain http in `ENVIRONMENT=test`),
@@ -57,6 +57,14 @@ server, these answer `503 { error: "not_configured" }`.
 | `POST /auth/2fa/enable` | `{ code }` → `{ recovery_codes[10] }`, shown once. Every other session ends |
 | `POST /auth/2fa/disable` | `{ password, code }` (app or recovery code) → `204`. Every other session ends |
 | `POST /auth/2fa/recovery-codes` | `{ code }` → ten new codes; the old ones stop working |
+
+## The account's photo (migration 0040, `account.self`)
+
+| Endpoint | What |
+|---|---|
+| `PUT /account/avatar` | The body is the image itself, `Content-Type` `image/jpeg`, `image/png` or `image/webp`, at most 300 KB (nginx: 320k on this path), the bytes checked (magic numbers) → `200 { avatar_at }`. Refused `400 { error }`: `avatar_type`, `avatar_too_large`, `avatar_not_image`. The panel sends a 256×256 JPEG. Audit `avatar.set` |
+| `DELETE /account/avatar` | → `204`, no photo. Audit `avatar.remove` |
+| `GET /users/{id}/avatar` | Any signed-in account → the photo with its type, `Cache-Control: private, max-age=86400`, `X-Content-Type-Options: nosniff`; `404` without one. The panel asks for `?v=<avatar_at>`, so a new photo is a new address |
 
 ## Alerts, files and the office's tools (TASK 07c, DECISIONS v1.11)
 

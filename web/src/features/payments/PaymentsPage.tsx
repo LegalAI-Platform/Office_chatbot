@@ -7,7 +7,8 @@ import { cairoWhen } from "../../shared/lib/time";
 import { useUrlState } from "../../shared/lib/url";
 import { ActionBar, CaseCard, CaseHead, CaseNote, Facts, Files, Meta, Phone } from "../../shared/ui/caseCard";
 import { toast } from "../../shared/ui/feedback";
-import { Button, Card, Chip, Empty, ErrorState, Field, Loading } from "../../shared/ui/ui";
+import { Icon, type IconName } from "../../shared/ui/Icon";
+import { Button, Chip, ErrorState, Field, Loading } from "../../shared/ui/ui";
 import { payments, pounds, receiptUrl, type Payment, type Review, type Show } from "./api";
 
 const TONE: Record<string, string> = {
@@ -24,6 +25,12 @@ export function prefetchData(qc: QueryClient) {
   void qc.prefetchQuery(listQuery("refunds"));
 }
 
+const TABS: { value: Show; label: string; icon: IconName }[] = [
+  { value: "review", label: "مستني مراجعتك", icon: "receipt" },
+  { value: "refunds", label: "استرداد مطلوب", icon: "refresh" },
+  { value: "all", label: "الكل", icon: "document" },
+];
+
 /**
  * «الإيصالات والمدفوعات» (TASK 09, DECISIONS v1.13): the system never confirms a payment. Whoever checks
  * the office's InstaPay or wallet opens the receipt and marks what really came (P1: the lawyer, the manager or
@@ -32,26 +39,77 @@ export function prefetchData(qc: QueryClient) {
 export function PaymentsPage() {
   const [show, setShow] = useUrlState<Show>("show", "review", SHOWS);
   const list = useQuery(listQuery(show));
-  const tabs: [Show, string][] = [["review", "مستني مراجعتك"], ["refunds", "استرداد مطلوب"], ["all", "الكل"]];
 
   return (
-    <div className="grid gap-4">
-      <h1 className="text-2xl">الإيصالات والمدفوعات</h1>
-      <p className="text-sm text-ink-soft">
-        حازم بيأكد الميعاد بصورة التحويل بس. افتح الإيصال، اتأكد إن الفلوس وصلت، وعلّم اللي لقيته.
-      </p>
-      <div className="flex flex-wrap gap-2" role="tablist" aria-label="المدفوعات">
-        {tabs.map(([t, text]) => (
-          <Button key={t} role="tab" aria-selected={t === show} variant={t === show ? "primary" : "secondary"} onClick={() => setShow(t)}>{text}</Button>
-        ))}
+    <div className="relative isolate grid gap-5 pb-4">
+      {/* the soft light the glass shows through */}
+      <div aria-hidden className="pointer-events-none absolute inset-x-0 -top-6 -z-10 h-[30rem] overflow-hidden">
+        <span className="absolute -top-16 end-[4%] size-[24rem] rounded-full bg-gold/30 blur-[100px]" />
+        <span className="absolute top-24 start-[10%] size-[20rem] rounded-full bg-green/10 blur-[100px]" />
       </div>
+
+      <Intro count={list.data?.length} />
+
+      <section aria-label="الفلاتر" className="liquid grid gap-2 rounded-[22px] p-4 sm:p-5">
+        <div className="flex gap-1 overflow-x-auto rounded-full border border-line/60 bg-card/45 p-1 shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)]" role="tablist" aria-label="المدفوعات">
+          {TABS.map((t) => {
+            const on = t.value === show;
+            return (
+              <button key={t.value} type="button" role="tab" aria-selected={on} onClick={() => setShow(t.value)}
+                className={`flex min-h-9 shrink-0 grow items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-3.5 text-[13.5px] transition ${on
+                  ? "btn-gold font-bold shadow-[inset_0_1px_0_rgb(255_255_255/0.4),0_6px_14px_-6px_rgb(140_98_58/0.8)]"
+                  : "text-ink hover:bg-card/80"}`}>
+                <Icon name={t.icon} className="size-4" />
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
       {list.isPending ? <Loading /> : list.isError ? <ErrorState message={errorMessage(list.error)} onRetry={() => void list.refetch()} /> : (
         list.data.length === 0 ? (
-          <Card><Empty title="مفيش حاجة هنا" icon="check-circle" /></Card>
+          <Nothing />
         ) : (
-          <ul className="grid gap-3">{list.data.map((p) => <PaymentCard key={p.appointment_id} p={p} />)}</ul>
+          <ul className={GLASS_LIST}>{list.data.map((p) => <PaymentCard key={p.appointment_id} p={p} />)}</ul>
         )
       )}
+    </div>
+  );
+}
+
+/** The shared case cards as glass: see-through over the page's light, a lit edge, a lift under the pointer. */
+const GLASS_LIST = "grid gap-3 [&>li>article]:rounded-[20px] [&>li>article]:border-line/60 [&>li>article]:bg-card/60 [&>li>article]:shadow-[inset_0_1px_0_rgb(255_255_255/0.45),0_8px_24px_-14px_rgb(60_44_20/0.4)] [&>li>article]:backdrop-blur-md [&>li>article]:transition [&>li>article:hover]:-translate-y-px [&>li>article:hover]:bg-card/80 motion-reduce:[&>li>article]:transition-none motion-reduce:[&>li>article:hover]:translate-y-0 [&_dl>div]:border [&_dl>div]:border-line/50 [&_dl>div]:bg-card/55";
+
+function Intro({ count }: { count?: number | undefined }) {
+  return (
+    <header className="relative">
+      <div className="relative">
+        <div className="flex items-start gap-4">
+          <span aria-hidden className="grid size-11 shrink-0 place-items-center rounded-[14px] bg-gradient-to-br from-gold-tint to-card text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.6),0_8px_20px_-10px_rgb(140_98_58/0.7)]">
+            <Icon name="receipt" className="size-6" />
+          </span>
+          <div className="grid min-w-0 gap-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-[26px] leading-tight font-bold">الإيصالات والمدفوعات</h1>
+              {count !== undefined ? (
+                <span className="tabular rounded-full border border-gold-line bg-gold-tint px-2.5 py-0.5 text-[12.5px] font-bold text-gold-ink">{count} إيصال</span>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+function Nothing() {
+  return (
+    <div className="liquid grid justify-items-center gap-2 rounded-[22px] px-6 py-10 text-center">
+      <span className="grid size-14 place-items-center rounded-full bg-gradient-to-br from-green-bg to-card text-green-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.6)]">
+        <Icon name="check-circle" className="size-7" />
+      </span>
+      <p className="text-[16px] font-bold">مفيش حاجة هنا</p>
     </div>
   );
 }
@@ -144,7 +202,7 @@ function PaymentCard({ p }: { p: Payment }) {
 
 function Sure({ text, busy, onYes, onNo }: { text: string; busy: boolean; onYes: () => void; onNo: () => void }) {
   return (
-    <div className="grid gap-2 rounded-lg border border-gold-line bg-gold-tint p-3 text-sm" role="alertdialog" aria-label="تأكيد">
+    <div className="grid gap-2 rounded-[14px] border border-gold-line bg-gold-tint/85 p-3 text-sm shadow-[inset_0_1px_0_rgb(255_255_255/0.5)]" role="alertdialog" aria-label="تأكيد">
       <p>{text}</p>
       <div className="flex gap-2">
         <Button variant="primary" busy={busy} onClick={onYes}>أيوه، أكّد</Button>

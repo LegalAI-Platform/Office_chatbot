@@ -23,6 +23,7 @@ const COMMANDS: Command[] = [
   { id: "texts", text: "نصوص حازم", hint: "الإعدادات", icon: "message", to: "/texts", words: "نصوص رسائل حازم", permission: "texts.manage" },
   { id: "users", text: "الحسابات", hint: "الإعدادات", icon: "users", to: "/users", words: "حسابات موظفين مستخدمين", permission: "users.manage" },
   { id: "settings", text: "الإعدادات", hint: "صفحة", icon: "settings", to: "/settings", words: "اعدادات إعدادات" },
+  { id: "booking-settings", text: "إعدادات المواعيد", hint: "المواعيد", icon: "settings", to: "/appointments/settings", words: "ساعات الشغل المواعيد الثابتة أسبوع اسبوع الحجز من واتساب بيانات المكتب الدفع انستاباي InstaPay محفظة", permission: "schedule.manage" },
   { id: "testing", text: "حازم ينسى رقم تجربة", hint: "أدوات التجربة", icon: "refresh", to: "/testing", words: "انسى امسح تجربة اختبار رقم ارقام أرقام", permission: "testing.forget" },
   { id: "account", text: "حسابي", hint: "الإعدادات", icon: "account", to: "/account", words: "حسابي كلمة السر باسورد" },
 ];

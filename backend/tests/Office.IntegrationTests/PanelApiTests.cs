@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json.Nodes;
@@ -446,6 +447,104 @@ public sealed class PanelApiTests(TestDatabase db) : IAsyncLifetime
             Assert.DoesNotContain(secret, logs);
             Assert.DoesNotContain(secret, audit!);
         }
+    }
+
+    // ---------- the account's photo (migration 0040) ----------
+
+    private static readonly byte[] Jpeg = [0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, .. "JFIF"u8, 0x00, 0x01, 0x02, 0xFF, 0xD9];
+    private static readonly byte[] Png = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, .. "IHDR"u8];
+
+    private static Task<HttpResponseMessage> PutAvatar(HttpClient c, byte[] bytes, string type)
+    {
+        var content = new ByteArrayContent(bytes);
+        content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(type);
+        return c.PutAsync("/api/panel/account/avatar", content, Ct);
+    }
+
+    private static async Task<string?> Error(HttpResponseMessage r) => (string?)(await r.Content.ReadFromJsonAsync<JsonNode>(Ct))?["error"];
+
+    [Fact]
+    public async Task An_account_sets_its_photo_others_see_it_and_me_carries_its_time()
+    {
+        var yasmin = await SignIn("yasmin");
+        var me = (await yasmin.GetFromJsonAsync<JsonNode>("/api/panel/auth/me", Ct))!;
+        Assert.Null((string?)me["avatar_at"]);
+        var id = (string)me["id"]!;
+        Assert.Equal(HttpStatusCode.NotFound, (await yasmin.GetAsync($"/api/panel/users/{id}/avatar", Ct)).StatusCode);
+
+        var put = await PutAvatar(yasmin, Jpeg, "image/jpeg");
+        Assert.Equal(HttpStatusCode.OK, put.StatusCode);
+        var at = (await yasmin.GetFromJsonAsync<JsonNode>("/api/panel/auth/me", Ct))!["avatar_at"];
+        Assert.NotNull(at);
+        Assert.Equal(DateTimeOffset.Parse((string)(await put.Content.ReadFromJsonAsync<JsonNode>(Ct))!["avatar_at"]!, CultureInfo.InvariantCulture),
+            DateTimeOffset.Parse((string)at!, CultureInfo.InvariantCulture));
+
+        // another account (a staff member's photo seen by the lawyer, in the lists later)
+        var lawyer = await SignIn("lawyer");
+        var r = await lawyer.GetAsync($"/api/panel/users/{id}/avatar?v=1", Ct);
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        Assert.Equal(Jpeg, await r.Content.ReadAsByteArrayAsync(Ct));
+        Assert.Equal("image/jpeg", r.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("nosniff", r.Headers.GetValues("X-Content-Type-Options").Single());
+        Assert.True(r.Headers.CacheControl is { Private: true, NoStore: false } cc && cc.MaxAge == TimeSpan.FromDays(1));
+        Assert.False(r.Headers.Contains("Pragma"));
+
+        // a PNG replaces it
+        Assert.Equal(HttpStatusCode.OK, (await PutAvatar(yasmin, Png, "image/png")).StatusCode);
+        Assert.Equal("image/png", (await lawyer.GetAsync($"/api/panel/users/{id}/avatar", Ct)).Content.Headers.ContentType?.MediaType);
+        Assert.Equal(2L, await db.ScalarAsync<long>($"SELECT count(*) FROM hazem.panel_audit WHERE action = 'avatar.set' AND user_id = '{id}' AND target_id = '{id}'"));
+
+        // without a session: nothing
+        Assert.Equal(HttpStatusCode.Unauthorized, (await _factory.CreateClient().GetAsync($"/api/panel/users/{id}/avatar", Ct)).StatusCode);
+    }
+
+    [Fact]
+    public async Task A_photo_of_another_type_too_large_or_with_fake_bytes_is_refused()
+    {
+        var c = await SignIn("karim");
+        var gif = await PutAvatar(c, "GIF89a "u8.ToArray(), "image/gif");
+        Assert.Equal(HttpStatusCode.BadRequest, gif.StatusCode);
+        Assert.Equal("avatar_type", await Error(gif));
+
+        var svg = await PutAvatar(c, "<svg xmlns=\"http://www.w3.org/2000/svg\"/>"u8.ToArray(), "image/svg+xml");
+        Assert.Equal("avatar_type", await Error(svg));
+
+        var big = new byte[PanelAvatars.MaxBytes + 1];
+        Jpeg.CopyTo(big, 0);
+        var tooBig = await PutAvatar(c, big, "image/jpeg");
+        Assert.Equal(HttpStatusCode.BadRequest, tooBig.StatusCode);
+        Assert.Equal("avatar_too_large", await Error(tooBig));
+
+        // an HTML page called a PNG, and a JPEG called a WebP
+        var fake = await PutAvatar(c, "<html><script>alert(1)</script></html>"u8.ToArray(), "image/png");
+        Assert.Equal(HttpStatusCode.BadRequest, fake.StatusCode);
+        Assert.Equal("avatar_not_image", await Error(fake));
+        Assert.Equal("avatar_not_image", await Error(await PutAvatar(c, Jpeg, "image/webp")));
+
+        // exactly the limit is fine
+        Assert.Equal(HttpStatusCode.OK, (await PutAvatar(c, big[..PanelAvatars.MaxBytes], "image/jpeg")).StatusCode);
+        Assert.Equal(1L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.panel_audit WHERE action = 'avatar.set'"));
+    }
+
+    [Fact]
+    public async Task Removing_the_photo_goes_back_to_none_and_needs_the_antiforgery_token()
+    {
+        var c = await SignIn("yasmin");
+        var id = (string)(await c.GetFromJsonAsync<JsonNode>("/api/panel/auth/me", Ct))!["id"]!;
+        Assert.Equal(HttpStatusCode.OK, (await PutAvatar(c, Jpeg, "image/jpeg")).StatusCode);
+
+        var noToken = await SignIn("yasmin");
+        noToken.DefaultRequestHeaders.Remove("X-CSRF-TOKEN");
+        Assert.Equal(HttpStatusCode.BadRequest, (await noToken.DeleteAsync("/api/panel/account/avatar", Ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await PutAvatar(noToken, Png, "image/png")).StatusCode);
+        Assert.Equal("image/jpeg", await db.ScalarAsync<string>($"SELECT avatar_type FROM hazem.panel_users WHERE id = '{id}'"));
+
+        Assert.Equal(HttpStatusCode.NoContent, (await c.DeleteAsync("/api/panel/account/avatar", Ct)).StatusCode);
+        Assert.Null((string?)(await c.GetFromJsonAsync<JsonNode>("/api/panel/auth/me", Ct))!["avatar_at"]);
+        Assert.Equal(HttpStatusCode.NotFound, (await c.GetAsync($"/api/panel/users/{id}/avatar", Ct)).StatusCode);
+        Assert.True(await db.ScalarAsync<bool>($"SELECT avatar IS NULL AND avatar_type IS NULL AND avatar_at IS NULL FROM hazem.panel_users WHERE id = '{id}'"));
+        Assert.Equal(1L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.panel_audit WHERE action = 'avatar.remove'"));
+        Assert.False(await db.ScalarAsync<bool>("SELECT has_column_privilege('office_readonly', 'hazem.panel_users', 'avatar', 'SELECT')"));
     }
 
     [Fact]

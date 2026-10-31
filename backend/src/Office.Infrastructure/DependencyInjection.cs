@@ -91,6 +91,7 @@ public static class DependencyInjection
         services.AddScoped<Application.Panel.IPanelUserStore, Panel.PanelUserStore>();
         services.AddScoped<Application.Panel.IPanelTaskStore, Panel.PanelTaskStore>();
         services.AddScoped<Application.Panel.PanelAccounts>();
+        services.AddScoped<Application.Panel.PanelAvatars>();
         services.AddScoped<Application.Panel.PanelTasks>();
         // v1.9: sign-up, e-mail codes (the owner's SMTP) and the authenticator app.
         services.AddSingleton<Application.Panel.IPanelCrypto, Panel.PanelCrypto>();
