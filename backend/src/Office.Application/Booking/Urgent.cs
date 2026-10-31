@@ -10,21 +10,27 @@ namespace Office.Application.Booking;
 // «التحويل تمام، هكلمه» (urgent_seen to the client) or «فيه مشكلة» (payment_not_received; a new receipt alerts him again).
 // No decision in time: the manager too (urgent_waiting to the client). The booking off: the urgent path as in 1.32.
 
-/// <summary>v1.33 (B-09): the urgent call's settings and the two numbers of «بيانات المكتب».</summary>
-public sealed record UrgentRules(int CallWithinMinutes, int EscalateAfterMinutes, string LawyerWhatsApp, string ManagerWhatsApp)
+/// <summary>
+/// v1.33 (B-09): the urgent call's settings and the two numbers of «بيانات المكتب». v1.34 (B-09.6, test only):
+/// <see cref="AlertInWindow"/>, the alert as a normal message when the number wrote in the last 24 hours.
+/// </summary>
+public sealed record UrgentRules(int CallWithinMinutes, int EscalateAfterMinutes, string LawyerWhatsApp, string ManagerWhatsApp,
+    bool AlertInWindow = false)
 {
     public const string CallWithinKey = "urgent.call_within_minutes";
     public const string EscalateAfterKey = "urgent.escalate_after_minutes";
     public const string LawyerWhatsAppKey = "office.lawyer_whatsapp";
     public const string ManagerWhatsAppKey = "office.manager_whatsapp";
+    public const string AlertInWindowKey = "urgent.alert_in_window";
 
     public static UrgentRules Default { get; } = new(10, 10, "", "");
 
-    public static UrgentRules From(HazemSettings s)
+    /// <param name="testEnvironment">v1.34: the switch counts in the test environment only, whatever the setting says.</param>
+    public static UrgentRules From(HazemSettings s, bool testEnvironment = false)
     {
         int Minutes(string key, int fallback) => int.TryParse(s.Get(key), out var v) && v is >= 1 and <= 120 ? v : fallback;
         return new(Minutes(CallWithinKey, Default.CallWithinMinutes), Minutes(EscalateAfterKey, Default.EscalateAfterMinutes),
-            Digits(s.Get(LawyerWhatsAppKey)) ?? "", Digits(s.Get(ManagerWhatsAppKey)) ?? "");
+            Digits(s.Get(LawyerWhatsAppKey)) ?? "", Digits(s.Get(ManagerWhatsAppKey)) ?? "", testEnvironment && s.Flag(AlertInWindowKey));
     }
 
     /// <summary>

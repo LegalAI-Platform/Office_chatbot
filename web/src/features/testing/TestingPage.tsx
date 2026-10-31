@@ -11,7 +11,55 @@ type Forgot = { masked: string; rows: number; calendar_deleted: number; calendar
 const testing = {
   numbers: () => api<{ numbers: TestNumber[] }>("GET", "/testing/numbers"),
   forget: (key: string) => api<Forgot>("POST", "/testing/forget", { key }),
+  urgentWindow: () => api<{ on: boolean }>("GET", "/testing/urgent-window"),
+  setUrgentWindow: (on: boolean) => api<{ on: boolean }>("PUT", "/testing/urgent-window", { on }),
 };
+
+/**
+ * v1.34 (B-09.6): until Meta approves urgent_alert, the lawyer's (and the manager's) alert can go as a normal message when
+ * that number wrote to the bot in the last 24 hours. Off by default; the healthcheck fails if it is left on in production.
+ */
+function UrgentWindow() {
+  const qc = useQueryClient();
+  const state = useQuery({ queryKey: ["testing", "urgent-window"], queryFn: testing.urgentWindow, retry: false });
+  const set = useMutation({
+    mutationFn: testing.setUrgentWindow,
+    onSuccess: (r) => {
+      void qc.invalidateQueries({ queryKey: ["testing", "urgent-window"] });
+      toast(r.on ? "تنبيه العاجل هيوصل رسالة عادية جوه الـ 24 ساعة ✅" : "تنبيه العاجل رجع قالب بس ✅");
+    },
+  });
+  if (!state.data) return null;
+  const on = state.data.on;
+
+  const flip = async () => {
+    const ok = await confirmAction({
+      title: on ? "ترجّع التنبيه قالب بس؟" : "تشغّل تنبيه العاجل جوه الـ 24 ساعة؟",
+      body: on
+        ? "تنبيه المستشار والمدير هيتبعت قالب urgent_alert بس، زي DECISIONS. ولحد ما Meta توافق عليه، هيوصل في اللوحة والإيميل بس."
+        : "لو المستشار أو المدير بعت أي رسالة للبوت في آخر 24 ساعة، التنبيه هيوصله رسالة عادية بنفس الكلام وزرار «شوف التحويل». غير كده، القالب زي ما هو. ده للتجربة بس: اقفله قبل الإطلاق.",
+      yes: on ? "أيوه، رجّعه" : "أيوه، شغّله",
+    });
+    if (ok) set.mutate(!on);
+  };
+
+  return (
+    <Card>
+      <h2 className="text-lg">تنبيه العاجل جوه الـ 24 ساعة</h2>
+      <p className="text-sm text-ink-soft">
+        لحد ما Meta توافق على قالب تنبيه المستشار، ده بيخلّي التنبيه يوصل رسالة عادية لو المستشار أو المدير كاتب للبوت في آخر 24 ساعة.
+        للتجربة بس.
+      </p>
+      <div className="flex flex-wrap items-center gap-3 pt-2">
+        <span className="font-semibold">{on ? "شغّال" : "مقفول"}</span>
+        <Button variant={on ? "secondary" : "primary"} busy={set.isPending} onClick={() => void flip()}>
+          {on ? "اقفله" : "شغّله"}
+        </Button>
+      </div>
+      {set.isError ? <p className="text-sm text-bad" role="alert">{errorMessage(set.error)}</p> : null}
+    </Card>
+  );
+}
 
 /** «…0589» → «0589»: the end of the number, as the office says it. */
 const ending = (masked: string) => masked.replace(/^\*+/, "");
@@ -91,6 +139,7 @@ export function TestingPage() {
           {forget.isError ? <p className="text-sm text-bad" role="alert">{errorMessage(forget.error)}</p> : null}
         </Card>
       )}
+      {off ? null : <UrgentWindow />}
     </div>
   );
 }

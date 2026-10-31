@@ -11,6 +11,7 @@ namespace Office.IntegrationTests;
 /// v1.33 (B-09) through the real API and database: the urgent consultation as a paid call-back. The client presses the urgent
 /// row, pays, and the worker alerts the lawyer with the template urgent_alert («شوف التحويل»); his press sends him the receipt
 /// and «التحويل تمام، هكلمه» / «فيه مشكلة»; the first decision on the latest receipt wins; no decision in time → the manager.
+/// v1.34 (B-09.6, test only): with urgent.alert_in_window on, the alert goes first as a normal message inside the 24 hours.
 /// The app's clock starts on Wednesday 18 November 2026, 12:00 Cairo (the lawyer's calendar is empty, the hours 10:00–24:00).
 /// </summary>
 [Collection(nameof(HazemApiTests))]
@@ -31,7 +32,7 @@ public sealed class UrgentApiTests(TestDatabase db) : IAsyncLifetime
         UPDATE hazem.appointments SET urgent_alert_receipt = NULL;
         DELETE FROM hazem.payment_receipts; DELETE FROM hazem.payments; DELETE FROM hazem.appointments;
         DELETE FROM hazem.booking_exceptions; DELETE FROM hazem.booking_changes;
-        UPDATE hazem.settings SET value = 'false' WHERE key = 'booking.enabled';
+        UPDATE hazem.settings SET value = 'false' WHERE key IN ('booking.enabled', 'urgent.alert_in_window');
         UPDATE hazem.settings SET value = '' WHERE key IN ('booking.calendar_id', 'office.instapay', 'office.wallet_number', 'office.wallet_provider',
           'office.lawyer_whatsapp', 'office.manager_whatsapp');
         TRUNCATE hazem.panel_audit; DELETE FROM hazem.panel_users;
@@ -282,6 +283,51 @@ public sealed class UrgentApiTests(TestDatabase db) : IAsyncLifetime
         };
         Assert.Equal(1, await Worker());
         Assert.Equal(1L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.staff_tasks WHERE type = 'urgent_call_failed'"));
+    }
+
+    [Fact]
+    public async Task V134_with_the_test_switch_on_the_alert_inside_the_window_is_a_normal_message_with_the_same_button()
+    {
+        await db.SetAsync("urgent.alert_in_window", "true");
+        var call = await Paid();
+        var before = _factory.N8n.Requests.Count;
+        Assert.Equal(1, await Worker());
+        var alert = Assert.Single(SentSince(before)); // the lawyer wrote in the last 24 hours (n8n sent it): no template
+        Assert.Equal(("send_interactive", Lawyer), ((string)alert["type"]!, (string)alert["wa_id"]!));
+        Assert.Equal("🚨 استشارة عاجلة مدفوعة: Ahmed، 01000000113. المكالمة الساعة 12:05 م. اتأكد من التحويل في الصورة.", (string)alert["text"]!);
+        var see = Assert.Single(alert["interactive"]!["choices"]!.AsArray())!;
+        Assert.Equal(($"ug:see:{call:N}", "شوف التحويل"), ((string)see["id"]!, (string)see["title"]!));
+
+        // Its button is the template's: the receipt, then «التحويل تمام، هكلمه» / «فيه مشكلة».
+        before = _factory.N8n.Requests.Count;
+        Assert.Empty(await Press($"ug:see:{call:N}", Lawyer));
+        var receipt = await LatestReceipt(call);
+        IsReceiptFor(SentSince(before), Lawyer, receipt, await db.ScalarAsync<string>($"SELECT key FROM hazem.payment_receipts WHERE id = '{receipt}'") ?? "");
+        Assert.Equal(0L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.staff_tasks WHERE type = 'urgent_call_failed'"));
+    }
+
+    [Fact]
+    public async Task V134_outside_the_window_the_switch_falls_back_to_the_template_and_it_is_off_by_default()
+    {
+        Assert.Equal("false", await db.ScalarAsync<string>("SELECT value FROM hazem.settings WHERE key = 'urgent.alert_in_window'"));
+        await db.SetAsync("urgent.alert_in_window", "true");
+        var call = await Paid();
+        _factory.N8n.Responder = r => r.Content!.ReadAsStringAsync().Result.Contains("\"send_interactive\"", StringComparison.Ordinal)
+            ? new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""{"ok":false,"status":"failed","error_code":"OUTSIDE_24H_WINDOW"}""", Encoding.UTF8, "application/json"),
+            }
+            : new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""{"ok":true,"outbound_id":"00000000-0000-0000-0000-000000000901","status":"sent"}""", Encoding.UTF8,
+                    "application/json"),
+            };
+        var before = _factory.N8n.Requests.Count;
+        Assert.Equal(1, await Worker());
+        var sent = SentSince(before);
+        Assert.Equal(["send_interactive", "send_template"], sent.Select(s => (string)s["type"]!));
+        IsAlert(sent[1], Lawyer, call);
+        Assert.Equal(0L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.staff_tasks WHERE type = 'urgent_call_failed'"));
     }
 
     [Fact]

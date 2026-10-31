@@ -263,6 +263,7 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
                         + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.31.md"), Ct) // B-01.7 and B-26 of 1.31
                         + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.32.md"), Ct) // the welcome and «المستشار» of 1.32
                         + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.33.md"), Ct); // B-09's urgent call-back of 1.33
+        decisions = decisions.Replace("\r\n", "\n", StringComparison.Ordinal); // a Windows checkout (core.autocrlf) has CRLF; the texts have \n
         await using var c = new NpgsqlConnection(db.ApiConnectionString);
         await c.OpenAsync(Ct);
         await using var cmd = new NpgsqlCommand("SELECT key, text FROM hazem.approved_texts WHERE active AND source LIKE 'DECISIONS%'", c);
