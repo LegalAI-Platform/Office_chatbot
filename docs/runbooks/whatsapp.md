@@ -211,6 +211,23 @@ powershell -ExecutionPolicy Bypass -File scripts\windows\forget-number.ps1 01012
 The number stays in `whatsapp.test_recipients` / `hazem.recipients`. Files in storage (a receipt image) are not
 deleted; nothing points at them any more.
 
+## Testing the urgent alert before Meta approves `urgent_alert` (v1.34, test only)
+
+Until Meta approves the template, the lawyer's urgent alert cannot reach WhatsApp (it is a panel alert and a task).
+To test the whole call-back on the test number:
+
+1. The lawyer's and the manager's numbers: in Meta's **API Setup → Manage phone number list**, in
+   `whatsapp.test_recipients`, and in «المواعيد ← بيانات المكتب».
+2. The panel: الإعدادات ← **أدوات التجربة** ← «تنبيه العاجل جوه الـ 24 ساعة» ← **شغّله** (the manager or the lawyer;
+   `urgent.alert_in_window`, written to the audit as `testing.urgent_window`).
+3. The lawyer (and the manager, for the escalation) sends **any message** to the bot: that opens the 24-hour window.
+4. A client pays an urgent consultation: the lawyer gets the alert as a normal message with «شوف التحويل», then the
+   receipt and «التحويل تمام، هكلمه» / «فيه مشكلة», exactly as with the template. Without a message in the last 24
+   hours, the template goes as before.
+5. **Switch it off when done** (same place). The healthcheck warns while it is on, and fails if it is on while
+   `whatsapp.send_restricted` is not `true` or `hazem.open_to_all` is `true`. Outside the test environment the API
+   ignores it (`ASPNETCORE_ENVIRONMENT` ≠ `test`).
+
 ## End-to-end test without Meta
 
 `hazem-e2e`: message → n8n → API → reply (dry run) → result back; same turn twice; API down and

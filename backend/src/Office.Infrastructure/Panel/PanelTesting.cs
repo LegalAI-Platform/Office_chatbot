@@ -36,6 +36,23 @@ public sealed class PanelTesting(HazemDbContext db, ISettingsReader settings, Go
         (await settings.GetAsync(ct)).List(HazemResponder.RecipientsKey).Order(StringComparer.Ordinal)
             .Select(w => new TestNumberView(KeyOf(w), LogMask.Phone(w))).ToList();
 
+    /// <summary>v1.34 (B-09.6): is the urgent alert sent as a normal message inside the 24-hour window (test only)?</summary>
+    public async Task<bool> UrgentWindowAsync(CancellationToken ct) =>
+        (await settings.GetAsync(ct)).Flag(Application.Booking.UrgentRules.AlertInWindowKey);
+
+    /// <summary>v1.34 (B-09.6): the switch, recorded in the audit (who, on or off).</summary>
+    public async Task SetUrgentWindowAsync(Guid by, string username, bool on, CancellationToken ct)
+    {
+        var value = on ? "true" : "false";
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO hazem.settings (key, value, description, updated_by)
+            VALUES ({Application.Booking.UrgentRules.AlertInWindowKey}, {value}, 'v1.34 (B-09.6), TEST ONLY', {"panel:" + username})
+            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_by = EXCLUDED.updated_by
+            """, ct);
+        await PanelAudit.WriteAsync(db, clock, by, "testing.urgent_window", "booking", null,
+            new Dictionary<string, string?> { ["on"] = value }, ct);
+    }
+
     /// <summary>Null when the key is not one of the test numbers.</summary>
     public async Task<ForgetResult?> ForgetAsync(Guid by, string key, CancellationToken ct)
     {

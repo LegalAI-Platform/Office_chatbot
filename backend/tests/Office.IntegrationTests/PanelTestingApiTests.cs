@@ -103,4 +103,27 @@ public sealed class PanelTestingApiTests(TestDatabase db) : IAsyncLifetime
             (await staff.PostAsJsonAsync("/api/panel/testing/forget", new { key = PanelTesting.KeyOf(Tester) }, Ct)).StatusCode);
         Assert.Equal(1, await db.ScalarAsync<long>($"SELECT count(*) FROM hazem.persons WHERE wa_id = '{Tester}'"));
     }
+
+    [Fact]
+    public async Task V134_the_lawyer_switches_the_urgent_alert_inside_the_window_and_the_staff_cannot()
+    {
+        try
+        {
+            var lawyer = await SignIn("lawyer");
+            Assert.False((bool)(await lawyer.GetFromJsonAsync<JsonNode>("/api/panel/testing/urgent-window", Ct))!["on"]!); // off by default
+            Assert.Equal(HttpStatusCode.BadRequest, (await lawyer.PutAsJsonAsync("/api/panel/testing/urgent-window", new { }, Ct)).StatusCode);
+            Assert.Equal(HttpStatusCode.OK, (await lawyer.PutAsJsonAsync("/api/panel/testing/urgent-window", new { on = true }, Ct)).StatusCode);
+            Assert.Equal("true", await db.ScalarAsync<string>("SELECT value FROM hazem.settings WHERE key = 'urgent.alert_in_window'"));
+            Assert.Equal("true", await db.ScalarAsync<string>(
+                "SELECT detail ->> 'on' FROM hazem.panel_audit WHERE action = 'testing.urgent_window' AND target_type = 'booking'"));
+
+            var staff = await SignIn("yasmin");
+            Assert.Equal(HttpStatusCode.Forbidden, (await staff.PutAsJsonAsync("/api/panel/testing/urgent-window", new { on = false }, Ct)).StatusCode);
+            Assert.Equal("true", await db.ScalarAsync<string>("SELECT value FROM hazem.settings WHERE key = 'urgent.alert_in_window'"));
+        }
+        finally
+        {
+            await db.SetAsync("urgent.alert_in_window", "false");
+        }
+    }
 }

@@ -66,6 +66,16 @@ public sealed class UrgentFirstFreeTests
     }
 
     [Fact]
+    public void V134_the_window_switch_counts_in_the_test_environment_only_and_is_off_by_default()
+    {
+        var on = new HazemSettings(new Dictionary<string, string> { [UrgentRules.AlertInWindowKey] = "true" });
+        Assert.True(UrgentRules.From(on, testEnvironment: true).AlertInWindow);
+        Assert.False(UrgentRules.From(on).AlertInWindow); // production: the template only, whatever the setting says
+        Assert.False(UrgentRules.From(new HazemSettings(new Dictionary<string, string>()), testEnvironment: true).AlertInWindow);
+        Assert.False(UrgentRules.Default.AlertInWindow);
+    }
+
+    [Fact]
     public void The_panel_numbers_and_the_words_of_the_alert()
     {
         Assert.Equal("201000000555", UrgentRules.Digits("0100 000 0555"));

@@ -5,7 +5,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Me } from "../shared/api/types";
 import { makeQueryClient, routes } from "./App";
 
-// «أدوات التجربة» (the owner, 2026-10-30): Hazem forgets a test number from the panel, the manager and the lawyer only.
+// «أدوات التجربة» (the owner, 2026-10-30): Hazem forgets a test number from the panel, the manager and the lawyer only; and
+// (v1.34) the switch for the urgent alert inside the 24-hour window.
 const person = (over: Partial<Me>): Me => ({
   id: "u1", username: "u", display_name: "شخص", email: "u@example.test", role: "staff",
   permissions: ["tasks.view_own", "tasks.update", "account.self"], must_change_password: false, two_factor: false,
@@ -69,6 +70,20 @@ describe("أدوات التجربة", () => {
     fireEvent.click(screen.getByRole("button", { name: "انسى كل الأرقام (2)" }));
     expect(await confirmYes()).toContain("589، 471");
     await vi.waitFor(() => expect(calls.filter((c) => c.path === "/testing/forget")).toHaveLength(3));
+  });
+
+  it("v1.34: the urgent alert inside the 24-hour window is switched on after asking, and says it is for testing", async () => {
+    const calls = serve({
+      "GET /auth/me": { body: lawyer }, "GET /testing/numbers": { body: numbers },
+      "GET /testing/urgent-window": { body: { on: false } }, "PUT /testing/urgent-window": { body: { on: true } },
+    });
+    renderAt("/testing");
+    expect(await screen.findByText("تنبيه العاجل جوه الـ 24 ساعة")).toBeTruthy();
+    expect(screen.getByText("مقفول")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "شغّله" }));
+    expect(await confirmYes()).toContain("للتجربة بس");
+    await vi.waitFor(() => expect(calls.filter((c) => c.method === "PUT").map((c) => c.body)).toEqual([{ on: true }]));
+    expect(await screen.findByText("تنبيه العاجل هيوصل رسالة عادية جوه الـ 24 ساعة ✅")).toBeTruthy();
   });
 
   it("says the tools are off outside the test environment", async () => {
