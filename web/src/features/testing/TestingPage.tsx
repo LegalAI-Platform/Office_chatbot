@@ -45,20 +45,23 @@ function UrgentWindow() {
   };
 
   return (
-    <Card>
-      <h2 className="text-lg">تنبيه العاجل جوه الـ 24 ساعة</h2>
-      <p className="text-sm text-ink-soft">
+    <section aria-labelledby="testing-urgent" className="liquid relative isolate grid gap-3 overflow-hidden rounded-[22px] p-4 sm:p-5">
+      <h2 id="testing-urgent" className="flex items-center gap-2 text-[16px] font-bold">
+        <Icon name="alert-circle" className="size-4 text-gold-ink" />
+        تنبيه العاجل جوه الـ 24 ساعة
+      </h2>
+      <p className="text-[13px] text-ink-soft">
         لحد ما Meta توافق على قالب تنبيه المستشار، ده بيخلّي التنبيه يوصل رسالة عادية لو المستشار أو المدير كاتب للبوت في آخر 24 ساعة.
         للتجربة بس.
       </p>
-      <div className="flex flex-wrap items-center gap-3 pt-2">
-        <span className="font-semibold">{on ? "شغّال" : "مقفول"}</span>
+      <div className="flex flex-wrap items-center gap-3 border-t border-line/60 pt-3">
+        <span className={`rounded-full px-3 py-1 text-[13px] font-bold ${on ? "bg-green-bg text-green-ink" : "bg-grey-bg text-ink-soft"}`}>{on ? "شغّال" : "مقفول"}</span>
         <Button variant={on ? "secondary" : "primary"} busy={set.isPending} onClick={() => void flip()}>
           {on ? "اقفله" : "شغّله"}
         </Button>
       </div>
       {set.isError ? <p className="text-sm text-bad" role="alert">{errorMessage(set.error)}</p> : null}
-    </Card>
+    </section>
   );
 }
 
