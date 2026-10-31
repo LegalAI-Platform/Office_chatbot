@@ -6,7 +6,7 @@ import { avatarUrl, can, useLogout, useMe } from "../shared/api/session";
 import { ALERT_KINDS, label, ROLES, SYSTEM_WHAT, TASK_TYPES } from "../shared/lib/labels";
 import { cairoLongDate, cairoTime, timeAgo } from "../shared/lib/time";
 import { Avatar } from "../shared/ui/Avatar";
-import { Icon } from "../shared/ui/Icon";
+import { Icon, type IconName } from "../shared/ui/Icon";
 import { ConfirmHost, Toaster } from "../shared/ui/feedback";
 import { CommandPalette } from "./CommandPalette";
 import { prefetchAll, usePrefetch } from "./lazyPages";
@@ -258,10 +258,24 @@ function UserMenu() {
     setOpen(false);
     navigate(to);
   };
-  const Row = ({ onClick, children, danger = false }: { onClick: () => void; children: ReactNode; danger?: boolean }) => (
+  // one row of the menu: its icon in a small glass tile, the words, and an arrow that moves in on hover
+  const Row = ({ onClick, icon, children, hint, danger = false }: {
+    onClick: () => void; icon: IconName; children: ReactNode; hint?: string; danger?: boolean;
+  }) => (
     <button role="menuitem" type="button" onClick={onClick}
-      className={`flex min-h-10 w-full items-center gap-2.5 rounded-lg px-3 text-start text-sm hover:bg-muted ${danger ? "text-red-ink" : ""}`}>
-      {children}
+      className={`group/row flex min-h-11 w-full items-center gap-3 rounded-[14px] px-2.5 text-start text-[13.5px] transition-colors duration-150
+        ${danger ? "text-red-ink hover:bg-red-bg/70" : "hover:bg-card/80"}`}>
+      <span className={`grid size-8 shrink-0 place-items-center rounded-[10px] border transition-colors duration-150
+        ${danger ? "border-red/20 bg-red-bg text-red-ink" : "border-line/70 bg-card/70 text-ink-soft group-hover/row:border-gold-line group-hover/row:text-gold-ink"}`}>
+        <Icon name={icon} className="size-4" />
+      </span>
+      <span className="grid min-w-0 flex-1 leading-tight">
+        <span className="truncate font-semibold">{children}</span>
+        {hint ? <span className="truncate text-[11.5px] font-normal text-ink-soft">{hint}</span> : null}
+      </span>
+      {danger ? null : (
+        <Icon name="chevron-start" className="size-4 shrink-0 text-ink-soft opacity-0 transition duration-150 group-hover/row:opacity-100 group-hover/row:-translate-x-0.5" />
+      )}
     </button>
   );
   return (
@@ -283,19 +297,29 @@ function UserMenu() {
         <Icon name="chevron-down" className={`hidden size-4 text-ink-soft transition-transform duration-200 sm:block ${open ? "rotate-180" : "group-hover:translate-y-0.5"}`} />
       </button>
       {open ? (
-        <div role="menu" className="surface absolute top-[calc(100%+0.5rem)] left-0 z-30 grid w-56 gap-0.5 rounded-xl p-1.5">
-          <Row onClick={() => go("/account")}><Icon name="account" className="size-4" />حسابي</Row>
-          <Row onClick={() => go("/change-password")}><Icon name="key" className="size-4" />تغيير كلمة السر</Row>
-          {can(me, "users.manage") ? <Row onClick={() => go("/users")}><Icon name="users" className="size-4" />الحسابات</Row> : null}
-          <hr className="my-1 border-line" />
-          <div className="grid gap-2 px-3 pt-1 pb-2">
-            <span className="text-xs font-semibold text-ink-soft" id="look-label">الشكل</span>
+        <div role="menu" className="liquid menu-glass menu-pop absolute top-[calc(100%+0.6rem)] left-0 z-30 grid w-[min(18.5rem,calc(100vw-2rem))] gap-1 overflow-hidden rounded-[22px] p-2">
+          {/* who is signed in: the photo, the name, the e-mail and the role, over a soft gold light */}
+          <div className="relative mb-1 flex items-center gap-3 overflow-hidden rounded-[16px] border border-gold-line/50 bg-gradient-to-br from-gold-tint via-card/60 to-card/30 p-3">
+            <span aria-hidden className="absolute -top-10 -start-10 size-28 rounded-full bg-gold/25 blur-2xl" />
+            <Avatar name={me.display_name} photo={avatarUrl(me)} className="relative size-12 text-base ring-2 ring-card" />
+            <span className="relative grid min-w-0 flex-1 leading-tight">
+              <span className="truncate text-[14.5px] font-bold">{me.display_name}</span>
+              <span className="truncate text-[11.5px] text-ink-soft" dir="ltr" style={{ textAlign: "right" }}>{me.email}</span>
+              <span className="mt-1 w-fit rounded-full bg-card/80 px-2 py-0.5 text-[11px] font-semibold text-gold-ink">{label(ROLES, me.role)}</span>
+            </span>
+          </div>
+          <Row icon="account" hint="بياناتك وصورتك" onClick={() => go("/account")}>حسابي</Row>
+          <Row icon="key" hint="غيّرها كل فترة" onClick={() => go("/change-password")}>تغيير كلمة السر</Row>
+          {can(me, "users.manage") ? <Row icon="users" hint="حسابات المكتب وصلاحياتها" onClick={() => go("/users")}>الحسابات</Row> : null}
+          <div className="mx-1 my-1 h-px bg-gradient-to-l from-transparent via-line to-transparent" aria-hidden />
+          <div className="grid gap-2 px-2.5 pt-0.5 pb-1.5">
+            <span className="flex items-center gap-1.5 text-[11.5px] font-semibold text-ink-soft" id="look-label">
+              <Icon name="sun" className="size-3.5" />الشكل
+            </span>
             <ThemePicker labelledBy="look-label" />
           </div>
-          <hr className="my-1 border-line" />
-          <Row danger onClick={async () => { await logout(); navigate("/login", { replace: true }); }}>
-            <Icon name="logout" className="size-4" />تسجيل الخروج
-          </Row>
+          <div className="mx-1 my-1 h-px bg-gradient-to-l from-transparent via-line to-transparent" aria-hidden />
+          <Row icon="logout" danger onClick={async () => { await logout(); navigate("/login", { replace: true }); }}>تسجيل الخروج</Row>
         </div>
       ) : null}
     </div>
