@@ -1,8 +1,11 @@
 # Findings of the secret scan (.gitleaks.toml) that are known and safe, pinned to their commit and line:
-# - the office's own numbers, published on its websites (its WhatsApp and InstaPay), in the owner's chat notes;
+# - the office's own numbers, published on its websites (its WhatsApp and InstaPay), in the owner's chat notes and
+#   on the landing page's footer (its phone and WhatsApp, as saadfathy.com gives them);
 # - the integration tests' made-up panel secret key.
 b1d3f65afbbf20ff49960ca220a2c141ab3f912b:docs/chats/LastChatAhmedAmin.md:egypt-mobile-number:334
 b1d3f65afbbf20ff49960ca220a2c141ab3f912b:docs/chats/LastChatAhmedAmin.md:egypt-mobile-number:335
 b1d3f65afbbf20ff49960ca220a2c141ab3f912b:docs/chats/LastChatAhmedAmin.md:egypt-mobile-number:358
 9922bed0720bf6327fa2a613f284e5628f248602:TASK-06-prompt.md:egypt-mobile-number:40
 de7bbb2611d3b032b2ec7e1e413d72be2c7c7774:backend/tests/Office.IntegrationTests/ApiFactory.cs:generic-api-key:32
+70a708662e3e46275296b49a8036032ae7b54cc9:web/public/landing/index.html:egypt-mobile-number:195
+70a708662e3e46275296b49a8036032ae7b54cc9:web/public/landing/index.html:egypt-mobile-number:199
