@@ -70,17 +70,13 @@ export function Layout() {
       {/* computer: the black side bar, as «liquid glass» (the owner: modern, clearly worked on): the links are glass
           pills with their icons in small glass tiles, over the scales behind */}
       <aside className="sticky top-0 hidden h-dvh flex-col overflow-hidden bg-side text-side-ink lg:flex">
-        {/* a warm light at the top, and a thin gold line along the bar's inner edge */}
-        <span aria-hidden className="pointer-events-none absolute -top-24 start-1/2 size-72 -translate-x-1/2 rounded-full bg-gold/20 blur-3xl rtl:translate-x-1/2" />
+        {/* a thin gold line along the bar's inner edge */}
         <span aria-hidden className="pointer-events-none absolute inset-y-0 end-0 z-20 w-px bg-gradient-to-b from-transparent via-gold/45 to-transparent" />
-        <div className="relative z-10 grid justify-items-center gap-1 px-3 pt-5 pb-3 text-center">
-          <span className="relative grid place-items-center">
-            <span aria-hidden className="absolute size-[5.5rem] rounded-full bg-gold/25 blur-xl" />
-            <OwnerImg name="logo_emblem" className="relative size-[5.5rem] drop-shadow-[0_6px_14px_rgb(0_0_0/0.6)]" />
-          </span>
+        {/* the seal and the name on plain black (the owner kept this part as it was) */}
+        <div className="relative z-10 grid justify-items-center gap-1 px-3 pt-5 pb-4 text-center">
+          <OwnerImg name="logo_emblem" className="size-[5.5rem]" />
           <p className="mt-1 text-[16px] leading-tight font-bold text-white">مكتب سعد فتحي سعد</p>
           <p className="text-[12px] text-side-ink/80">للمحاماة والاستشارات القانونية</p>
-          <span aria-hidden className="mt-2 h-px w-3/4 bg-gradient-to-l from-transparent via-gold/50 to-transparent" />
         </div>
         <nav aria-label="التنقل" className="relative z-10 flex min-h-0 flex-1 flex-col px-2.5 pb-3">
           <div className="soft-scroll grid min-h-0 content-start gap-1 overflow-x-hidden overflow-y-auto pe-0.5">
