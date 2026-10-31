@@ -26,6 +26,8 @@ export interface Office {
   instapay: string; wallet_number: string; wallet_provider: string; address: string; map_url: string;
   /** 1.25: the lawyer's fixed Google Meet link, and the office's phone in the office confirmation. */
   meet_link: string | null; phone: string | null;
+  /** 1.33 (B-09): where the urgent call's alert goes (the lawyer), and the manager when the lawyer does not answer it. */
+  lawyer_whatsapp: string | null; manager_whatsapp: string | null;
 }
 export interface Change { id: number; at: string; what: string; by: string | null; undone: boolean }
 export interface Preview { calendar: "ok" | "unavailable" | "not_configured"; slots: string[] }

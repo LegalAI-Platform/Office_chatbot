@@ -700,11 +700,20 @@ function OfficeForm() {
   if (o.isPending) return <Loading />;
   if (o.isError || !v) return <ErrorState message={errorMessage(o.error)} onRetry={() => void o.refetch()} />;
   const set = (k: keyof Office) => (e: { target: { value: string } }) => setDraft({ ...v, [k]: e.target.value });
+  // 1.33 (B-09): a WhatsApp number as the API takes it (digits, spaces, dashes, a leading +; 8 to 15 digits), or empty.
+  const badNumber = (raw: string | null) => {
+    const t = (raw ?? "").trim();
+    const digits = t.replace(/[^0-9]/g, "").length;
+    return t !== "" && (!/^\+?[0-9 -]{6,20}$/.test(t) || digits < 8 || digits > 15) ? "رقم واتساب مش صحيح (مثلًا 01xxxxxxxxx)" : undefined;
+  };
+  const lawyerBad = badNumber(v.lawyer_whatsapp);
+  const managerBad = badNumber(v.manager_whatsapp);
 
   return (
     <Card>
       <p className="text-sm text-ink-soft">حازم بيكتب البيانات دي في رسالة الحجز المؤقت (فين يحوّل). لو InstaPay أو المحفظة فاضيين، الميعاد بيتمسك للعميل بس الرسالة مش بتتبعت وبتتعمل مهمة.</p>
       <p className="text-sm text-ink-soft">لينك Google Meet: لو فاضي، حازم مش بيعرض Meet على العميل. والعنوان والخريطة ورقم التليفون بيتكتبوا في تأكيد المقابلة في المكتب بعد مراجعة التحويل.</p>
+      <p className="text-sm text-ink-soft">الاستشارة العاجلة: بعد صورة التحويل، المستشار بيوصله تنبيه واتساب على رقمه بزرار «شوف التحويل» (صورة التحويل، وبعدها «التحويل تمام، هكلمه» أو «فيه مشكلة»). لو ما ردّش في 10 دقايق، التنبيه بيروح لرقم المدير. لو رقم المستشار فاضي، التنبيه في اللوحة بس.</p>
       <div className="grid gap-3 md:grid-cols-2">
         <Field label="عنوان InstaPay" dir="ltr" value={v.instapay} onChange={set("instapay")} />
         <Field label="رقم المحفظة" dir="ltr" inputMode="tel" value={v.wallet_number} onChange={set("wallet_number")} />
@@ -713,9 +722,11 @@ function OfficeForm() {
         <Field label="لينك الخريطة" dir="ltr" placeholder="https://maps.app.goo.gl/…" value={v.map_url} onChange={set("map_url")} />
         <Field label="لينك Google Meet بتاع المستشار" dir="ltr" placeholder="https://meet.google.com/…" value={v.meet_link ?? ""} onChange={set("meet_link")} />
         <Field label="رقم تليفون المكتب" dir="ltr" inputMode="tel" value={v.phone ?? ""} onChange={set("phone")} />
+        <Field label="رقم واتساب المستشار (تنبيه الاستشارة العاجلة)" dir="ltr" inputMode="tel" placeholder="01xxxxxxxxx" value={v.lawyer_whatsapp ?? ""} error={lawyerBad} onChange={set("lawyer_whatsapp")} />
+        <Field label="رقم واتساب المدير (لو المستشار ما ردّش)" dir="ltr" inputMode="tel" placeholder="01xxxxxxxxx" value={v.manager_whatsapp ?? ""} error={managerBad} onChange={set("manager_whatsapp")} />
       </div>
       {save.isError ? <p className="text-sm text-bad" role="alert">{errorMessage(save.error)}</p> : null}
-      <div><Button variant="primary" busy={save.isPending} disabled={!draft} onClick={() => save.mutate(v)}>احفظ</Button></div>
+      <div><Button variant="primary" busy={save.isPending} disabled={!draft || !!lawyerBad || !!managerBad} onClick={() => save.mutate(v)}>احفظ</Button></div>
     </Card>
   );
 }

@@ -316,6 +316,20 @@ check "office_app (n8n) cannot read the ratings" \
 check "no rating forgotten by the worker (one more than 10 minutes past its time)" \
   sql_equals office "SELECT count(*) FROM hazem.service_ratings WHERE (state = 'scheduled' AND due_at < now() - interval '10 minutes') OR (state = 'sending' AND updated_at < now() - interval '10 minutes')" "0"
 
+echo "== The urgent call-back (DECISIONS v1.33 B-09 / M-03)"
+urgent_keys="'urgent_pay', 'urgent_night', 'urgent_now', 'urgent_after', 'urgent_seen', 'urgent_waiting', 'urgent_alert', 'btn_urgent_see', 'btn_urgent_ok', 'btn_urgent_bad'"
+# Only while the call-back runs (its 10 texts active): an urgent booking of 1.32 is never alerted.
+check "no urgent alert forgotten by the worker (a paid urgent call more than 10 minutes past its alert time)" \
+  sql_equals office "SELECT count(*) FROM hazem.appointments a JOIN hazem.payments p ON p.appointment_id = a.id
+    WHERE a.service = 'consultation_urgent' AND a.state = 'confirmed' AND a.urgent_alerted_at IS NULL AND p.proof_at IS NOT NULL AND a.ends_at > now()
+      AND a.starts_at - make_interval(mins => hazem.price('urgent.call_within_minutes', 10)) < now() - interval '10 minutes'
+      AND (SELECT count(DISTINCT key) FROM hazem.approved_texts WHERE active AND key IN ($urgent_keys)) = 10" "0"
+if [[ "$(psql_super office -c "SELECT count(DISTINCT key) FROM hazem.approved_texts WHERE active AND key IN ($urgent_keys)")" != "10" ]]; then
+  warn "an urgent call-back text is not active: the urgent path offers today's times as in 1.32 (DECISIONS v1.33 B-09)"
+elif [[ "$(psql_super office -c "SELECT count(*) FROM hazem.settings WHERE key = 'office.lawyer_whatsapp' AND value ~ '^[0-9]{8,15}$'")" != "1" ]]; then
+  warn "the lawyer's WhatsApp number is empty: a paid urgent call is an alert in the panel only (المواعيد ← بيانات المكتب)"
+fi
+
 echo "== The prices and the office's questions (TASK 06, DECISIONS v1.17 B-20 / B-23)"
 check "the price list has its 10 lines, each a whole number from 1 to 1,000,000 (price.*)" \
   sql_equals office "SELECT count(*) FROM hazem.settings WHERE key IN ('price.phone_video', 'price.office', 'price.urgent', 'price.review_min',
@@ -385,6 +399,8 @@ if [[ "$provider" == waha ]]; then
 fi
 
 echo "== Migrations"
+check "migration 0035 (the urgent call-back, v1.33 B-09) is applied" \
+  sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0035'" "1"
 check "migration 0033 (the returning client and the service rating) is applied" \
   sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0033'" "1"
 check "migration 0025 (forget one test number) is applied" \

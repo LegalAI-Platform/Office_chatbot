@@ -236,6 +236,19 @@ public static class TextKeys
     public const string RatingThanks = "rating_thanks";  // 5, 4 or 3 (and a second press on an answered rating)
     public const string RatingLow = "rating_low";        // 2: a task for the managers
     public const string RatingLater = "rating_later";    // «ليس الآن»
+
+    // v1.33 (B-09): the urgent consultation is a paid call-back. The client's texts, and the lawyer's alert (the M-03 template
+    // urgent_alert's body, word for word as submitted to Meta; also the caption of the receipt and the body of its two buttons).
+    public const string UrgentPay = "urgent_pay";         // after urgent_price: where to pay (the first free time is held)
+    public const string UrgentNight = "urgent_night";     // before urgent_pay: the first free time is not today
+    public const string UrgentNow = "urgent_now";         // the receipt, the lawyer free: within 10 minutes
+    public const string UrgentAfter = "urgent_after";     // the receipt, the lawyer busy: about {{time}}
+    public const string UrgentSeen = "urgent_seen";       // «التحويل تمام، هكلمه» pressed
+    public const string UrgentWaiting = "urgent_waiting"; // the alert not answered: the manager's template went too
+    public const string UrgentAlert = "urgent_alert";
+    public const string BtnUrgentSee = "btn_urgent_see"; // the template's quick reply «شوف التحويل»
+    public const string BtnUrgentOk = "btn_urgent_ok";   // under the receipt: «التحويل تمام، هكلمه»
+    public const string BtnUrgentBad = "btn_urgent_bad"; // under the receipt: «فيه مشكلة»
 }
 
 /// <summary>

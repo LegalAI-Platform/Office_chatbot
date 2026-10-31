@@ -255,6 +255,64 @@ public static class Availability
         return slots.Count == 1 && slots[0].Start == start;
     }
 
+    /// <summary>
+    /// v1.33 (B-09): the first moment the lawyer is free for an urgent call of <paramref name="durationMinutes"/>, from
+    /// <paramref name="now"/> (rounded up to the minute): inside the panel's hours (the exceptions too), clear of every taken
+    /// appointment (held or confirmed: a held unpaid booking is busy) and every calendar event, with the buffer around them.
+    /// Not on the slot grid and no minimum notice; the next days up to the horizon when today has no room. Null: none.
+    /// </summary>
+    public static DateTimeOffset? FirstFree(Schedule schedule, BookingRules rules, int durationMinutes,
+        IReadOnlyList<BusyInterval> booked, IReadOnlyList<BusyInterval> busy, DateTimeOffset now, TimeZoneInfo zone)
+    {
+        if (durationMinutes <= 0)
+        {
+            return null;
+        }
+
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, zone).DateTime);
+        var buffer = TimeSpan.FromMinutes(rules.BufferMinutes);
+        var length = TimeSpan.FromMinutes(durationMinutes);
+        var earliest = CeilMinute(now);
+        var taken = booked.Concat(busy).ToList();
+        for (var day = today; day <= today.AddDays(rules.HorizonDays); day = day.AddDays(1))
+        {
+            if (rules.MaxPerDay is { } max && booked.Count(b => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(b.Start, zone).DateTime) == day) >= max)
+            {
+                continue;
+            }
+
+            foreach (var range in schedule.HoursOn(day))
+            {
+                if (At(day, range.Start, zone) is not { } open || At(day, range.End, zone) is not { } close)
+                {
+                    continue; // a range that starts or ends at a time the clock skips (DST): left out
+                }
+
+                var start = open > earliest ? open : earliest;
+                while (start + length <= close)
+                {
+                    var clash = taken.Where(b => b.Overlaps(start - buffer, start + length + buffer)).ToList();
+                    if (clash.Count == 0)
+                    {
+                        return start;
+                    }
+
+                    start = CeilMinute(clash.Max(b => b.End) + buffer); // right after the last thing in the way, and its buffer
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>The instant rounded up to a whole minute.</summary>
+    public static DateTimeOffset CeilMinute(DateTimeOffset at)
+    {
+        var minute = TimeSpan.TicksPerMinute;
+        var ticks = (at.UtcTicks + minute - 1) / minute * minute;
+        return new DateTimeOffset(ticks, TimeSpan.Zero).ToOffset(at.Offset);
+    }
+
     /// <summary>The instant of a Cairo date and minute; null when the clock skips it (DST).</summary>
     public static DateTimeOffset? At(DateOnly day, int minute, TimeZoneInfo zone)
     {

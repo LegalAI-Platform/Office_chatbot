@@ -461,6 +461,11 @@ public sealed class AppointmentRow
     public DateTimeOffset? AttendanceFor { get; set; }  // for this time (a moved appointment is not confirmed again)
     public string? CallApp { get; set; }                // 1.25 (B-23): whatsapp, facetime or meet (a call only)
     public DateTimeOffset? CompletedAt { get; set; }    // 1.31 (B-26): when the office marked it completed
+    public DateTimeOffset? UrgentAlertedAt { get; set; }   // 1.33 (B-09): the template urgent_alert went to the lawyer (or could not)
+    public Guid? UrgentAlertReceipt { get; set; }          // the receipt that alert was for (a new receipt alerts again)
+    public DateTimeOffset? UrgentAckedAt { get; set; }     // «التحويل تمام، هكلمه» pressed
+    public DateTimeOffset? UrgentEscalatedAt { get; set; } // that alert not decided in time: the manager
+    public DateTimeOffset? UrgentWaitingAt { get; set; }   // urgent_waiting told the client (once per call)
 }
 
 /// <summary>hazem.service_ratings (0033, v1.31, B-26).</summary>
@@ -585,6 +590,8 @@ public sealed class PaymentReceiptRow
     public string? Mime { get; set; }
     public Guid? DuplicateOf { get; set; }
     public DateTimeOffset ReceivedAt { get; set; }
+    public string? UrgentDecision { get; set; }          // 1.33 (B-09): ok / bad, the lawyer's (or the manager's) press on it
+    public DateTimeOffset? UrgentDecidedAt { get; set; }
 }
 
 public sealed class SettingRow
