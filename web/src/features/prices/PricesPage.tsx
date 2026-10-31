@@ -4,21 +4,14 @@ import { errorMessage } from "../../shared/api/client";
 import { prices, usePrices } from "../../shared/api/prices";
 import { can, useMe } from "../../shared/api/session";
 import { cairoWhen } from "../../shared/lib/time";
-import { Icon, type IconName } from "../../shared/ui/Icon";
+import { Icon } from "../../shared/ui/Icon";
 import { Button, ErrorState, Loading } from "../../shared/ui/ui";
 import { confirmAction, toast } from "../../shared/ui/feedback";
-
-// how a price is changed, for the lawyer and the manager
-const STEPS: { icon: IconName; title: string; text: string }[] = [
-  { icon: "receipt", title: "اكتب السعر الجديد", text: "في الخانة جنب الخدمة، بالجنيه." },
-  { icon: "check", title: "اضغط «احفظ الأسعار»", text: "تحت القايمة، وأكّد." },
-  { icon: "check-circle", title: "حازم يقول السعر الجديد", text: "للطلبات الجديدة بس، من دلوقتي." },
-];
 
 /**
  * «الأسعار» (TASK 06, DECISIONS v1.17 B-23): the price list Hazem quotes and the booking asks for. Everyone sees it; the lawyer
  * and the manager change it. A new price counts for new requests only: a booking or an order made before keeps its amount.
- * As «liquid glass»: a header saying what the list is and how to change it, each price a glass row (a line at its start
+ * As «liquid glass»: a glass header saying what the list is, each price a glass row (a line at its start
  * once changed), and the last changes as glass rows that read «who changed what, from and to».
  */
 export function PricesPage() {
@@ -45,55 +38,33 @@ export function PricesPage() {
       <header className="liquid relative overflow-hidden rounded-[26px] p-5 sm:p-6">
         <span aria-hidden className="absolute -top-20 -start-16 size-64 rounded-full bg-gradient-to-br from-gold/30 to-transparent blur-2xl" />
         <span aria-hidden className="absolute inset-x-8 top-0 h-px bg-gradient-to-l from-transparent via-gold to-transparent opacity-70" />
-        <div className={`relative grid gap-5 ${editor ? "xl:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)] xl:items-center" : ""}`}>
-          <div className="flex items-start gap-4">
-            <span aria-hidden className="grid size-14 shrink-0 place-items-center rounded-[18px] bg-gradient-to-br from-gold-tint to-card text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.6),0_8px_20px_-10px_rgb(140_98_58/0.7)]">
-              <Icon name="receipt" className="size-7" />
-            </span>
-            <div className="grid min-w-0 gap-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-[26px] leading-tight font-bold">الأسعار</h1>
-                {list.data ? (
-                  <span className="tabular rounded-full border border-gold-line bg-gold-tint px-2.5 py-0.5 text-[12.5px] font-bold text-gold-ink">{list.data.length} سعر</span>
-                ) : null}
-              </div>
-              <p className="max-w-2xl text-[14px] leading-relaxed text-ink-soft">
-                الأسعار اللي حازم بيقولها للعميل وبيطلبها في الحجز والخدمات. السعر الجديد <strong className="text-ink">للطلبات الجديدة بس</strong>:
-                الحجز أو الطلب اللي اتعمل قبل كده بيفضل بسعره.
-                {editor ? "" : " التعديل للأستاذ والمدير."}
-              </p>
+        <div className="relative flex items-start gap-4">
+          <span aria-hidden className="grid size-14 shrink-0 place-items-center rounded-[18px] bg-gradient-to-br from-gold-tint to-card text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.6),0_8px_20px_-10px_rgb(140_98_58/0.7)]">
+            <Icon name="receipt" className="size-7" />
+          </span>
+          <div className="grid min-w-0 gap-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-[26px] leading-tight font-bold">الأسعار</h1>
+              {list.data ? (
+                <span className="tabular rounded-full border border-gold-line bg-gold-tint px-2.5 py-0.5 text-[12.5px] font-bold text-gold-ink">{list.data.length} سعر</span>
+              ) : null}
             </div>
+            <p className="max-w-2xl text-[14px] leading-relaxed text-ink-soft">
+              الأسعار اللي حازم بيقولها للعميل وبيطلبها في الحجز والخدمات. السعر الجديد <strong className="text-ink">للطلبات الجديدة بس</strong>:
+              الحجز أو الطلب اللي اتعمل قبل كده بيفضل بسعره.
+              {editor ? "" : " التعديل للأستاذ والمدير."}
+            </p>
           </div>
-          {editor ? (
-            <ol className="grid gap-2 sm:grid-cols-3" aria-label="إزاي تغيّر سعر">
-              {STEPS.map((s, i) => (
-                <li key={s.title} className="relative flex items-start gap-3 rounded-[16px] border border-line/60 bg-card/55 p-3 shadow-[inset_0_1px_0_rgb(255_255_255/0.45)]">
-                  <span className="tabular grid size-7 shrink-0 place-items-center rounded-full bg-gradient-to-b from-[#dcb98c] to-[#a87a48] text-[13px] font-bold text-[#2a2117] shadow-[inset_0_1px_0_rgb(255_255_255/0.6)]">
-                    {i + 1}
-                  </span>
-                  <span className="grid gap-0.5">
-                    <span className="text-[13.5px] font-bold">{s.title}</span>
-                    <span className="text-[12px] leading-snug text-ink-soft">{s.text}</span>
-                  </span>
-                </li>
-              ))}
-            </ol>
-          ) : null}
         </div>
       </header>
 
       {list.isPending ? <Loading /> : list.isError ? <ErrorState message={errorMessage(list.error)} onRetry={() => void list.refetch()} /> : (
         <section aria-labelledby="prices-list" className="liquid relative isolate grid gap-3 overflow-hidden rounded-[22px] p-4 sm:p-5">
           <span aria-hidden className="pointer-events-none absolute -top-16 -end-10 -z-10 size-48 rounded-full bg-gold/15 blur-3xl" />
-          <header className="grid gap-0.5">
-            <h2 id="prices-list" className="flex items-center gap-2 text-[16px] font-bold">
-              <Icon name="receipt" className="size-4 text-gold-ink" />
-              قايمة الأسعار
-            </h2>
-            <p className="text-[12.5px] text-ink-soft">
-              {editor ? "كل سطر خدمة وسعرها بالجنيه. «الأصلي» = السعر اللي السيستم بدأ بيه." : "كل سطر خدمة وسعرها بالجنيه، زي ما حازم بيقولها للعميل."}
-            </p>
-          </header>
+          <h2 id="prices-list" className="flex items-center gap-2 text-[16px] font-bold">
+            <Icon name="receipt" className="size-4 text-gold-ink" />
+            قايمة الأسعار
+          </h2>
           <ul className="grid gap-2">
             {list.data.map((p) => {
               const edited = draft[p.key] !== undefined && Number(draft[p.key]) !== p.value;
@@ -129,10 +100,6 @@ export function PricesPage() {
                   }}>
                   احفظ الأسعار
                 </Button>
-                <p className="flex items-center gap-1.5 text-[12.5px] text-ink-soft" aria-live="polite">
-                  <Icon name="info" className="size-3.5 shrink-0 text-gold-ink" />
-                  {changed.length === 0 ? "غيّر أي سعر الأول، وبعدين احفظ." : `${changed.length} سعر اتغيّر ولسه ما اتحفظش.`}
-                </p>
               </div>
             </div>
           ) : null}
@@ -150,13 +117,10 @@ function Changes() {
   if (!changes.data || changes.data.length === 0) return null;
   return (
     <section aria-labelledby="prices-changes" className="liquid relative isolate grid gap-3 overflow-hidden rounded-[22px] p-4 sm:p-5">
-      <header className="grid gap-0.5">
-        <h2 id="prices-changes" className="flex items-center gap-2 text-[16px] font-bold">
-          <Icon name="clock" className="size-4 text-gold-ink" />
-          آخر التغييرات
-        </h2>
-        <p className="text-[12.5px] text-ink-soft">مين غيّر أنهي سعر وإمتى، عشان لو فيه حاجة غلط تعرف ترجع لها.</p>
-      </header>
+      <h2 id="prices-changes" className="flex items-center gap-2 text-[16px] font-bold">
+        <Icon name="clock" className="size-4 text-gold-ink" />
+        آخر التغييرات
+      </h2>
       <ul className="soft-scroll grid max-h-[24rem] gap-2 overflow-y-auto">
         {changes.data.map((c, i) => (
           <li key={i} className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-[14px] border border-line/60 bg-card/50 px-3.5 py-2.5 text-[13px] shadow-[inset_0_1px_0_rgb(255_255_255/0.4)]">

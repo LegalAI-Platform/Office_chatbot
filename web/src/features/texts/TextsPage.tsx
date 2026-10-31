@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError, errorMessage } from "../../shared/api/client";
 import type { ApprovedText, TextVersion } from "../../shared/api/types";
 import { cairoWhen } from "../../shared/lib/time";
-import { Icon, type IconName } from "../../shared/ui/Icon";
+import { Icon } from "../../shared/ui/Icon";
 import { Button, Chip, ErrorState, Loading } from "../../shared/ui/ui";
 import { toast } from "../../shared/ui/feedback";
 
@@ -12,17 +12,10 @@ const ERRORS: Record<string, string> = {
   placeholder: "النص فيه {{...}}: اكتب الكلام نفسه، مش مكان فاضي.",
 };
 
-// how a text is changed
-const STEPS: { icon: IconName; title: string; text: string }[] = [
-  { icon: "search", title: "دوّر على الرسالة", text: "بكلمة منها، أو باسمها بالإنجليزي." },
-  { icon: "document", title: "اضغط «عدّل» واكتب", text: "الكلام نفسه، من غير {{...}}." },
-  { icon: "check-circle", title: "«احفظ نسخة جديدة»", text: "بتشتغل من الرسالة الجاية على طول." },
-];
-
 /**
  * Hazem's approved texts (TASK 07c, the manager and the lawyer): what he says, word for word. A
  * change is a new version, active at once; every older version stays and comes back with a click.
- * As «liquid glass»: a header saying what these texts are and the three steps of a change, a glass search, and each text a
+ * As «liquid glass»: a glass header saying what these texts are, a glass search, and each text a
  * glass card with the words in a message bubble, as the client reads them.
  */
 export function TextsPage() {
@@ -41,36 +34,21 @@ export function TextsPage() {
       <header className="liquid relative overflow-hidden rounded-[26px] p-5 sm:p-6">
         <span aria-hidden className="absolute -top-20 -start-16 size-64 rounded-full bg-gradient-to-br from-gold/30 to-transparent blur-2xl" />
         <span aria-hidden className="absolute inset-x-8 top-0 h-px bg-gradient-to-l from-transparent via-gold to-transparent opacity-70" />
-        <div className="relative grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)] xl:items-center">
-          <div className="flex items-start gap-4">
-            <span aria-hidden className="grid size-14 shrink-0 place-items-center rounded-[18px] bg-gradient-to-br from-gold-tint to-card text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.6),0_8px_20px_-10px_rgb(140_98_58/0.7)]">
-              <Icon name="message" className="size-7" />
-            </span>
-            <div className="grid min-w-0 gap-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-[26px] leading-tight font-bold">نصوص حازم</h1>
-                {texts.data ? (
-                  <span className="tabular rounded-full border border-gold-line bg-gold-tint px-2.5 py-0.5 text-[12.5px] font-bold text-gold-ink">{texts.data.length} نص</span>
-                ) : null}
-              </div>
-              <p className="text-[14px] leading-relaxed text-ink-soft">
-                ده الكلام اللي حازم بيبعته للعملاء <strong className="text-ink">بالحرف</strong>. أي تعديل بيشتغل على طول من الرسالة الجاية، والنسخة القديمة بتفضل محفوظة وترجع بضغطة.
-              </p>
+        <div className="relative flex items-start gap-4">
+          <span aria-hidden className="grid size-14 shrink-0 place-items-center rounded-[18px] bg-gradient-to-br from-gold-tint to-card text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.6),0_8px_20px_-10px_rgb(140_98_58/0.7)]">
+            <Icon name="message" className="size-7" />
+          </span>
+          <div className="grid min-w-0 gap-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-[26px] leading-tight font-bold">نصوص حازم</h1>
+              {texts.data ? (
+                <span className="tabular rounded-full border border-gold-line bg-gold-tint px-2.5 py-0.5 text-[12.5px] font-bold text-gold-ink">{texts.data.length} نص</span>
+              ) : null}
             </div>
+            <p className="text-[14px] leading-relaxed text-ink-soft">
+              ده الكلام اللي حازم بيبعته للعملاء <strong className="text-ink">بالحرف</strong>. أي تعديل بيشتغل على طول من الرسالة الجاية، والنسخة القديمة بتفضل محفوظة وترجع بضغطة.
+            </p>
           </div>
-          <ol className="grid gap-2 sm:grid-cols-3" aria-label="إزاي تعدّل نص">
-            {STEPS.map((s, i) => (
-              <li key={s.title} className="relative flex items-start gap-3 rounded-[16px] border border-line/60 bg-card/55 p-3 shadow-[inset_0_1px_0_rgb(255_255_255/0.45)]">
-                <span className="tabular grid size-7 shrink-0 place-items-center rounded-full bg-gradient-to-b from-[#dcb98c] to-[#a87a48] text-[13px] font-bold text-[#2a2117] shadow-[inset_0_1px_0_rgb(255_255_255/0.6)]">
-                  {i + 1}
-                </span>
-                <span className="grid gap-0.5">
-                  <span className="text-[13.5px] font-bold">{s.title}</span>
-                  <span className="text-[12px] leading-snug text-ink-soft">{s.text}</span>
-                </span>
-              </li>
-            ))}
-          </ol>
         </div>
       </header>
 
@@ -91,7 +69,6 @@ export function TextsPage() {
             <Icon name="search" className="size-7" />
           </span>
           <p className="text-[16px] font-bold">{q.trim() ? "مفيش نص فيه الكلام ده" : "مفيش نصوص لسه"}</p>
-          {q.trim() ? <p className="max-w-sm text-[13px] text-ink-soft">جرّب كلمة تانية، أو امسح البحث وشوف الكل.</p> : null}
         </div>
       ) : (
         <ul className="grid gap-3">
@@ -154,7 +131,6 @@ function TextCard({ text }: { text: ApprovedText }) {
             <Button variant="primary" busy={save.isPending} disabled={!draft.trim() || over || draft.trim() === text.text}
               onClick={() => save.mutate()}>احفظ نسخة جديدة</Button>
             <Button variant="ghost" onClick={() => { setDraft(null); save.reset(); }}>إلغاء</Button>
-            <span className="text-[12px] text-ink-soft">النسخة دي هتفضل محفوظة، وترجّعها وقت ما تحب.</span>
           </div>
         </div>
       )}
@@ -174,10 +150,6 @@ function History({ textKey }: { textKey: string }) {
   if (versions.isError) return <ErrorState message={errorMessage(versions.error)} />;
   return (
     <div className="grid gap-2 border-t border-line/60 pt-3">
-      <p className="flex items-center gap-1.5 text-[12.5px] text-ink-soft">
-        <Icon name="info" className="size-3.5 shrink-0 text-gold-ink" />
-        النسخ اللي كانت شغالة قبل كده. «رجّع النسخة دي» تخليها هي اللي حازم يقولها من دلوقتي.
-      </p>
       <ol className="soft-scroll grid max-h-[28rem] gap-2 overflow-y-auto">
         {versions.data.filter((v) => !v.active).map((v) => (
           <li key={v.version} className="grid gap-1.5 rounded-[14px] border border-line/60 bg-card/45 p-3 shadow-[inset_0_1px_0_rgb(255_255_255/0.35)]">

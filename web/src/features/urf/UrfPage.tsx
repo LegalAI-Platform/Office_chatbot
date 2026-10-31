@@ -25,16 +25,9 @@ export function prefetchData(qc: QueryClient) {
   void qc.prefetchQuery(listQuery("open"));
 }
 
-// each tab with the words that tell a new person what it shows
-const TABS: { value: Show; label: string; hint: string; icon: IconName }[] = [
-  { value: "open", label: "شغالة", hint: "الحالات اللي لسه ماشية: أسئلة، أو ورق، أو مستنية موافقة المستشار.", icon: "play" },
-  { value: "done", label: "اتقفلت", hint: "اللي اتوافق عليها أو اترفضت أو اتحوّلت لاستشارة، للرجوع ليها.", icon: "check-circle" },
-];
-
-const STEPS: { title: string; text: string }[] = [
-  { title: "حازم يسأل العميل", text: "السن والولي والشهود، ويحجز ميعاد في المكتب." },
-  { title: "العميل يبعت الورق", text: "صور البطايق والمطلوب، بعد صورة التحويل." },
-  { title: "المستشار يراجع", text: "ويضغط «موافق» أو «رفض» قبل الميعاد." },
+const TABS: { value: Show; label: string; icon: IconName }[] = [
+  { value: "open", label: "شغالة", icon: "play" },
+  { value: "done", label: "اتقفلت", icon: "check-circle" },
 ];
 
 /**
@@ -42,8 +35,6 @@ const STEPS: { title: string; text: string }[] = [
  * (ID cards, opened here only), the appointment in the office and its payment. The lawyer or the manager approves the
  * case before the appointment (the client gets the confirmation with who must come) or refuses it (the appointment is
  * cancelled by the office and what was paid goes back).
- * Made to explain itself as «liquid glass»: what the page is for and its steps at the top, a line under the
- * tabs saying what each shows, and on a card the next step when it needs one.
  */
 export function UrfPage() {
   const [show, setShow] = useUrlState<Show>("show", "open", SHOWS);
@@ -60,7 +51,6 @@ export function UrfPage() {
       <Intro count={list.data?.length} />
 
       <section aria-label="الفلاتر" className="liquid grid gap-2 rounded-[22px] p-4 sm:p-5">
-        <p className="text-[12.5px] font-bold text-gold-ink">عايز تشوف إيه؟</p>
         <div className="flex gap-1 overflow-x-auto rounded-full border border-line/60 bg-card/45 p-1 shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)]" role="tablist" aria-label="حالات العرفي">
           {TABS.map((t) => {
             const on = t.value === show;
@@ -75,14 +65,10 @@ export function UrfPage() {
             );
           })}
         </div>
-        <p className="flex items-start gap-1.5 text-[12.5px] text-ink-soft" aria-live="polite">
-          <Icon name="info" className="mt-0.5 size-3.5 shrink-0 text-gold-ink" />
-          {TABS.find((t) => t.value === show)?.hint}
-        </p>
       </section>
 
       {list.isPending ? <Loading /> : list.isError ? <ErrorState message={errorMessage(list.error)} onRetry={() => void list.refetch()} /> : (
-        list.data.length === 0 ? <Nothing show={show} /> : (
+        list.data.length === 0 ? <Nothing /> : (
           <ul className={GLASS_LIST}>{list.data.map((c) => <UrfCard key={c.id} c={c} />)}</ul>
         )
       )}
@@ -98,7 +84,7 @@ function Intro({ count }: { count?: number | undefined }) {
     <header className="liquid relative overflow-hidden rounded-[26px] p-5 sm:p-6">
       <span aria-hidden className="absolute -top-20 -start-16 size-64 rounded-full bg-gradient-to-br from-gold/30 to-transparent blur-2xl" />
       <span aria-hidden className="absolute inset-x-8 top-0 h-px bg-gradient-to-l from-transparent via-gold to-transparent opacity-70" />
-      <div className="relative grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)] xl:items-center">
+      <div className="relative">
         <div className="flex items-start gap-4">
           <span aria-hidden className="grid size-14 shrink-0 place-items-center rounded-[18px] bg-gradient-to-br from-gold-tint to-card text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.6),0_8px_20px_-10px_rgb(140_98_58/0.7)]">
             <Icon name="shield" className="size-7" />
@@ -111,36 +97,22 @@ function Intro({ count }: { count?: number | undefined }) {
               ) : null}
             </div>
             <p className="text-[14px] leading-relaxed text-ink-soft">
-              عقد الجواز والطلاق العرفي: إجابات العميل، والورق، والميعاد في المكتب. <strong className="text-ink">المستشار يراجع الورق قبل الميعاد</strong>، وحازم يبلّغ العميل بالقرار.
+              عقد الجواز والطلاق العرفي: إجابات العميل، والورق، والميعاد في المكتب. المستشار يراجع الورق قبل الميعاد.
             </p>
           </div>
         </div>
-        <ol className="grid gap-2 sm:grid-cols-3" aria-label="إزاي حالة العرفي بتمشي">
-          {STEPS.map((s, i) => (
-            <li key={s.title} className="relative flex items-start gap-3 rounded-[16px] border border-line/60 bg-card/55 p-3 shadow-[inset_0_1px_0_rgb(255_255_255/0.45)]">
-              <span className="tabular grid size-7 shrink-0 place-items-center rounded-full bg-gradient-to-b from-[#dcb98c] to-[#a87a48] text-[13px] font-bold text-[#2a2117] shadow-[inset_0_1px_0_rgb(255_255_255/0.6)]">
-                {i + 1}
-              </span>
-              <span className="grid gap-0.5">
-                <span className="text-[13.5px] font-bold">{s.title}</span>
-                <span className="text-[12px] leading-snug text-ink-soft">{s.text}</span>
-              </span>
-            </li>
-          ))}
-        </ol>
       </div>
     </header>
   );
 }
 
-function Nothing({ show }: { show: Show }) {
+function Nothing() {
   return (
     <div className="liquid grid justify-items-center gap-2 rounded-[22px] px-6 py-10 text-center">
       <span className="grid size-14 place-items-center rounded-full bg-gradient-to-br from-green-bg to-card text-green-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.6)]">
         <Icon name="check-circle" className="size-7" />
       </span>
       <p className="text-[16px] font-bold">مفيش حالات هنا</p>
-      <p className="max-w-sm text-[13px] text-ink-soft">{show === "open" ? "مفيش حالات عرفي شغالة دلوقتي." : "لسه مفيش حالات اتقفلت."}</p>
     </div>
   );
 }
@@ -185,7 +157,7 @@ function UrfCard({ c }: { c: UrfCase }) {
       ]} />
       <CaseNote>المطلوب: {c.documents}</CaseNote>
       <Files label="ورق العميل" count={c.files} href={(i) => fileUrl(c.id, i)} word="مستند" />
-      {c.state === "booked" ? <Next>{mayReview ? "راجع الورق ووافق أو ارفض قبل الميعاد." : "مستنية المستشار أو المدير يراجع الورق."}</Next> : null}
+      {c.state === "booked" && !mayReview ? <CaseNote>مستنية المستشار أو المدير يراجع الورق.</CaseNote> : null}
       {c.files === 0 && c.state === "booked" ? <CaseNote>لسه مفيش ورق. حازم طلبه من العميل بعد صورة التحويل.</CaseNote> : null}
       {c.notice === "failed" ? <CaseNote tone="bad">رسالة القرار ما وصلتش للعميل (غالبًا عدّى 24 ساعة من آخر رسالة منه). كلّموه.</CaseNote> : null}
 
@@ -209,15 +181,5 @@ function UrfCard({ c }: { c: UrfCase }) {
         ) : null}
       </ActionBar>
     </CaseCard>
-  );
-}
-
-/** What the card needs from whoever reads it now, in a line. */
-function Next({ children }: { children: ReactNode }) {
-  return (
-    <p className="mx-5 mt-3 flex items-start gap-2 rounded-[12px] border border-gold-line/70 bg-gold-tint/70 px-3.5 py-2 text-[13px] font-semibold text-gold-ink">
-      <Icon name="play" className="mt-0.5 size-4 shrink-0" />
-      <span>{children}</span>
-    </p>
   );
 }

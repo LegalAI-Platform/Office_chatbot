@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { can, useMe } from "../shared/api/session";
 import { OwnerImg } from "../shared/ui/Owner";
@@ -14,20 +13,17 @@ function Glow() {
   );
 }
 
-/** A page's glass header: the icon tile, the title, and one plain sentence saying what the page is for. */
-function Intro({ icon, title, children }: { icon: IconName; title: string; children: ReactNode }) {
+/** A page's glass header: the icon tile and the title. */
+function Intro({ icon, title }: { icon: IconName; title: string }) {
   return (
     <header className="liquid relative overflow-hidden rounded-[26px] p-5 sm:p-6">
       <span aria-hidden className="absolute -top-20 -start-16 size-64 rounded-full bg-gradient-to-br from-gold/30 to-transparent blur-2xl" />
       <span aria-hidden className="absolute inset-x-8 top-0 h-px bg-gradient-to-l from-transparent via-gold to-transparent opacity-70" />
-      <div className="relative flex items-start gap-4">
+      <div className="relative flex items-center gap-4">
         <span aria-hidden className="grid size-14 shrink-0 place-items-center rounded-[18px] bg-gradient-to-br from-gold-tint to-card text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.6),0_8px_20px_-10px_rgb(140_98_58/0.7)]">
           <Icon name={icon} className="size-7" />
         </span>
-        <div className="grid min-w-0 gap-1">
-          <h1 className="text-[26px] leading-tight font-bold">{title}</h1>
-          <p className="text-[14px] leading-relaxed text-ink-soft">{children}</p>
-        </div>
+        <h1 className="text-[26px] leading-tight font-bold">{title}</h1>
       </div>
     </header>
   );
@@ -38,9 +34,7 @@ export function ComingSoon({ title, icon, what, when }: { title: string; icon: I
   return (
     <div className="relative isolate grid gap-5 pb-4">
       <Glow />
-      <Intro icon={icon} title={title}>
-        الصفحة دي <strong className="text-ink">لسه بتتعمل</strong>. تحت هتلاقي هيبقى فيها إيه وهتجهز إمتى، ولحد ما تجهز كمّل شغلك من الرئيسية أو المهام.
-      </Intro>
+      <Intro icon={icon} title={title} />
       <section className="liquid relative grid justify-items-center gap-3 overflow-hidden rounded-[26px] px-6 py-14 text-center">
         <OwnerImg name="sidebar_art" className="fade-all pointer-events-none absolute bottom-0 left-0 w-44 opacity-20 sm:w-56" />
         <span aria-hidden className="absolute inset-x-8 top-0 h-px bg-gradient-to-l from-transparent via-gold to-transparent opacity-70" />
@@ -48,10 +42,7 @@ export function ComingSoon({ title, icon, what, when }: { title: string; icon: I
           <Icon name={icon} className="size-8" />
         </span>
         <p className="relative text-[20px] font-bold">قريبًا</p>
-        <div className="relative grid max-w-md gap-1">
-          <p className="text-[12.5px] font-bold text-gold-ink">هيبقى فيها إيه؟</p>
-          <p className="text-[14px] text-ink-soft">{what}</p>
-        </div>
+        <p className="relative max-w-md text-[14px] text-ink-soft">{what}</p>
         <p className="relative inline-flex items-center gap-1.5 rounded-full border border-gold-line bg-gold-tint px-3.5 py-1 text-xs font-semibold text-gold-ink">
           <Icon name="clock" className="size-3.5" />
           {when}
@@ -68,7 +59,7 @@ export function ComingSoon({ title, icon, what, when }: { title: string; icon: I
 type Row = { to: string; icon: IconName; title: string; text: string; show: boolean };
 
 /**
- * «الإعدادات» as «liquid glass»: a header saying what lives here, then the settings in two groups (your own account,
+ * «الإعدادات» as «liquid glass»: a glass header, then the settings in two groups (your own account,
  * and the office's: shown only to who may change them), each a glass card with what it changes.
  */
 export function SettingsPage() {
@@ -87,29 +78,23 @@ export function SettingsPage() {
   return (
     <div className="relative isolate grid gap-5 pb-4">
       <Glow />
-      <Intro icon="settings" title="الإعدادات">
-        كل حاجة بتتظبط مرة وخلاص: <strong className="text-ink">حسابك انت</strong>، و<strong className="text-ink">إعدادات المكتب</strong> اللي حازم
-        بيشتغل بيها. اختار الكارت اللي محتاجه.
-      </Intro>
-      <Group id="settings-mine" icon="account" title="حسابك" hint="بياناتك انت، وكلمة السر اللي بتدخل بيها." rows={mine} />
-      <Group id="settings-office" icon="office" title="المكتب" hint="اللي بيتغير هنا بيأثر على حازم وعلى كل اللي في المكتب." rows={office} />
+      <Intro icon="settings" title="الإعدادات" />
+      <Group id="settings-mine" icon="account" title="حسابك" rows={mine} />
+      <Group id="settings-office" icon="office" title="المكتب" rows={office} />
     </div>
   );
 }
 
-function Group({ id, icon, title, hint, rows }: { id: string; icon: IconName; title: string; hint: string; rows: Row[] }) {
+function Group({ id, icon, title, rows }: { id: string; icon: IconName; title: string; rows: Row[] }) {
   const shown = rows.filter((r) => r.show);
   if (shown.length === 0) return null;
   return (
     <section className="grid gap-3" aria-labelledby={id}>
-      <div className="flex items-start gap-3">
+      <div className="flex items-center gap-3">
         <span aria-hidden className="grid size-10 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-gold-tint to-card text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.5)]">
           <Icon name={icon} className="size-5" />
         </span>
-        <div className="grid gap-0.5">
-          <h2 id={id} className="text-[17px] font-bold">{title}</h2>
-          <p className="text-[12.5px] text-ink-soft">{hint}</p>
-        </div>
+        <h2 id={id} className="text-[17px] font-bold">{title}</h2>
       </div>
       <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {shown.map((r) => (

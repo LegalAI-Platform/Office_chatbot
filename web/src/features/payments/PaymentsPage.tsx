@@ -25,25 +25,16 @@ export function prefetchData(qc: QueryClient) {
   void qc.prefetchQuery(listQuery("refunds"));
 }
 
-// each tab with the words that tell a new person what it shows
-const TABS: { value: Show; label: string; hint: string; icon: IconName }[] = [
-  { value: "review", label: "مستني مراجعتك", hint: "إيصالات العملاء بعتوها ومحدش راجعها لسه: ابدأ بيها.", icon: "receipt" },
-  { value: "refunds", label: "استرداد مطلوب", hint: "فلوس لازم ترجع لعميل: حوّلها له، وبعدين سجّل هنا إنك حوّلت.", icon: "refresh" },
-  { value: "all", label: "الكل", hint: "كل الإيصالات، اللي اتراجعت واللي لسه، للرجوع ليها.", icon: "document" },
-];
-
-const STEPS: { title: string; text: string }[] = [
-  { title: "افتح صورة التحويل", text: "من «فتح الإيصال» في كارت العميل." },
-  { title: "اتأكد إن الفلوس وصلت", text: "بص في InstaPay أو المحفظة بتاعة المكتب." },
-  { title: "اكتب المبلغ واختار", text: "«تمام» أو «ناقص» أو «ما وصلش»، وحازم يبلّغ العميل." },
+const TABS: { value: Show; label: string; icon: IconName }[] = [
+  { value: "review", label: "مستني مراجعتك", icon: "receipt" },
+  { value: "refunds", label: "استرداد مطلوب", icon: "refresh" },
+  { value: "all", label: "الكل", icon: "document" },
 ];
 
 /**
  * «الإيصالات والمدفوعات» (TASK 09, DECISIONS v1.13): the system never confirms a payment. Whoever checks
  * the office's InstaPay or wallet opens the receipt and marks what really came (P1: the lawyer, the manager or
  * the staff); a refund due is transferred by a person, who records it here (P2). Hazem tells the client.
- * Made to explain itself as «liquid glass»: what the page is for and its steps at the top, a line under the
- * tabs saying what each shows, and on a card the next step when it needs one.
  */
 export function PaymentsPage() {
   const [show, setShow] = useUrlState<Show>("show", "review", SHOWS);
@@ -60,7 +51,6 @@ export function PaymentsPage() {
       <Intro count={list.data?.length} />
 
       <section aria-label="الفلاتر" className="liquid grid gap-2 rounded-[22px] p-4 sm:p-5">
-        <p className="text-[12.5px] font-bold text-gold-ink">عايز تشوف إيه؟</p>
         <div className="flex gap-1 overflow-x-auto rounded-full border border-line/60 bg-card/45 p-1 shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)]" role="tablist" aria-label="المدفوعات">
           {TABS.map((t) => {
             const on = t.value === show;
@@ -75,15 +65,11 @@ export function PaymentsPage() {
             );
           })}
         </div>
-        <p className="flex items-start gap-1.5 text-[12.5px] text-ink-soft" aria-live="polite">
-          <Icon name="info" className="mt-0.5 size-3.5 shrink-0 text-gold-ink" />
-          {TABS.find((t) => t.value === show)?.hint}
-        </p>
       </section>
 
       {list.isPending ? <Loading /> : list.isError ? <ErrorState message={errorMessage(list.error)} onRetry={() => void list.refetch()} /> : (
         list.data.length === 0 ? (
-          <Nothing show={show} />
+          <Nothing />
         ) : (
           <ul className={GLASS_LIST}>{list.data.map((p) => <PaymentCard key={p.appointment_id} p={p} />)}</ul>
         )
@@ -100,7 +86,7 @@ function Intro({ count }: { count?: number | undefined }) {
     <header className="liquid relative overflow-hidden rounded-[26px] p-5 sm:p-6">
       <span aria-hidden className="absolute -top-20 -start-16 size-64 rounded-full bg-gradient-to-br from-gold/30 to-transparent blur-2xl" />
       <span aria-hidden className="absolute inset-x-8 top-0 h-px bg-gradient-to-l from-transparent via-gold to-transparent opacity-70" />
-      <div className="relative grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)] xl:items-center">
+      <div className="relative">
         <div className="flex items-start gap-4">
           <span aria-hidden className="grid size-14 shrink-0 place-items-center rounded-[18px] bg-gradient-to-br from-gold-tint to-card text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.6),0_8px_20px_-10px_rgb(140_98_58/0.7)]">
             <Icon name="receipt" className="size-7" />
@@ -113,39 +99,22 @@ function Intro({ count }: { count?: number | undefined }) {
               ) : null}
             </div>
             <p className="text-[14px] leading-relaxed text-ink-soft">
-              حازم بيأكد الميعاد بصورة التحويل بس، <strong className="text-ink">ومش بيعرف الفلوس وصلت ولا لأ</strong>.
-              افتح الإيصال، اتأكد إن الفلوس وصلت، وعلّم اللي لقيته.
+              حازم بيأكد الميعاد بصورة التحويل بس. افتح الإيصال، اتأكد إن الفلوس وصلت، وعلّم اللي لقيته.
             </p>
           </div>
         </div>
-        <ol className="grid gap-2 sm:grid-cols-3" aria-label="إزاي تراجع إيصال">
-          {STEPS.map((s, i) => (
-            <li key={s.title} className="relative flex items-start gap-3 rounded-[16px] border border-line/60 bg-card/55 p-3 shadow-[inset_0_1px_0_rgb(255_255_255/0.45)]">
-              <span className="tabular grid size-7 shrink-0 place-items-center rounded-full bg-gradient-to-b from-[#dcb98c] to-[#a87a48] text-[13px] font-bold text-[#2a2117] shadow-[inset_0_1px_0_rgb(255_255_255/0.6)]">
-                {i + 1}
-              </span>
-              <span className="grid gap-0.5">
-                <span className="text-[13.5px] font-bold">{s.title}</span>
-                <span className="text-[12px] leading-snug text-ink-soft">{s.text}</span>
-              </span>
-            </li>
-          ))}
-        </ol>
       </div>
     </header>
   );
 }
 
-function Nothing({ show }: { show: Show }) {
+function Nothing() {
   return (
     <div className="liquid grid justify-items-center gap-2 rounded-[22px] px-6 py-10 text-center">
       <span className="grid size-14 place-items-center rounded-full bg-gradient-to-br from-green-bg to-card text-green-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.6)]">
         <Icon name="check-circle" className="size-7" />
       </span>
       <p className="text-[16px] font-bold">مفيش حاجة هنا</p>
-      <p className="max-w-sm text-[13px] text-ink-soft">
-        {show === "review" ? "كل الإيصالات اتراجعت. أول ما عميل يبعت صورة تحويل هتظهر هنا." : show === "refunds" ? "مفيش فلوس لازم ترجع لحد دلوقتي." : "لسه مفيش إيصالات."}
-      </p>
     </div>
   );
 }
@@ -200,10 +169,6 @@ function PaymentCard({ p }: { p: Payment }) {
       <ActionBar>
         {reviewable ? (
           <div className="grid gap-2">
-            <p className="flex items-start gap-1.5 text-[12.5px] text-ink-soft">
-              <Icon name="info" className="mt-0.5 size-3.5 shrink-0 text-gold-ink" />
-              افتح الإيصال، اتأكد في InstaPay أو المحفظة، واكتب اللي وصل فعلًا. «تمام» لو وصل كامل أو أكتر، «ناقص» لو أقل.
-            </p>
             <div className="flex flex-wrap items-end gap-2">
               <Field label="المبلغ اللي وصل فعلًا (جنيه)" type="number" min={1} inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value)} />
               <Button variant="primary" disabled={!(received >= p.amount_due)} onClick={() => setAsk("verified")}>تمام</Button>
@@ -227,10 +192,6 @@ function PaymentCard({ p }: { p: Payment }) {
               <Field label="حوّلته على إيه" hint="مثلًا فودافون كاش أو InstaPay" maxLength={100} value={method} onChange={(e) => setMethod(e.target.value)} />
               <Field label="ملاحظة (اختياري)" maxLength={200} value={note} onChange={(e) => setNote(e.target.value)} />
             </div>
-            <p className="flex items-start gap-1.5 text-[12.5px] text-ink-soft">
-              <Icon name="info" className="mt-0.5 size-3.5 shrink-0 text-gold-ink" />
-              حوّل المبلغ للعميل الأول، وبعدين اكتب حوّلته على إيه واضغط «اتحوّل».
-            </p>
             <div><Button variant="primary" disabled={method.trim() === ""} onClick={() => setAsk("refunded")}>اتحوّل</Button></div>
             {ask === "refunded" ? (
               <Sure text={`إنت حوّلت ${pounds(p.refund_due ?? 0)} جنيه فعلًا على ${method}؟ حازم هيبلّغ العميل إن المبلغ اترد.`} busy={refunded.isPending}

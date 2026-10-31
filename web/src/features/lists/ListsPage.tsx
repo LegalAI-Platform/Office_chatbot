@@ -9,11 +9,11 @@ import { Icon, type IconName } from "../../shared/ui/Icon";
 import { Avatar, Button, ErrorState, Field, Loading } from "../../shared/ui/ui";
 
 const KINDS: ListKind[] = ["existing_client", "lawyer_direct", "blocked"];
-// each list with the words that tell a new person what Hazem does with a number on it
-const KIND_LOOK: Record<ListKind, { icon: IconName; hint: string; bar: string }> = {
-  existing_client: { icon: "clients", hint: "موكلين المكتب: حازم بيعاملهم كموكل مش عميل جديد، ومعاهم اسم الموظف المسؤول عنهم.", bar: "bg-green" },
-  lawyer_direct: { icon: "shield", hint: "ناس الأستاذ نفسه: حازم بيقولهم إن رسالتهم وصلت للأستاذ، وبيعمله مهمة.", bar: "bg-gold" },
-  blocked: { icon: "lock", hint: "أرقام حازم مش بيرد عليها خالص.", bar: "bg-red" },
+// each list's icon and the colour of the line at its rows' start
+const KIND_LOOK: Record<ListKind, { icon: IconName; bar: string }> = {
+  existing_client: { icon: "clients", bar: "bg-green" },
+  lawyer_direct: { icon: "shield", bar: "bg-gold" },
+  blocked: { icon: "lock", bar: "bg-red" },
 };
 const ERRORS: Record<string, string> = {
   invalid_phone: "الرقم مش صحيح. اكتبه زي 01012345678 أو +201012345678.",
@@ -23,16 +23,12 @@ const ERRORS: Record<string, string> = {
 const PAGE = 50; // the API's page
 const MAX_CSV_BYTES = 600_000; // 300,000 Arabic characters: what the API takes
 
-// the order Hazem checks a number in when it is on more than one list
-const ORDER: ListKind[] = ["blocked", "lawyer_direct", "existing_client"];
-
 const select = "min-h-11 rounded-[14px] border border-line/70 bg-card/70 px-3 font-normal text-ink shadow-[inset_0_1px_2px_rgb(0_0_0/0.05)] focus:border-gold";
 
 /**
  * The office's lists (B-14, TASK 07c): who Hazem treats as a current client, the lawyer's own list,
  * and the blocked. The manager and the lawyer. And (the manager only) the muted conversations (S-01).
- * As «liquid glass» that explains itself: what the lists are for and which wins at the top, a line under the list
- * picker saying what the chosen one does, then adding a number, importing a sheet, and the list itself.
+ * As «liquid glass»: a glass header, a glass list picker, then adding a number, importing a sheet, and the list itself.
  */
 export function ListsPage() {
   const { data: me } = useMe();
@@ -64,7 +60,6 @@ export function ListsPage() {
       <Intro />
 
       <section aria-label="اختار القايمة" className="liquid grid gap-2 rounded-[22px] p-4 sm:p-5">
-        <p className="text-[12.5px] font-bold text-gold-ink">هتشتغل على أنهي قايمة؟</p>
         <div className="flex flex-wrap gap-1 rounded-[22px] border border-line/60 bg-card/45 p-1 shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)] sm:rounded-full" role="group" aria-label="القايمة">
           {KINDS.map((k) => {
             const on = k === kind;
@@ -79,10 +74,6 @@ export function ListsPage() {
             );
           })}
         </div>
-        <p className="flex items-start gap-1.5 text-[12.5px] text-ink-soft" aria-live="polite">
-          <Icon name="info" className="mt-0.5 size-3.5 shrink-0 text-gold-ink" />
-          {look.hint}
-        </p>
       </section>
 
       <div className="grid gap-5 xl:grid-cols-2">
@@ -91,7 +82,6 @@ export function ListsPage() {
       </div>
 
       <GlassCard icon={look.icon} title={label(LIST_KINDS, kind)} count={list.data?.total}
-        hint="كل رقم هنا حازم بيتعامل معاه على حسب القايمة. «شيل» بيرجّعه رقم عادي."
         action={
           <div className="w-full sm:max-w-xs">
             <Field label="دوّر بالاسم أو آخر أرقام" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />
@@ -99,7 +89,7 @@ export function ListsPage() {
         }>
         {list.isPending ? <Loading /> : list.isError ? <ErrorState message={errorMessage(list.error)} onRetry={() => void list.refetch()} /> :
           list.data.items.length === 0 ? (
-            <Nothing title="القايمة فاضية" text={q.trim() ? "مفيش رقم بالاسم أو الأرقام دي. جرّب كلمة تانية." : "ضيف رقم من فوق، أو استورد شيت Excel مرة واحدة."} />
+            <Nothing title="القايمة فاضية" />
           ) : (
             <ul className="grid gap-2">
               {list.data.items.map((e) => (
@@ -137,50 +127,31 @@ export function ListsPage() {
   );
 }
 
-// ---------- the top: what the lists are, and which one wins ----------
+// ---------- the top ----------
 
 function Intro() {
   return (
     <header className="liquid relative overflow-hidden rounded-[26px] p-5 sm:p-6">
       <span aria-hidden className="absolute -top-20 -start-16 size-64 rounded-full bg-gradient-to-br from-gold/30 to-transparent blur-2xl" />
       <span aria-hidden className="absolute inset-x-8 top-0 h-px bg-gradient-to-l from-transparent via-gold to-transparent opacity-70" />
-      <div className="relative grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)] xl:items-center">
-        <div className="flex items-start gap-4">
-          <span aria-hidden className="grid size-14 shrink-0 place-items-center rounded-[18px] bg-gradient-to-br from-gold-tint to-card text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.6),0_8px_20px_-10px_rgb(140_98_58/0.7)]">
-            <Icon name="clients" className="size-7" />
-          </span>
-          <div className="grid min-w-0 gap-1">
-            <h1 className="text-[26px] leading-tight font-bold">قوايم المكتب</h1>
-            <p className="text-[14px] leading-relaxed text-ink-soft">
-              حازم بيستخدم القوايم دي علشان <strong className="text-ink">يعرف مين بيكلمه</strong> قبل ما يرد: موكل حالي،
-              حد من ناس الأستاذ، ولا رقم ممنوع.
-            </p>
-          </div>
-        </div>
-        <div className="grid gap-2">
-          <p className="text-[12.5px] font-bold text-gold-ink">لو الرقم في أكتر من قايمة، حازم بيمشي بالترتيب ده:</p>
-          <ol className="grid gap-2 sm:grid-cols-3" aria-label="ترتيب القوايم">
-            {ORDER.map((k, i) => (
-              <li key={k} className="flex items-start gap-3 rounded-[16px] border border-line/60 bg-card/55 p-3 shadow-[inset_0_1px_0_rgb(255_255_255/0.45)]">
-                <span className="tabular grid size-7 shrink-0 place-items-center rounded-full bg-gradient-to-b from-[#dcb98c] to-[#a87a48] text-[13px] font-bold text-[#2a2117] shadow-[inset_0_1px_0_rgb(255_255_255/0.6)]">
-                  {i + 1}
-                </span>
-                <span className="grid gap-0.5">
-                  <span className="text-[13.5px] font-bold">{label(LIST_KINDS, k)}</span>
-                  <span className="text-[12px] leading-snug text-ink-soft">{KIND_LOOK[k].hint}</span>
-                </span>
-              </li>
-            ))}
-          </ol>
+      <div className="relative flex items-start gap-4">
+        <span aria-hidden className="grid size-14 shrink-0 place-items-center rounded-[18px] bg-gradient-to-br from-gold-tint to-card text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.6),0_8px_20px_-10px_rgb(140_98_58/0.7)]">
+          <Icon name="clients" className="size-7" />
+        </span>
+        <div className="grid min-w-0 gap-1">
+          <h1 className="text-[26px] leading-tight font-bold">قوايم المكتب</h1>
+          <p className="text-[14px] leading-relaxed text-ink-soft">
+            حازم بيستخدم القوايم دي علشان يعرف مين بيكلمه. لو الرقم في أكتر من قايمة: الممنوعين الأول، بعدين قايمة المستشار، بعدين الموكلين الحاليين.
+          </p>
         </div>
       </div>
     </header>
   );
 }
 
-/** The see-through card of this page, with an icon tile, a title, a count and a line saying what it is for. */
+/** The see-through card of this page, with an icon tile, a title, a count and (when it has one) a line under the title. */
 function GlassCard({ icon, title, count, hint, action, children }: {
-  icon: IconName; title: string; count?: number | undefined; hint: string; action?: ReactNode; children: ReactNode;
+  icon: IconName; title: string; count?: number | undefined; hint?: string; action?: ReactNode; children: ReactNode;
 }) {
   return (
     <section className="liquid grid min-w-0 content-start gap-4 rounded-[22px] p-5">
@@ -196,7 +167,7 @@ function GlassCard({ icon, title, count, hint, action, children }: {
                 <span className="tabular rounded-full border border-gold-line bg-gold-tint px-2 py-0.5 text-[12px] font-bold text-gold-ink">({count})</span>
               ) : null}
             </h2>
-            <p className="text-[12.5px] text-ink-soft">{hint}</p>
+            {hint ? <p className="text-[12.5px] text-ink-soft">{hint}</p> : null}
           </div>
         </div>
         {action}
@@ -206,14 +177,13 @@ function GlassCard({ icon, title, count, hint, action, children }: {
   );
 }
 
-function Nothing({ title, text }: { title: string; text: string }) {
+function Nothing({ title }: { title: string }) {
   return (
     <div className="grid justify-items-center gap-2 rounded-[18px] border border-dashed border-gold-line/70 bg-card/40 px-6 py-8 text-center">
       <span className="grid size-12 place-items-center rounded-full bg-gradient-to-br from-gold-tint to-card text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.6)]">
         <Icon name="check-circle" className="size-6" />
       </span>
       <p className="text-[15px] font-bold">{title}</p>
-      <p className="max-w-sm text-[13px] text-ink-soft">{text}</p>
     </div>
   );
 }
@@ -248,7 +218,7 @@ function AddEntry({ kind }: { kind: ListKind }) {
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm({ ...form, [k]: e.target.value });
 
   return (
-    <GlassCard icon="user-plus" title="ضيف رقم" hint={`رقم واحد بإيدك على «${label(LIST_KINDS, kind)}». حازم بيعرفه من أول رسالة جاية.`}>
+    <GlassCard icon="user-plus" title="ضيف رقم">
       <form onSubmit={(e: FormEvent) => { e.preventDefault(); add.mutate(); }} className="grid gap-3 md:grid-cols-2" noValidate>
         <Field label="الرقم" required dir="ltr" inputMode="tel" value={form.phone} onChange={set("phone")} />
         <Field label="الاسم" value={form.name} onChange={set("name")} />
@@ -280,17 +250,8 @@ function ImportCsv({ kind }: { kind: ListKind }) {
   });
 
   return (
-    <GlassCard icon="document" title="استورد من Excel" hint="أرقام كتير مرة واحدة من شيت المكتب، بدل ما تكتبهم واحد واحد.">
-      <ol className="grid gap-2 text-[13px]">
-        <li className="flex items-start gap-2">
-          <Step n={1} />
-          <span>احفظ الشيت كـ CSV فيه عمود <code dir="ltr">phone</code> (ومعاه <code dir="ltr">name</code>، و<code dir="ltr">staff</code> للموكلين).</span>
-        </li>
-        <li className="flex items-start gap-2">
-          <Step n={2} />
-          <span>اختار الملف تحت. الأرقام الغلط بتتعدّى وبيتقالك سطرها.</span>
-        </li>
-      </ol>
+    <GlassCard icon="document" title="استورد من Excel">
+      <p className="text-[13px] text-ink-soft">احفظ الشيت كـ CSV فيه عمود <code dir="ltr">phone</code> (ومعاه <code dir="ltr">name</code>، و<code dir="ltr">staff</code> للموكلين). الأرقام الغلط بتتعدّى وبيتقالك سطرها.</p>
       <label className="flex items-start gap-2 rounded-2xl border border-line/60 bg-card/50 px-3 py-2.5 text-sm">
         <input type="checkbox" className="mt-1 accent-gold" checked={replace} onChange={(e) => setReplace(e.target.checked)} />
         استبدل القايمة كلها بالملف ده (لو فيه سطر غلط، مفيش حاجة بتتغير)
@@ -321,14 +282,6 @@ function ImportCsv({ kind }: { kind: ListKind }) {
   );
 }
 
-function Step({ n }: { n: number }) {
-  return (
-    <span aria-hidden className="tabular grid size-6 shrink-0 place-items-center rounded-full bg-gradient-to-b from-[#dcb98c] to-[#a87a48] text-[12px] font-bold text-[#2a2117] shadow-[inset_0_1px_0_rgb(255_255_255/0.6)]">
-      {n}
-    </span>
-  );
-}
-
 // ---------- the muted conversations ----------
 
 /** S-01: a conversation Hazem went silent in (abuse, spam, a blocked number) comes back only by the manager's decision. */
@@ -344,7 +297,7 @@ function Muted() {
     <GlassCard icon="alert-circle" title="محادثات حازم ساكت فيها" count={muted.data?.length}
       hint="بسبب شتيمة أو سبام أو رقم ممنوع. لو رجّعتها، حازم بيرد على الرقم ده تاني.">
       {muted.isPending ? <Loading /> : muted.isError ? <ErrorState message={errorMessage(muted.error)} /> :
-        muted.data.length === 0 ? <Nothing title="مفيش محادثات ساكتة" text="حازم بيرد على كل الأرقام دلوقتي." /> : (
+        muted.data.length === 0 ? <Nothing title="مفيش محادثات ساكتة" /> : (
           <ul className="grid gap-2">
             {muted.data.map((m) => (
               <li key={m.wa_id} className="relative flex flex-wrap items-center gap-x-4 gap-y-2 overflow-hidden rounded-[16px] border border-line/60 bg-card/55 py-2.5 ps-4 pe-3 shadow-[inset_0_1px_0_rgb(255_255_255/0.45)]">

@@ -11,7 +11,7 @@ export const MIN_PASSWORD = 12;
 
 /**
  * First sign-in (a temporary password) or any time from «حسابي». In the sign-in's layout (the office's black panel and
- * a card), saying why the page is here, what happens after (the other devices sign out), and how long the new one is.
+ * a card), with how long the new one is.
  */
 export function ChangePasswordPage() {
   const { data: me } = useMe();
@@ -47,8 +47,7 @@ export function ChangePasswordPage() {
   }
 
   return (
-    <AuthLayout title="تغيير كلمة السر"
-      subtitle={forced ? "أول دخول ليك: اختار كلمة سر بتاعتك انت بدل المؤقتة." : "اكتب كلمة السر اللي بتدخل بيها دلوقتي، وبعدين الجديدة مرتين."}>
+    <AuthLayout title="تغيير كلمة السر">
       {forced ? (
         <p className="flex items-start gap-2 rounded-[14px] border border-orange/30 bg-orange-bg px-3 py-2.5 text-sm text-orange-ink">
           <Icon name="key" className="mt-0.5 size-4 shrink-0" />
@@ -81,10 +80,6 @@ export function ChangePasswordPage() {
           )}
         </div>
       </form>
-      <p className="flex items-start gap-1.5 rounded-[14px] border border-line/60 bg-card-2 px-3 py-2.5 text-[12.5px] text-ink-soft">
-        <Icon name="info" className="mt-0.5 size-3.5 shrink-0 text-gold-ink" />
-        بعد التغيير هتفضل داخل من هنا، وأي جهاز تاني كان داخل بحسابك هيخرج لوحده.
-      </p>
     </AuthLayout>
   );
 }

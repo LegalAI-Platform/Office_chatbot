@@ -11,18 +11,17 @@ import { Icon, type IconName } from "../../shared/ui/Icon";
 import { Avatar, Chip, ErrorState, Loading } from "../../shared/ui/ui";
 import { tasksQuery, useTasks, type Scope, type StateFilter } from "./api";
 
-// each filter with the words that tell a new person what it shows (the owner: «مش عارف هو رايح فين ولا جاي منين»)
-const SCOPES: { value: Scope; label: string; hint: string; icon: IconName; needsAll?: boolean }[] = [
-  { value: "mine", label: "مهامي", hint: "المهام اللي متعيّنة ليك انت.", icon: "account" },
-  { value: "unassigned", label: "مش متعيّنة", hint: "مهام لسه محدش استلمها: افتح واحدة واستلمها.", icon: "user-plus" },
-  { value: "all", label: "الكل", hint: "كل مهام المكتب، بتاعتك وبتاعة زمايلك.", icon: "users", needsAll: true },
+const SCOPES: { value: Scope; label: string; icon: IconName; needsAll?: boolean }[] = [
+  { value: "mine", label: "مهامي", icon: "account" },
+  { value: "unassigned", label: "مش متعيّنة", icon: "user-plus" },
+  { value: "all", label: "الكل", icon: "users", needsAll: true },
 ];
 
-const STATES: { value: StateFilter; label: string; hint: string; icon: IconName }[] = [
-  { value: "active", label: "محتاجة شغل", hint: "اللي لسه مستنية حد يخلّصها، الجديد والمتأخر.", icon: "play" },
-  { value: "overdue", label: "متأخرة", hint: "عدّى ميعادها ولسه ما خلصتش: ابدأ بيها.", icon: "clock" },
-  { value: "done", label: "خلصت", hint: "اللي اتعملت خلاص، للرجوع ليها بس.", icon: "check-circle" },
-  { value: "cancelled", label: "اتلغت", hint: "اللي اتقفلت من غير شغل (مثلًا اتكررت أو العميل رجع في كلامه).", icon: "x" },
+const STATES: { value: StateFilter; label: string; icon: IconName }[] = [
+  { value: "active", label: "محتاجة شغل", icon: "play" },
+  { value: "overdue", label: "متأخرة", icon: "clock" },
+  { value: "done", label: "خلصت", icon: "check-circle" },
+  { value: "cancelled", label: "اتلغت", icon: "x" },
 ];
 
 export const isUrgent = (t: { type: string }) => t.type === "urgent_request" || t.type === "safety_alert";
@@ -33,9 +32,8 @@ export function prefetchData(qc: QueryClient, me: Me | null | undefined) {
 }
 
 /**
- * «المهام» as «liquid glass», made to explain itself: what a task is and the three steps of one at the top, a line under
- * each filter saying what it shows, and every task a glass card that reads as a sentence (who, what they need, who has
- * it, by when, where it stands).
+ * «المهام» as «liquid glass»: the filters as glass pills, and every task a glass card that reads as a sentence (who, what
+ * they need, who has it, by when, where it stands). How to use the panel is for a first-login dialog, not this page.
  */
 export function TasksPage() {
   const { data: me } = useMe();
@@ -74,9 +72,9 @@ export function TasksPage() {
         </p>
       ) : null}
 
-      <section aria-label="الفلاتر" className="liquid grid gap-4 rounded-[22px] p-4 sm:p-5 2xl:grid-cols-2">
-        <FilterRow title="تبع مين؟" label="مين" value={scope} onChange={pick(setScope)} options={scopes} />
-        <FilterRow title="حالتها إيه؟" label="الحالة" value={state} onChange={pick(setState)} options={STATES} />
+      <section aria-label="الفلاتر" className="liquid grid gap-3 rounded-[22px] p-3 sm:p-4 2xl:grid-cols-2">
+        <FilterRow label="مين" value={scope} onChange={pick(setScope)} options={scopes} />
+        <FilterRow label="الحالة" value={state} onChange={pick(setState)} options={STATES} />
       </section>
 
       {tasks.isPending ? (
@@ -101,50 +99,21 @@ export function TasksPage() {
   );
 }
 
-// ---------- the top: what a task is, and how to work one ----------
-
-const STEPS: { icon: IconName; title: string; text: string }[] = [
-  { icon: "tasks", title: "افتح المهمة", text: "هتلاقي كلام العميل والمطلوب بالظبط." },
-  { icon: "play", title: "اضغط «هاشتغل عليها»", text: "عشان زمايلك يعرفوا إنك ماسكها." },
-  { icon: "check-circle", title: "لما تخلّص اضغط «خلصت»", text: "وحازم يكمّل مع العميل لوحده." },
-];
+// ---------- the top ----------
 
 function Intro({ total }: { total?: number | undefined }) {
   return (
-    <header className="liquid relative overflow-hidden rounded-[26px] p-5 sm:p-6">
+    <header className="liquid relative overflow-hidden rounded-[22px] px-5 py-4">
       <span aria-hidden className="absolute -top-20 -start-16 size-64 rounded-full bg-gradient-to-br from-gold/30 to-transparent blur-2xl" />
       <span aria-hidden className="absolute inset-x-8 top-0 h-px bg-gradient-to-l from-transparent via-gold to-transparent opacity-70" />
-      <div className="relative grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)] xl:items-center">
-        <div className="flex items-start gap-4">
-          <span aria-hidden className="grid size-14 shrink-0 place-items-center rounded-[18px] bg-gradient-to-br from-gold-tint to-card text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.6),0_8px_20px_-10px_rgb(140_98_58/0.7)]">
-            <Icon name="tasks" className="size-7" />
-          </span>
-          <div className="grid min-w-0 gap-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-[26px] leading-tight font-bold">المهام</h1>
-              {total !== undefined ? (
-                <span className="tabular rounded-full border border-gold-line bg-gold-tint px-2.5 py-0.5 text-[12.5px] font-bold text-gold-ink">{total} مهمة</span>
-              ) : null}
-            </div>
-            <p className="text-[14px] leading-relaxed text-ink-soft">
-              كل مهمة هنا حاجة <strong className="text-ink">حازم ما ينفعش يخلّصها لوحده</strong> ومحتاجة حد من المكتب:
-              عميل عايز يكلّم موظف، إيصال محتاج مراجعة، طلب عاجل، سعر خدمة…
-            </p>
-          </div>
-        </div>
-        <ol className="grid gap-2 sm:grid-cols-3" aria-label="إزاي تشتغل على مهمة">
-          {STEPS.map((s, i) => (
-            <li key={s.title} className="relative flex items-start gap-3 rounded-[16px] border border-line/60 bg-card/55 p-3 shadow-[inset_0_1px_0_rgb(255_255_255/0.45)]">
-              <span className="tabular grid size-7 shrink-0 place-items-center rounded-full bg-gradient-to-b from-[#dcb98c] to-[#a87a48] text-[13px] font-bold text-[#2a2117] shadow-[inset_0_1px_0_rgb(255_255_255/0.6)]">
-                {i + 1}
-              </span>
-              <span className="grid gap-0.5">
-                <span className="text-[13.5px] font-bold">{s.title}</span>
-                <span className="text-[12px] leading-snug text-ink-soft">{s.text}</span>
-              </span>
-            </li>
-          ))}
-        </ol>
+      <div className="relative flex flex-wrap items-center gap-3">
+        <span aria-hidden className="grid size-12 shrink-0 place-items-center rounded-[16px] bg-gradient-to-br from-gold-tint to-card text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.6),0_8px_20px_-10px_rgb(140_98_58/0.7)]">
+          <Icon name="tasks" className="size-6" />
+        </span>
+        <h1 className="text-[26px] leading-tight font-bold">المهام</h1>
+        {total !== undefined ? (
+          <span className="tabular rounded-full border border-gold-line bg-gold-tint px-2.5 py-0.5 text-[12.5px] font-bold text-gold-ink">{total} مهمة</span>
+        ) : null}
       </div>
     </header>
   );
@@ -152,14 +121,11 @@ function Intro({ total }: { total?: number | undefined }) {
 
 // ---------- the filters ----------
 
-function FilterRow<T extends string>({ title, label: name, value, options, onChange }: {
-  title: string; label: string; value: T; options: { value: T; label: string; hint: string; icon: IconName }[]; onChange: (v: T) => void;
+function FilterRow<T extends string>({ label: name, value, options, onChange }: {
+  label: string; value: T; options: { value: T; label: string; icon: IconName }[]; onChange: (v: T) => void;
 }) {
-  const now = options.find((o) => o.value === value);
   return (
-    <div className="grid min-w-0 content-start gap-2">
-      <p className="text-[12.5px] font-bold text-gold-ink">{title}</p>
-      <div className="flex gap-1 overflow-x-auto rounded-full border border-line/60 bg-card/45 p-1 shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)]" role="group" aria-label={name}>
+    <div className="flex gap-1 overflow-x-auto rounded-full border border-line/60 bg-card/45 p-1 shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)]" role="group" aria-label={name}>
         {options.map((o) => {
           const on = value === o.value;
           return (
@@ -172,13 +138,6 @@ function FilterRow<T extends string>({ title, label: name, value, options, onCha
             </button>
           );
         })}
-      </div>
-      {now ? (
-        <p className="flex items-start gap-1.5 text-[12.5px] text-ink-soft" aria-live="polite">
-          <Icon name="info" className="mt-0.5 size-3.5 shrink-0 text-gold-ink" />
-          {now.hint}
-        </p>
-      ) : null}
     </div>
   );
 }
@@ -270,14 +229,13 @@ function Field({ icon, term, children }: { icon: IconName; term: string; childre
 // ---------- nothing to show, and the pages ----------
 
 function Nothing({ state }: { state: StateFilter }) {
-  const active = state === "active" || state === "overdue";
   return (
     <div className="liquid grid justify-items-center gap-2 rounded-[22px] px-6 py-10 text-center">
       <span className="grid size-14 place-items-center rounded-full bg-gradient-to-br from-green-bg to-card text-green-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.6)]">
         <Icon name="check-circle" className="size-7" />
       </span>
       <p className="text-[16px] font-bold">{state === "active" ? "مفيش مهام محتاجة شغل دلوقتي" : "مفيش مهام هنا"}</p>
-      {active ? <p className="max-w-sm text-[13px] text-ink-soft">أول ما حازم يفتح مهمة جديدة هتظهر هنا لوحدها، ومش محتاج تعمل ريفريش.</p> : null}
+      {state === "active" ? <p className="max-w-sm text-[13px] text-ink-soft">أول ما حازم يفتح مهمة جديدة هتظهر هنا لوحدها.</p> : null}
     </div>
   );
 }

@@ -10,11 +10,7 @@ import { Avatar, Button, Chip, ErrorState, Loading } from "../../shared/ui/ui";
 import { useAssign, useStaff, useTask, useTaskAction, type TaskAction } from "./api";
 import { isUrgent } from "./TasksPage";
 
-/**
- * One task as «liquid glass» that tells a new person what to do: who and what at the top with the steps of a task
- * (the one they are on marked), the client's own words as big quotes, and the buttons in one card on the side, each
- * with a line saying what it does.
- */
+/** One task as «liquid glass»: who and what at the top, the client's own words as big quotes, the buttons in one card on the side. */
 export function TaskDetailPage() {
   const { id = "" } = useParams();
   const task = useTask(id);
@@ -42,31 +38,6 @@ export function TaskDetailPage() {
   );
 }
 
-// ---------- what this kind of task asks of you (a line; the rest is in the steps) ----------
-
-const TYPE_HINT: Record<string, string> = {
-  human_requested: "العميل طلب يكلّم حد من المكتب: كلّمه وشوف محتاج إيه.",
-  urgent_request: "طلب عاجل: كلّم العميل في أسرع وقت، قبل أي مهمة تانية.",
-  safety_alert: "العميل ممكن يكون في خطر: كلّمه دلوقتي وبلّغ المستشار.",
-  existing_client_message: "موكل عندنا بيسأل عن موضوعه: رد عليه بآخر الأخبار.",
-  price_quote: "العميل عايز يعرف سعر: رد عليه بالسعر من قايمة الأسعار.",
-  discount_request: "العميل طالب خصم: اسأل المستشار أو المدير ورد عليه.",
-  complaint: "العميل زعلان من حاجة: اسمعه كويس وبلّغ المدير.",
-  refund: "العميل عايز فلوسه ترجع: راجع الإيصال وشوف المستحق.",
-  unclear_message: "حازم ما فهمش العميل: اقرا كلامه وكلّمه تفهم منه.",
-  reschedule_or_cancel: "العميل عايز يغيّر أو يلغي ميعاده: اتفق معاه على الجديد.",
-  late_reschedule: "العميل عايز يغيّر ميعاد قرّب: اتفق معاه وشوف الكالندر.",
-};
-
-// the three steps of every task (the same as on «المهام»), and which one the task is on
-const STEPS: { icon: IconName; title: string; text: string }[] = [
-  { icon: "message", title: "اقرا كلام العميل", text: "هتلاقيه تحت بالظبط زي ما بعته." },
-  { icon: "play", title: "اضغط «هاشتغل عليها»", text: "عشان زمايلك يعرفوا إنك ماسكها." },
-  { icon: "chat", title: "كلّم العميل وخلّص طلبه", text: "من المحادثة أو التليفون." },
-  { icon: "check-circle", title: "اضغط «خلصت»", text: "وحازم يكمّل مع العميل لوحده." },
-];
-const stepOf = (t: TaskDetail) => (t.state === "done" || t.state === "cancelled" ? STEPS.length : t.state === "open" ? 1 : 2);
-
 const LOOK: Record<string, string> = {
   urgent: "bg-red", overdue: "bg-orange", in_progress: "bg-gold", open: "bg-blue", done: "bg-green", cancelled: "bg-ink-soft/50",
 };
@@ -81,7 +52,7 @@ function Detail({ task }: { task: TaskDetail }) {
         <span aria-hidden className="absolute -top-20 -start-16 size-64 rounded-full bg-gradient-to-br from-gold/30 to-transparent blur-2xl" />
         <span aria-hidden className="absolute inset-x-8 top-0 h-px bg-gradient-to-l from-transparent via-gold to-transparent opacity-70" />
         <span aria-hidden className={`absolute inset-y-6 start-0 w-1 rounded-e-full ${LOOK[isUrgent(task) && open ? "urgent" : task.state] ?? "bg-blue"}`} />
-        <div className="relative grid gap-5">
+        <div className="relative">
           <div className="flex flex-wrap items-start gap-4">
             <Avatar name={name} className="size-14 shrink-0 text-[16px]" />
             <div className="grid min-w-0 flex-1 gap-1.5">
@@ -101,15 +72,8 @@ function Detail({ task }: { task: TaskDetail }) {
                   <span className={`tabular font-semibold ${late ? "text-red-ink" : "text-ink"}`}>{cairoWhen(task.due_at)}</span>
                 </span>
               </p>
-              {TYPE_HINT[task.type] ? (
-                <p className="flex items-start gap-1.5 text-[13.5px] leading-relaxed text-ink">
-                  <Icon name="info" className="mt-1 size-3.5 shrink-0 text-gold-ink" />
-                  {TYPE_HINT[task.type]}
-                </p>
-              ) : null}
             </div>
           </div>
-          <Steps at={stepOf(task)} cancelled={task.state === "cancelled"} />
         </div>
       </header>
 
@@ -135,38 +99,6 @@ function Detail({ task }: { task: TaskDetail }) {
         </div>
       </div>
     </>
-  );
-}
-
-/** Where the task stands among the steps: the ones behind it ticked, the one it is on lit. */
-function Steps({ at, cancelled }: { at: number; cancelled: boolean }) {
-  return (
-    <div className="grid gap-2">
-      <p className="text-[12.5px] font-bold text-gold-ink">{cancelled ? "المهمة دي اتلغت: مفيش حاجة تتعمل فيها" : "تعمل إيه في المهمة دي؟"}</p>
-      <ol className="grid grid-cols-2 gap-2 xl:grid-cols-4" aria-label="خطوات المهمة">
-        {STEPS.map((s, i) => {
-          const done = i < at || cancelled;
-          const now = i === at && !cancelled;
-          return (
-            <li key={s.title} aria-current={now ? "step" : undefined}
-              className={`relative flex items-start gap-2 rounded-[16px] border p-2.5 sm:gap-3 sm:p-3 shadow-[inset_0_1px_0_rgb(255_255_255/0.45)] transition motion-reduce:transition-none ${now
-                ? "border-gold-line bg-gold-tint/80 shadow-[inset_0_1px_0_rgb(255_255_255/0.5),0_8px_20px_-12px_rgb(176_133_82/0.8)]"
-                : `border-line/60 bg-card/55 ${done ? "opacity-70" : ""}`}`}>
-              <span className={`tabular grid size-7 shrink-0 place-items-center rounded-full text-[13px] font-bold shadow-[inset_0_1px_0_rgb(255_255_255/0.6)] ${done && !cancelled
-                ? "bg-green-bg text-green-ink"
-                : "bg-gradient-to-b from-[#dcb98c] to-[#a87a48] text-[#2a2117]"}`}>
-                {done && !cancelled ? <Icon name="check" className="size-4" /> : i + 1}
-              </span>
-              <span className="grid gap-0.5">
-                <span className="text-[13px] font-bold sm:text-[13.5px]">{s.title}</span>
-                {/* on a phone only the step it is on keeps its line, so the buttons are not pushed far down */}
-                <span className={`text-[12px] leading-snug text-ink-soft ${now ? "" : "max-sm:hidden"}`}>{now ? "انت هنا: " : ""}{s.text}</span>
-              </span>
-            </li>
-          );
-        })}
-      </ol>
-    </div>
   );
 }
 
@@ -246,9 +178,9 @@ function ClientWords({ taskId, words }: { taskId: string; words: ClientWord[] })
 }
 
 // «إلغاء المهمة» is apart, at the bottom behind a «متأكد؟»
-const ACTIONS: { action: Exclude<TaskAction, "cancel">; text: string; hint: string }[] = [
-  { action: "start", text: "هاشتغل عليها", hint: "المهمة تبقى باسمك، وزمايلك يعرفوا إنك ماسكها." },
-  { action: "done", text: "خلصت", hint: "لما طلب العميل يتعمل خلاص. حازم يرجع يكمّل معاه." },
+const ACTIONS: { action: Exclude<TaskAction, "cancel">; text: string }[] = [
+  { action: "start", text: "هاشتغل عليها" },
+  { action: "done", text: "خلصت" },
 ];
 
 function Actions({ task }: { task: TaskDetail }) {
@@ -263,7 +195,7 @@ function Actions({ task }: { task: TaskDetail }) {
   const first = main[0]?.action;
 
   return (
-    <Section icon="play" title="اعمل إيه دلوقتي">
+    <Section icon="play" title="المهمة">
       <dl className="grid gap-1.5">
         <Row icon={task.staff ? "account" : "user-plus"} term="الموظف">
           {task.staff?.name ?? <span className="text-orange-ink">مش متعيّنة</span>}
@@ -272,19 +204,13 @@ function Actions({ task }: { task: TaskDetail }) {
       </dl>
 
       {main.length > 0 ? (
-        <div className="grid gap-3">
+        <div className="grid gap-2">
           {main.map((a) => (
-            <div key={a.action} className="grid gap-1">
-              <Button variant={a.action === first ? "primary" : "secondary"} busy={act.isPending && act.variables === a.action}
-                className="min-h-12 w-full text-[15px]" onClick={() => act.mutate(a.action)}>
-                <Icon name={a.action === "start" ? "play" : "check"} className="size-4" />
-                {a.text}
-              </Button>
-              <p className="flex items-start gap-1.5 text-[12px] text-ink-soft">
-                <Icon name="info" className="mt-0.5 size-3.5 shrink-0 text-gold-ink" />
-                {a.hint}
-              </p>
-            </div>
+            <Button key={a.action} variant={a.action === first ? "primary" : "secondary"} busy={act.isPending && act.variables === a.action}
+              className="min-h-12 w-full text-[15px]" onClick={() => act.mutate(a.action)}>
+              <Icon name={a.action === "start" ? "play" : "check"} className="size-4" />
+              {a.text}
+            </Button>
           ))}
         </div>
       ) : (
@@ -321,7 +247,6 @@ function Actions({ task }: { task: TaskDetail }) {
               {staff.data?.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </label>
-          <p className="text-xs text-ink-soft">اختار زميل والمهمة تتنقل له على طول، وتظهر عنده في «مهامي».</p>
         </div>
       ) : null}
 
@@ -336,13 +261,10 @@ function Actions({ task }: { task: TaskDetail }) {
               </span>
             </div>
           ) : (
-            <>
-              <Button variant="ghost" className="w-fit text-red-ink" onClick={() => setConfirmCancel(true)}>
-                <Icon name="x" className="size-4" />
-                إلغاء المهمة
-              </Button>
-              <p className="text-xs text-ink-soft">بس لو المهمة اتكررت أو مش محتاجة شغل (مثلًا العميل رجع في كلامه).</p>
-            </>
+            <Button variant="ghost" className="w-fit text-red-ink" onClick={() => setConfirmCancel(true)}>
+              <Icon name="x" className="size-4" />
+              إلغاء المهمة
+            </Button>
           )}
         </div>
       ) : null}

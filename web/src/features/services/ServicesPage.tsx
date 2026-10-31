@@ -26,24 +26,15 @@ export function prefetchData(qc: QueryClient) {
   void qc.prefetchQuery(listQuery("open"));
 }
 
-// each tab with the words that tell a new person what it shows
-const TABS: { value: Show; label: string; hint: string; icon: IconName }[] = [
-  { value: "open", label: "شغالة", hint: "الطلبات اللي لسه ما اتسلّمتش: محتاجة سعر، أو فلوس، أو شغل وملف.", icon: "play" },
-  { value: "done", label: "اتسلّمت أو اتقفلت", hint: "اللي الملف بتاعها وصل للعميل أو اتقفلت، للرجوع ليها.", icon: "check-circle" },
-];
-
-const STEPS: { title: string; text: string }[] = [
-  { title: "العميل يبعت الورق", text: "حازم بيجمعه منه على واتساب ويحطه هنا." },
-  { title: "المستشار يحدّد السعر", text: "ويوم التسليم، وحازم يبعتهم للعميل." },
-  { title: "اشتغل وارفع الملف", text: "بعد ما الفلوس تتراجع، وحازم يبعته على واتساب." },
+const TABS: { value: Show; label: string; icon: IconName }[] = [
+  { value: "open", label: "شغالة", icon: "play" },
+  { value: "done", label: "اتسلّمت أو اتقفلت", icon: "check-circle" },
 ];
 
 /**
  * «طلبات الخدمات» (TASK 10, DECISIONS v1.14 B-16 / B-17): a written service from the client's documents to the
  * delivered file. The lawyer or the manager prices it; the work starts once a person found the money (الإيصالات);
  * the file goes from here to storage and Hazem sends it on WhatsApp.
- * Made to explain itself as «liquid glass»: what the page is for and its steps at the top, a line under the
- * tabs saying what each shows, and on a card the next step when it needs one.
  */
 export function ServicesPage() {
   const [show, setShow] = useUrlState<Show>("show", "open", SHOWS);
@@ -60,7 +51,6 @@ export function ServicesPage() {
       <Intro count={list.data?.length} />
 
       <section aria-label="الفلاتر" className="liquid grid gap-2 rounded-[22px] p-4 sm:p-5">
-        <p className="text-[12.5px] font-bold text-gold-ink">عايز تشوف إيه؟</p>
         <div className="flex gap-1 overflow-x-auto rounded-full border border-line/60 bg-card/45 p-1 shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)]" role="tablist" aria-label="طلبات الخدمات">
           {TABS.map((t) => {
             const on = t.value === show;
@@ -75,14 +65,10 @@ export function ServicesPage() {
             );
           })}
         </div>
-        <p className="flex items-start gap-1.5 text-[12.5px] text-ink-soft" aria-live="polite">
-          <Icon name="info" className="mt-0.5 size-3.5 shrink-0 text-gold-ink" />
-          {TABS.find((t) => t.value === show)?.hint}
-        </p>
       </section>
 
       {list.isPending ? <Loading /> : list.isError ? <ErrorState message={errorMessage(list.error)} onRetry={() => void list.refetch()} /> : (
-        list.data.length === 0 ? <Nothing show={show} /> : (
+        list.data.length === 0 ? <Nothing /> : (
           <ul className={GLASS_LIST}>{list.data.map((o) => <OrderCard key={o.id} o={o} />)}</ul>
         )
       )}
@@ -98,7 +84,7 @@ function Intro({ count }: { count?: number | undefined }) {
     <header className="liquid relative overflow-hidden rounded-[26px] p-5 sm:p-6">
       <span aria-hidden className="absolute -top-20 -start-16 size-64 rounded-full bg-gradient-to-br from-gold/30 to-transparent blur-2xl" />
       <span aria-hidden className="absolute inset-x-8 top-0 h-px bg-gradient-to-l from-transparent via-gold to-transparent opacity-70" />
-      <div className="relative grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)] xl:items-center">
+      <div className="relative">
         <div className="flex items-start gap-4">
           <span aria-hidden className="grid size-14 shrink-0 place-items-center rounded-[18px] bg-gradient-to-br from-gold-tint to-card text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.6),0_8px_20px_-10px_rgb(140_98_58/0.7)]">
             <Icon name="document" className="size-7" />
@@ -111,36 +97,22 @@ function Intro({ count }: { count?: number | undefined }) {
               ) : null}
             </div>
             <p className="text-[14px] leading-relaxed text-ink-soft">
-              مراجعة وصياغة العقود، والإنذار، والرأي المكتوب: <strong className="text-ink">من الورق لحد ما الملف يوصل للعميل</strong>. كل طلب كارت فيه هو فين ومستني إيه.
+              مراجعة وصياغة العقود، والإنذار، والرأي المكتوب: من الورق لحد ما الملف يوصل للعميل.
             </p>
           </div>
         </div>
-        <ol className="grid gap-2 sm:grid-cols-3" aria-label="إزاي طلب الخدمة بيمشي">
-          {STEPS.map((s, i) => (
-            <li key={s.title} className="relative flex items-start gap-3 rounded-[16px] border border-line/60 bg-card/55 p-3 shadow-[inset_0_1px_0_rgb(255_255_255/0.45)]">
-              <span className="tabular grid size-7 shrink-0 place-items-center rounded-full bg-gradient-to-b from-[#dcb98c] to-[#a87a48] text-[13px] font-bold text-[#2a2117] shadow-[inset_0_1px_0_rgb(255_255_255/0.6)]">
-                {i + 1}
-              </span>
-              <span className="grid gap-0.5">
-                <span className="text-[13.5px] font-bold">{s.title}</span>
-                <span className="text-[12px] leading-snug text-ink-soft">{s.text}</span>
-              </span>
-            </li>
-          ))}
-        </ol>
       </div>
     </header>
   );
 }
 
-function Nothing({ show }: { show: Show }) {
+function Nothing() {
   return (
     <div className="liquid grid justify-items-center gap-2 rounded-[22px] px-6 py-10 text-center">
       <span className="grid size-14 place-items-center rounded-full bg-gradient-to-br from-green-bg to-card text-green-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.6)]">
         <Icon name="check-circle" className="size-7" />
       </span>
       <p className="text-[16px] font-bold">مفيش طلبات هنا</p>
-      <p className="max-w-sm text-[13px] text-ink-soft">{show === "open" ? "مفيش طلبات شغالة دلوقتي. أول ما عميل يطلب خدمة هتظهر هنا." : "لسه مفيش طلبات اتسلّمت أو اتقفلت."}</p>
     </div>
   );
 }
@@ -172,10 +144,9 @@ function OrderCard({ o }: { o: ServiceOrder }) {
       {facts.length > 0 ? <Facts items={facts} /> : null}
       <Files label="ورق العميل" count={o.files} href={(i) => fileUrl(o.id, i)} word="مستند" />
       {o.files === 0 && o.state === "collecting" ? <CaseNote>مستنيين العميل يبعت الورق.</CaseNote> : null}
-      {o.state === "awaiting_price" || (o.state === "collecting" && o.files > 0)
-        ? <Next>{can(me, "services.price") ? "الورق وصل: حدّد السعر ويوم التسليم تحت، وحازم يبعتهم للعميل." : "مستني المستشار أو المدير يحدّد السعر."}</Next>
+      {(o.state === "awaiting_price" || (o.state === "collecting" && o.files > 0)) && !can(me, "services.price")
+        ? <CaseNote>مستني المستشار أو المدير يحدّد السعر.</CaseNote>
         : null}
-      {o.state === "in_progress" ? <Next>الفلوس اتراجعت: اشتغل على الطلب وسلّمه قبل يوم التسليم.</Next> : null}
       {o.state === "awaiting_payment" ? <CaseNote>حازم بعت السعر وبيانات الدفع. لما الإيصال يوصل، راجعه من «الإيصالات والمدفوعات».</CaseNote> : null}
       {o.notice === "failed" ? (
         <CaseNote tone="bad">
@@ -210,16 +181,6 @@ function OrderCard({ o }: { o: ServiceOrder }) {
         ) : null}
       </ActionBar>
     </CaseCard>
-  );
-}
-
-/** What the card needs from whoever reads it now, in a line. */
-function Next({ children }: { children: ReactNode }) {
-  return (
-    <p className="mx-5 mt-3 flex items-start gap-2 rounded-[12px] border border-gold-line/70 bg-gold-tint/70 px-3.5 py-2 text-[13px] font-semibold text-gold-ink">
-      <Icon name="play" className="mt-0.5 size-4 shrink-0" />
-      <span>{children}</span>
-    </p>
   );
 }
 

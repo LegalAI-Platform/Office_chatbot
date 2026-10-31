@@ -10,19 +10,12 @@ import { Avatar, Button, Chip, ErrorState, Field, Loading } from "../../shared/u
 
 const usersKey = ["users"];
 
-// what each role sees, said once at the top so the manager knows what a choice gives
-const ROLE_HINTS: { role: Role; icon: IconName; text: string }[] = [
-  { role: "staff", icon: "account", text: "مهامه هو، والمهام اللي لسه محدش استلمها." },
-  { role: "lawyer", icon: "shield", text: "كل المهام، وهو اللي بيوزّعها على الموظفين." },
-  { role: "manager", icon: "key", text: "كل حاجة، ومنها الصفحة دي والحسابات." },
-];
-
 const select = "min-h-11 rounded-[14px] border border-line/70 bg-card/70 px-3 text-ink shadow-[inset_0_1px_2px_rgb(0_0_0/0.05)] focus:border-gold";
 
 /**
- * Accounts (users.manage: the manager only). The page is not even in the navigation for others. As «liquid glass»
- * that explains itself: what the page is for and what each role sees at the top, the sign-ups waiting for the manager
- * first, then every account as a glass card with its role, its name in the lists and its last sign-in.
+ * Accounts (users.manage: the manager only). The page is not even in the navigation for others. As «liquid glass»: a
+ * glass header, the sign-ups waiting for the manager first, then every account as a glass card with its role, its name in
+ * the lists and its last sign-in.
  */
 export function UsersPage() {
   const users = useQuery({ queryKey: usersKey, queryFn: () => api<PanelUser[]>("GET", "/users") });
@@ -62,8 +55,7 @@ export function UsersPage() {
         <>
           {waiting.length > 0 ? (
             <section className="grid gap-3" aria-labelledby="pending-title">
-              <Heading id="pending-title" icon="user-plus" count={waiting.length} hot
-                hint="ناس سجّلوا من صفحة «حساب جديد». اختار دور كل واحد وفعّله، أو ارفضه لو مش من المكتب.">
+              <Heading id="pending-title" icon="user-plus" count={waiting.length} hot>
                 مستنيين التفعيل
               </Heading>
               <ul className="grid gap-3 lg:grid-cols-2" aria-label="حسابات مستنية التفعيل">
@@ -74,8 +66,7 @@ export function UsersPage() {
             </section>
           ) : null}
           <section className="grid gap-3" aria-labelledby="accounts-title">
-            <Heading id="accounts-title" icon="users" count={users.data.length - waiting.length}
-              hint="غيّر دور حد من القايمة اللي جوه الكارت، أو اعمله كلمة سر جديدة لو نسيها، أو عطّله لو ساب المكتب.">
+            <Heading id="accounts-title" icon="users" count={users.data.length - waiting.length}>
               حسابات المكتب
             </Heading>
             <ul className="grid gap-3 lg:grid-cols-2" aria-label="الحسابات">
@@ -92,69 +83,42 @@ export function UsersPage() {
   );
 }
 
-// ---------- the top: what the page is for, and what each role sees ----------
+// ---------- the top ----------
 
 function Intro({ total, action }: { total?: number | undefined; action: ReactNode }) {
   return (
     <header className="liquid relative overflow-hidden rounded-[26px] p-5 sm:p-6">
       <span aria-hidden className="absolute -top-20 -start-16 size-64 rounded-full bg-gradient-to-br from-gold/30 to-transparent blur-2xl" />
       <span aria-hidden className="absolute inset-x-8 top-0 h-px bg-gradient-to-l from-transparent via-gold to-transparent opacity-70" />
-      <div className="relative grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)] xl:items-center">
-        <div className="flex flex-wrap items-start gap-4">
-          <span aria-hidden className="grid size-14 shrink-0 place-items-center rounded-[18px] bg-gradient-to-br from-gold-tint to-card text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.6),0_8px_20px_-10px_rgb(140_98_58/0.7)]">
-            <Icon name="users" className="size-7" />
-          </span>
-          <div className="grid min-w-0 flex-1 basis-56 gap-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-[26px] leading-tight font-bold">الحسابات</h1>
-              {total !== undefined ? (
-                <span className="tabular rounded-full border border-gold-line bg-gold-tint px-2.5 py-0.5 text-[12.5px] font-bold text-gold-ink">{total} حساب</span>
-              ) : null}
-            </div>
-            <p className="text-[14px] leading-relaxed text-ink-soft">
-              هنا <strong className="text-ink">كل اللي بيدخلوا لوحة المكتب</strong>: تزوّد موظف جديد، تفعّل اللي سجّل لوحده،
-              تغيّر دور حد، أو تقفل حساب حد ساب المكتب.
-            </p>
-          </div>
-          {action ? <div className="w-full sm:w-auto">{action}</div> : null}
+      <div className="relative flex flex-wrap items-center gap-4">
+        <span aria-hidden className="grid size-14 shrink-0 place-items-center rounded-[18px] bg-gradient-to-br from-gold-tint to-card text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.6),0_8px_20px_-10px_rgb(140_98_58/0.7)]">
+          <Icon name="users" className="size-7" />
+        </span>
+        <div className="flex min-w-0 flex-1 basis-56 flex-wrap items-center gap-2">
+          <h1 className="text-[26px] leading-tight font-bold">الحسابات</h1>
+          {total !== undefined ? (
+            <span className="tabular rounded-full border border-gold-line bg-gold-tint px-2.5 py-0.5 text-[12.5px] font-bold text-gold-ink">{total} حساب</span>
+          ) : null}
         </div>
-        <div className="grid gap-2">
-          <p className="text-[12.5px] font-bold text-gold-ink">كل دور بيشوف إيه؟</p>
-          <ul className="grid gap-2 sm:grid-cols-3" aria-label="الأدوار">
-            {ROLE_HINTS.map((r) => (
-              <li key={r.role} className="flex items-start gap-3 rounded-[16px] border border-line/60 bg-card/55 p-3 shadow-[inset_0_1px_0_rgb(255_255_255/0.45)]">
-                <span aria-hidden className="grid size-7 shrink-0 place-items-center rounded-full bg-gradient-to-b from-[#dcb98c] to-[#a87a48] text-[#2a2117] shadow-[inset_0_1px_0_rgb(255_255_255/0.6)]">
-                  <Icon name={r.icon} className="size-3.5" />
-                </span>
-                <span className="grid gap-0.5">
-                  <span className="text-[13.5px] font-bold">{label(ROLES, r.role)}</span>
-                  <span className="text-[12px] leading-snug text-ink-soft">{r.text}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
+        {action ? <div className="w-full sm:w-auto">{action}</div> : null}
       </div>
     </header>
   );
 }
 
-/** A section's title on the page: an icon tile, the words, a count, and a line saying what to do here. */
-function Heading({ id, icon, count, hot = false, hint, children }: { id: string; icon: IconName; count: number; hot?: boolean; hint: string; children: ReactNode }) {
+/** A section's title on the page: an icon tile, the words and a count. */
+function Heading({ id, icon, count, hot = false, children }: { id: string; icon: IconName; count: number; hot?: boolean; children: ReactNode }) {
   return (
-    <div className="flex items-start gap-3">
+    <div className="flex items-center gap-3">
       <span aria-hidden className="grid size-10 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-gold-tint to-card text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.5)]">
         <Icon name={icon} className="size-5" />
       </span>
-      <div className="grid min-w-0 gap-0.5">
-        <h2 id={id} className="flex flex-wrap items-center gap-2 text-[17px] font-bold">
-          {children}
-          <span className={`tabular grid min-w-6 place-items-center rounded-full px-1.5 text-xs font-bold ${hot ? "bg-red text-white" : "border border-gold-line bg-gold-tint text-gold-ink"}`}>
-            {count}
-          </span>
-        </h2>
-        <p className="text-[12.5px] text-ink-soft">{hint}</p>
-      </div>
+      <h2 id={id} className="flex min-w-0 flex-wrap items-center gap-2 text-[17px] font-bold">
+        {children}
+        <span className={`tabular grid min-w-6 place-items-center rounded-full px-1.5 text-xs font-bold ${hot ? "bg-red text-white" : "border border-gold-line bg-gold-tint text-gold-ink"}`}>
+          {count}
+        </span>
+      </h2>
     </div>
   );
 }
@@ -200,7 +164,6 @@ function Nothing() {
         <Icon name="users" className="size-7" />
       </span>
       <p className="text-[16px] font-bold">مفيش حسابات لسه</p>
-      <p className="max-w-sm text-[13px] text-ink-soft">اضغط «ضيف حساب» فوق، أو خلّي الموظف يسجّل من صفحة الدخول وفعّله من هنا.</p>
     </div>
   );
 }
@@ -254,14 +217,11 @@ function AddUser({ onCancel, onCreated }: { onCancel: () => void; onCreated: (r:
 
   return (
     <section className="liquid grid gap-4 rounded-[22px] p-5">
-      <div className="flex items-start gap-3">
+      <div className="flex items-center gap-3">
         <span aria-hidden className="grid size-10 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-gold-tint to-card text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.5)]">
           <Icon name="user-plus" className="size-5" />
         </span>
-        <div className="grid gap-0.5">
-          <h2 className="text-[17px] font-bold">حساب جديد</h2>
-          <p className="text-[12.5px] text-ink-soft">اكتب بياناته واضغط «اعمل الحساب»: هتطلعلك كلمة سر مؤقتة تدّيها له، وهو يغيّرها أول ما يدخل.</p>
-        </div>
+        <h2 className="text-[17px] font-bold">حساب جديد</h2>
       </div>
       <form onSubmit={submit} className="grid gap-4 md:grid-cols-2" noValidate>
         <Field label="الاسم اللي هيظهر" required value={form.display_name} onChange={set("display_name")} error={fieldError("display_name")} />
@@ -430,12 +390,7 @@ function UserCard({ user, onSecret }: { user: PanelUser; onSecret: (s: { name: s
             ) : null}
           </div>
         )
-      ) : (
-        <p className="flex items-start gap-1.5 border-t border-line/50 pt-3 text-[12.5px] text-ink-soft">
-          <Icon name="info" className="mt-0.5 size-3.5 shrink-0 text-gold-ink" />
-          ده حسابك انت: بياناتك وكلمة السر من «حسابي».
-        </p>
-      )}
+      ) : null}
       {change.isError ? <p className="text-sm text-bad" role="alert">{errorMessage(change.error)}</p> : null}
     </GlassCard>
   );
