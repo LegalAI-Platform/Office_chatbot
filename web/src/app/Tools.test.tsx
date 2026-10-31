@@ -90,7 +90,9 @@ describe("TASK 07c tools", () => {
       "GET /auth/me": { body: lawyer },
       "GET /reports": { body: { month: "2026-10", tasks: 4, done: 2, done_on_time: 1, late: 1, by_type: [{ key: "urgent_request", count: 2 }], by_staff: [], new_clients: 3, by_source: [{ key: "ad", count: 3 }], by_matter: [], by_client_type: [], by_booking: [], received: 0, missing: 0, refunded: 0,
         ratings: { sent: 3, answered: 2, average: 3.5, by_service: [{ key: "consultation_office", count: 1, average: 5 }, { key: "document_review", count: 1, average: 2 }],
-          low: [{ at: "2026-10-12T09:00:00Z", service: "document_review", client_name: "منى سعيد" }] } } },
+          low: [{ at: "2026-10-12T09:00:00Z", service: "document_review", client_name: "منى سعيد" }] },
+        review: [{ at: "2026-10-31T10:00:00Z", client: "ابو عماد", reason: "repeated" },
+          { at: "2026-10-30T10:00:00Z", client: null, reason: "offer_after_payment" }] } },
     });
     renderAt("/reports");
     expect(await screen.findByRole("heading", { name: "التقارير" })).toBeTruthy();
@@ -102,6 +104,13 @@ describe("TASK 07c tools", () => {
     expect(within(ratings).getByText("مقابلة في المكتب")).toBeTruthy();
     expect(within(ratings).getByText("منى سعيد")).toBeTruthy();
     expect(within(ratings).getAllByText("مراجعة عقد")).toHaveLength(2);
+    // v1.39 (TASK 16, 3.4): «محادثات محتاجة مراجعة», the alarm first
+    const review = screen.getByRole("region", { name: "محادثات محتاجة مراجعة" });
+    const rows = within(review).getAllByRole("row").slice(1);
+    expect(rows[0]!.textContent).toContain("عرض مدفوع لعميل دفع");
+    expect(rows[0]!.textContent).toContain("رقم من غير اسم");
+    expect(rows[1]!.textContent).toContain("ابو عماد");
+    expect(rows[1]!.textContent).toContain("الرد اتكرر");
   });
 
   it("will not save a text longer than its limit", async () => {

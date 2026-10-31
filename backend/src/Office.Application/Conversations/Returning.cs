@@ -26,6 +26,10 @@ public sealed record IntakeFacts(TimeSpan? SilentFor, IReadOnlyList<RequestItem>
 public interface IIntakeHistory
 {
     Task<IntakeFacts> FactsAsync(Guid personId, string waId, Guid intakeId, CancellationToken ct);
+
+    /// <summary>v1.39 (TASK 16): the client's situation before this turn (nothing known: no situation).</summary>
+    Task<SituationFacts> SituationAsync(Guid personId, string waId, DateTimeOffset now, CancellationToken ct) =>
+        Task.FromResult(SituationFacts.Empty);
 }
 
 /// <summary>B-01.7's rules. Pure: the flow and the tests use the same ones.</summary>

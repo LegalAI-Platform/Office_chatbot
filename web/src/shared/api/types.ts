@@ -236,6 +236,15 @@ export interface MonthReport {
   refunded: number;
   /** v1.31 (B-26) «تقييمات العملاء»: the ratings sent in the month and their answers. */
   ratings: RatingReport;
+  /** v1.39 (TASK 16) «محادثات محتاجة مراجعة»: the month's conversations the system flagged. */
+  review?: ReviewRow[];
+}
+
+/** v1.39: why a conversation is flagged (keys and reasons only, never the messages). */
+export interface ReviewRow {
+  at: string;
+  client: string | null;
+  reason: "repeated" | "unclear_twice" | "asked_status" | "offer_after_payment" | "left_after_price";
 }
 
 export interface RatingReport {

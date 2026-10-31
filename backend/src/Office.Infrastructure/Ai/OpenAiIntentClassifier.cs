@@ -20,7 +20,7 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
 {
     public const string HttpClientName = "openai";
     /// <summary>The prompt in use: Ai/prompts/{PromptVersion}.md. Older versions stay in the folder as history.</summary>
-    public const string PromptVersion = "classify-v12";
+    public const string PromptVersion = "classify-v13";
     public const string StubEnabledKey = "ai.stub_enabled";
     public const string StubBaseUrlKey = "ai.stub_base_url";
 
@@ -128,7 +128,8 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
                 StringOrNull(o["sender_role"]),
                 StringOrNull(o["info_topic"]),
                 StringOrNull(o["scope"]),
-                StringOrNull(o["courtesy"])), null);
+                StringOrNull(o["courtesy"]),
+                StringOrNull(o["name_gender"])), null);
         }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException)
         {
@@ -184,7 +185,7 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
             ["type"] = "object",
             ["additionalProperties"] = false,
             ["required"] = new JsonArray("subject", "scope", "intent", "service", "consultation_mode", "full_name", "confidence",
-                "matter_type", "matter_subtype", "sender_role", "info_topic", "courtesy"),
+                "matter_type", "matter_subtype", "sender_role", "info_topic", "courtesy", "name_gender"),
             // v1.24: subject and scope come first, so the model names what the turn is about before it picks an
             // intent. The subject is a few words for that only: it is never read, kept or logged.
             ["properties"] = new JsonObject
@@ -201,6 +202,8 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
                 ["info_topic"] = new JsonObject { ["type"] = new JsonArray("string", "null"), ["enum"] = Codes<InfoTopic>(true) },
                 // v1.32: the greeting's kind, for the approved answer when the code's list does not know the words
                 ["courtesy"] = new JsonObject { ["type"] = "string", ["enum"] = Codes<CourtesyKind>(false) },
+                // v1.39 (TASK 16): the gender of the name he typed, for «يا أستاذ» / «يا أستاذة» (unknown: «حضرتك»)
+                ["name_gender"] = new JsonObject { ["type"] = "string", ["enum"] = Codes<NameGender>(false) },
                 ["confidence"] = new JsonObject { ["type"] = "number" },
             },
         };

@@ -360,6 +360,70 @@ public sealed class UrgentApiTests(TestDatabase db) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task V138_the_urgent_task_comes_with_the_payment_and_an_urgent_call_never_gets_the_review_task()
+    {
+        await Turn(new JsonObject { ["type"] = "text", ["text"] = "السلام عليكم" });
+        await Press("sv:urgent");
+        await Turn(new JsonObject { ["type"] = "text", ["text"] = "محمد أحمد علي حسن" });
+        Assert.Equal(0L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.staff_tasks WHERE type = 'urgent_request'")); // pressed, not paid
+
+        _clock.Advance(TimeSpan.FromMinutes(5));
+        await Receipt();
+        Assert.Equal(1L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.staff_tasks WHERE type = 'urgent_request'")); // paid
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<BookingNotices>().RunAsync(Ct); // the call starts within the review hour
+        }
+
+        Assert.Equal(0L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.staff_tasks WHERE type = 'payment_review_due'"));
+    }
+
+    [Fact]
+    public async Task V139_abu_emad_replayed_gets_his_situation_the_services_and_never_a_paid_offer_and_the_office_sees_it()
+    {
+        await Paid(); // «محمد أحمد علي حسن» (the AI reads a man's name), paid at 12:05, the call at 12:05
+        Assert.Equal("male", await db.ScalarAsync<string>($"SELECT name_gender FROM hazem.persons WHERE wa_id = '{Client}'"));
+        var offersBefore = await db.ScalarAsync<long>(
+            "SELECT count(*) FROM hazem.turn_replies WHERE text_key IN ('consultation_offer', 'case_offer', 'urgent_price', 'urgent_pay', 'booking_hold')");
+
+        static string Last(JsonArray a) => (string)a[^1]!["text"]!;
+        Assert.Equal("أكيد يا أستاذ محمد 👋 حضرتك عندك استشارة عاجلة مدفوعة، والمستشار هيكلم حضرتك خلال دقايق. لو حابب تكتب الموضوع باختصار، اكتبه هنا ويوصل للمستشار.",
+            Last(await Turn(new JsonObject { ["type"] = "text", ["text"] = "السلام عليكم" })));
+        Assert.StartsWith("أكيد يا أستاذ محمد 👋", Last(await Turn(new JsonObject { ["type"] = "text", ["text"] = "انت فاكرني؟" })));
+        var services = await Turn(new JsonObject { ["type"] = "text", ["text"] = "خدمات" });
+        Assert.Equal("list", (string)services[^1]!["interactive"]!["kind"]!);
+        Assert.Equal("معلش لو مش واضح، تحب تشوف خدمات المكتب، ولا تكلم حد من المكتب؟",
+            Last(await Turn(new JsonObject { ["type"] = "text", ["text"] = "اي خدمات المكتب" })));
+        Assert.Equal("تحت أمرك، احكيلي الموضوع باختصار.", Last(await Turn(new JsonObject { ["type"] = "text", ["text"] = "عاوز احكي مشكلتي" })));
+        Assert.Equal("تمام يا أستاذ محمد، وصلت ✅ وهتبقى قدام المستشار.",
+            Last(await Turn(new JsonObject { ["type"] = "text", ["text"] = "جاري بني على أرضي" })));
+        Assert.Equal(offersBefore, await db.ScalarAsync<long>(
+            "SELECT count(*) FROM hazem.turn_replies WHERE text_key IN ('consultation_offer', 'case_offer', 'urgent_price', 'urgent_pay', 'booking_hold')"));
+        Assert.Equal(1L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.staff_tasks WHERE type = 'existing_client_message'")); // his topic
+
+        // 3.4: «محادثات محتاجة مراجعة» flags the repeat and «فاكرني؟», and no paid offer after the payment.
+        var (year, month) = (await db.ScalarAsync<int>("SELECT extract(year FROM now() AT TIME ZONE 'Africa/Cairo')::int"),
+            await db.ScalarAsync<int>("SELECT extract(month FROM now() AT TIME ZONE 'Africa/Cairo')::int"));
+        using var scope = _factory.Services.CreateScope();
+        var report = await scope.ServiceProvider.GetRequiredService<Office.Infrastructure.Panel.PanelTools>().ReportAsync(year, month, Ct);
+        var reasons = report.Review.Select(r => r.Reason).ToList();
+        Assert.Contains("repeated", reasons);
+        Assert.Contains("asked_status", reasons);
+        Assert.DoesNotContain("offer_after_payment", reasons);
+        Assert.All(report.Review, r => Assert.Equal("محمد أحمد علي حسن", r.Client));
+
+        // The alarm: a paid offer to a client who had paid (seeded: it cannot happen through Hazem any more).
+        var turn = await db.ScalarAsync<string>($"SELECT turn_id FROM hazem.turns WHERE wa_id = '{Client}' ORDER BY created_at DESC LIMIT 1");
+        await db.ExecAsync($"""
+            INSERT INTO hazem.turn_replies (idempotency_key, turn_id, text_key, text_version)
+            SELECT '{turn}:seeded', '{turn}', key, version FROM hazem.approved_texts WHERE key = 'consultation_offer' AND active
+            """);
+        report = await scope.ServiceProvider.GetRequiredService<Office.Infrastructure.Panel.PanelTools>().ReportAsync(year, month, Ct);
+        Assert.Contains("offer_after_payment", report.Review.Select(r => r.Reason));
+    }
+
+    [Fact]
     public async Task V135_a_number_whose_urgent_call_was_alerted_can_be_forgotten()
     {
         await Paid();

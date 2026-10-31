@@ -158,7 +158,7 @@ public sealed partial class BookingFlowTests
         UrgentOn();
         var row = await UrgentPressed();
         Assert.Equal([TextKeys.UrgentPrice, TextKeys.AskNameBooking], Keys(row)); // v1.35: the name first, nothing held yet
-        Assert.Contains(PendingTask.UrgentRequest, TaskKinds(row));
+        Assert.DoesNotContain(PendingTask.UrgentRequest, TaskKinds(row)); // v1.38: the office's urgent task waits for the payment
         Assert.Empty(_booking.Appointments);
         _script["محمد أحمد"] = new("provide_name", null, "unknown", "محمد أحمد", 0.95);
         var d = await Say("محمد أحمد");
@@ -213,6 +213,7 @@ public sealed partial class BookingFlowTests
         _now = Now.AddMinutes(7).AddSeconds(30);
         var d = await Receipt();
         Assert.Equal([TextKeys.UrgentNow], Keys(d));
+        Assert.Contains(PendingTask.UrgentRequest, TaskKinds(d)); // v1.38: the office's urgent task once he has paid
         Assert.Equal((AppointmentInfo.Confirmed, Now.AddMinutes(8)), (TheCall.State, TheCall.Start)); // now, rounded up to the minute
         Assert.Equal(PaymentInfo.ProofReceived, _booking.Payments[TheCall.Id].State); // the review stays the panel's
     }

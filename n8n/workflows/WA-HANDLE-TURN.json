@@ -31,6 +31,150 @@
     },
     {
       "parameters": {
+        "content": "### v1.39 (TASK 16): blue ticks and «بيكتب…»\nBefore the API is asked: the turn's last message marked as read, with Meta's typing indicator (it stops when the reply goes, or after 25 s). Same rules as a send: never in dry run or through WAHA, and only the test numbers while sends are restricted (0006). A failure here never stops the turn.",
+        "height": 200,
+        "width": 520
+      },
+      "id": "0b7c39e1-16a4-5c2e-9d0e-3f1e8a6b2c41",
+      "name": "Note: read and typing",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        800,
+        -260
+      ]
+    },
+    {
+      "id": "5f2d8a10-7c3b-5e4a-a1d2-6b9e0c4f7a12",
+      "name": "Read and typing?",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        480,
+        60
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT (COALESCE((SELECT value FROM app.settings WHERE key = 'whatsapp.dry_run'), 'false') <> 'true' AND COALESCE((SELECT value FROM app.settings WHERE key = 'whatsapp.provider'), 'meta') = 'meta' AND (COALESCE((SELECT value FROM app.settings WHERE key = 'whatsapp.send_restricted'), 'true') = 'false' OR app.wa_is_test_recipient($1)) AND $2 <> '') AS ok, $2 AS wamid",
+        "options": {
+          "queryReplacement": "={{ [ $json.wa_id, (() => { const m = ($json.messages || []).filter((x) => x && x.wamid); return m.length ? String(m[m.length - 1].wamid) : ''; })() ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "CRED:office-postgres-app",
+          "name": "office-postgres-app"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "3c1e9b7a-2d4f-5a6b-8c0d-1e2f3a4b5c6d",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "8a4c2e61-9b3d-5f7a-b0c1-2d3e4f5a6b7c",
+      "name": "Mark it read?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        720,
+        60
+      ]
+    },
+    {
+      "id": "c7e1f3a2-4b5d-5c6e-9f0a-1b2c3d4e5f60",
+      "name": "Read config",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.4,
+      "position": [
+        960,
+        40
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "WaCfgGet00000001",
+          "mode": "id",
+          "cachedResultName": "CFG-GET"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/{{ $('Read config').first().json.cfg['whatsapp.graph_api_version'] }}/{{ $('Read config').first().json.cfg['whatsapp.phone_number_id'] }}/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 5000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ messaging_product: 'whatsapp', status: 'read', message_id: $('Read and typing?').first().json.wamid, typing_indicator: { type: 'text' } }) }}"
+      },
+      "id": "e2d4f6a8-1c3b-5d7e-9f0a-b1c2d3e4f5a6",
+      "name": "Read and typing",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1200,
+        40
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CRED:meta-whatsapp-token",
+          "name": "meta-whatsapp-token"
+        }
+      },
+      "retryOnFail": false,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
         "method": "POST",
         "url": "http://api:8080/api/hazem/turns",
         "authentication": "genericCredentialType",
@@ -368,7 +512,45 @@
       "main": [
         [
           {
+            "node": "Read and typing?",
+            "type": "main",
+            "index": 0
+          },
+          {
             "node": "Ask the API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read and typing?": {
+      "main": [
+        [
+          {
+            "node": "Mark it read?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark it read?": {
+      "main": [
+        [
+          {
+            "node": "Read config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read config": {
+      "main": [
+        [
+          {
+            "node": "Read and typing",
             "type": "main",
             "index": 0
           }

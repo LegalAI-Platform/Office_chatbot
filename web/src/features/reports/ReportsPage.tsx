@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { queryOptions, useQuery, type QueryClient } from "@tanstack/react-query";
 import { api, errorMessage } from "../../shared/api/client";
-import type { MonthReport, RatingReport, ReportRow } from "../../shared/api/types";
+import type { MonthReport, RatingReport, ReportRow, ReviewRow } from "../../shared/api/types";
 import { APPOINTMENT_STATES, BOOKING_SERVICES, label, SERVICE_KINDS, SOURCES, TASK_TYPES, CLIENT_TYPES, matterLabel } from "../../shared/lib/labels";
 import { Card, ErrorState, Loading } from "../../shared/ui/ui";
 
@@ -75,6 +75,7 @@ export function ReportsPage() {
           </div>
           <p className="text-xs text-ink-soft">«في وقتها» = خلصت قبل الميعاد المطلوب. الفلوس = اللي المكتب علّم إنه وصل فعلًا لحجوزات الشهر.</p>
           {r.ratings ? <Ratings ratings={r.ratings} /> : null}
+          <Review rows={r.review ?? []} />
         </>
       ) : null}
     </div>
@@ -127,6 +128,48 @@ function Ratings({ ratings }: { ratings: RatingReport }) {
         </Card>
       </div>
       <p className="text-xs text-ink-soft">التقييمات اللي اتبعتت الشهر ده. «ليس الآن» مش بيتحسب في المتوسط. سبب التقييم الضعيف في مهمته («كلام العميل»).</p>
+    </section>
+  );
+}
+
+/** v1.39 (TASK 16, 3.4): why the system flagged a conversation. */
+const REVIEW_REASONS: Record<ReviewRow["reason"], string> = {
+  offer_after_payment: "عرض مدفوع لعميل دفع (المفروض ما يحصلش)",
+  repeated: "الرد اتكرر",
+  unclear_twice: "مش فاهم مرتين ورا بعض",
+  asked_status: "العميل سأل «فاكرني؟» أو عن ميعاده",
+  left_after_price: "مشي بعد السعر",
+};
+
+/**
+ * v1.39 (TASK 16, 3.4) «محادثات محتاجة مراجعة»: the conversations the system flagged this month, the alarm first. Each one
+ * the office finds wrong becomes a test (the owner's rule).
+ */
+function Review({ rows }: { rows: ReviewRow[] }) {
+  const when = (at: string) =>
+    new Intl.DateTimeFormat("ar-EG", { timeZone: "Africa/Cairo", day: "numeric", month: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(at));
+  const alarm = (x: ReviewRow) => (x.reason === "offer_after_payment" ? 1 : 0);
+  const sorted = [...rows].sort((a, b) => alarm(b) - alarm(a));
+  return (
+    <section className="grid gap-3" aria-labelledby="review-title">
+      <h2 id="review-title" className="text-xl">محادثات محتاجة مراجعة</h2>
+      <Card>
+        {sorted.length === 0 ? <p className="text-sm text-ink-soft">مفيش محادثات محتاجة مراجعة الشهر ده.</p> : (
+          <table className="w-full text-sm">
+            <thead><tr className="text-ink-soft"><th className="py-1.5 text-start">إمتى</th><th className="text-start">العميل</th><th className="text-start">السبب</th></tr></thead>
+            <tbody className="divide-y divide-line">
+              {sorted.map((x, i) => (
+                <tr key={`${x.at}-${i}`}>
+                  <td className="py-1.5 tabular">{when(x.at)}</td>
+                  <td>{x.client ?? "رقم من غير اسم"}</td>
+                  <td className={x.reason === "offer_after_payment" ? "font-semibold text-bad" : undefined}>{REVIEW_REASONS[x.reason] ?? x.reason}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Card>
+      <p className="text-xs text-ink-soft">النظام بيعلّم عليها لوحده. افتح المحادثة من «المحادثات» وشوف حازم رد إزاي.</p>
     </section>
   );
 }

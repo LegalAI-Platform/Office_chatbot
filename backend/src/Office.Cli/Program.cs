@@ -272,7 +272,7 @@ async Task<JsonNode> ClassifyEval()
     var confusion = new SortedDictionary<string, SortedDictionary<string, int>>(StringComparer.Ordinal);
     var failures = new SortedDictionary<string, int>(StringComparer.Ordinal);
     int total = 0, correct = 0, serviceChecked = 0, serviceCorrect = 0, matterChecked = 0, matterCorrect = 0, roleChecked = 0, roleCorrect = 0,
-        topicChecked = 0, topicCorrect = 0, scopeChecked = 0, scopeCorrect = 0;
+        topicChecked = 0, topicCorrect = 0, scopeChecked = 0, scopeCorrect = 0, genderChecked = 0, genderCorrect = 0;
     var otherMistakes = new JsonArray();
     long latency = 0, inputTokens = 0, outputTokens = 0;
     var mistakes = new JsonArray();
@@ -370,6 +370,21 @@ async Task<JsonNode> ClassifyEval()
             }
         }
 
+        // v1.39 (classify-v13): the gender of the name, on the samples that carry it
+        if ((string?)sample["name_gender"] is { } gender)
+        {
+            genderChecked++;
+            var gotGender = Classification.Code(c.Gender);
+            if (gotGender == gender)
+            {
+                genderCorrect++;
+            }
+            else
+            {
+                otherMistakes.Add(new JsonObject { ["id"] = sample["id"]?.DeepClone(), ["field"] = "name_gender", ["expected"] = gender, ["got"] = gotGender });
+            }
+        }
+
         if ((string?)sample["service"] is { } service)
         {
             serviceChecked++;
@@ -412,6 +427,7 @@ async Task<JsonNode> ClassifyEval()
         ["sender_role_accuracy"] = roleChecked == 0 ? null : Math.Round((double)roleCorrect / roleChecked, 3),
         ["info_topic_accuracy"] = topicChecked == 0 ? null : Math.Round((double)topicCorrect / topicChecked, 3),
         ["scope_accuracy"] = scopeChecked == 0 ? null : Math.Round((double)scopeCorrect / scopeChecked, 3),
+        ["name_gender_accuracy"] = genderChecked == 0 ? null : Math.Round((double)genderCorrect / genderChecked, 3),
         ["other_mistakes"] = otherMistakes,
     };
     if (double.TryParse(Option("--input-price"), System.Globalization.CultureInfo.InvariantCulture, out var inPrice)

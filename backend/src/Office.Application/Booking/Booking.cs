@@ -603,6 +603,9 @@ public sealed record ServiceRow(string Code, Classification? AsClassification)
     /// <summary>v1.32 (B-01.1): the welcome's «خدمات المكتب» button: the services list itself.</summary>
     public const string Menu = "menu";
 
+    /// <summary>v1.39 (TASK 16): «أكلم حد من المكتب» under repeat_choice: as «عايز أكلم حد».</summary>
+    public const string Human = "human";
+
     public bool IsTell => Code == Tell;
 
     public bool IsMenu => Code == Menu;
@@ -629,6 +632,7 @@ public sealed record ServiceRow(string Code, Classification? AsClassification)
             Notice => As(Intent.ServiceByName, Service.FormalNotice),
             Opinion => As(Intent.ServiceByName, Service.WrittenOpinion),
             Urf => As(Intent.ServiceByName, Service.UrfUnclear),
+            Human => As(Intent.HumanRequest, null),
             Tell => null,
             _ => null,
         };

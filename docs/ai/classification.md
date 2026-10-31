@@ -24,6 +24,13 @@ fields. It never writes a word the client sees: every reply is an approved text
 | `describe_matter` (05a) | tells the problem without asking | the offer (+ the B-25 question when the topic is still unknown); after that question: «تمام، وصلت ✅» |
 | `abusive` (05a) | insults, threats, spam | once: `abuse_warning` (proposed) + task `complaint`; then muted for good |
 | `office_info` (06) | a question about the office itself, with `info_topic` | its approved text filled from the panel (address, hours, payment, prices…), then the offer; a detail not written yet → the offer and a task `office_info_missing` |
+| `show_services` (v1.39) | «خدمات»، «عندكم ايه؟» | the services list, as the welcome's button |
+| `tell_problem` (v1.39) | «عاوز احكي مشكلتي» without the problem | «تحت أمرك، احكيلي الموضوع باختصار.», as the «أحكي مشكلتي» button |
+| `my_status` (v1.39) | «فاكرني؟»، «ميعادي امتى؟»، «دفعت ولا لأ؟» | his situation (B-28); nothing open → «أهلًا بحضرتك تاني يا …» with his name, else «أنا حازم…» |
+
+v1.39: every answer above depends on the client's situation too (B-28): a general message from a client with something
+open gets his situation first, and the code never sends a paid offer to a client with a consultation held or paid.
+`name_gender` (`male` / `female` / `unknown`): the gender of the name he typed, for «يا أستاذ» / «يا أستاذة».
 
 `service`: `consultation_phone_video`, `consultation_office`, `consultation_urgent`,
 `document_review`, `contract_drafting`, `formal_notice`, `urf_marriage`, `urf_divorce`,
@@ -35,9 +42,9 @@ fields. It never writes a word the client sees: every reply is an approved text
 
 - OpenAI Chat Completions, **Structured Outputs** (`response_format: json_schema`, `strict: true`,
   `additionalProperties: false`, every field required, enums = the lists above), `temperature: 0`.
-- Prompt: `backend/src/Office.Infrastructure/Ai/prompts/classify-v12.md` (v1..v11 kept as history), embedded in the build.
-  Its version (`classify-v12`) is saved with every classification. **Change the prompt = a new
-  file (`classify-v13.md` next) and a new `PromptVersion`**, then run `classify-eval` again.
+- Prompt: `backend/src/Office.Infrastructure/Ai/prompts/classify-v13.md` (v1..v12 kept as history), embedded in the build.
+  Its version (`classify-v13`) is saved with every classification. **Change the prompt = a new
+  file (`classify-v14.md` next) and a new `PromptVersion`**, then run `classify-eval` again.
 - Model: `OPENAI_MODEL`. Empty = `gpt-4.1-mini`, **a starting point only**. The final model is
   chosen by the owner after `classify-eval` (T-08).
 - Key: `HAZEM_OPENAI_API_KEY` in `.env` — the .NET key, separate from n8n's voice key. It may be
@@ -304,3 +311,23 @@ is used only when the list found none («صيباح الخير»، «مساء ا
 The field never changes the intent; a fallback classification (failed call, low confidence) gives no greeting. v12 is v11
 with that section and «المستشار» next to «الأستاذ» for the office's lawyer (B-27). `classify-eval` was not run again for
 v12: the intent rules did not change.
+
+### v1.39: the client's situation (`classify-v13`, Claude Opus 5.5, 2026-11-01)
+
+Three new intents (`show_services`, `tell_problem`, `my_status`; «انت فاكرني؟» moved from `office_info/assistant` to
+`my_status`, set sample 233 relabelled by that decision) and a new field `name_gender`. 21 new samples written before any
+v13 run (set 252–265, hold-out 1082–1088). The first run showed `my_status` taking a case follow-up (set 96) and the Urfi
+price questions going to `service_by_name` (set 67, 75): the prompt says both plainly now (measured below, second run).
+Timeouts in a row are the network (Anthropic I/O), not the prompt: the numbers below leave them out.
+
+| Prompt | Set | Accuracy (no timeouts) | New intents | name_gender | |
+|---|---|---|---|---|---|
+| **`classify-v13`** (in use) | set 265 (8 timeouts) | **99.2%** (255/257; v11: 98.0%) | 13/13 | 2/2 | |
+| **`classify-v13`** | hold-out 88 | **95.5%** (84/88; on v11's 81: 95.1%, v11 97.5%) | 7/7 | | |
+| **`classify-v13`** | scope 64 | **100%** | | | |
+
+The set's misses: 168 «عندي مشكلة كبيرة ومش عارف ابدأ منين» → `tell_problem` (its label is older than the intent; the
+answer «احكيلي الموضوع» fits it), 192 «ازاي احجز؟ عندي مشكلة في عقد ايجار» → `office_info/how_to_book` (its text, then the
+offer). The hold-out's two new misses are the new intents taking messages that fit them: 1056 «انا زعلان عشان محدش رد
+عليا امبارح» → `my_status` (his situation, or the welcome) and 1059 «عندي موضوع حساس شوية» → `tell_problem`; their labels
+stay as written (never tune on the hold-out set). 1023 and 1035 are v11's own misses.
