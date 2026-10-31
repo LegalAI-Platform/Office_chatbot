@@ -7,6 +7,8 @@
   <meta name="description" content="نظام متكامل لإدارة المواعيد، العملاء، الطلبات، المهام والمستندات، مصمم خصيصًا لمكتب سعد فتحي سعد للمحاماة والاستشارات القانونية.">
   <meta name="robots" content="noindex, nofollow">
   <meta name="theme-color" content="#f7f2ea">
+  <!-- light or dark before the first paint (theme.js), so the page never opens in the wrong colours -->
+  <script src="theme.js"></script>
   <link rel="icon" type="image/png" href="img/logo.png">
   <link rel="preload" href="fonts/cairo-arabic-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/cairo-arabic-800-normal.woff2" as="font" type="font/woff2" crossorigin>
@@ -34,6 +36,10 @@
         <a href="#contact">الأسئلة الشائعة</a>
         <a href="#contact">اتصل بنا</a>
       </nav>
+      <button type="button" class="theme" aria-label="الوضع الليلي" aria-pressed="false">
+        <svg viewBox="0 0 24 24" class="moon" aria-hidden="true"><path d="M20 14.6A8.2 8.2 0 0 1 9.4 4a8.2 8.2 0 1 0 10.6 10.6z"/></svg>
+        <svg viewBox="0 0 24 24" class="sun" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.6v2.2M12 19.2v2.2M2.6 12h2.2M19.2 12h2.2M5.4 5.4l1.5 1.5M17.1 17.1l1.5 1.5M5.4 18.6l1.5-1.5M17.1 6.9l1.5-1.5"/></svg>
+      </button>
       <a class="btn btn-dark" href="/login">تسجيل الدخول <i aria-hidden="true">←</i></a>
       <details class="menu">
         <summary aria-label="القايمة"><span></span><span></span><span></span></summary>
