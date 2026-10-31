@@ -5,6 +5,7 @@ import { errorMessage } from "../../shared/api/client";
 import type { ClientWord, TaskDetail } from "../../shared/api/types";
 import { CLIENT_TYPES, label, matterLabel, MEDIA_TYPES, SOURCES, TASK_STATES, TASK_TYPES } from "../../shared/lib/labels";
 import { cairoWhen } from "../../shared/lib/time";
+import { phoneOf } from "../../shared/ui/caseCard";
 import { Icon } from "../../shared/ui/Icon";
 import { Button, Card, Chip, ErrorState, Loading } from "../../shared/ui/ui";
 import { useAssign, useStaff, useTask, useTaskAction, type TaskAction } from "./api";
@@ -64,7 +65,7 @@ function Detail({ task }: { task: TaskDetail }) {
             <h2 className="text-lg">العميل</h2>
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
               <dt className="text-ink-soft">الرقم</dt>
-              <dd className="tabular font-medium" dir="ltr" style={{ textAlign: "right" }}>+{task.client.phone}</dd>
+              <dd className="tabular font-medium" dir="ltr" style={{ textAlign: "right" }}>{phoneOf(task.client.phone) ?? "من غير رقم"}</dd>
               <dt className="text-ink-soft">النوع</dt>
               <dd className="font-medium">{label(CLIENT_TYPES, task.client.client_type) || "—"}</dd>
               <dt className="text-ink-soft">جه منين</dt>

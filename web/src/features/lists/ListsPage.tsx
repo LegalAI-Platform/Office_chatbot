@@ -5,6 +5,7 @@ import { can, useMe } from "../../shared/api/session";
 import type { ListEntry, ListKind, MutedConversation, StaffRef } from "../../shared/api/types";
 import { label, LIST_KINDS } from "../../shared/lib/labels";
 import { cairoWhen } from "../../shared/lib/time";
+import { phoneOf } from "../../shared/ui/caseCard";
 import { Icon } from "../../shared/ui/Icon";
 import { Button, Card, Empty, ErrorState, Field, Loading } from "../../shared/ui/ui";
 
@@ -189,7 +190,7 @@ function Muted() {
               <li key={m.wa_id} className="flex flex-wrap items-center gap-3 py-2.5">
                 <span className="grid min-w-0 flex-1">
                   <span className="font-semibold">{m.name ?? "من غير اسم"}</span>
-                  <span className="tabular text-xs text-ink-soft" dir="ltr" style={{ textAlign: "right" }}>+{m.wa_id}</span>
+                  <span className="tabular text-xs text-ink-soft" dir="ltr" style={{ textAlign: "right" }}>{phoneOf(m.wa_id) ?? "من غير رقم"}</span>
                 </span>
                 <span className="tabular text-xs text-ink-soft">من {cairoWhen(m.since)}</span>
                 <Button busy={unmute.isPending && unmute.variables === m.wa_id} onClick={() => unmute.mutate(m.wa_id)}>رجّعها لحازم</Button>

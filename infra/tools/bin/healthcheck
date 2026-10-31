@@ -415,6 +415,8 @@ check "migration 0037 (the name on the urgent path, two texts, forgetting after 
   sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0037'" "1"
 check "migration 0038 (the WhatsApp name for the office, v1.36) is applied" \
   sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0038'" "1"
+check "migration 0039 (clients with a WhatsApp username, v1.37 TASK 15) is applied" \
+  sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0039'" "1"
 check "migration 0033 (the returning client and the service rating) is applied" \
   sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0033'" "1"
 check "migration 0025 (forget one test number) is applied" \

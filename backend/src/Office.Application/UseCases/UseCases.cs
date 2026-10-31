@@ -17,7 +17,8 @@ public sealed class HandleTurn(ITurnStore turns, ISettingsReader settings, IResp
 
         var current = await settings.GetAsync(ct);
         var decision = await responders.Select(current).DecideAsync(turn, current, ct);
-        var stored = new StoredTurn(turn.TurnId, turn.WaId, turn.ContactName, turn.Messages, decision.Responder, decision.Actions);
+        var stored = new StoredTurn(turn.TurnId, turn.WaId, turn.ContactName, turn.Messages, decision.Responder, decision.Actions,
+            turn.ContactUsername);
         if (await turns.TryAddAsync(stored, decision.Effects, ct))
         {
             return new TurnResult(turn.TurnId, TurnStatus.Processed, decision.Actions, decision.Notes);

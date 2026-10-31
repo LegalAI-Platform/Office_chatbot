@@ -10,7 +10,8 @@ namespace Office.Api.Contracts;
 // Contract: docs/hazem-internal-api.md. JSON is snake_case (turn_id, wa_id, ...).
 
 /// <summary>What the client said that needs one answer, as sent by n8n.</summary>
-public sealed record TurnRequest(string? TurnId, string? WaId, string? ContactName, IReadOnlyList<TurnMessage>? Messages);
+public sealed record TurnRequest(string? TurnId, string? WaId, string? ContactName, IReadOnlyList<TurnMessage>? Messages,
+    string? ContactUsername = null); // v1.37: the WhatsApp username, when the client has one
 
 public sealed record TurnMessage(
     string? Wamid,
@@ -114,7 +115,7 @@ public static partial class TurnRules
         "office-media", "office-sensitive",
     };
 
-    [GeneratedRegex("^[0-9]{8,15}$")]
+    [GeneratedRegex(@"^([0-9]{8,15}|[A-Z]{2}\.[A-Za-z0-9.]{1,140})$")] // v1.37: a phone number or a BSUID
     private static partial Regex WaIdPattern();
 
     [GeneratedRegex(@"^wa/[0-9]{4}/[0-9]{2}/[A-Za-z0-9._-]+$")]
@@ -293,7 +294,7 @@ public static partial class TurnRules
 public static class TurnMapping
 {
     public static Turn ToTurn(this TurnRequest r) =>
-        new(r.TurnId!, r.WaId!, r.ContactName, r.Messages!.Select(ToMessage).ToList());
+        new(r.TurnId!, r.WaId!, r.ContactName, r.Messages!.Select(ToMessage).ToList(), r.ContactUsername);
 
     private static IncomingMessage ToMessage(TurnMessage m) => new(
         m.Wamid!,

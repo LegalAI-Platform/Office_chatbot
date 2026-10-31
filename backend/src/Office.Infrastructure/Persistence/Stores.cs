@@ -60,6 +60,15 @@ public sealed class TurnStore(HazemDbContext db) : ITurnStore
                 """, ct);
         }
 
+        if (turn.ContactUsername is { Length: > 0 and <= 64 } username)
+        {
+            // v1.37 (TASK 15, migration 0039): his WhatsApp username («@…» in the test numbers and the testing tools).
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                UPDATE hazem.persons SET whatsapp_username = {username}
+                 WHERE wa_id = {turn.WaId} AND whatsapp_username IS DISTINCT FROM {username}
+                """, ct);
+        }
+
         await tx.CommitAsync(ct);
         return true;
     }

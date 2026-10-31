@@ -3,7 +3,10 @@ using System.Text.RegularExpressions;
 
 namespace Office.Domain.Common;
 
-/// <summary>A WhatsApp id: the client's identity for conversations and sends (B-03).</summary>
+/// <summary>
+/// A WhatsApp id: the client's identity for conversations and sends (B-03). v1.37 (TASK 15): his phone number, or, for a
+/// client whose WhatsApp has a username and hides the number, Meta's business-scoped user id (BSUID, «EG.123…»).
+/// </summary>
 public sealed partial record WaId
 {
     private WaId(string value) => Value = value;
@@ -17,11 +20,17 @@ public sealed partial record WaId
     }
 
     public static WaId From(string value) =>
-        TryCreate(value, out var w) ? w : throw new ArgumentException("wa_id must be 8-15 digits", nameof(value));
+        TryCreate(value, out var w) ? w : throw new ArgumentException("wa_id must be 8-15 digits or a BSUID", nameof(value));
+
+    /// <summary>v1.37: a phone number (not a BSUID): the lawyer can dial it.</summary>
+    public bool IsPhone => IsPhoneNumber(Value);
+
+    /// <summary>v1.37: 8–15 digits, as WhatsApp writes a number.</summary>
+    public static bool IsPhoneNumber(string? value) => value is { Length: > 0 } && char.IsAsciiDigit(value[0]);
 
     public override string ToString() => Value;
 
-    [GeneratedRegex("^[0-9]{8,15}$")]
+    [GeneratedRegex(@"^([0-9]{8,15}|[A-Z]{2}\.[A-Za-z0-9.]{1,140})$")]
     private static partial Regex Pattern();
 }
 

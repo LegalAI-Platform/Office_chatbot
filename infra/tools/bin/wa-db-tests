@@ -499,6 +499,29 @@ fi
 psql_super office -c "DELETE FROM app.wa_inbound_messages WHERE wa_id = '$W'; DELETE FROM app.wa_contact_windows WHERE wa_id = '$W';
   DELETE FROM app.wa_webhook_events WHERE phone_number_id = 'waha' AND payload::text LIKE '%TEST-W%';" >/dev/null
 
+echo "== A WhatsApp username (TASK 15, v1.37): no «from», a BSUID instead"
+U="EG.98765432109876543210"
+uname_ev() {  # uname_ev WAMID [PHONE]: a text from the username client, his number shown only when given
+  local from="" contact="\"user_id\":\"$U\",\"profile\":{\"name\":\"Uname Test\",\"username\":\"unametest\"}"
+  [[ -n "${2:-}" ]] && from="\"from\":\"$2\"," && contact="\"wa_id\":\"$2\",$contact"
+  printf '{"field":"messages","metadata":{"phone_number_id":"100000000000001"},"contacts":[{%s}],"messages":[{"id":"%s",%s"from_user_id":"%s","timestamp":"%s","type":"text","text":{"body":"hi"}}]}' \
+    "$contact" "$1" "$from" "$U" "$(date +%s)"
+}
+r="$(app -v ev="$(uname_ev wamid.TEST-U1)" <<<"SELECT app.wa_process_event(:'ev'::jsonb);")"
+assert_eq "a message without «from» is stored, never lost" "$(jq -r .messages_new <<<"$r")" "1"
+assert_eq "its key is the BSUID, pending, with the username" \
+  "$(q "SELECT wa_id||'/'||processing_status||'/'||username FROM app.wa_inbound_messages WHERE wamid='wamid.TEST-U1'")" "$U/pending/unametest"
+app -v ev="$(uname_ev wamid.TEST-U2 201000000077)" <<<"SELECT app.wa_process_event(:'ev'::jsonb);" >/dev/null
+assert_eq "the same user later showing his number stays one client (the BSUID key)" \
+  "$(q "SELECT wa_id FROM app.wa_inbound_messages WHERE wamid='wamid.TEST-U2'")" "$U"
+use_recipients "@UnameTest"
+assert_eq "a send to the BSUID is allowed by «@username» in the test list" \
+  "$(q "SELECT app.wa_outbound_prepare('wadb:u1', '$U', 'text', '{}'::jsonb, 'wa-db-tests')->>'action'")" "send"
+assert_eq "a key that is neither a number nor a BSUID is refused" \
+  "$(app -c "SELECT app.wa_outbound_prepare('wadb:u2', 'eg.x', 'text', '{}'::jsonb, 'wa-db-tests')" 2>&1 | grep -c 'digits or a BSUID')" "1"
+psql_super office -c "DELETE FROM app.wa_outbound_messages WHERE wa_id = '$U'; DELETE FROM app.wa_inbound_messages WHERE wa_id = '$U';
+  DELETE FROM app.wa_contact_windows WHERE wa_id = '$U'; DELETE FROM app.wa_contact_keys WHERE user_id = '$U';" >/dev/null
+
 cleanup
 echo
 echo "Result: $passed passed, $failed failed."

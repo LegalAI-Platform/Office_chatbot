@@ -44,6 +44,7 @@ public sealed class HazemDbContext(DbContextOptions<HazemDbContext> options) : D
             e.ToTable("persons");
             e.Property(x => x.SourceRaw).HasColumnType("jsonb");
             e.Property(x => x.WhatsAppName).HasColumnName("whatsapp_name");
+            e.Property(x => x.WhatsAppUsername).HasColumnName("whatsapp_username");
             e.Property(x => x.OfficeName).ValueGeneratedOnAddOrUpdate(); // a generated column (0038): read only
             e.HasKey(x => x.Id);
         });
@@ -245,6 +246,9 @@ public sealed class PersonRow
     /// WhatsApp name marked «(اسم الواتساب)», else null.
     /// </summary>
     public string? OfficeName { get; set; }
+
+    /// <summary>v1.37 (TASK 15): his WhatsApp username, when he has one (his key may then be a BSUID).</summary>
+    public string? WhatsAppUsername { get; set; }
 }
 
 public sealed class ConversationRow
