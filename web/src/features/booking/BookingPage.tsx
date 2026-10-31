@@ -149,6 +149,9 @@ function Calendar({ today, picked, onPick }: { today: string; picked: string; on
           })}
         </div>
       )}
+      <ul className="flex flex-wrap gap-2 border-t border-line/60 pt-3 text-xs" aria-label="مفتاح الألوان">
+        {Object.values(STATUS).map((s) => <li key={s.word}><Chip tone={s.tone}>{s.word}</Chip></li>)}
+      </ul>
     </section>
   );
 }
