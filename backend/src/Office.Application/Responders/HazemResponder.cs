@@ -589,6 +589,9 @@ public sealed class HazemResponder(
             };
         }
 
+        /// <summary>v1.35 (B-09): what waits for the name on the urgent path (not a time: the first free moment once it comes).</summary>
+        private const string UrgentPick = "urgent";
+
         /// <summary>v1.32 (B-02): a time picked before the name: the name is asked, the time waits for it (no hold yet).</summary>
         private BookingWork? AskNameFor(string pickId)
         {
@@ -603,6 +606,17 @@ public sealed class HazemResponder(
         /// </summary>
         private void AnswerNameForPick(string pickId)
         {
+            if (c is null && pickId == UrgentPick)
+            {
+                // v1.35 (B-09): a photo instead of the name on the urgent path: no second ask, the call is held without it, and
+                // the payment message follows (no receipt can be for this call yet: it had no payment details).
+                AnswerMediaProblems();
+                State.Person.ContinueWithoutFullName();
+                Intake.TakePending();
+                work = new UrgentHold();
+                return;
+            }
+
             if (c is null)
             {
                 // A photo or file instead of the name is not a refusal (B-02): answer the file and ask again without
@@ -647,6 +661,12 @@ public sealed class HazemResponder(
             }
 
             Intake.TakePending();
+            if (pickId == UrgentPick)
+            {
+                work = new UrgentHold(); // v1.35: the first free moment from now, and where to pay
+                return;
+            }
+
             var pick = BookingChoice.Parse(pickId)!;
             work = new PickTime(pick.Service!, pick.At!.Value, pick.App);
         }
@@ -1416,7 +1436,8 @@ public sealed class HazemResponder(
         /// <summary>
         /// B-09 first sentence and, by the owner's decision, the offer (never the topic question).
         /// TASK 08: the first sentence, then today's free times (B-09.2).
-        /// v1.33 (B-09): the first sentence, then the first free moment held at once and where to pay (no times, no name).
+        /// v1.33 (B-09): the first sentence, then the first free moment held at once and where to pay (no times).
+        /// v1.35 (B-09, B-02): the name first when it is not known, as for any booking; the hold and the payment follow it.
         /// </summary>
         private void Urgent()
         {
@@ -1424,8 +1445,14 @@ public sealed class HazemResponder(
             plan.Task(PendingTask.UrgentRequest);
             if (MayBook && urgentOn)
             {
-                work = new UrgentHold();
                 Check(Intake.MoveTo(IntakeState.OfferSent));
+                if (!State.Person.NameSettled)
+                {
+                    AskNameFor(UrgentPick);
+                    return;
+                }
+
+                work = new UrgentHold();
                 return;
             }
 

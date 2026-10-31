@@ -94,11 +94,15 @@ public sealed class UrgentApiTests(TestDatabase db) : IAsyncLifetime
         },
     });
 
-    /// <summary>«السلام عليكم», the urgent row, then the receipt five minutes later: the call is booked now.</summary>
+    /// <summary>
+    /// «السلام عليكم», the urgent row, the name it asks first (v1.35), then the receipt five minutes later: the call is booked now.
+    /// </summary>
     private async Task<Guid> Paid()
     {
         await Turn(new JsonObject { ["type"] = "text", ["text"] = "السلام عليكم" });
-        var urgent = await Press("sv:urgent");
+        Assert.Equal("تمام، ممكن اسم حضرتك عشان أسجّل الميعاد؟", (string)(await Press("sv:urgent"))[^1]!["text"]!);
+        Assert.Equal(0L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.appointments")); // nothing held before the name
+        var urgent = await Turn(new JsonObject { ["type"] = "text", ["text"] = "محمد أحمد علي حسن" });
         Assert.Contains("عشان المستشار يكلم حضرتك في أسرع وقت، حوّل 1,000 على InstaPay: office@instapay", (string)urgent[^1]!["text"]!);
         Assert.Equal("12:00", (await db.ScalarAsync<string>(
             "SELECT to_char(starts_at AT TIME ZONE 'Africa/Cairo', 'HH24:MI') FROM hazem.appointments WHERE state = 'pending_payment'"))!);
@@ -125,7 +129,7 @@ public sealed class UrgentApiTests(TestDatabase db) : IAsyncLifetime
     {
         Assert.Equal(("send_template", to, "urgent_alert", "ar"), ((string)t["type"]!, (string)t["wa_id"]!, (string)t["template_name"]!, (string)t["language"]!));
         var body = t["components"]![0]!["parameters"]!.AsArray().Select(p => (string)p!["text"]!).ToList();
-        Assert.Equal(["Ahmed", "01000000113", time], body); // no stored name: the WhatsApp contact name
+        Assert.Equal(["محمد أحمد علي حسن", "01000000113", time], body); // v1.35: the name told at the urgent row
         Assert.Equal($"ug:see:{call:N}", (string)t["components"]![1]!["parameters"]![0]!["payload"]!);
     }
 
@@ -135,7 +139,7 @@ public sealed class UrgentApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal(2, sent.Count);
         Assert.Equal(("send_document", to), ((string)sent[0]["type"]!, (string)sent[0]["wa_id"]!));
         Assert.Contains(key, (string)sent[0]["document"]!["link"]!, StringComparison.Ordinal);
-        Assert.Equal($"🚨 استشارة عاجلة مدفوعة: Ahmed، 01000000113. المكالمة الساعة {time}. اتأكد من التحويل في الصورة.", (string)sent[0]["text"]!);
+        Assert.Equal($"🚨 استشارة عاجلة مدفوعة: محمد أحمد علي حسن، 01000000113. المكالمة الساعة {time}. اتأكد من التحويل في الصورة.", (string)sent[0]["text"]!);
         Assert.Equal(("send_interactive", to), ((string)sent[1]["type"]!, (string)sent[1]["wa_id"]!));
         Assert.Equal([$"ug:ok:{receipt:N}", $"ug:bad:{receipt:N}"],
             sent[1]["interactive"]!["choices"]!.AsArray().Select(c => (string)c!["id"]!));
@@ -238,7 +242,7 @@ public sealed class UrgentApiTests(TestDatabase db) : IAsyncLifetime
         var sent = SentSince(before);
         Assert.Equal(2, sent.Count);
         IsAlert(sent[0], Manager, call);
-        Assert.Equal((Client, "بنوصّل للمستشار، ثواني وهيكلم حضرتك."), ((string)sent[1]["wa_id"]!, (string)sent[1]["text"]!));
+        Assert.Equal((Client, "بنتواصل مع المستشار دلوقتي، وهيكلم حضرتك."), ((string)sent[1]["wa_id"]!, (string)sent[1]["text"]!));
         Assert.Equal(1L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.staff_tasks WHERE type = 'urgent_call_unanswered'"));
         using (var scope = _factory.Services.CreateScope())
         {
@@ -294,7 +298,7 @@ public sealed class UrgentApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal(1, await Worker());
         var alert = Assert.Single(SentSince(before)); // the lawyer wrote in the last 24 hours (n8n sent it): no template
         Assert.Equal(("send_interactive", Lawyer), ((string)alert["type"]!, (string)alert["wa_id"]!));
-        Assert.Equal("🚨 استشارة عاجلة مدفوعة: Ahmed، 01000000113. المكالمة الساعة 12:05 م. اتأكد من التحويل في الصورة.", (string)alert["text"]!);
+        Assert.Equal("🚨 استشارة عاجلة مدفوعة: محمد أحمد علي حسن، 01000000113. المكالمة الساعة 12:05 م. اتأكد من التحويل في الصورة.", (string)alert["text"]!);
         var see = Assert.Single(alert["interactive"]!["choices"]!.AsArray())!;
         Assert.Equal(($"ug:see:{call:N}", "شوف التحويل"), ((string)see["id"]!, (string)see["title"]!));
 
@@ -328,6 +332,16 @@ public sealed class UrgentApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal(["send_interactive", "send_template"], sent.Select(s => (string)s["type"]!));
         IsAlert(sent[1], Lawyer, call);
         Assert.Equal(0L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.staff_tasks WHERE type = 'urgent_call_failed'"));
+    }
+
+    [Fact]
+    public async Task V135_a_number_whose_urgent_call_was_alerted_can_be_forgotten()
+    {
+        await Paid();
+        Assert.Equal(1, await Worker()); // the alert: the call now points at its receipt (0035)
+        Assert.Equal("1", await db.ScalarAsync<string>($"SELECT hazem.forget_wa_id('{Client}') -> 'deleted' ->> 'appointments'"));
+        Assert.Equal(0L, await db.ScalarAsync<long>($"SELECT count(*) FROM hazem.persons WHERE wa_id = '{Client}'"));
+        Assert.Equal(0L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.payment_receipts"));
     }
 
     [Fact]

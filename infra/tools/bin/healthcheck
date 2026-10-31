@@ -411,6 +411,8 @@ check "migration 0035 (the urgent call-back, v1.33 B-09) is applied" \
   sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0035'" "1"
 check "migration 0036 (the urgent alert's test switch, v1.34 B-09.6) is applied" \
   sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0036'" "1"
+check "migration 0037 (the name on the urgent path, two texts, forgetting after an urgent alert, v1.35) is applied" \
+  sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0037'" "1"
 check "migration 0033 (the returning client and the service rating) is applied" \
   sql_equals office "SELECT count(*) FROM public.schema_migrations WHERE version = '0033'" "1"
 check "migration 0025 (forget one test number) is applied" \
