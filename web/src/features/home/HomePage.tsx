@@ -414,8 +414,22 @@ function PriorityPanel({ items, pending, now }: { items?: DashboardTask[] | unde
 
 // ---------- the next appointments ----------
 
-/** The next four open appointments after today (two weeks ahead), nearest first. */
+// the date tile of a row: the day's number over its name, in Cairo
+const dayNum = new Intl.DateTimeFormat("en-US", { timeZone: "Africa/Cairo", day: "numeric" });
+const dayName = new Intl.DateTimeFormat("ar-EG", { timeZone: "Africa/Cairo", weekday: "long" });
+// each kind's own glass tint: the tile, its icon and the thin line at the row's start
+const TINT: Partial<Record<IconName, { tile: string; ink: string; bar: string }>> = {
+  phone: { tile: "from-gold/30 to-gold-tint", ink: "text-gold-ink", bar: "bg-gold" },
+  video: { tile: "from-blue/25 to-blue-bg", ink: "text-blue-ink", bar: "bg-blue" },
+  office: { tile: "from-orange/25 to-orange-bg", ink: "text-orange-ink", bar: "bg-orange" },
+};
+
+/**
+ * The next four open appointments after today (two weeks ahead), nearest first, as «liquid glass» (the owner: modern,
+ * clearly worked on): each one a small glass card with its date tile; the list scrolls inside the row with a thin gold bar.
+ */
 function UpcomingPanel({ now }: { now: Date }) {
+  const id = useId();
   const from = cairoDate(new Date(now.getTime() + 86_400_000));
   const to = cairoDate(new Date(now.getTime() + 14 * 86_400_000));
   const next = useQuery({
@@ -424,30 +438,61 @@ function UpcomingPanel({ now }: { now: Date }) {
   });
   const items = next.data?.filter(isOpen).sort(byStart).slice(0, 4);
   return (
-    <Panel title="أقرب المواعيد القادمة" action={<SeeAll to="/appointments" />} className="min-h-0 overflow-hidden" flush>
+    <section aria-labelledby={id} className="liquid relative isolate flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[18px]">
+      {/* the glass's warm light and its lit top edge */}
+      <span aria-hidden className="pointer-events-none absolute -top-16 -end-10 -z-10 size-48 rounded-full bg-gold/25 blur-3xl" />
+      <span aria-hidden className="pointer-events-none absolute -bottom-20 start-10 -z-10 size-40 rounded-full bg-blue/10 blur-3xl" />
+      <span aria-hidden className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-l from-transparent via-gold/70 to-transparent" />
+      <header className="flex items-center justify-between gap-2 px-4 pt-3.5 pb-2.5">
+        <span className="flex min-w-0 items-center gap-2.5">
+          <span aria-hidden className="grid size-8 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-gold-tint to-card text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.5)]">
+            <Icon name="calendar" className="size-[18px]" />
+          </span>
+          <h2 id={id} className="min-w-0 truncate text-[16px] font-bold 2xl:text-[19px]">أقرب المواعيد القادمة</h2>
+          {items?.length ? (
+            <span className="tabular shrink-0 rounded-full border border-gold-line bg-gold-tint px-2 py-0.5 text-[11px] font-bold text-gold-ink">{items.length}</span>
+          ) : null}
+        </span>
+        <SeeAll to="/appointments" />
+      </header>
       {next.isPending ? <Rows n={4} /> : next.isError ? (
         <Quiet icon="top_calendar" title="المواعيد الجاية مش متاحة دلوقتي">جرّب تاني بعد شوية.</Quiet>
       ) : !items?.length ? (
         <Quiet icon="top_calendar" title="مفيش مواعيد جاية">أقرب الاستشارات والمقابلات هتظهر هنا بالترتيب.</Quiet>
       ) : (
-        <ul className="grid min-h-0 grid-cols-[minmax(0,1fr)] content-start divide-y divide-line overflow-y-auto border-t border-line" aria-label="أقرب المواعيد">
+        <ul className="soft-scroll grid min-h-0 grid-cols-[minmax(0,1fr)] content-start gap-2 overflow-y-auto px-3 pb-3" aria-label="أقرب المواعيد">
           {items.map((a) => {
             const k = kindOf(a);
+            const t = TINT[k.icon] ?? TINT.phone!;
+            const at = new Date(a.start);
             return (
               <li key={a.id}>
-                <Link to="/appointments" className="flex items-center gap-2.5 px-4 py-2.5 text-[12.5px] hover:bg-card-2 2xl:text-[13.5px]">
-                  <span className="tabular w-11 shrink-0 font-semibold" dir="ltr">{clock(a.start)}</span>
-                  <Icon name={k.icon} className="size-4 shrink-0 text-ink-soft" />
-                  <span className="min-w-0 flex-1 truncate">{k.text} - {client(a)}</span>
-                  <span className="shrink-0 text-[11.5px] text-ink-soft">{cairoDayWord(a.start, now)}</span>
-                  <Icon name="chevron-start" className="size-4 shrink-0 text-ink-soft" />
+                <Link to="/appointments"
+                  className="group relative flex items-center gap-3 overflow-hidden rounded-[14px] border border-line/60 bg-card/55 py-2 ps-2 pe-3 shadow-[inset_0_1px_0_rgb(255_255_255/0.45),0_4px_14px_-8px_rgb(60_44_20/0.25)] transition hover:-translate-y-px hover:border-gold-line hover:bg-card/80 hover:shadow-[0_10px_24px_-12px_rgb(60_44_20/0.35)] motion-reduce:transition-none motion-reduce:hover:translate-y-0">
+                  <span aria-hidden className={`absolute inset-y-2 start-0 w-[3px] rounded-full ${t.bar}`} />
+                  <span className={`grid w-12 shrink-0 place-items-center rounded-[11px] bg-gradient-to-b ${t.tile} py-1 leading-none shadow-[inset_0_1px_0_rgb(255_255_255/0.5)]`}>
+                    <span className="tabular text-[17px] font-bold">{dayNum.format(at)}</span>
+                    <span className="mt-0.5 max-w-full truncate px-0.5 text-[9.5px] text-ink-soft">{dayName.format(at)}</span>
+                  </span>
+                  <span className="grid min-w-0 flex-1 gap-0.5">
+                    <span className="truncate text-[13.5px] font-bold 2xl:text-[14.5px]">{client(a)}</span>
+                    <span className={`flex min-w-0 items-center gap-1.5 text-[12px] ${t.ink}`}>
+                      <Icon name={k.icon} className="size-3.5 shrink-0" />
+                      <span className="truncate">{k.text}</span>
+                    </span>
+                  </span>
+                  <span className="grid shrink-0 justify-items-end gap-0.5">
+                    <span className="tabular rounded-full border border-line/70 bg-card/70 px-2.5 py-0.5 text-[12.5px] font-bold" dir="ltr">{clock(a.start)}</span>
+                    <span className="text-[11px] text-ink-soft">{cairoDayWord(a.start, now)}</span>
+                  </span>
+                  <Icon name="chevron-start" className="size-4 shrink-0 text-ink-soft transition group-hover:-translate-x-0.5 group-hover:text-gold-ink" />
                 </Link>
               </li>
             );
           })}
         </ul>
       )}
-    </Panel>
+    </section>
   );
 }
 

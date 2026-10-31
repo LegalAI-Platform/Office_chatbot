@@ -239,6 +239,18 @@
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
   }
+  /* a list that scrolls inside its card: a thin gold bar, no grey track */
+  .soft-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklab, var(--gold) 55%, transparent) transparent;
+  }
+  .soft-scroll::-webkit-scrollbar {
+    width: 6px;
+  }
+  .soft-scroll::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: color-mix(in oklab, var(--gold) 55%, transparent);
+  }
   /* a menu opening: a short fade and lift (none when the person asked for less motion) */
   .menu-pop {
     animation: menu-pop 160ms ease-out;
