@@ -2,21 +2,28 @@ import { useId, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router";
 import { api, errorMessage } from "../../shared/api/client";
+import { openChatwoot } from "../../shared/api/chatwoot";
 import { useDashboard } from "../../shared/api/dashboard";
 import { useMe } from "../../shared/api/session";
 import type { DashboardTask } from "../../shared/api/types";
-import { label, TASK_TYPES } from "../../shared/lib/labels";
+import { BOOKING_SERVICES, label, TASK_TYPES } from "../../shared/lib/labels";
 import { cairoDate, cairoDayWord, cairoHour, cairoMonth, cairoWeek, timeAgo } from "../../shared/lib/time";
-import { Icon } from "../../shared/ui/Icon";
+import { Icon, type IconName } from "../../shared/ui/Icon";
 import { OwnerImg, type OwnerImage } from "../../shared/ui/Owner";
 import { Chip, ErrorState } from "../../shared/ui/ui";
 
 const URGENT = new Set(["urgent_request", "safety_alert"]);
+
+/** The fields of /booking/appointments this page shows (the booking feature has the whole type; features stay apart). */
+interface Appointment {
+  id: string; service: string; start: string; state: string; name: string | null; payment: string | null;
+  call_app: "whatsapp" | "facetime" | "meet" | null;
+}
 const who = (t: DashboardTask) => t.client_name ?? "رقم من غير اسم";
 
 /**
  * «الرئيسية» exactly as the owner's mockups lay it out. Tasks are real (TASK 07a); appointments and
- * the receipts waiting for a review come from the payments (TASK 09); today's appointments keep their place, empty.
+ * the receipts waiting for a review come from the payments (TASK 09); today's and the next appointments are the booking's.
  */
 export function HomePage() {
   const { data: me } = useMe();
@@ -28,9 +35,10 @@ export function HomePage() {
   const today = cairoDate(now);
   const appointments = useQuery({
     queryKey: ["booking", "appointments", "today", today],
-    queryFn: () => api<{ state: string }[]>("GET", `/booking/appointments?from=${today}&to=${today}`),
+    queryFn: () => api<Appointment[]>("GET", `/booking/appointments?from=${today}&to=${today}`),
   });
-  const todays = appointments.data?.filter((a) => a.state === "confirmed" || a.state === "pending_payment").length;
+  const todayList = appointments.data?.filter(isOpen).sort(byStart);
+  const todays = todayList?.length;
   const greeting = cairoHour(now) < 12 ? "صباح الخير" : "مساء الخير";
   const name = me?.role === "lawyer" ? "أستاذ سعد" : me?.display_name.split(/\s+/)[0] ?? "";
 
@@ -57,18 +65,18 @@ export function HomePage() {
           <Kpi tone="red" icon="stat_clock_red" title="مهام متأخرة" value={dash.data?.overdue} series={dash.data?.overdue_by_day} to="/tasks?state=overdue" more="عرض المهام" />
         </div>
 
-        {/* the calendar on the right; today and the alerts, then the next appointments and the tasks */}
-        <div className="grid gap-5 xl:grid-cols-[20.5rem_minmax(0,1fr)]">
+        {/* the mockup's three columns: the calendar on the right, today's and the next appointments in the middle, the
+            alerts and the tasks on the left. Narrower (a laptop, 110% zoom): the left column goes under the middle one;
+            a phone: one column. */}
+        <div className="grid gap-5 xl:grid-cols-[20.5rem_minmax(0,1fr)] 2xl:grid-cols-[20.5rem_minmax(0,1.45fr)_minmax(0,1fr)]">
           <CalendarPanel now={now} />
           <div className="grid min-w-0 content-start gap-5">
-            <div className="grid gap-5 2xl:grid-cols-[minmax(0,1.42fr)_minmax(0,1fr)]">
-              <TodayPanel />
-              <AlertsPanel items={dash.data?.recent} pending={dash.isPending} now={now} />
-            </div>
-            <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_minmax(0,1.37fr)]">
-              <UpcomingPanel />
-              <PriorityPanel items={dash.data?.priority} pending={dash.isPending} now={now} />
-            </div>
+            <TodayPanel items={todayList} pending={appointments.isPending} failed={appointments.isError} />
+            <UpcomingPanel now={now} />
+          </div>
+          <div className="grid min-w-0 content-start gap-5 xl:col-start-2 2xl:col-start-auto">
+            <AlertsPanel items={dash.data?.recent} pending={dash.isPending} now={now} />
+            <PriorityPanel items={dash.data?.priority} pending={dash.isPending} now={now} />
           </div>
         </div>
       </div>
@@ -219,27 +227,99 @@ function CalendarPanel({ now }: { now: Date }) {
 
 // ---------- today's appointments ----------
 
-function TodayPanel() {
-  const heads = ["الوقت", "العميل", "الخدمة", "نوع الموضوع", "حالة الدفع", "الإجراءات"];
+const isOpen = (a: Appointment) => a.state === "confirmed" || a.state === "pending_payment";
+const byStart = (a: Appointment, b: Appointment) => a.start.localeCompare(b.start);
+const client = (a: Appointment) => a.name ?? "رقم من غير اسم";
+// «09:00» as in the mockup (24 hours, Cairo), the same in both languages' directions
+const clockFmt = new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Cairo", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+const clock = (iso: string) => clockFmt.format(new Date(iso));
+
+/** The kind of appointment as the mockup draws it: the icon, then the words. */
+function kindOf(a: Appointment): { icon: IconName; text: string } {
+  if (a.service === "consultation_office" || a.service.startsWith("urf_")) return { icon: "office", text: label(BOOKING_SERVICES, a.service) };
+  if (a.service === "consultation_urgent") return { icon: "phone", text: "استشارة عاجلة" };
+  if (a.call_app === "meet" || a.call_app === "facetime") return { icon: "video", text: "استشارة فيديو" };
+  return { icon: "phone", text: "استشارة هاتفية" };
+}
+
+/** The payment in the office's words (never «مدفوع» before a person checked the transfer). */
+function paidOf(a: Appointment): { tone: string; text: string; paid: boolean } {
+  switch (a.payment) {
+    case "verified": return { tone: "green", text: "مدفوع", paid: true };
+    case "proof_received": case "duplicate_suspected": return { tone: "blue", text: "بانتظار المراجعة", paid: false };
+    case "partial": return { tone: "orange", text: "مدفوع جزئيًا", paid: false };
+    case "not_received": return { tone: "red", text: "لم يتم الدفع", paid: false };
+    case "refund_requested": case "refunded": return { tone: "grey", text: "استرداد", paid: false };
+    default: return { tone: "orange", text: "بانتظار الدفع", paid: false };
+  }
+}
+
+function TodayPanel({ items, pending, failed }: { items?: Appointment[] | undefined; pending: boolean; failed: boolean }) {
+  const heads = ["الوقت", "العميل", "النوع", "حالة الدفع", "الإجراءات"];
   return (
     <Panel title="مواعيد اليوم" action={<SeeAll to="/appointments" />} flush>
-      <div className="overflow-x-auto px-3 pb-3">
-        <table className="w-full min-w-[33rem]">
-          <thead>
-            <tr className="bg-card-2">{heads.map((h) => <th key={h} className={`${TH} first:rounded-s-lg last:rounded-e-lg`}>{h}</th>)}</tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td colSpan={heads.length} className="px-3 py-12 text-center">
-                <span className="mx-auto mb-2 grid w-fit"><OwnerImg name="stat_calendar_blue" className="size-12" /></span>
-                <span className="block font-bold">مفيش مواعيد النهارده</span>
-                <span className="block text-[13px] text-ink-soft">مواعيد اليوم وحالة الدفع بتاعتها هتظهر هنا لما الحجز يشتغل.</span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      {pending ? <Rows n={4} /> : failed ? (
+        <Quiet icon="stat_calendar_blue" title="مواعيد اليوم مش متاحة دلوقتي">جرّب تاني بعد شوية.</Quiet>
+      ) : !items?.length ? (
+        <Quiet icon="stat_calendar_blue" title="مفيش مواعيد النهارده">مواعيد اليوم وحالة الدفع بتاعتها هتظهر هنا.</Quiet>
+      ) : (
+        <>
+          {/* a phone: one row of two lines per appointment */}
+          <ul className="grid grid-cols-[minmax(0,1fr)] divide-y divide-line border-t border-line sm:hidden">
+            {items.map((a) => {
+              const k = kindOf(a), p = paidOf(a);
+              return (
+                <li key={a.id} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-4 py-3">
+                  <span className="tabular row-span-2 text-[15px] font-bold" dir="ltr">{clock(a.start)}</span>
+                  <span className="truncate font-bold">{client(a)}</span>
+                  <Chip tone={p.tone}>{p.text}</Chip>
+                  <span className="flex min-w-0 items-center gap-1.5 text-[13px] text-ink-soft"><Icon name={k.icon} className="size-4 shrink-0" /><span className="truncate">{k.text}</span></span>
+                  <Actions paid={p.paid} />
+                </li>
+              );
+            })}
+          </ul>
+          {/* wider: the mockup's table */}
+          <div className="hidden overflow-x-auto px-3 pb-3 sm:block">
+            <table className="w-full min-w-[34rem]">
+              <thead>
+                <tr className="bg-card-2">{heads.map((h) => <th key={h} className={`${TH} first:rounded-s-lg last:rounded-e-lg`}>{h}</th>)}</tr>
+              </thead>
+              <tbody className="divide-y divide-line text-[14px]">
+                {items.map((a) => {
+                  const k = kindOf(a), p = paidOf(a);
+                  return (
+                    <tr key={a.id} className="hover:bg-card-2">
+                      <td className="tabular whitespace-nowrap px-3 py-2.5 font-semibold" dir="ltr">{clock(a.start)}</td>
+                      <td className="max-w-[10rem] truncate px-3 py-2.5">{client(a)}</td>
+                      <td className="whitespace-nowrap px-3 py-2.5">
+                        <span className="flex items-center gap-2"><Icon name={k.icon} className="size-[18px] text-ink-soft" />{k.text}</span>
+                      </td>
+                      <td className="px-3 py-2.5"><Chip tone={p.tone}>{p.text}</Chip></td>
+                      <td className="px-3 py-2.5"><Actions paid={p.paid} /></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </Panel>
+  );
+}
+
+/** «التفاصيل» for a paid one, «التواصل» (the office's chats, in Chatwoot) for one still waiting for the money; ⋮ the day. */
+function Actions({ paid }: { paid: boolean }) {
+  const button = "grid min-h-8 place-items-center whitespace-nowrap rounded-[8px] border border-line px-3 text-[13px] font-semibold text-ink hover:border-gold-line";
+  return (
+    <span className="flex items-center justify-end gap-1.5">
+      {paid ? <Link to="/appointments" className={button}>التفاصيل</Link>
+        : <button type="button" onClick={() => void openChatwoot()} className={button}>التواصل</button>}
+      <Link to="/appointments" aria-label="افتح المواعيد" className="grid size-8 place-items-center rounded-[8px] text-ink-soft hover:bg-card-2">
+        <Icon name="more" className="size-5" />
+      </Link>
+    </span>
   );
 }
 
@@ -336,21 +416,39 @@ function PriorityPanel({ items, pending, now }: { items?: DashboardTask[] | unde
 
 // ---------- the next appointments ----------
 
-function UpcomingPanel() {
+/** The next four open appointments after today (two weeks ahead), nearest first. */
+function UpcomingPanel({ now }: { now: Date }) {
+  const from = cairoDate(new Date(now.getTime() + 86_400_000));
+  const to = cairoDate(new Date(now.getTime() + 14 * 86_400_000));
+  const next = useQuery({
+    queryKey: ["booking", "appointments", "next", from, to],
+    queryFn: () => api<Appointment[]>("GET", `/booking/appointments?from=${from}&to=${to}`),
+  });
+  const items = next.data?.filter(isOpen).sort(byStart).slice(0, 4);
   return (
-    <Panel title="أقرب المواعيد القادمة" action={<SeeAll to="/appointments" />}>
-      <ul className="grid divide-y divide-line" aria-label="أقرب المواعيد">
-        {[0, 1, 2, 3].map((i) => (
-          <li key={i} className="flex min-h-[3rem] items-center gap-3 text-ink-soft/60" aria-hidden>
-            <Icon name="chevron-start" className="size-4" />
-            <OwnerImg name="top_calendar" className="size-6 object-contain opacity-50" />
-            <span className="h-2.5 w-24 rounded bg-card-2" />
-            <span className="ms-auto h-2.5 w-14 rounded bg-card-2" />
-            <span className="h-2.5 w-14 rounded bg-card-2" />
-          </li>
-        ))}
-      </ul>
-      <p className="pt-3 text-center text-[13px] text-ink-soft">مفيش مواعيد جاية. أقرب الجلسات والاستشارات هتظهر هنا بالترتيب.</p>
+    <Panel title="أقرب المواعيد القادمة" action={<SeeAll to="/appointments" />} flush>
+      {next.isPending ? <Rows n={4} /> : next.isError ? (
+        <Quiet icon="top_calendar" title="المواعيد الجاية مش متاحة دلوقتي">جرّب تاني بعد شوية.</Quiet>
+      ) : !items?.length ? (
+        <Quiet icon="top_calendar" title="مفيش مواعيد جاية">أقرب الاستشارات والمقابلات هتظهر هنا بالترتيب.</Quiet>
+      ) : (
+        <ul className="grid grid-cols-[minmax(0,1fr)] divide-y divide-line border-t border-line" aria-label="أقرب المواعيد">
+          {items.map((a) => {
+            const k = kindOf(a);
+            return (
+              <li key={a.id}>
+                <Link to="/appointments" className="flex min-h-[3rem] items-center gap-3 px-4 py-2.5 text-[14px] hover:bg-card-2">
+                  <span className="tabular w-16 shrink-0 font-semibold" dir="ltr">{clock(a.start)}</span>
+                  <Icon name={k.icon} className="size-[18px] shrink-0 text-ink-soft" />
+                  <span className="min-w-0 flex-1 truncate">{k.text} - {client(a)}</span>
+                  <span className="shrink-0 text-[12px] text-ink-soft">{cairoDayWord(a.start, now)}</span>
+                  <Icon name="chevron-start" className="size-4 shrink-0 text-ink-soft" />
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </Panel>
   );
 }
