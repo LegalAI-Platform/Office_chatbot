@@ -53,7 +53,7 @@ public sealed class PanelServices(HazemDbContext db, BookingStore store, IDelive
                       from pay in pays.DefaultIfEmpty()
                       where open ? o.State != "delivered" && o.State != "closed" : (o.State == "delivered" || o.State == "closed") && o.UpdatedAt >= since
                       orderby o.CreatedAt
-                      select new ServiceOrderView(o.Id, o.Kind, o.State, p.NameRaw, p.WaId, o.CreatedAt, db.ServiceFiles.Count(f => f.OrderId == o.Id),
+                      select new ServiceOrderView(o.Id, o.Kind, o.State, p.OfficeName, p.WaId, o.CreatedAt, db.ServiceFiles.Count(f => f.OrderId == o.Id),
                           o.Price, o.PriceException, o.DueOn, o.Delivery, o.PriceUntil, pay == null ? null : pay.State, o.FileName, o.DeliveredAt,
                           o.ClosedReason, o.AppointmentId, o.ClientNotice)).Take(300).ToListAsync(ct);
 

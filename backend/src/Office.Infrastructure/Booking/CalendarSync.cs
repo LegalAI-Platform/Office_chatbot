@@ -37,7 +37,7 @@ public sealed class CalendarSync(HazemDbContext db, GoogleCalendar google, ISett
                          from pay in pays.DefaultIfEmpty()
                          where (a.CalendarState == "create" || a.CalendarState == "update" || a.CalendarState == "remove") && a.CalendarNextAt <= now
                          orderby a.CalendarNextAt
-                         select new { a, p.NameRaw, p.WaId, Payment = pay == null ? null : pay.State }).Take(Batch).ToListAsync(ct);
+                         select new { a, NameRaw = p.OfficeName, p.WaId, Payment = pay == null ? null : pay.State }).Take(Batch).ToListAsync(ct);
         var done = 0;
         foreach (var x in due)
         {

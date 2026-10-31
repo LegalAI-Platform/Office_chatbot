@@ -286,20 +286,19 @@ public sealed class UrgentNotices(HazemDbContext db, BookingStore store, ISettin
         return r.Ok;
     }
 
-    /// <summary>{{name}} (the stored name, else the WhatsApp contact name, else «عميل»), {{phone}} (as the lawyer dials it), {{time}}.</summary>
+    /// <summary>
+    /// {{name}} (the office's name for him, v1.36: the name he gave, else his WhatsApp name marked «(اسم الواتساب)», else
+    /// «عميل»), {{phone}} (as the lawyer dials it), {{time}}.
+    /// </summary>
     private async Task<Dictionary<string, string>> FillAsync(Guid appointmentId, CancellationToken ct)
     {
         var a = await (from x in db.Appointments.AsNoTracking()
                        join p in db.Persons.AsNoTracking() on x.PersonId equals p.Id
                        where x.Id == appointmentId
-                       select new { x.StartsAt, p.WaId, p.NameRaw }).SingleAsync(ct);
-        var contact = a.NameRaw is { Length: > 0 }
-            ? null
-            : await db.Turns.AsNoTracking().Where(t => t.WaId == a.WaId && t.ContactName != null)
-                .OrderByDescending(t => t.CreatedAt).Select(t => t.ContactName).FirstOrDefaultAsync(ct);
+                       select new { x.StartsAt, p.WaId, p.OfficeName }).SingleAsync(ct);
         return new Dictionary<string, string>
         {
-            ["name"] = UrgentTexts.Name(a.NameRaw, contact),
+            ["name"] = UrgentTexts.Name(a.OfficeName, null),
             ["phone"] = UrgentTexts.LocalNumber(a.WaId),
             ["time"] = BookingWords.Time(a.StartsAt),
         };
