@@ -266,7 +266,7 @@ function UserMenu() {
   );
   return (
     // ms-auto: toward the far end of the bar (the left, in Arabic), with some room before the edge
-    <div ref={box} className="relative ms-auto shrink-0 lg:me-14 2xl:me-24">
+    <div ref={box} className="relative ms-auto shrink-0 lg:me-24 2xl:me-40">
       <button type="button" aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen((v) => !v)}
         className="flex items-center gap-3 rounded-[10px] p-1 hover:bg-muted">
         <Avatar name={me.display_name} photo={avatarUrl(me)} className="size-12 text-base" />
