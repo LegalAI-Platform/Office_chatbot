@@ -360,6 +360,20 @@ public sealed class Intake
     /// <summary>The button id of the time waiting for the name, if any.</summary>
     public string? PickWaitingForName => Pending is { Intent: PickIntent } p ? p.Service : null;
 
+    /// <summary>v1.37 (TASK 15): a pick waiting for the phone number of a client whose WhatsApp hides it (asked once, then again).</summary>
+    public const string PhoneIntent = "pick_phone";
+
+    public const string PhoneAgainIntent = "pick_phone_again";
+
+    /// <summary>v1.37 (B-02): the pick waits for his number; <paramref name="again"/> is the second and last ask.</summary>
+    public void AskPhoneFor(string pickId, bool again) => Pending = new PendingRequest(again ? PhoneAgainIntent : PhoneIntent, pickId, null);
+
+    /// <summary>The button id of the pick waiting for the number, if any.</summary>
+    public string? PickWaitingForPhone => Pending is { Intent: PhoneIntent or PhoneAgainIntent } p ? p.Service : null;
+
+    /// <summary>True when the number was asked twice already.</summary>
+    public bool PhoneAskedTwice => Pending is { Intent: PhoneAgainIntent };
+
     /// <summary>B-01.4: keep the first request; only the first one is kept.</summary>
     public void Remember(PendingRequest request) => Pending ??= request;
 

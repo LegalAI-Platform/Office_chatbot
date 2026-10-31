@@ -34,7 +34,7 @@ public sealed class PanelTesting(HazemDbContext db, ISettingsReader settings, Go
 
     public async Task<IReadOnlyList<TestNumberView>> NumbersAsync(CancellationToken ct) =>
         (await settings.GetAsync(ct)).List(HazemResponder.RecipientsKey).Order(StringComparer.Ordinal)
-            .Select(w => new TestNumberView(KeyOf(w), LogMask.Phone(w))).ToList();
+            .Select(w => new TestNumberView(KeyOf(w), w.StartsWith('@') ? w : LogMask.Phone(w))).ToList(); // v1.37: «@username» as written
 
     /// <summary>v1.34 (B-09.6): is the urgent alert sent as a normal message inside the 24-hour window (test only)?</summary>
     public async Task<bool> UrgentWindowAsync(CancellationToken ct) =>
@@ -61,6 +61,21 @@ public sealed class PanelTesting(HazemDbContext db, ISettingsReader settings, Go
         if (wa is null)
         {
             return null;
+        }
+
+        var masked = LogMask.Phone(wa);
+        if (wa.StartsWith('@'))
+        {
+            // v1.37 (TASK 15): a test client named by his WhatsApp username: his key (a BSUID, or a number) from his row.
+            masked = wa;
+            var byName = await db.Persons.AsNoTracking().Where(p => p.WhatsAppUsername != null
+                    && p.WhatsAppUsername.ToLower() == wa.Substring(1).ToLower()).Select(p => p.WaId).FirstOrDefaultAsync(ct);
+            if (byName is null)
+            {
+                return new ForgetResult(masked, 0, 0, [], "off", 0); // never wrote yet: nothing to forget
+            }
+
+            wa = byName;
         }
 
         var json = await db.Database.SqlQuery<string>($"""SELECT hazem.forget_wa_id({wa})::text AS "Value" """).SingleAsync(ct);
@@ -105,6 +120,6 @@ public sealed class PanelTesting(HazemDbContext db, ISettingsReader settings, Go
             ["rows"] = rows.ToString(System.Globalization.CultureInfo.InvariantCulture),
             ["chatwoot"] = chat,
         }, ct);
-        return new ForgetResult(LogMask.Phone(wa), rows, deleted, byHand, chat, conversations);
+        return new ForgetResult(masked, rows, deleted, byHand, chat, conversations);
     }
 }

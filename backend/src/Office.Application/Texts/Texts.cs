@@ -25,6 +25,9 @@ public static class TextKeys
     public const string Welcome = "welcome";
     public const string WelcomeChoose = "welcome_choose";
     public const string AskNameBooking = "ask_name_booking";
+    public const string AskPhone = "ask_phone";                       // v1.37 (TASK 15): a client whose WhatsApp hides his number
+    public const string AskPhoneAgain = "ask_phone_again";            // v1.37: the second and last ask
+    public const string PhoneNeededForCall = "phone_needed_for_call"; // v1.37: no number for a call: the office meeting instead
     public const string ConsultationOffer = "consultation_offer";
     public const string LegalQuestion = "legal_question";
     public const string UrgentPrice = "urgent_price";

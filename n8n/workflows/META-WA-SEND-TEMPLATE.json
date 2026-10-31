@@ -51,7 +51,7 @@
           "conditions": [
             {
               "id": "d42ae212-4dc4-5d68-860a-6e47a15c08dc",
-              "leftValue": "={{ /^[0-9]{8,15}$/.test(String($json.wa_id || '')) && !!$json.template_name && !!$json.idempotency_key && !!$json.requested_by }}",
+              "leftValue": "={{ /^([0-9]{8,15}|[A-Z]{2}[.][A-Za-z0-9.]{1,140})$/.test(String($json.wa_id || '')) && !!$json.template_name && !!$json.idempotency_key && !!$json.requested_by }}",
               "rightValue": "",
               "operator": {
                 "type": "boolean",
@@ -121,7 +121,7 @@
         "operation": "executeQuery",
         "query": "SELECT app.wa_outbound_prepare($1, $2, 'template', $3::jsonb, $4, $5, $6) AS r, $3::jsonb AS payload, COALESCE((SELECT value = 'true' FROM app.settings WHERE key = 'whatsapp.dry_run'), false) AS dry_run, COALESCE((SELECT value FROM app.settings WHERE key = 'whatsapp.provider'), 'meta') AS provider",
         "options": {
-          "queryReplacement": "={{ [ $json.idempotency_key, $json.wa_id, JSON.stringify({ messaging_product: 'whatsapp', recipient_type: 'individual', to: $json.wa_id, type: 'template', template: { name: $json.template_name, language: { code: $json.language || 'ar' }, components: $json.components || [] } }), $json.requested_by, $json.template_name, $json.language || 'ar' ] }}"
+          "queryReplacement": "={{ [ $json.idempotency_key, $json.wa_id, JSON.stringify({ messaging_product: 'whatsapp', recipient_type: 'individual', ...(/^[0-9]{8,15}$/.test(String($json.wa_id)) ? { to: $json.wa_id } : { recipient: $json.wa_id }), type: 'template', template: { name: $json.template_name, language: { code: $json.language || 'ar' }, components: $json.components || [] } }), $json.requested_by, $json.template_name, $json.language || 'ar' ] }}"
         }
       },
       "credentials": {

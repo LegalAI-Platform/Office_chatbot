@@ -295,11 +295,11 @@ public sealed class UrgentNotices(HazemDbContext db, BookingStore store, ISettin
         var a = await (from x in db.Appointments.AsNoTracking()
                        join p in db.Persons.AsNoTracking() on x.PersonId equals p.Id
                        where x.Id == appointmentId
-                       select new { x.StartsAt, p.WaId, p.OfficeName }).SingleAsync(ct);
+                       select new { x.StartsAt, p.WaId, p.OfficeName, p.PreferredCallPhone }).SingleAsync(ct);
         return new Dictionary<string, string>
         {
             ["name"] = UrgentTexts.Name(a.OfficeName, null),
-            ["phone"] = UrgentTexts.LocalNumber(a.WaId),
+            ["phone"] = UrgentTexts.CallNumber(a.WaId, a.PreferredCallPhone), // v1.37: a username client, the number he gave
             ["time"] = BookingWords.Time(a.StartsAt),
         };
     }

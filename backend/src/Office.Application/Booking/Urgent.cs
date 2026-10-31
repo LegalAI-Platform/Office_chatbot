@@ -1,6 +1,7 @@
 using Office.Application.Responders;
 using Office.Application.Texts;
 using Office.Application.Turns;
+using Office.Domain.Common;
 
 namespace Office.Application.Booking;
 
@@ -91,6 +92,15 @@ public static class UrgentTexts
     /// <summary>The alert's {{2}}: the client's number as the lawyer dials it («01…» for an Egyptian number, else «+…»).</summary>
     public static string LocalNumber(string waId) =>
         waId.Length == 12 && waId.StartsWith("201", StringComparison.Ordinal) ? "0" + waId[2..] : "+" + waId;
+
+    /// <summary>
+    /// v1.37 (TASK 15): the number the lawyer dials: his WhatsApp number, else (a client with a username, whose key is a
+    /// BSUID) the number he gave Hazem, else «من غير رقم».
+    /// </summary>
+    public static string CallNumber(string waId, string? givenPhone) =>
+        WaId.IsPhoneNumber(waId) ? LocalNumber(waId) : WaId.IsPhoneNumber(givenPhone) ? LocalNumber(givenPhone!) : NoNumber;
+
+    public const string NoNumber = "من غير رقم";
 
     /// <summary>The alert's {{1}}: the stored name, else the WhatsApp contact name, else «عميل».</summary>
     public static string Name(string? stored, string? contact) =>
