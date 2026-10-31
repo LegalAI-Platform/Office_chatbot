@@ -1,7 +1,7 @@
 # Runbook: the booking (TASK 08, DECISIONS v1.12; TASK 09, v1.13)
 
 Hazem offers free times on WhatsApp. **(v1.13) A picked time is held for the client until his receipt
-image** (two hours, one when the appointment is soon, always ending 15 minutes before it: «إعدادات الحجز»);
+image** (two hours, one when the appointment is soon, always ending 15 minutes before it: «إعدادات المواعيد ← الحجز من واتساب»);
 the image confirms it, and a hold that runs out frees the time again. The payments, their review and the
 refunds: [payments.md](payments.md). A free time is **inside the hours of
 the panel** and **clear of every event in the lawyer's Google Calendar** (B-24, both together).

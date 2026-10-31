@@ -1,5 +1,6 @@
-import { useState, type ReactNode } from "react";
-import { queryOptions, useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { Link } from "react-router";
+import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { ApiError, errorMessage } from "../../shared/api/client";
 import { can, useMe } from "../../shared/api/session";
 import { APPOINTMENT_STATES, BOOKING_SERVICES, CALL_APPS, label, matterLabel, PAYMENT_STATES, REMINDER_KINDS, REMINDER_SKIPS } from "../../shared/lib/labels";
@@ -9,122 +10,89 @@ import { Phone } from "../../shared/ui/caseCard";
 import { Icon, type IconName } from "../../shared/ui/Icon";
 import { confirmAction, toast } from "../../shared/ui/feedback";
 import { Button, Chip, Empty, ErrorState, Field, Loading } from "../../shared/ui/ui";
-import { booking, cairoDate, hhmm, monthOf, shiftMonth, TIMES, type Appointment, type Day, type Done, type Office, type Reminder, type Settings, type WeekDay } from "./api";
+import { booking, cairoDate, hhmm, monthOf, shiftMonth, type Appointment, type Day, type Done, type Reminder } from "./api";
+import { Confirm, Dialog, Glow, longDay, monthQuery, ROW, Segmented, SELECT, settingsQuery, STATUS, TimeSelect, TitleTile, Told, WEEK } from "./parts";
 
-type Tab = "calendar" | "bookings" | "week" | "settings" | "office";
-// The office week starts on Saturday; the API's weekday is 0 = Sunday … 6 = Saturday.
-const WEEK = [6, 0, 1, 2, 3, 4, 5];
-const DAY_NAMES = ["الأحد", "الاتنين", "التلات", "الأربع", "الخميس", "الجمعة", "السبت"];
 // the calendar's column heads: short, so all seven fit a phone whole
 const SHORT_DAYS = ["أحد", "اتنين", "تلات", "أربع", "خميس", "جمعة", "سبت"];
-const STATUS: Record<Day["status"], { word: string; tone: string }> = {
-  open: { word: "شغال", tone: "green" },
-  weekly_off: { word: "إجازة", tone: "grey" },
-  closed: { word: "مقفول", tone: "red" },
-  custom_hours: { word: "ساعات مختلفة", tone: "blue" },
-  partly_closed: { word: "جزء مقفول", tone: "orange" },
+// the word a day's state writes in its cell (an open day writes nothing), written out in full so Tailwind keeps them
+const CELL_WORD: Record<Day["status"], string> = {
+  open: "", weekly_off: "text-grey-ink", closed: "text-red-ink", custom_hours: "text-blue-ink", partly_closed: "text-orange-ink",
 };
-// Written out in full so Tailwind keeps them.
-const DOT: Record<string, string> = { green: "bg-green-ink", grey: "bg-grey-ink", red: "bg-red-ink", blue: "bg-blue-ink", orange: "bg-orange-ink" };
 // the line at a booking's start, by the tone of its state
 const BAR: Record<string, string> = { green: "bg-green", grey: "bg-ink-soft/40", blue: "bg-blue", orange: "bg-orange", red: "bg-red" };
-const longDay = (day: string) =>
-  new Intl.DateTimeFormat("ar-EG-u-nu-latn", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(new Date(`${day}T12:00:00Z`));
 const STATE_TONE: Record<string, string> = {
   pending_payment: "orange", expired: "grey", confirmed: "blue", completed: "green", no_show: "orange", cancelled_by_client: "grey", cancelled_by_office: "grey",
 };
+/** «حجز واحد»، «حجزين»، «3 حجوزات»، «12 حجز». */
+const bookingsWords = (n: number) => (n === 1 ? "حجز واحد" : n === 2 ? "حجزين" : n <= 10 ? `${n} حجوزات` : `${n} حجز`);
 
-const monthQuery = (month: string) => queryOptions({ queryKey: ["booking", "month", month], queryFn: () => booking.month(month) });
-const settingsQuery = queryOptions({ queryKey: ["booking", "settings"], queryFn: booking.settings });
+const dayQuery = (day: string) => ({ queryKey: ["booking", "appointments", day, day], queryFn: () => booking.appointments(day, day), refetchInterval: 60_000 });
 
-/** This month's calendar (the tab the page opens on) and the settings, fetched while the pointer is still on the link (idea from PR #14). */
+/** This month's calendar, today's bookings and the settings, fetched while the pointer is still on the link (idea from PR #14). */
 export function prefetchData(qc: QueryClient) {
-  void qc.prefetchQuery(monthQuery(monthOf(cairoDate(new Date()))));
+  const today = cairoDate(new Date());
+  void qc.prefetchQuery(monthQuery(monthOf(today)));
+  void qc.prefetchQuery(dayQuery(today));
   void qc.prefetchQuery(settingsQuery);
 }
 
-const TABS: { value: Tab; label: string; icon: IconName; needsOffice?: boolean }[] = [
-  { value: "calendar", label: "التقويم", icon: "calendar" },
-  { value: "bookings", label: "الحجوزات", icon: "clients" },
-  { value: "week", label: "المواعيد الثابتة", icon: "clock" },
-  { value: "settings", label: "إعدادات الحجز", icon: "settings" },
-  { value: "office", label: "بيانات المكتب", icon: "office", needsOffice: true },
+type View = "day" | "all";
+const VIEWS: { value: View; label: string; icon: IconName }[] = [
+  { value: "day", label: "اليوم ده", icon: "calendar" },
+  { value: "all", label: "كل الجاي", icon: "clients" },
 ];
 
 /**
- * «المواعيد» (TASK 08, DECISIONS v1.12 B-24) as «liquid glass»: the booking hours Hazem offers, changed from here and
- * seen by Hazem at once. A glass header, the sections as a glass segmented control, and each section glass cards:
- * the calendar of the month (close a day, close some hours, other hours that day), the appointments, the default week,
- * the settings and (manager / lawyer) the office's details.
+ * «المواعيد» (TASK 08, DECISIONS v1.12 B-24): the office's daily screen. The month on the start side, the picked day's
+ * bookings (today when the page opens) on the other; «تعديل اليوم ده» changes that one day in a small window, and
+ * what is set once (the week, the booking settings, the office's details) lives in «إعدادات المواعيد».
  */
 export function BookingPage() {
   const { data: me } = useMe();
-  const tabs = TABS.filter((t) => !t.needsOffice || can(me, "office.manage"));
-  const [tab, setTab] = useUrlState<Tab>("tab", "calendar", tabs.map((t) => t.value));
+  // opens on today (idea from PR #14): the first question every morning is «who is coming today»
+  const today = cairoDate(new Date());
+  const [picked, setPicked] = useState(today);
+  const [view, setView] = useUrlState<View>("show", "day", ["day", "all"]);
+  const mayChange = can(me, "schedule.manage");
 
   return (
     <div className="relative isolate grid gap-5 pb-4">
-      {/* the soft light the glass shows through */}
-      <div aria-hidden className="pointer-events-none absolute inset-x-0 -top-6 -z-10 h-[30rem] overflow-hidden">
-        <span className="absolute -top-16 end-[4%] size-[24rem] rounded-full bg-gold/30 blur-[100px]" />
-        <span className="absolute top-24 start-[10%] size-[20rem] rounded-full bg-blue/10 blur-[100px]" />
-      </div>
-
-      <Intro />
-
-      <section aria-label="الأقسام" className="liquid grid rounded-[22px] p-2 sm:p-2.5">
-        <div className="flex flex-wrap gap-1 rounded-[20px] border border-line/60 bg-card/45 p-1 shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)]" role="tablist" aria-label="أقسام المواعيد">
-          {tabs.map((t) => {
-            const on = t.value === tab;
-            return (
-              <button key={t.value} type="button" role="tab" aria-selected={on} onClick={() => setTab(t.value)}
-                className={`flex min-h-10 grow basis-[9rem] items-center justify-center gap-1.5 whitespace-nowrap rounded-[16px] px-3.5 text-[13.5px] transition motion-reduce:transition-none ${on
-                  ? "btn-gold font-bold shadow-[inset_0_1px_0_rgb(255_255_255/0.4),0_6px_14px_-6px_rgb(140_98_58/0.8)]"
-                  : "text-ink hover:bg-card/80"}`}>
-                <Icon name={t.icon} className="size-4" />
-                {t.label}
-              </button>
-            );
-          })}
-        </div>
-      </section>
-
-      {tab === "calendar" ? <Calendar /> : tab === "bookings" ? <Bookings /> : tab === "week" ? <Week /> : tab === "settings" ? <SettingsForm /> : <OfficeForm />}
-    </div>
-  );
-}
-
-// ---------- the top ----------
-
-function Intro() {
-  return (
-    <header className="relative">
-      <div className="relative grid items-center gap-3 lg:grid-cols-[auto_minmax(0,1fr)_auto]">
-        <div className="flex items-center gap-3">
-          <span aria-hidden className="grid size-11 shrink-0 place-items-center rounded-[14px] bg-gradient-to-br from-gold-tint to-card text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.6),0_8px_20px_-10px_rgb(140_98_58/0.7)]">
-            <Icon name="calendar" className="size-6" />
-          </span>
-          <h1 className="text-[26px] leading-tight font-bold">المواعيد</h1>
-        </div>
+      <Glow />
+      <header className="grid items-center gap-3 lg:grid-cols-[auto_minmax(0,1fr)_auto]">
+        <TitleTile icon="calendar">المواعيد</TitleTile>
         <Status />
-        <Undo />
+        {mayChange || can(me, "office.manage") ? (
+          <Link to="/appointments/settings"
+            className="flex min-h-10 w-fit items-center gap-2 rounded-full border border-line/60 bg-card/60 px-4 text-[14px] font-semibold text-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.45)] transition hover:border-gold-line hover:bg-gold-tint hover:text-gold-ink motion-reduce:transition-none">
+            <Icon name="settings" className="size-[18px] text-gold-ink" />إعدادات المواعيد
+          </Link>
+        ) : null}
+      </header>
+
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+        <Calendar today={today} picked={view === "day" ? picked : ""} onPick={(d) => { setPicked(d); setView("day"); }} />
+        <div className="grid min-w-0 content-start gap-3">
+          <Segmented label="العرض" value={view} onChange={setView} options={VIEWS} />
+          {view === "day" ? <DayPanel key={picked} day={picked} today={today} mayChange={mayChange} /> : <Bookings />}
+        </div>
       </div>
-    </header>
+    </div>
   );
 }
 
 /** Whether Hazem books from WhatsApp now, and what is missing if not. */
 function Status() {
   const s = useQuery(settingsQuery);
-  if (!s.data) return null;
+  if (!s.data) return <span />;
   const missing = [
     !s.data.calendar_key && "مفتاح Google Calendar (صاحب المشروع بيحطه في .env)",
-    !s.data.calendar_id && "إيميل كالندر المستشار (في إعدادات الحجز)",
+    !s.data.calendar_id && "إيميل كالندر المستشار (في «الحجز من واتساب»)",
     !s.data.texts_approved && "اعتماد نصوص الحجز (من «نصوص حازم»)",
   ].filter(Boolean);
   const ok = s.data.enabled && missing.length === 0;
   return (
-    <p role="status" className={`flex items-start gap-2 rounded-[16px] border px-3.5 py-2.5 text-[13.5px] leading-relaxed ${ok ? "border-green/30 bg-green-bg text-green-ink" : "border-orange/30 bg-orange-bg text-orange-ink"}`}>
+    <p role="status" className={`flex w-fit items-start gap-2 rounded-[16px] border px-3.5 py-2 text-[13px] leading-relaxed lg:justify-self-center ${ok ? "border-green/30 bg-green-bg text-green-ink" : "border-orange/30 bg-orange-bg text-orange-ink"}`}>
       <Icon name={ok ? "check-circle" : "alert-circle"} className="mt-0.5 size-4 shrink-0" />
       <span>
         {s.data.enabled ? "حازم بيحجز من واتساب." : "الحجز من واتساب مقفول: حازم بيعرض الاستشارة من غير مواعيد."}
@@ -134,156 +102,100 @@ function Status() {
   );
 }
 
-/** Puts back the last change; when that would leave bookings outside the hours it asks first, like any change. */
-function Undo() {
-  const qc = useQueryClient();
-  const changes = useQuery({ queryKey: ["booking", "changes"], queryFn: booking.changes });
-  const [affected, setAffected] = useState<Appointment[] | null>(null);
-  const undo = useMutation({
-    mutationFn: (confirm: boolean) => booking.undo(confirm),
-    onSuccess: () => { setAffected(null); void qc.invalidateQueries({ queryKey: ["booking"] }); },
-    onError: (e) => { if (e instanceof ApiError && e.code === "has_bookings") setAffected(e.data?.appointments as Appointment[]); },
-  });
-  const last = changes.data?.find((c) => !c.undone);
-  if (!last) return null;
-  return (
-    <div className="grid gap-2">
-      <span className="flex flex-wrap items-center gap-2 rounded-[16px] border border-line/60 bg-card/55 py-1 ps-3.5 pe-1 text-[13px] text-ink-soft shadow-[inset_0_1px_0_rgb(255_255_255/0.45)]">
-        <Icon name="clock" className="size-4 shrink-0 text-gold-ink" />
-        آخر تعديل: {last.by ?? "—"}، {cairoWhen(last.at)}
-        <Button variant="ghost" className="!min-h-9 !px-3" busy={undo.isPending && !affected} onClick={() => undo.mutate(false)}><Icon name="back" className="size-4" />تراجع</Button>
-        {undo.isError && !affected ? <span className="text-bad" role="alert">{errorMessage(undo.error)}</span> : null}
-      </span>
-      {affected ? <Confirm list={affected} busy={undo.isPending} onYes={() => undo.mutate(true)} onNo={() => setAffected(null)} /> : null}
-    </div>
-  );
-}
+// ---------- the month ----------
 
-// ---------- the glass pieces every tab is built from ----------
+function Calendar({ today, picked, onPick }: { today: string; picked: string; onPick: (day: string) => void }) {
+  const [month, setMonth] = useState(() => monthOf(picked || today));
+  const days = useQuery(monthQuery(month));
+  const first = days.data?.[0];
+  const lead = first ? WEEK.indexOf(new Date(`${first.day}T12:00:00Z`).getUTCDay()) : 0;
+  const nav = "grid size-10 place-items-center rounded-full border border-line/60 bg-card/60 text-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.45)] transition hover:border-gold-line hover:bg-gold-tint hover:text-gold-ink motion-reduce:transition-none";
 
-/** A glass card with an icon tile, a title and an optional line under it. */
-function Sheet({ icon, title, hint, aside, children, className = "" }: {
-  icon: IconName; title: ReactNode; hint?: ReactNode; aside?: ReactNode; children: ReactNode; className?: string;
-}) {
   return (
-    <section className={`liquid relative grid min-w-0 content-start gap-4 overflow-hidden rounded-[22px] p-4 sm:p-5 ${className}`}>
+    <section className="liquid relative grid min-w-0 gap-3 overflow-hidden rounded-[22px] p-3 sm:p-4 xl:sticky xl:top-4">
       <span aria-hidden className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-l from-transparent via-gold/70 to-transparent" />
-      <div className="flex flex-wrap items-start gap-3">
-        <span aria-hidden className="grid size-10 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-gold-tint to-card text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.5)]">
-          <Icon name={icon} className="size-5" />
-        </span>
-        <div className="grid min-w-0 flex-1 basis-56 gap-0.5">
-          <h2 className="flex flex-wrap items-center gap-2 text-[17px] leading-snug font-bold">{title}</h2>
-          {hint ? <p className="text-[12.5px] leading-relaxed text-ink-soft">{hint}</p> : null}
-        </div>
-        {aside}
+      <div className="flex items-center justify-between gap-2">
+        <button type="button" className={nav} aria-label="الشهر اللي فات" onClick={() => setMonth(shiftMonth(month, -1))}><Icon name="chevron-start" className="size-5" /></button>
+        <h2 className="flex flex-wrap items-center justify-center gap-2 text-center text-[17px] font-bold tabular">
+          {new Intl.DateTimeFormat("ar-EG-u-nu-latn", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${month}-15T00:00:00Z`))}
+          {month !== monthOf(today) || picked !== today ? (
+            <button type="button" className="rounded-full border border-gold-line bg-gold-tint px-3 py-0.5 text-[12.5px] font-bold text-gold-ink transition hover:brightness-105" onClick={() => { setMonth(monthOf(today)); onPick(today); }}>النهارده</button>
+          ) : null}
+        </h2>
+        <button type="button" className={nav} aria-label="الشهر الجاي" onClick={() => setMonth(shiftMonth(month, 1))}><Icon name="chevron-end" className="size-5" /></button>
       </div>
-      {children}
+      {days.isPending ? <Loading /> : days.isError ? <ErrorState message={errorMessage(days.error)} onRetry={() => void days.refetch()} /> : (
+        <div className="grid grid-cols-7 gap-1 text-center sm:gap-1.5" role="grid" aria-label="أيام الشهر">
+          {WEEK.map((w) => <span key={w} className="py-1 text-[11.5px] font-bold text-ink-soft">{SHORT_DAYS[w]}</span>)}
+          {Array.from({ length: lead }, (_, i) => <span key={`x${i}`} />)}
+          {days.data.map((d) => {
+            const on = d.day === picked;
+            const isToday = d.day === today;
+            const off = d.status === "closed" || d.status === "weekly_off";
+            return (
+              <button key={d.day} type="button" role="gridcell" aria-selected={on} onClick={() => onPick(d.day)}
+                aria-label={`${d.day}: ${STATUS[d.status].word}${d.bookings ? `، ${bookingsWords(d.bookings)}` : ""}`}
+                aria-current={isToday ? "date" : undefined}
+                className={`grid min-h-[3.75rem] min-w-0 cursor-pointer content-start justify-items-center gap-0.5 rounded-[12px] border px-0.5 py-1 text-sm transition motion-reduce:transition-none sm:min-h-[4.5rem] ${on
+                  ? "border-gold bg-gold-tint ring-2 ring-gold/60 shadow-[inset_0_1px_0_rgb(255_255_255/0.5),0_6px_14px_-8px_rgb(140_98_58/0.7)]"
+                  : off
+                    ? "border-line/50 bg-grey-bg/60 hover:border-gold-line"
+                    : `${isToday ? "border-gold-line" : "border-line/60"} bg-card/55 hover:-translate-y-px hover:border-gold-line hover:bg-card/90 motion-reduce:hover:translate-y-0`}`}>
+                <span className={`tabular font-semibold ${isToday ? "rounded-full bg-gradient-to-b from-[#dcb98c] to-[#a87a48] px-1.5 text-[#2a2117]" : off ? "text-ink-soft" : ""}`}>{Number(d.day.slice(8))}</span>
+                {d.status !== "open" ? <span className={`max-w-full text-[10px] leading-tight font-semibold sm:text-[11px] ${CELL_WORD[d.status]}`}>{STATUS[d.status].word}</span> : null}
+                {d.bookings ? <span className="max-w-full text-[10px] leading-tight font-bold text-gold-ink sm:text-[11px]">{bookingsWords(d.bookings)}</span> : null}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </section>
   );
 }
 
-/** Glass segmented pills. */
-function Segmented<T extends string>({ label: name, value, options, onChange }: {
-  label: string; value: T; options: { value: T; label: string; icon: IconName }[]; onChange: (v: T) => void;
-}) {
-  return (
-    <div className="grid min-w-0 content-start">
-      <div className="flex flex-wrap gap-1 rounded-[20px] border border-line/60 bg-card/45 p-1 shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)]" role="group" aria-label={name}>
-        {options.map((o) => {
-          const on = value === o.value;
-          return (
-            <button key={o.value} type="button" aria-pressed={on} onClick={() => onChange(o.value)}
-              className={`flex min-h-9 grow items-center justify-center gap-1.5 whitespace-nowrap rounded-[16px] px-3.5 text-[13.5px] transition motion-reduce:transition-none ${on
-                ? "btn-gold font-bold shadow-[inset_0_1px_0_rgb(255_255_255/0.4),0_6px_14px_-6px_rgb(140_98_58/0.8)]"
-                : "text-ink hover:bg-card/80"}`}>
-              <Icon name={o.icon} className="size-4" />
-              {o.label}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
+// ---------- one day ----------
 
-/** The save row at the bottom of a form: «not saved yet» while there is a draft, then the buttons. */
-function SaveBar({ dirty = false, children }: { dirty?: boolean; children: ReactNode }) {
-  return (
-    <div className="liquid flex flex-wrap items-center gap-3 rounded-[18px] px-4 py-3">
-      {dirty ? (
-        <p className="flex min-w-0 flex-1 basis-60 items-center gap-1.5 text-[13px] font-semibold text-gold-ink" role="status">
-          <Icon name="alert-circle" className="size-4 shrink-0" />
-          فيه تعديلات لسه ما اتحفظتش.
-        </p>
-      ) : null}
-      <div className="flex flex-wrap gap-2">{children}</div>
-    </div>
-  );
-}
-
-const ROW = "relative overflow-hidden rounded-[14px] border border-line/60 bg-card/55 shadow-[inset_0_1px_0_rgb(255_255_255/0.45),0_4px_14px_-8px_rgb(60_44_20/0.25)]";
-const SELECT = "min-h-10 rounded-[12px] border border-line-strong bg-card/80 px-2 text-ink";
-
-// ---------- the month ----------
-
-function Calendar() {
-  // opens on today (idea from PR #14): the first question every morning is «who is coming today»
-  const today = cairoDate(new Date());
-  const [month, setMonth] = useState(() => monthOf(today));
-  const [picked, setPicked] = useState<string | null>(today);
-  const days = useQuery(monthQuery(month));
-  const first = days.data?.[0];
-  const lead = first ? WEEK.indexOf(new Date(`${first.day}T12:00:00Z`).getUTCDay()) : 0;
-  const day = days.data?.find((d) => d.day === picked);
-  const nav = "grid size-10 place-items-center rounded-full border border-line/60 bg-card/60 text-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.45)] transition hover:border-gold-line hover:bg-gold-tint hover:text-gold-ink motion-reduce:transition-none";
+/** The picked day: its name and hours, «تعديل اليوم ده», and its bookings as cards. */
+function DayPanel({ day, today, mayChange }: { day: string; today: string; mayChange: boolean }) {
+  const month = useQuery(monthQuery(monthOf(day)));
+  const info = month.data?.find((d) => d.day === day);
+  const list = useQuery(dayQuery(day));
+  const [editing, setEditing] = useState(false);
+  const [done, setDone] = useState<Done | null>(null);
+  const items = (list.data ?? []).slice().sort((a, b) => a.start.localeCompare(b.start));
 
   return (
-    <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_26rem]">
-      <section className="liquid relative grid min-w-0 gap-4 overflow-hidden rounded-[22px] p-4 sm:p-5">
-        <span aria-hidden className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-l from-transparent via-gold/70 to-transparent" />
-        <div className="flex items-center justify-between gap-2">
-          <button type="button" className={nav} aria-label="الشهر اللي فات" onClick={() => setMonth(shiftMonth(month, -1))}><Icon name="chevron-start" className="size-5" /></button>
-          <h2 className="flex flex-wrap items-center justify-center gap-2 text-center text-[17px] font-bold tabular">
-            {new Intl.DateTimeFormat("ar-EG-u-nu-latn", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${month}-15T00:00:00Z`))}
-            {month !== monthOf(today) || picked !== today ? (
-              <button type="button" className="rounded-full border border-gold-line bg-gold-tint px-3 py-0.5 text-[12.5px] font-bold text-gold-ink transition hover:brightness-105" onClick={() => { setMonth(monthOf(today)); setPicked(today); }}>النهارده</button>
-            ) : null}
+    <section className="liquid relative grid min-w-0 content-start gap-3 overflow-hidden rounded-[22px] p-3.5 sm:p-4">
+      <span aria-hidden className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-l from-transparent via-gold/70 to-transparent" />
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <div className="grid min-w-0 flex-1 basis-56 gap-1">
+          <h2 className="flex flex-wrap items-center gap-2 text-[18px] leading-snug font-bold">
+            {day === today ? "النهارده · " : ""}{longDay(day)}
+            {info && info.status !== "open" ? <Chip tone={STATUS[info.status].tone}>{STATUS[info.status].word}</Chip> : null}
           </h2>
-          <button type="button" className={nav} aria-label="الشهر الجاي" onClick={() => setMonth(shiftMonth(month, 1))}><Icon name="chevron-end" className="size-5" /></button>
+          {info ? (
+            <p className="flex items-center gap-1.5 text-[13px] text-ink-soft">
+              <Icon name="clock" className="size-4 shrink-0 text-gold-ink" />
+              <span className="tabular">{info.hours.length === 0 ? "مفيش حجز اليوم ده" : info.hours.map((h) => `${hhmm(h.start)}–${hhmm(h.end)}`).join("، ")}</span>
+            </p>
+          ) : null}
         </div>
-        {days.isPending ? <Loading /> : days.isError ? <ErrorState message={errorMessage(days.error)} onRetry={() => void days.refetch()} /> : (
-          <div className="grid grid-cols-7 gap-1 text-center sm:gap-1.5" role="grid" aria-label="أيام الشهر">
-            {WEEK.map((w) => <span key={w} className="py-1 text-[11.5px] font-bold text-ink-soft">{SHORT_DAYS[w]}</span>)}
-            {Array.from({ length: lead }, (_, i) => <span key={`x${i}`} />)}
-            {days.data.map((d) => {
-              const on = d.day === picked;
-              return (
-                <button key={d.day} type="button" role="gridcell" aria-selected={on} onClick={() => setPicked(d.day)}
-                  aria-label={`${d.day}: ${STATUS[d.status].word}${d.bookings ? `، ${d.bookings} حجز` : ""}`}
-                  aria-current={d.day === today ? "date" : undefined}
-                  className={`grid min-h-14 min-w-0 content-start justify-items-center gap-0.5 rounded-[12px] border p-1 text-sm transition motion-reduce:transition-none sm:min-h-16 ${on
-                    ? "border-gold bg-gold-tint shadow-[inset_0_1px_0_rgb(255_255_255/0.5),0_6px_14px_-8px_rgb(140_98_58/0.7)]"
-                    : "border-line/60 bg-card/45 hover:-translate-y-px hover:border-gold-line hover:bg-card/80 motion-reduce:hover:translate-y-0"} ${d.status === "closed" || d.status === "weekly_off" ? "opacity-60" : ""}`}>
-                  <span className={`tabular font-semibold ${d.day === today ? "rounded-full bg-gradient-to-b from-[#dcb98c] to-[#a87a48] px-1.5 text-[#2a2117]" : ""}`}>{Number(d.day.slice(8))}</span>
-                  <span className={`size-2 rounded-full ${DOT[STATUS[d.status].tone]}`} aria-hidden />
-                  {d.bookings ? <span className="tabular text-[10.5px] leading-tight text-ink-soft sm:text-[11px]">{d.bookings} حجز</span> : null}
-                </button>
-              );
-            })}
-          </div>
+        {mayChange && info ? (
+          <Button variant="primary" className="!min-h-10" onClick={() => setEditing(true)}><Icon name="calendar" className="size-4" />تعديل اليوم ده</Button>
+        ) : null}
+      </div>
+      {done && done.cancelled > 0 ? <Told n={done.cancelled} /> : null}
+
+      <section aria-label="حجوزات اليوم" className="grid gap-2">
+        {list.isPending ? <Loading /> : list.isError ? <ErrorState message={errorMessage(list.error)} onRetry={() => void list.refetch()} /> : items.length === 0 ? (
+          <Empty title="مفيش حجوزات اليوم ده" icon="calendar" />
+        ) : (
+          <ul className="grid gap-2">{items.map((a) => <BookingCard key={a.id} a={a} now={new Date()} />)}</ul>
         )}
-        <ul className="flex flex-wrap gap-2 border-t border-line/60 pt-3 text-xs" aria-label="مفتاح الألوان">
-          {Object.values(STATUS).map((s) => <li key={s.word}><Chip tone={s.tone}>{s.word}</Chip></li>)}
-        </ul>
       </section>
-      {/* keyed by the date: nothing typed or asked about one day carries over to another */}
-      {day ? <DaySheet key={day.day} day={day} isToday={day.day === today} /> : (
-        <section className="liquid rounded-[22px] p-4 sm:p-5">
-          <Empty title="اختار يوم" icon="calendar">تقفله، أو تقفل جزء منه، أو تديله ساعات مختلفة، وتشوف حازم هيعرض إيه.</Empty>
-        </section>
-      )}
-    </div>
+
+      {editing && info ? <DayDialog day={info} isToday={day === today} onClose={() => setEditing(false)} onDone={setDone} /> : null}
+    </section>
   );
 }
 
@@ -293,8 +205,8 @@ const KINDS = [
   ["custom_hours", "ساعات مختلفة لليوم ده"],
 ] as const;
 
-/** One date: its hours, its exceptions, closing it (asks first if it has bookings), and the preview. */
-function DaySheet({ day, isToday }: { day: Day; isToday: boolean }) {
+/** «تعديل اليوم ده»: the day's changes, closing it (asks first if it has bookings), other hours, and the preview. */
+function DayDialog({ day, isToday, onClose, onDone }: { day: Day; isToday: boolean; onClose: () => void; onDone: (r: Done) => void }) {
   const qc = useQueryClient();
   const [kind, setKind] = useState<"closed_day" | "closed_hours" | "custom_hours">("closed_day");
   const [from, setFrom] = useState(600);
@@ -303,14 +215,14 @@ function DaySheet({ day, isToday }: { day: Day; isToday: boolean }) {
   // A change that would cancel bookings: the list, and the same change again with confirm.
   const [ask, setAsk] = useState<{ list: Appointment[]; again: () => void } | null>(null);
   const [done, setDone] = useState<Done | null>(null);
-  const finished = (r: Done) => { setAsk(null); setDone(r); refresh(); };
+  const refresh = () => void qc.invalidateQueries({ queryKey: ["booking"] });
+  const finished = (r: Done) => { setAsk(null); setDone(r); onDone(r); refresh(); };
   const asked = (e: Error, again: () => void) => {
     if (e instanceof ApiError && e.code === "has_bookings") setAsk({ list: e.data?.appointments as Appointment[], again });
   };
-  const refresh = () => void qc.invalidateQueries({ queryKey: ["booking"] });
   const add = useMutation({
     mutationFn: (confirm: boolean) => booking.addException({ day: day.day, kind, ...(kind === "closed_day" ? {} : { start: from, end: to }), reason, confirm }),
-    onSuccess: (r) => { finished(r); setReason(""); },
+    onSuccess: (r) => { finished(r); setReason(""); toast("اليوم اتعدّل ✅"); onClose(); },
     onError: (e) => asked(e, () => add.mutate(true)),
   });
   const remove = useMutation({
@@ -320,12 +232,7 @@ function DaySheet({ day, isToday }: { day: Day; isToday: boolean }) {
   });
 
   return (
-    <Sheet icon="calendar" title={<>{isToday ? "النهارده · " : ""}{longDay(day.day)} <Chip tone={STATUS[day.status].tone}>{STATUS[day.status].word}</Chip></>}>
-      {day.bookings ? <DayBookings day={day.day} /> : null}
-      <p className={`flex items-start gap-2 px-3.5 py-2.5 text-[13.5px] ${ROW}`}>
-        <Icon name="clock" className="mt-0.5 size-4 shrink-0 text-gold-ink" />
-        <span>{day.hours.length === 0 ? "مفيش حجز اليوم ده." : `حازم بيحجز: ${day.hours.map((h) => `${hhmm(h.start)}–${hhmm(h.end)}`).join("، ")}`}</span>
-      </p>
+    <Dialog title={<>تعديل {isToday ? "النهارده · " : ""}{longDay(day.day)}</>} onClose={onClose}>
       {day.exceptions.length > 0 ? (
         <div className="grid gap-1.5">
           <p className="text-[12px] font-bold text-ink-soft">تغييرات اليوم ده</p>
@@ -344,8 +251,8 @@ function DaySheet({ day, isToday }: { day: Day; isToday: boolean }) {
         </div>
       ) : null}
 
-      <fieldset className="grid gap-2 border-t border-line/60 pt-3">
-        <legend className="float-start mb-1 w-full pt-3 text-[14px] font-bold">غيّر اليوم ده</legend>
+      <fieldset className="grid gap-2">
+        <legend className="sr-only">غيّر اليوم ده</legend>
         {KINDS.map(([k, t]) => (
           <label key={k} className="flex cursor-pointer items-center gap-2.5 rounded-[14px] border border-line/60 bg-card/45 px-3 py-2.5 text-sm transition focus-within:border-gold has-checked:border-gold has-checked:bg-gold-tint motion-reduce:transition-none">
             <input type="radio" name="kind" className="accent-[#a87a48]" checked={kind === k} onChange={() => setKind(k)} />
@@ -358,69 +265,17 @@ function DaySheet({ day, isToday }: { day: Day; isToday: boolean }) {
           </div>
         ) : null}
         <Field label="السبب (للمكتب بس)" value={reason} maxLength={200} onChange={(e) => setReason(e.target.value)} />
-        <Button variant="primary" busy={add.isPending && !ask} onClick={() => add.mutate(false)}>احفظ</Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="primary" busy={add.isPending && !ask} onClick={() => add.mutate(false)}>احفظ</Button>
+          <Button onClick={onClose}>إلغاء</Button>
+        </div>
       </fieldset>
       {ask ? (
         <Confirm list={ask.list} busy={add.isPending || remove.isPending} onYes={ask.again} onNo={() => setAsk(null)} />
       ) : add.isError || remove.isError ? <p className="text-sm text-bad" role="alert">{errorMessage(add.error ?? remove.error)}</p> : null}
       {done && done.cancelled > 0 ? <Told n={done.cancelled} /> : null}
       <PreviewOf day={day.day} />
-    </Sheet>
-  );
-}
-
-/** The clients are told by Hazem within seconds (the worker); one he cannot reach becomes a task. */
-const Told = ({ n }: { n: number }) => (
-  <p className="flex items-start gap-2 rounded-[14px] border border-green/30 bg-green-bg px-3.5 py-2.5 text-sm text-green-ink" role="status">
-    <Icon name="check-circle" className="mt-0.5 size-4 shrink-0" />
-    <span>اتلغى {n} حجز، وحازم هيبلّغ العملاء خلال ثواني (اللي ماتوصلوش الرسالة بتتعمله مهمة).</span>
-  </p>
-);
-
-/** «الحجوزات دي هتتلغي»: the office cancels and Hazem tells each client (B-22: another time or a full refund). */
-function Confirm({ list, busy, onYes, onNo }: { list: Appointment[]; busy: boolean; onYes: () => void; onNo: () => void }) {
-  return (
-    <div className="grid gap-2.5 rounded-[16px] border border-orange-ink/40 bg-orange-bg p-3.5 text-sm shadow-[inset_0_1px_0_rgb(255_255_255/0.35)]" role="alertdialog" aria-label="فيه حجوزات">
-      <p className="flex items-start gap-2 font-semibold text-orange-ink">
-        <Icon name="alert" className="mt-0.5 size-4 shrink-0" />
-        <span>التعديل ده فيه {list.length} حجز (مؤكد أو مستني الإيصال). لو كمّلت، الحجوزات دي هتتلغي وحازم هيبعت لكل عميل يختار ميعاد تاني، أو استرداد كامل لو كان دفع.</span>
-      </p>
-      <ul className="grid gap-1">{list.map((a) => <li key={a.id} className="rounded-[10px] bg-card/60 px-3 py-1.5">{cairoWhen(a.start)} · {a.name ?? "من غير اسم"} · {label(BOOKING_SERVICES, a.service)}</li>)}</ul>
-      <div className="flex flex-wrap gap-2">
-        <Button variant="danger" busy={busy} onClick={onYes}>كمّل وبلّغ العملاء</Button>
-        <Button onClick={onNo}>لأ، سيبه</Button>
-      </div>
-    </div>
-  );
-}
-
-/** The day's bookings, in time order (the calendar opens on today with them, idea from PR #14). */
-function DayBookings({ day }: { day: string }) {
-  const list = useQuery({ queryKey: ["booking", "appointments", day, day], queryFn: () => booking.appointments(day, day), refetchInterval: 60_000 });
-  if (list.isPending) return <Loading />;
-  if (list.isError) return <ErrorState message={errorMessage(list.error)} onRetry={() => void list.refetch()} />;
-  const items = list.data.slice().sort((a, b) => a.start.localeCompare(b.start));
-  if (items.length === 0) return null;
-  return (
-    <section aria-label="حجوزات اليوم" className="grid gap-2">
-      <h3 className="flex items-center gap-2 text-[14px] font-bold">
-        <Icon name="clients" className="size-4 text-gold-ink" />
-        الحجوزات ({items.length})
-      </h3>
-      <ul className="grid gap-1.5">
-        {items.map((a) => (
-          <li key={a.id} className={`flex flex-wrap items-center gap-x-3 gap-y-1 py-2 ps-4 pe-2.5 text-sm ${ROW}`}>
-            <span aria-hidden className={`absolute inset-y-2 start-0 w-1 rounded-e-full ${BAR[STATE_TONE[a.state] ?? "grey"]}`} />
-            <span className="tabular font-bold">{cairoTime(new Date(a.start))}</span>
-            <span className="min-w-0 flex-1">
-              {a.name ?? "من غير اسم"}
-              <span className="block text-xs text-ink-soft">{label(BOOKING_SERVICES, a.service)}{a.call_app ? ` (${label(CALL_APPS, a.call_app)})` : ""} · <Phone wa={a.wa_id} /></span>
-            </span>
-            <Chip tone={STATE_TONE[a.state] ?? "grey"}>{label(APPOINTMENT_STATES, a.state)}</Chip>
-          </li>
-        ))}
-      </ul>
-    </section>
+    </Dialog>
   );
 }
 
@@ -450,25 +305,9 @@ function PreviewOf({ day }: { day: string }) {
   );
 }
 
-function TimeSelect({ value, onChange, label: aria, min = 0 }: { value: number; onChange: (m: number) => void; label: string; min?: number }) {
-  return (
-    <select aria-label={aria} className={`${SELECT} tabular`} value={value} onChange={(e) => onChange(Number(e.target.value))}>
-      {TIMES.filter((t) => t >= min).map((t) => <option key={t} value={t}>{t === 1440 ? "12 بالليل" : hhmm(t)}</option>)}
-    </select>
-  );
-}
-
-// ---------- the appointments ----------
+// ---------- one booking ----------
 
 const DAY_MS = 86_400_000;
-type Kind = "all" | "phone" | "office" | "urgent" | "urf";
-const KIND_TEST: Record<Kind, (a: Appointment) => boolean> = {
-  all: () => true,
-  phone: (a) => a.service === "consultation_phone_video",
-  office: (a) => a.service === "consultation_office",
-  urgent: (a) => a.service === "consultation_urgent",
-  urf: (a) => a.service.startsWith("urf_"),
-};
 /** Still on the office's day: held, or confirmed and not marked. */
 const isLive = (a: Appointment) => a.state === "confirmed" || a.state === "pending_payment";
 const minutesOf = (a: Appointment) => Math.round((new Date(a.end).getTime() - new Date(a.start).getTime()) / 60_000);
@@ -506,80 +345,37 @@ function notesOf(a: Appointment, now: Date): { text: string; tone: string }[] {
   return out;
 }
 
-const WHENS: { value: "ahead" | "past"; label: string; icon: IconName }[] = [
-  { value: "ahead", label: "الجاية (30 يوم)", icon: "forward" },
-  { value: "past", label: "اللي فاتت (أسبوعين)", icon: "back" },
-];
-const KIND_ICON: Record<Kind, IconName> = { all: "calendar", phone: "video", office: "office", urgent: "alert", urf: "document" };
-const TILE_ICON: Record<string, IconName> = {
-  "النهارده": "clock", "الأسبوع ده": "calendar", "مستني الإيصال": "receipt", "تحويل محتاج مراجعة": "alert-circle",
-  "خلصت": "check-circle", "ماحضروش": "user-plus", "اتلغت": "x", "اتفكت (الإيصال ما وصلش)": "receipt",
-};
-
-function Bookings() {
+/** One booking as a card: the time, the client, the kind, the state, what to look at, and what the office can do. */
+function BookingCard({ a, now }: { a: Appointment; now: Date }) {
   const qc = useQueryClient();
   const { data: me } = useMe();
-  const [when, setWhen] = useUrlState<"ahead" | "past">("when", "ahead", ["ahead", "past"]);
-  const [kind, setKind] = useUrlState<Kind>("kind", "all", ["all", "phone", "office", "urgent", "urf"]);
-  const [q, setQ] = useState("");
-  // Ahead: today and the next 30 days. Past (TASK 10): the last two weeks, so a consultation that took place can get
-  // «مطلوب رأي مكتوب» (B-17), most recent first.
-  const now = new Date();
-  const from = when === "ahead" ? cairoDate(now) : cairoDate(new Date(now.getTime() - 14 * DAY_MS));
-  const to = when === "ahead" ? cairoDate(new Date(now.getTime() + 30 * DAY_MS)) : cairoDate(new Date(now.getTime() - DAY_MS));
-  const list = useQuery({ queryKey: ["booking", "appointments", from, to], queryFn: () => booking.appointments(from, to), refetchInterval: 60_000 });
   const refresh = () => void qc.invalidateQueries({ queryKey: ["booking"] });
   const mark = useMutation({
-    mutationFn: ({ id, state }: { id: string; state: string }) => booking.mark(id, state),
-    onSuccess: (_, v) => { refresh(); toast(v.state === "completed" ? "اتعلّم إن الميعاد خلص ✅" : "اتعلّم إن العميل ماحضرش"); },
+    mutationFn: (state: string) => booking.mark(a.id, state),
+    onSuccess: (_, state) => { refresh(); toast(state === "completed" ? "اتعلّم إن الميعاد خلص ✅" : "اتعلّم إن العميل ماحضرش"); },
   });
-  const cancel = useMutation({ mutationFn: booking.cancel, onSuccess: () => { refresh(); toast("الحجز اتلغى، وحازم هيبلّغ العميل"); } });
+  const cancel = useMutation({ mutationFn: () => booking.cancel(a.id), onSuccess: () => { refresh(); toast("الحجز اتلغى، وحازم هيبلّغ العميل"); } });
+  const notes = notesOf(a, now);
 
-  const all = (list.data ?? []).slice().sort((a, b) => (when === "ahead" ? 1 : -1) * a.start.localeCompare(b.start));
-  const needle = q.trim().replace(/^\+/, "");
-  const items = all.filter((a) => KIND_TEST[kind](a) && (!needle || (a.name ?? "").includes(needle) || a.wa_id.includes(needle)));
-  const days = [...new Set(items.map((a) => cairoDate(new Date(a.start))))].map((day) => ({ day, items: items.filter((a) => cairoDate(new Date(a.start)) === day) }));
-  const todayKey = cairoDate(now);
-  const weekEnd = cairoDate(new Date(now.getTime() + 6 * DAY_MS));
-  const next = when === "ahead" ? all.find((a) => isLive(a) && new Date(a.end) > now) : undefined;
-  // TASK 12 (B-18): tomorrow's confirmed appointments whose client has not pressed «هحضر ✅» yet (nothing is cancelled for it).
-  const tomorrowKey = cairoDate(new Date(now.getTime() + DAY_MS));
-  const tomorrows = when === "ahead" ? all.filter((a) => a.state === "confirmed" && cairoDate(new Date(a.start)) === tomorrowKey) : [];
-  const unconfirmed = tomorrows.filter((a) => !a.attending).length;
-  const count = (f: (a: Appointment) => boolean) => (list.data ? all.filter(f).length : undefined);
-  const tiles: { label: string; value: number | undefined; tone: string }[] = when === "ahead" ? [
-    { label: "النهارده", value: count((a) => isLive(a) && cairoDate(new Date(a.start)) === todayKey), tone: "text-blue-ink" },
-    { label: "الأسبوع ده", value: count((a) => isLive(a) && cairoDate(new Date(a.start)) <= weekEnd), tone: "text-blue-ink" },
-    { label: "مستني الإيصال", value: count((a) => a.state === "pending_payment"), tone: "text-orange-ink" },
-    { label: "تحويل محتاج مراجعة", value: count((a) => a.state === "confirmed" && (a.payment === "proof_received" || a.payment === "duplicate_suspected")), tone: "text-red-ink" },
-  ] : [
-    { label: "خلصت", value: count((a) => a.state === "completed"), tone: "text-green-ink" },
-    { label: "ماحضروش", value: count((a) => a.state === "no_show"), tone: "text-orange-ink" },
-    { label: "اتلغت", value: count((a) => a.state.startsWith("cancelled")), tone: "text-ink" },
-    { label: "اتفكت (الإيصال ما وصلش)", value: count((a) => a.state === "expired"), tone: "text-ink" },
-  ];
-  const kinds: { value: Kind; label: string; icon: IconName }[] = ([["all", `الكل ${all.length}`], ["phone", "تليفون أو فيديو"], ["office", "في المكتب"], ["urgent", "عاجلة"], ["urf", "عرفي"]] as const)
-    .map(([v, t]) => ({ value: v, label: t, icon: KIND_ICON[v] }));
-
-  const row = (a: Appointment) => (
-    <li key={a.id} className={`flex flex-wrap items-center gap-3 py-2.5 ps-4 pe-3 transition hover:bg-card/80 motion-reduce:transition-none ${ROW}`}>
-      <span aria-hidden className={`absolute inset-y-2.5 start-0 w-1 rounded-e-full ${BAR[STATE_TONE[a.state] ?? "grey"]}`} />
-      <span className="tabular grid min-w-[4.25rem] shrink-0 place-items-center rounded-[12px] border border-line/60 bg-card/70 px-2 py-1.5 text-[15px] font-bold shadow-[inset_0_1px_0_rgb(255_255_255/0.45)]">
+  return (
+    <li className={`flex flex-wrap items-start gap-3 py-3 ps-4 pe-3 transition hover:bg-card/80 motion-reduce:transition-none ${ROW}`}>
+      <span aria-hidden className={`absolute inset-y-3 start-0 w-1 rounded-e-full ${BAR[STATE_TONE[a.state] ?? "grey"]}`} />
+      <span className="tabular grid min-w-[4.5rem] shrink-0 place-items-center rounded-[12px] border border-line/60 bg-card/70 px-2 py-2 text-[17px] font-bold shadow-[inset_0_1px_0_rgb(255_255_255/0.45)]">
         {cairoTime(new Date(a.start))}
       </span>
-      <span className="grid min-w-0 flex-1 basis-60 gap-0.5">
+      <span className="grid min-w-0 flex-1 basis-52 gap-1">
         <span className="flex flex-wrap items-baseline gap-x-2">
-          <span className="font-bold">{a.name ?? "من غير اسم"}</span>
+          <span className="text-[15.5px] font-bold">{a.name ?? "من غير اسم"}</span>
           <span className="text-xs font-normal text-ink-soft">{lengthWords(minutesOf(a))}{isLive(a) ? ` · ${fromNow(a, now)}` : ""}</span>
         </span>
-        <span className="text-xs text-ink-soft">
+        <span className="text-[13px] text-ink-soft">
           {label(BOOKING_SERVICES, a.service)}{a.call_app ? ` (${label(CALL_APPS, a.call_app)})` : ""} · {matterLabel(a.matter_type ?? undefined)} · <Phone wa={a.wa_id} />{a.reschedules ? " · اتغيّر مرة" : ""}
           {a.payment && a.state !== "pending_payment" ? ` · الدفع: ${label(PAYMENT_STATES, a.payment)}` : ""}
         </span>
         {a.state === "confirmed" && a.reminders.length > 0 ? <Reminders items={a.reminders} /> : null}
-        {notesOf(a, now).length > 0 ? (
-          <span className="flex flex-wrap gap-1.5 pt-1">
-            {notesOf(a, now).map((n) => (
+        {notes.length > 0 ? (
+          <span className="flex flex-wrap gap-1.5 pt-0.5">
+            {notes.map((n) => (
               <span key={n.text} className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${n.tone === "orange" ? "bg-orange-bg text-orange-ink" : "bg-grey-bg text-grey-ink"}`}>
                 <Icon name="alert-circle" className="size-3.5" />{n.text}
               </span>
@@ -595,104 +391,23 @@ function Bookings() {
       </span>
       {a.state === "completed" && can(me, "services.price") ? <Opinion id={a.id} /> : null}
       {isLive(a) ? (
-        <span className="flex flex-wrap gap-1">
+        <span className="flex w-full flex-wrap justify-end gap-1">
           {a.state === "confirmed" ? (
             <>
-              <Button variant="ghost" className="!min-h-9 !px-3" busy={mark.isPending && mark.variables?.id === a.id && mark.variables.state === "completed"}
-                onClick={() => mark.mutate({ id: a.id, state: "completed" })}>خلص</Button>
-              <Button variant="ghost" className="!min-h-9 !px-3" busy={mark.isPending && mark.variables?.id === a.id && mark.variables.state === "no_show"}
-                onClick={() => mark.mutate({ id: a.id, state: "no_show" })}>ماحضرش</Button>
+              <Button variant="ghost" className="!min-h-9 !px-3" busy={mark.isPending && mark.variables === "completed"} onClick={() => mark.mutate("completed")}>خلص</Button>
+              <Button variant="ghost" className="!min-h-9 !px-3" busy={mark.isPending && mark.variables === "no_show"} onClick={() => mark.mutate("no_show")}>ماحضرش</Button>
             </>
           ) : null}
-          <Button variant="danger" className="!min-h-9 !px-3" busy={cancel.isPending && cancel.variables === a.id}
+          <Button variant="danger" className="!min-h-9 !px-3" busy={cancel.isPending}
             onClick={async () => {
-              if (await confirmAction({ title: "تلغي الحجز ده؟", body: "حازم هيبعت للعميل يختار ميعاد تاني، أو استرداد كامل لو كان دفع.", yes: "أيوه، الغيه", danger: true })) cancel.mutate(a.id);
+              if (await confirmAction({ title: "تلغي الحجز ده؟", body: "حازم هيبعت للعميل يختار ميعاد تاني، أو استرداد كامل لو كان دفع.", yes: "أيوه، الغيه", danger: true })) cancel.mutate();
             }}>
             إلغاء
           </Button>
         </span>
       ) : null}
+      {mark.isError || cancel.isError ? <p className="w-full text-sm text-bad" role="alert">{errorMessage(mark.error ?? cancel.error)}</p> : null}
     </li>
-  );
-
-  return (
-    <div className="grid gap-4">
-      <section aria-label="فلاتر الحجوزات" className="liquid grid gap-4 rounded-[22px] p-4 sm:p-5 2xl:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)]">
-        <div className="grid content-start gap-4">
-          <Segmented label="أنهي حجوزات" value={when} onChange={setWhen} options={WHENS} />
-          <label className="relative w-full">
-            <span className="sr-only">دوّر بالاسم أو الرقم</span>
-            <Icon name="search" className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-ink-soft" />
-            <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="دوّر بالاسم أو الرقم"
-              className="min-h-10 w-full rounded-full border border-line/70 bg-card/60 ps-9 pe-3 text-sm text-ink shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)] focus:border-gold" />
-          </label>
-        </div>
-        <Segmented label="نوع الميعاد" value={kind} onChange={setKind} options={kinds} />
-      </section>
-
-      <section aria-label="ملخص الحجوزات" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {tiles.map((t) => (
-          <div key={t.label} className="liquid relative grid content-start gap-0.5 overflow-hidden rounded-[18px] p-4">
-            <span aria-hidden className="absolute end-3 top-3 grid size-8 place-items-center rounded-xl bg-gradient-to-br from-gold-tint to-card text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.5)]">
-              <Icon name={TILE_ICON[t.label] ?? "calendar"} className="size-4" />
-            </span>
-            <span className={`tabular text-[28px] leading-tight font-bold ${t.tone === "text-red-ink" && !t.value ? "text-ink" : t.tone}`}>{t.value === undefined ? "…" : t.value}</span>
-            <span className="text-[13px] text-ink-soft">{t.label}</span>
-          </div>
-        ))}
-      </section>
-
-      {next ? (
-        <div className="liquid relative grid gap-1 overflow-hidden rounded-[22px] p-4 ps-6 sm:p-5 sm:ps-7">
-          <span aria-hidden className="absolute inset-y-4 start-0 w-1.5 rounded-e-full bg-gradient-to-b from-[#dcb98c] to-[#a87a48]" />
-          <span aria-hidden className="pointer-events-none absolute -top-16 -end-10 size-48 rounded-full bg-gold/20 blur-3xl" />
-          <span className="flex items-center gap-1.5 text-[13px] font-bold text-gold-ink"><Icon name="clock" className="size-4" />{fromNow(next, now) === "دلوقتي" ? "شغال دلوقتي" : "الميعاد الجاي"}</span>
-          <span className="flex flex-wrap items-baseline gap-x-3">
-            <span className="tabular text-[28px] leading-tight font-bold">{cairoTime(new Date(next.start))}</span>
-            <span className="text-sm text-ink-soft">{cairoWhen(next.start)}{fromNow(next, now) !== "دلوقتي" ? ` · ${fromNow(next, now)}` : ""}</span>
-          </span>
-          <span className="font-bold">{next.name ?? "من غير اسم"}</span>
-          <span className="text-sm text-ink-soft">
-            {label(BOOKING_SERVICES, next.service)}{next.call_app ? ` (${label(CALL_APPS, next.call_app)})` : ""} · {lengthWords(minutesOf(next))} · <Phone wa={next.wa_id} />
-          </span>
-        </div>
-      ) : null}
-
-      {tomorrows.length > 0 ? (
-        <p className={`liquid flex flex-wrap items-center gap-2 rounded-full px-4 py-2 text-sm ${unconfirmed > 0 ? "" : "text-green-ink"}`} role="status">
-          <Icon name={unconfirmed > 0 ? "bell" : "check-circle"} className={`size-4 shrink-0 ${unconfirmed > 0 ? "text-orange-ink" : ""}`} />
-          بكرة {tomorrows.length} {tomorrows.length === 1 ? "ميعاد" : "مواعيد"}
-          {unconfirmed > 0 ? <>، <span className="font-semibold text-orange-ink">{unconfirmed} ما أكدوش حضورهم</span></> : "، وكلهم أكدوا حضورهم ✅"}
-        </p>
-      ) : null}
-
-      {list.isPending ? <Loading /> : list.isError ? <ErrorState message={errorMessage(list.error)} onRetry={() => void list.refetch()} /> : days.length === 0 ? (
-        <div className="liquid rounded-[22px] p-4 sm:p-5">
-          {all.length > 0
-            ? <Empty title="مفيش حجوزات بالشكل ده" icon="search">جرّب نوع تاني أو امسح البحث.</Empty>
-            : <Empty title={when === "ahead" ? "مفيش حجوزات في الشهر الجاي" : "مفيش حجوزات في الأسبوعين اللي فاتوا"} icon="calendar" />}
-        </div>
-      ) : days.map((g) => {
-        const live = g.items.filter(isLive);
-        const held = g.items.filter((a) => a.state === "pending_payment").length;
-        return (
-          <section key={g.day} className="liquid relative grid gap-3 overflow-hidden rounded-[22px] p-3.5 sm:p-4">
-            <span aria-hidden className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-l from-transparent via-gold/70 to-transparent" />
-            <h3 className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 font-bold">
-              <span aria-hidden className="grid size-8 place-items-center rounded-xl bg-gradient-to-br from-gold-tint to-card text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.5)]"><Icon name="calendar" className="size-4" /></span>
-              {g.day === todayKey ? "النهارده" : g.day === tomorrowKey ? "بكرة" : ""} <span className="text-sm font-normal text-ink-soft">{longDay(g.day)}</span>
-              <span className="ms-auto flex flex-wrap gap-1.5 text-xs font-normal">
-                <span className="rounded-full border border-line/60 bg-card/60 px-2.5 py-0.5 text-ink-soft">{g.items.length} {g.items.length === 1 ? "ميعاد" : "مواعيد"}</span>
-                {live.length ? <span className="rounded-full border border-line/60 bg-card/60 px-2.5 py-0.5 text-ink-soft">{lengthWords(live.reduce((s, a) => s + minutesOf(a), 0))} محجوزة</span> : null}
-                {held ? <span className="rounded-full bg-orange-bg px-2.5 py-0.5 text-orange-ink">{held} مستني الإيصال</span> : null}
-              </span>
-            </h3>
-            <ul className="grid gap-2">{g.items.map(row)}</ul>
-          </section>
-        );
-      })}
-      {mark.isError || cancel.isError ? <p className="text-sm text-bad" role="alert">{errorMessage(mark.error ?? cancel.error)}</p> : null}
-    </div>
   );
 }
 
@@ -736,204 +451,129 @@ function Opinion({ id }: { id: string }) {
   );
 }
 
-// ---------- the default week ----------
+// ---------- كل الجاي: the appointments ahead (or past) ----------
 
-function Week() {
-  const qc = useQueryClient();
-  const week = useQuery({ queryKey: ["booking", "week"], queryFn: booking.week });
-  const [draft, setDraft] = useState<WeekDay[] | null>(null);
-  const [affected, setAffected] = useState<Appointment[] | null>(null);
-  const days = draft ?? week.data;
-  const save = useMutation({
-    mutationFn: (confirm: boolean) => booking.saveWeek(days!, confirm),
-    onSuccess: () => { setDraft(null); setAffected(null); void qc.invalidateQueries({ queryKey: ["booking"] }); toast("المواعيد الثابتة اتحفظت ✅"); },
-    onError: (e) => { if (e instanceof ApiError && e.code === "has_bookings") setAffected(e.data?.appointments as Appointment[]); },
-  });
-  if (week.isPending) return <Loading />;
-  if (week.isError || !days) return <ErrorState message={errorMessage(week.error)} onRetry={() => void week.refetch()} />;
-  const edit = (w: number, ranges: WeekDay["ranges"]) => setDraft(days.map((d) => (d.weekday === w ? { ...d, ranges } : d)));
-  // idea from PR #14: the hours of each day and of the week, so the full and the light days show at a glance
-  const minutesIn = (d: WeekDay) => d.ranges.reduce((s, r) => s + Math.max(0, r.end - r.start), 0);
-  const total = days.reduce((s, d) => s + minutesIn(d), 0);
-  const working = days.filter((d) => d.ranges.length > 0).length;
-  const chip = "rounded-full border border-gold-line bg-gold-tint px-3 py-1 text-gold-ink";
+type Kind = "all" | "phone" | "office" | "urgent" | "urf";
+const KIND_TEST: Record<Kind, (a: Appointment) => boolean> = {
+  all: () => true,
+  phone: (a) => a.service === "consultation_phone_video",
+  office: (a) => a.service === "consultation_office",
+  urgent: (a) => a.service === "consultation_urgent",
+  urf: (a) => a.service.startsWith("urf_"),
+};
+const WHENS: { value: "ahead" | "past"; label: string; icon: IconName }[] = [
+  { value: "ahead", label: "الجاية (30 يوم)", icon: "forward" },
+  { value: "past", label: "اللي فاتت (أسبوعين)", icon: "back" },
+];
+const KIND_ICON: Record<Kind, IconName> = { all: "calendar", phone: "video", office: "office", urgent: "alert", urf: "document" };
 
-  return (
-    <div className="grid gap-4">
-      <Sheet icon="clock" title="ساعات الحجز كل أسبوع"
-        hint="دي المواعيد اللي حازم بيحجز فيها كل أسبوع. اليوم من غير فترات = إجازة. أي يوم معين بيتغيّر من «التقويم»."
-        aside={
-          <p className="flex flex-wrap gap-2 text-[13px]" role="status">
-            <span className={chip}><strong className="tabular font-bold">{hoursWords(total)}</strong> في الأسبوع</span>
-            <span className={chip}><strong className="tabular font-bold">{working}</strong> {working === 1 ? "يوم" : "أيام"} شغل</span>
-          </p>
-        }>
-        {draft ? (
-          <p role="status" className="flex items-center gap-2 rounded-[14px] border border-gold-line bg-gold-tint px-3.5 py-2 text-sm font-semibold text-gold-ink">
-            <Icon name="alert-circle" className="size-4 shrink-0" />فيه تعديلات لسه ما اتحفظتش.
-          </p>
-        ) : null}
-        <ul className="grid gap-2">
-          {WEEK.map((w) => {
-            const d = days.find((x) => x.weekday === w) ?? { weekday: w, ranges: [] };
-            return (
-              <li key={w} className={`flex flex-wrap items-center gap-2 py-2 ps-4 pe-2.5 ${ROW}`}>
-                <span aria-hidden className={`absolute inset-y-2 start-0 w-1 rounded-e-full ${d.ranges.length ? "bg-gold" : "bg-ink-soft/40"}`} />
-                <span className="w-20 font-bold">{DAY_NAMES[w]}</span>
-                {d.ranges.length === 0 ? <Chip tone="grey">إجازة</Chip> : null}
-                {d.ranges.map((r, i) => (
-                  <Row key={i}>
-                    <TimeSelect label={`بداية فترة ${i + 1} يوم ${DAY_NAMES[w]}`} value={r.start} onChange={(v) => edit(w, d.ranges.map((x, j) => (j === i ? { ...x, start: v } : x)))} />
-                    –
-                    <TimeSelect label={`نهاية فترة ${i + 1} يوم ${DAY_NAMES[w]}`} value={r.end} min={15} onChange={(v) => edit(w, d.ranges.map((x, j) => (j === i ? { ...x, end: v } : x)))} />
-                    <Button variant="ghost" className="!min-h-9 !px-2" aria-label="شيل الفترة" onClick={() => edit(w, d.ranges.filter((_, j) => j !== i))}><Icon name="x" className="size-4" /></Button>
-                  </Row>
-                ))}
-                <Button variant="ghost" className="!min-h-9 !px-3 text-gold-ink" onClick={() => edit(w, [...d.ranges, { start: d.ranges.at(-1)?.end ?? 600, end: 1440 }])}>+ فترة</Button>
-                {d.ranges.length ? <span className="ms-auto tabular rounded-full bg-card/70 px-2.5 py-0.5 text-xs text-ink-soft">{hoursWords(minutesIn(d))}</span> : null}
-              </li>
-            );
-          })}
-        </ul>
-        {affected ? <Confirm list={affected} busy={save.isPending} onYes={() => save.mutate(true)} onNo={() => setAffected(null)} /> : null}
-        {save.isError && !affected ? <p className="text-sm text-bad" role="alert">{errorMessage(save.error)}</p> : null}
-      </Sheet>
-      <SaveBar>
-        <Button variant="primary" busy={save.isPending && !affected} disabled={!draft} onClick={() => save.mutate(false)}>احفظ الأسبوع</Button>
-        {draft ? <Button onClick={() => setDraft(null)}>ارجع زي ما كان</Button> : null}
-      </SaveBar>
-    </div>
-  );
-}
+function Bookings() {
+  const [when, setWhen] = useUrlState<"ahead" | "past">("when", "ahead", ["ahead", "past"]);
+  const [kind, setKind] = useUrlState<Kind>("kind", "all", ["all", "phone", "office", "urgent", "urf"]);
+  const [q, setQ] = useState("");
+  // Ahead: today and the next 30 days. Past (TASK 10): the last two weeks, so a consultation that took place can get
+  // «مطلوب رأي مكتوب» (B-17), most recent first.
+  const now = new Date();
+  const from = when === "ahead" ? cairoDate(now) : cairoDate(new Date(now.getTime() - 14 * DAY_MS));
+  const to = when === "ahead" ? cairoDate(new Date(now.getTime() + 30 * DAY_MS)) : cairoDate(new Date(now.getTime() - DAY_MS));
+  const list = useQuery({ queryKey: ["booking", "appointments", from, to], queryFn: () => booking.appointments(from, to), refetchInterval: 60_000 });
 
-/** 480 → «8 ساعات»، 90 → «ساعة و30 دقيقة». */
-function hoursWords(minutes: number): string {
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  const hours = h === 0 ? "" : h === 1 ? "ساعة" : h === 2 ? "ساعتين" : h <= 10 ? `${h} ساعات` : `${h} ساعة`;
-  if (m === 0) return hours || "0 ساعة";
-  return hours ? `${hours} و${m} دقيقة` : `${m} دقيقة`;
-}
-
-const Row = ({ children }: { children: ReactNode }) => (
-  <span className="flex items-center gap-1 rounded-[12px] border border-line/60 bg-card/60 px-1.5 py-1 shadow-[inset_0_1px_0_rgb(255_255_255/0.4)]">{children}</span>
-);
-
-// ---------- the settings and the office's details ----------
-
-function SettingsForm() {
-  const qc = useQueryClient();
-  const s = useQuery(settingsQuery);
-  const [draft, setDraft] = useState<Settings | null>(null);
-  const v = draft ?? s.data;
-  const save = useMutation({ mutationFn: booking.saveSettings, onSuccess: () => { setDraft(null); void qc.invalidateQueries({ queryKey: ["booking"] }); toast("إعدادات الحجز اتحفظت ✅"); } });
-  if (s.isPending) return <Loading />;
-  if (s.isError || !v) return <ErrorState message={errorMessage(s.error)} onRetry={() => void s.refetch()} />;
-  const num = (k: keyof Settings) => (e: { target: { value: string } }) => setDraft({ ...v, [k]: e.target.value === "" ? null : Number(e.target.value) });
+  const all = (list.data ?? []).slice().sort((a, b) => (when === "ahead" ? 1 : -1) * a.start.localeCompare(b.start));
+  const needle = q.trim().replace(/^\+/, "");
+  const items = all.filter((a) => KIND_TEST[kind](a) && (!needle || (a.name ?? "").includes(needle) || a.wa_id.includes(needle)));
+  const days = [...new Set(items.map((a) => cairoDate(new Date(a.start))))].map((day) => ({ day, items: items.filter((a) => cairoDate(new Date(a.start)) === day) }));
+  const todayKey = cairoDate(now);
+  const weekEnd = cairoDate(new Date(now.getTime() + 6 * DAY_MS));
+  const next = when === "ahead" ? all.find((a) => isLive(a) && new Date(a.end) > now) : undefined;
+  // TASK 12 (B-18): tomorrow's confirmed appointments whose client has not pressed «هحضر ✅» yet (nothing is cancelled for it).
+  const tomorrowKey = cairoDate(new Date(now.getTime() + DAY_MS));
+  const tomorrows = when === "ahead" ? all.filter((a) => a.state === "confirmed" && cairoDate(new Date(a.start)) === tomorrowKey) : [];
+  const unconfirmed = tomorrows.filter((a) => !a.attending).length;
+  const count = (f: (a: Appointment) => boolean) => (list.data ? all.filter(f).length : undefined);
+  const tiles: { label: string; value: number | undefined; tone: string }[] = when === "ahead" ? [
+    { label: "النهارده", value: count((a) => isLive(a) && cairoDate(new Date(a.start)) === todayKey), tone: "text-blue-ink" },
+    { label: "الأسبوع ده", value: count((a) => isLive(a) && cairoDate(new Date(a.start)) <= weekEnd), tone: "text-blue-ink" },
+    { label: "مستني الإيصال", value: count((a) => a.state === "pending_payment"), tone: "text-orange-ink" },
+    { label: "تحويل محتاج مراجعة", value: count((a) => a.state === "confirmed" && (a.payment === "proof_received" || a.payment === "duplicate_suspected")), tone: "text-red-ink" },
+  ] : [
+    { label: "خلصت", value: count((a) => a.state === "completed"), tone: "text-green-ink" },
+    { label: "ماحضروش", value: count((a) => a.state === "no_show"), tone: "text-orange-ink" },
+    { label: "اتلغت", value: count((a) => a.state.startsWith("cancelled")), tone: "text-ink" },
+    { label: "اتفكت (الإيصال ما وصلش)", value: count((a) => a.state === "expired"), tone: "text-ink" },
+  ];
+  const kinds: { value: Kind; label: string; icon: IconName }[] = ([["all", `الكل ${all.length}`], ["phone", "تليفون أو فيديو"], ["office", "في المكتب"], ["urgent", "عاجلة"], ["urf", "عرفي"]] as const)
+    .map(([v, t]) => ({ value: v, label: t, icon: KIND_ICON[v] }));
 
   return (
-    <div className="grid gap-4">
-      <Sheet icon="whatsapp" title="الحجز من واتساب">
-        <label className={`flex cursor-pointer items-center gap-3 px-4 py-3 font-semibold transition has-checked:border-gold-line has-checked:bg-gold-tint motion-reduce:transition-none ${ROW}`}>
-          <input type="checkbox" className="size-4 accent-[#a87a48]" checked={v.enabled} onChange={(e) => setDraft({ ...v, enabled: e.target.checked })} />
-          حازم يحجز من واتساب
-        </label>
-      </Sheet>
-      <div className="grid items-start gap-4 2xl:grid-cols-2">
-        <Sheet icon="calendar" title="المواعيد اللي حازم بيعرضها">
-          <div className="grid gap-3 md:grid-cols-2">
-            <Field label="الوقت بين كل ميعاد والتاني (دقيقة)" type="number" min={0} max={240} value={v.buffer_minutes} onChange={num("buffer_minutes")} />
-            <Field label="أقل مدة قبل الحجز (ساعة)" hint="ما بتنطبقش على العاجل." type="number" min={0} max={168} value={v.min_notice_hours} onChange={num("min_notice_hours")} />
-            <Field label="أبعد يوم ينفع يتحجز (يوم من النهارده)" type="number" min={1} max={180} value={v.horizon_days} onChange={num("horizon_days")} />
-            <Field label="أقصى عدد مواعيد في اليوم" hint="فاضي = من غير حد." type="number" min={1} max={100} value={v.max_per_day ?? ""} onChange={num("max_per_day")} />
-            <label className="grid gap-1.5 text-sm font-semibold">
-              الميعاد بيبدأ كل
-              <select className={`${SELECT} !min-h-11 px-3 font-normal`} value={v.slot_step_minutes} onChange={num("slot_step_minutes")}>
-                {[5, 10, 15, 20, 30, 60].map((m) => <option key={m} value={m}>{m} دقيقة</option>)}
-              </select>
-            </label>
-            <Field label="عدد المواعيد اللي حازم يعرضها مرة واحدة" type="number" min={1} max={9} value={v.offer_count} onChange={num("offer_count")} />
-            <div className="md:col-span-2">
-              <Field label="إيميل كالندر المستشار (Google)" dir="ltr" value={v.calendar_id} onChange={(e) => setDraft({ ...v, calendar_id: e.target.value })}
-                hint={v.calendar_key ? "مفتاح Google موجود." : "مفتاح Google لسه مش متحط (صاحب المشروع)."} />
-            </div>
-          </div>
-        </Sheet>
-        <div className="grid gap-4">
-          <Sheet icon="receipt" title="الحجز المؤقت لحد صورة التحويل"
-            hint="العميل يختار ميعاد ← الميعاد يتمسك له لحد ساعة محددة. صورة التحويل توصل ← الحجز يتأكد. ما وصلتش ← الميعاد يتفك ويرجع فاضي.">
-            <div className="grid gap-3 md:grid-cols-2">
-              <Field label="مدة الحجز المؤقت (دقيقة)" type="number" min={15} max={1440} value={v.hold_minutes} onChange={num("hold_minutes")} />
-              <Field label="المدة لو الميعاد قريب (دقيقة)" type="number" min={15} max={1440} value={v.hold_short_minutes} onChange={num("hold_short_minutes")} />
-              <Field label="«قريب» يعني بعد أقل من (ساعة)" type="number" min={0} max={72} value={v.hold_short_within_hours} onChange={num("hold_short_within_hours")} />
-              <Field label="الحجز المؤقت يخلص قبل الميعاد بـ (دقيقة)" type="number" min={0} max={240} value={v.hold_gap_minutes} onChange={num("hold_gap_minutes")} />
-            </div>
-          </Sheet>
-          <Sheet icon="document" title="العرفي">
-            <div className="grid gap-3 md:grid-cols-2">
-              <Field label="مدة ميعاد العرفي في المكتب (دقيقة)" type="number" min={15} max={480} value={v.urf_minutes} onChange={num("urf_minutes")} />
-            </div>
-          </Sheet>
+    <div className="grid gap-3">
+      <section aria-label="فلاتر الحجوزات" className="liquid grid gap-2.5 rounded-[22px] p-3">
+        <div className="grid gap-2.5 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          <Segmented label="أنهي حجوزات" value={when} onChange={setWhen} options={WHENS} small />
+          <label className="relative w-full">
+            <span className="sr-only">دوّر بالاسم أو الرقم</span>
+            <Icon name="search" className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-ink-soft" />
+            <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="دوّر بالاسم أو الرقم"
+              className="min-h-10 w-full rounded-full border border-line/70 bg-card/60 ps-9 pe-3 text-sm text-ink shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)] focus:border-gold" />
+          </label>
         </div>
-      </div>
-      {save.isError ? <p className="text-sm text-bad" role="alert">{errorMessage(save.error)}</p> : null}
-      <SaveBar dirty={!!draft}>
-        <Button variant="primary" busy={save.isPending} disabled={!draft} onClick={() => save.mutate(v)}>احفظ</Button>
-      </SaveBar>
-    </div>
-  );
-}
+        <Segmented label="نوع الميعاد" value={kind} onChange={setKind} options={kinds} small />
+      </section>
 
-function OfficeForm() {
-  const qc = useQueryClient();
-  const o = useQuery({ queryKey: ["booking", "office"], queryFn: booking.office });
-  const [draft, setDraft] = useState<Office | null>(null);
-  const v = draft ?? o.data;
-  const save = useMutation({ mutationFn: booking.saveOffice, onSuccess: () => { setDraft(null); void qc.invalidateQueries({ queryKey: ["booking"] }); toast("بيانات المكتب اتحفظت ✅"); } });
-  if (o.isPending) return <Loading />;
-  if (o.isError || !v) return <ErrorState message={errorMessage(o.error)} onRetry={() => void o.refetch()} />;
-  const set = (k: keyof Office) => (e: { target: { value: string } }) => setDraft({ ...v, [k]: e.target.value });
-  // 1.33 (B-09): a WhatsApp number as the API takes it (digits, spaces, dashes, a leading +; 8 to 15 digits), or empty.
-  const badNumber = (raw: string | null) => {
-    const t = (raw ?? "").trim();
-    const digits = t.replace(/[^0-9]/g, "").length;
-    return t !== "" && (!/^\+?[0-9 -]{6,20}$/.test(t) || digits < 8 || digits > 15) ? "رقم واتساب مش صحيح (مثلًا 01xxxxxxxxx)" : undefined;
-  };
-  const lawyerBad = badNumber(v.lawyer_whatsapp);
-  const managerBad = badNumber(v.manager_whatsapp);
+      <section aria-label="ملخص الحجوزات" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {tiles.map((t) => (
+          <div key={t.label} className="liquid grid content-start gap-0 rounded-[16px] px-3 py-2.5">
+            <span className={`tabular text-[22px] leading-tight font-bold ${t.tone === "text-red-ink" && !t.value ? "text-ink" : t.tone}`}>{t.value === undefined ? "…" : t.value}</span>
+            <span className="text-[12px] leading-snug text-ink-soft">{t.label}</span>
+          </div>
+        ))}
+      </section>
 
-  return (
-    <div className="grid gap-4">
-      <div className="grid items-start gap-4 2xl:grid-cols-2">
-        <Sheet icon="receipt" title="فين العميل يحوّل"
-          hint="حازم بيكتب البيانات دي في رسالة الحجز المؤقت (فين يحوّل). لو InstaPay أو المحفظة فاضيين، الميعاد بيتمسك للعميل بس الرسالة مش بتتبعت وبتتعمل مهمة.">
-          <div className="grid gap-3 md:grid-cols-2">
-            <Field label="عنوان InstaPay" dir="ltr" value={v.instapay} onChange={set("instapay")} />
-            <Field label="رقم المحفظة" dir="ltr" inputMode="tel" value={v.wallet_number} onChange={set("wallet_number")} />
-            <Field label="نوع المحفظة" hint="مثلًا فودافون كاش" value={v.wallet_provider} onChange={set("wallet_provider")} />
-          </div>
-        </Sheet>
-        <Sheet icon="office" title="المكتب والمقابلة"
-          hint="لينك Google Meet: لو فاضي، حازم مش بيعرض Meet على العميل. والعنوان والخريطة ورقم التليفون بيتكتبوا في تأكيد المقابلة في المكتب بعد مراجعة التحويل.">
-          <div className="grid gap-3 md:grid-cols-2">
-            <Field label="عنوان المكتب" value={v.address} onChange={set("address")} />
-            <Field label="لينك الخريطة" dir="ltr" placeholder="https://maps.app.goo.gl/…" value={v.map_url} onChange={set("map_url")} />
-            <Field label="لينك Google Meet بتاع المستشار" dir="ltr" placeholder="https://meet.google.com/…" value={v.meet_link ?? ""} onChange={set("meet_link")} />
-            <Field label="رقم تليفون المكتب" dir="ltr" inputMode="tel" value={v.phone ?? ""} onChange={set("phone")} />
-          </div>
-        </Sheet>
-      </div>
-      <Sheet icon="bell" title="تنبيه الاستشارة العاجلة"
-        hint="الاستشارة العاجلة: بعد صورة التحويل، المستشار بيوصله تنبيه واتساب على رقمه بزرار «شوف التحويل» (صورة التحويل، وبعدها «التحويل تمام، هكلمه» أو «فيه مشكلة»). لو ما ردّش في 10 دقايق، التنبيه بيروح لرقم المدير. لو رقم المستشار فاضي، التنبيه في اللوحة بس.">
-        <div className="grid gap-3 md:grid-cols-2">
-          <Field label="رقم واتساب المستشار (تنبيه الاستشارة العاجلة)" dir="ltr" inputMode="tel" placeholder="01xxxxxxxxx" value={v.lawyer_whatsapp ?? ""} error={lawyerBad} onChange={set("lawyer_whatsapp")} />
-          <Field label="رقم واتساب المدير (لو المستشار ما ردّش)" dir="ltr" inputMode="tel" placeholder="01xxxxxxxxx" value={v.manager_whatsapp ?? ""} error={managerBad} onChange={set("manager_whatsapp")} />
+      {next ? (
+        <div className="liquid relative flex flex-wrap items-center gap-x-4 gap-y-1 overflow-hidden rounded-[18px] px-4 py-3 ps-6">
+          <span aria-hidden className="absolute inset-y-3 start-0 w-1.5 rounded-e-full bg-gradient-to-b from-[#dcb98c] to-[#a87a48]" />
+          <span className="flex items-center gap-1.5 text-[13px] font-bold text-gold-ink"><Icon name="clock" className="size-4" />{fromNow(next, now) === "دلوقتي" ? "شغال دلوقتي" : "الميعاد الجاي"}</span>
+          <span className="tabular text-[20px] leading-tight font-bold">{cairoTime(new Date(next.start))}</span>
+          <span className="grid min-w-0 flex-1 basis-48">
+            <span className="font-bold">{next.name ?? "من غير اسم"}</span>
+            <span className="text-xs text-ink-soft">
+              {cairoWhen(next.start)}{fromNow(next, now) !== "دلوقتي" ? ` · ${fromNow(next, now)}` : ""} · {label(BOOKING_SERVICES, next.service)}{next.call_app ? ` (${label(CALL_APPS, next.call_app)})` : ""} · <Phone wa={next.wa_id} />
+            </span>
+          </span>
         </div>
-      </Sheet>
-      {save.isError ? <p className="text-sm text-bad" role="alert">{errorMessage(save.error)}</p> : null}
-      <SaveBar dirty={!!draft}>
-        <Button variant="primary" busy={save.isPending} disabled={!draft || !!lawyerBad || !!managerBad} onClick={() => save.mutate(v)}>احفظ</Button>
-      </SaveBar>
+      ) : null}
+
+      {tomorrows.length > 0 ? (
+        <p className={`liquid flex flex-wrap items-center gap-2 rounded-full px-4 py-2 text-sm ${unconfirmed > 0 ? "" : "text-green-ink"}`} role="status">
+          <Icon name={unconfirmed > 0 ? "bell" : "check-circle"} className={`size-4 shrink-0 ${unconfirmed > 0 ? "text-orange-ink" : ""}`} />
+          بكرة {tomorrows.length} {tomorrows.length === 1 ? "ميعاد" : "مواعيد"}
+          {unconfirmed > 0 ? <>، <span className="font-semibold text-orange-ink">{unconfirmed} ما أكدوش حضورهم</span></> : "، وكلهم أكدوا حضورهم ✅"}
+        </p>
+      ) : null}
+
+      {list.isPending ? <Loading /> : list.isError ? <ErrorState message={errorMessage(list.error)} onRetry={() => void list.refetch()} /> : days.length === 0 ? (
+        <div className="liquid rounded-[22px] p-4 sm:p-5">
+          {all.length > 0
+            ? <Empty title="مفيش حجوزات بالشكل ده" icon="search">جرّب نوع تاني أو امسح البحث.</Empty>
+            : <Empty title={when === "ahead" ? "مفيش حجوزات في الشهر الجاي" : "مفيش حجوزات في الأسبوعين اللي فاتوا"} icon="calendar" />}
+        </div>
+      ) : days.map((g) => {
+        const live = g.items.filter(isLive);
+        const held = g.items.filter((a) => a.state === "pending_payment").length;
+        return (
+          <section key={g.day} className="liquid relative grid gap-2.5 overflow-hidden rounded-[22px] p-3 sm:p-3.5">
+            <span aria-hidden className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-l from-transparent via-gold/70 to-transparent" />
+            <h3 className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 font-bold">
+              {g.day === todayKey ? "النهارده" : g.day === tomorrowKey ? "بكرة" : ""} <span className="text-sm font-normal text-ink-soft">{longDay(g.day)}</span>
+              <span className="ms-auto flex flex-wrap gap-1.5 text-xs font-normal">
+                <span className="rounded-full border border-line/60 bg-card/60 px-2.5 py-0.5 text-ink-soft">{g.items.length} {g.items.length === 1 ? "ميعاد" : "مواعيد"}</span>
+                {live.length ? <span className="rounded-full border border-line/60 bg-card/60 px-2.5 py-0.5 text-ink-soft">{lengthWords(live.reduce((s, a) => s + minutesOf(a), 0))} محجوزة</span> : null}
+                {held ? <span className="rounded-full bg-orange-bg px-2.5 py-0.5 text-orange-ink">{held} مستني الإيصال</span> : null}
+              </span>
+            </h3>
+            <ul className="grid gap-2">{g.items.map((a) => <BookingCard key={a.id} a={a} now={now} />)}</ul>
+          </section>
+        );
+      })}
     </div>
   );
 }

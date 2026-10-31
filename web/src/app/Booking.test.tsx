@@ -11,6 +11,7 @@ const staff: Me = {
   permissions: ["tasks.view_own", "tasks.update", "account.self", "schedule.manage"], must_change_password: false, two_factor: false,
   two_factor_required: false, avatar_at: null,
 };
+const manager: Me = { ...staff, id: "u2", display_name: "حازم", role: "manager", permissions: [...staff.permissions, "office.manage"] };
 const settings = { enabled: true, buffer_minutes: 10, min_notice_hours: 2, horizon_days: 14, max_per_day: null, slot_step_minutes: 15, offer_count: 4, calendar_id: "lawyer@example.test", calendar_key: true, texts_approved: true, hold_minutes: 120, hold_short_minutes: 60, hold_short_within_hours: 6, hold_gap_minutes: 15 };
 const day = (d: string, over: object = {}) => ({ day: d, status: "open", hours: [{ start: 600, end: 1440 }], bookings: 0, exceptions: [], ...over });
 const month = Array.from({ length: 30 }, (_, i) => day(`2026-11-${String(i + 1).padStart(2, "0")}`, i === 19 ? { bookings: 1 } : {}));
@@ -56,7 +57,9 @@ describe("TASK 08 booking", () => {
     });
     renderAt("/appointments");
     fireEvent.click(await screen.findByRole("gridcell", { name: /2026-11-20/ }));
-    fireEvent.click(screen.getByRole("button", { name: "احفظ" }));
+    fireEvent.click(await screen.findByRole("button", { name: "تعديل اليوم ده" }));
+    const dialog = await screen.findByRole("dialog", { name: /تعديل/ });
+    fireEvent.click(within(dialog).getByRole("button", { name: "احفظ" }));
     const ask = await screen.findByRole("alertdialog", { name: "فيه حجوزات" });
     expect(within(ask).getByText(/محمد أحمد علي حسن/)).toBeTruthy();
     fireEvent.click(within(ask).getByRole("button", { name: "كمّل وبلّغ العملاء" }));
@@ -68,8 +71,8 @@ describe("TASK 08 booking", () => {
   it("the default week: a day off and two ranges are saved as minutes", async () => {
     const week = [0, 1, 2, 3, 4, 5, 6].map((w) => ({ weekday: w, ranges: [{ start: 600, end: 1440 }] }));
     const calls = serve({ "GET /auth/me": { body: staff }, "GET /booking/week": { body: week }, "PUT /booking/week": { body: { cancelled: 0, not_told: 0 } } });
-    renderAt("/appointments");
-    fireEvent.click(await screen.findByRole("tab", { name: "المواعيد الثابتة" }));
+    renderAt("/appointments/settings");
+    expect((await screen.findByRole("tab", { name: "ساعات الشغل" })).getAttribute("aria-selected")).toBe("true");
     const friday = (await screen.findByText("الجمعة")).closest("li")!;
     fireEvent.click(within(friday).getByRole("button", { name: "شيل الفترة" }));
     expect(within(friday).getByText("إجازة")).toBeTruthy();
@@ -94,7 +97,7 @@ describe("TASK 08 booking", () => {
       ] },
     });
     renderAt("/appointments");
-    fireEvent.click(await screen.findByRole("tab", { name: "الحجوزات" }));
+    fireEvent.click(await screen.findByRole("button", { name: "كل الجاي" }));
     expect((await screen.findByText(/ما أكدوش حضورهم/)).closest("p")!.textContent).toMatch(/بكرة 2 مواعيد، 1 ما أكدوش حضورهم/);
     const first = screen.getAllByText(/محمد أحمد علي حسن/).map((e) => e.closest("li")).find(Boolean)!; // the row, not «الميعاد الجاي»
     expect(within(first).getByText("أكّد حضوره ✅")).toBeTruthy();
@@ -119,7 +122,7 @@ describe("TASK 08 booking", () => {
       ] },
     });
     renderAt("/appointments");
-    fireEvent.click(await screen.findByRole("tab", { name: "الحجوزات" }));
+    fireEvent.click(await screen.findByRole("button", { name: "كل الجاي" }));
     expect(await screen.findByText("الميعاد الجاي")).toBeTruthy(); // the data is in
     const tiles = screen.getByRole("region", { name: "ملخص الحجوزات" });
     expect(within(tiles).getByText("تحويل محتاج مراجعة").previousElementSibling!.textContent).toBe("1");
@@ -152,27 +155,64 @@ describe("TASK 08 booking", () => {
     });
     renderAt("/appointments");
     const list = await screen.findByRole("region", { name: "حجوزات اليوم" });
-    expect(within(list).getByText(/محمد أحمد علي حسن/)).toBeTruthy();
+    expect(await within(list).findByText(/محمد أحمد علي حسن/)).toBeTruthy();
     fireEvent.click(within(list).getByRole("button", { name: /انسخ الرقم/ }));
     await vi.waitFor(() => expect(write).toHaveBeenCalledWith("+201000000091"));
     expect(await screen.findByText("الرقم اتنسخ")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("tab", { name: "المواعيد الثابتة" }));
+    fireEvent.click(screen.getByRole("link", { name: "إعدادات المواعيد" }));
     expect((await screen.findByText("في الأسبوع")).textContent).toContain("48 ساعة"); // 6 days × 8 hours
     expect(within((await screen.findByText("السبت")).closest("li")!).getByText("8 ساعات")).toBeTruthy();
   });
 
-  it("the page's tab and the bookings' filter live in the address", async () => {
+  it("the page's view, the bookings' filter and the settings' section live in the address", async () => {
     serve({ "GET /auth/me": { body: staff }, "GET /booking/appointments": { body: [appointment] } });
-    renderAt("/appointments?tab=bookings&kind=office");
-    expect((await screen.findByRole("tab", { name: "الحجوزات" })).getAttribute("aria-selected")).toBe("true");
+    renderAt("/appointments?show=all&kind=office");
+    expect((await screen.findByRole("button", { name: "كل الجاي" })).getAttribute("aria-pressed")).toBe("true");
     expect((await screen.findByRole("button", { name: "في المكتب" })).getAttribute("aria-pressed")).toBe("true");
+    cleanup();
+    renderAt("/appointments/settings?section=booking");
+    expect((await screen.findByRole("tab", { name: "الحجز من واتساب" })).getAttribute("aria-selected")).toBe("true");
+    expect(await screen.findByLabelText("حازم يحجز من واتساب")).toBeTruthy();
   });
 
-  it("the office's payment details are not shown to a staff member", async () => {
-    serve({ "GET /auth/me": { body: staff } });
+  it("the daily screen has no tabs, and the day is changed from «تعديل اليوم ده» in a window", async () => {
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Cairo" }).format(new Date());
+    serve({ "GET /auth/me": { body: staff }, "GET /booking/month": { body: [day(today)] }, "GET /booking/appointments": { body: [] } });
     renderAt("/appointments");
-    expect(await screen.findByRole("tab", { name: "إعدادات الحجز" })).toBeTruthy();
-    expect(screen.queryByRole("tab", { name: "بيانات المكتب" })).toBeNull();
+    expect(await screen.findByRole("grid", { name: "أيام الشهر" })).toBeTruthy();
+    expect(screen.queryByRole("tablist")).toBeNull();
+    expect(screen.queryByRole("radio", { name: "اقفل اليوم كله" })).toBeNull(); // not on the page itself
+    expect(screen.getByRole("link", { name: "إعدادات المواعيد" }).getAttribute("href")).toBe("/appointments/settings");
+    fireEvent.click(await screen.findByRole("button", { name: "تعديل اليوم ده" }));
+    const dialog = await screen.findByRole("dialog", { name: /تعديل/ });
+    expect(within(dialog).getByRole("radio", { name: "اقفل اليوم كله" })).toBeTruthy();
+    expect(within(dialog).getByRole("radio", { name: "اقفل جزء منه" })).toBeTruthy();
+    expect(within(dialog).getByRole("radio", { name: "ساعات مختلفة لليوم ده" })).toBeTruthy();
+    expect(within(dialog).getByLabelText("السبب (للمكتب بس)")).toBeTruthy();
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "تعديل اليوم ده" }));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "اقفل" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("the settings page: three sections for a manager, the office's payment details hidden from a staff member", async () => {
+    serve({ "GET /auth/me": { body: manager }, "GET /booking/week": { body: [] }, "GET /office": { body: { instapay: "hazem@instapay", wallet_number: "", wallet_provider: "", address: "", map_url: "", meet_link: null, phone: null, lawyer_whatsapp: null, manager_whatsapp: null } } });
+    renderAt("/appointments/settings");
+    const menu = await screen.findByRole("tablist", { name: "أقسام الإعدادات" });
+    expect(within(menu).getAllByRole("tab").map((t) => t.textContent)).toEqual(["ساعات الشغل", "الحجز من واتساب", "بيانات المكتب والدفع"]);
+    fireEvent.click(within(menu).getByRole("tab", { name: "بيانات المكتب والدفع" }));
+    expect(((await screen.findByLabelText("عنوان InstaPay")) as HTMLInputElement).value).toBe("hazem@instapay");
+    expect(screen.getByRole("link", { name: "رجوع للمواعيد" }).getAttribute("href")).toBe("/appointments");
+    cleanup();
+    vi.restoreAllMocks();
+
+    serve({ "GET /auth/me": { body: staff }, "GET /booking/week": { body: [] } });
+    renderAt("/appointments/settings?section=office");
+    const staffMenu = await screen.findByRole("tablist", { name: "أقسام الإعدادات" });
+    expect(within(staffMenu).getByRole("tab", { name: "الحجز من واتساب" })).toBeTruthy();
+    expect(within(staffMenu).queryByRole("tab", { name: "بيانات المكتب والدفع" })).toBeNull();
+    expect(within(staffMenu).getByRole("tab", { name: "ساعات الشغل" }).getAttribute("aria-selected")).toBe("true");
   });
 });

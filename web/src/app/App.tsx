@@ -61,7 +61,10 @@ export const routes = [
           { path: "/clients", element: <ComingSoon title="العملاء / الشركات" icon="clients" what="ملف لكل عميل: بياناته، قضاياه، مواعيده ومستنداته في مكان واحد." when="بعد ربط المحادثات (TASK 07b)" /> },
           {
             element: <RequirePermission permission="schedule.manage" />,
-            children: [{ path: "/appointments", element: <LazyPage path="/appointments" /> }],
+            children: [
+              { path: "/appointments", element: <LazyPage path="/appointments" /> },
+              { path: "/appointments/settings", element: <LazyPage path="/appointments/settings" /> },
+            ],
           },
           { path: "/chats", element: <LazyPage path="/chats" /> },
           { path: "/documents", element: <ComingSoon title="المستندات" icon="document" what="العقود والصور والمستندات اللي العملاء بعتوها، مرتبة على كل عميل." when="بعد المحادثات" /> },
