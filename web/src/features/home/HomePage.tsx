@@ -67,14 +67,15 @@ export function HomePage() {
 
         {/* the mockup's three columns: the calendar on the right, today's and the next appointments in the middle, the
             alerts and the tasks on the left, from a laptop's width (1280 px, a 1920 screen at 150% too). A tablet: the
-            calendar beside today, the rest under it; a phone: one column. */}
+            calendar beside today, the rest under it; a phone: one column. The three columns end on one line: the last
+            panel of each stretches down to the tallest one. */}
         <div className="grid gap-4 md:grid-cols-[17rem_minmax(0,1fr)] xl:grid-cols-[17.5rem_minmax(0,1.5fr)_minmax(0,1fr)] 2xl:grid-cols-[19rem_minmax(0,1.45fr)_minmax(0,1fr)] 2xl:gap-5">
           <CalendarPanel now={now} items={todayList} />
-          <div className="grid min-w-0 content-start gap-4 2xl:gap-5">
+          <div className="grid min-w-0 grid-rows-[auto_1fr] gap-4 2xl:gap-5">
             <TodayPanel items={todayList} pending={appointments.isPending} failed={appointments.isError} />
             <UpcomingPanel now={now} />
           </div>
-          <div className="grid min-w-0 content-start gap-4 md:col-span-2 md:grid-cols-2 xl:col-span-1 xl:grid-cols-1 2xl:gap-5">
+          <div className="grid min-w-0 gap-4 md:col-span-2 md:grid-cols-2 xl:col-span-1 xl:grid-cols-1 xl:grid-rows-[auto_1fr] 2xl:gap-5">
             <AlertsPanel items={dash.data?.recent} pending={dash.isPending} now={now} />
             <PriorityPanel items={dash.data?.priority} pending={dash.isPending} now={now} />
           </div>
@@ -192,7 +193,7 @@ const DOT: Partial<Record<IconName, string>> = { phone: "bg-red", video: "bg-blu
 function CalendarPanel({ now, items }: { now: Date; items?: Appointment[] | undefined }) {
   const week = cairoWeek(now);
   return (
-    <Panel title="تقويم المواعيد" action={<SeeAll to="/appointments" />} className="self-start" flush>
+    <Panel title="تقويم المواعيد" action={<SeeAll to="/appointments" />} flush>
       <div className="flex items-center justify-between px-4 py-1.5">
         <button type="button" disabled aria-label="الأسبوع اللي فات" className="text-gold-ink disabled:opacity-50">
           <Icon name="back" className="size-5" />
@@ -210,7 +211,7 @@ function CalendarPanel({ now, items }: { now: Date; items?: Appointment[] | unde
           </li>
         ))}
       </ol>
-      <div className="border-t border-line">
+      <div className="flex flex-1 flex-col border-t border-line">
         <h3 className="px-4 pt-3 pb-1 text-[14px] font-bold">مواعيد اليوم{items ? ` (${items.length})` : ""}</h3>
         {!items?.length ? (
           <p className="px-4 pt-1 pb-3 text-[13px] text-ink-soft">{items ? "مفيش مواعيد النهارده." : "…"}</p>
@@ -231,7 +232,8 @@ function CalendarPanel({ now, items }: { now: Date; items?: Appointment[] | unde
             })}
           </ul>
         )}
-        <div className="p-3">
+        {/* at the foot of the column, level with the other two */}
+        <div className="mt-auto p-3">
           <Link to="/appointments" className="grid min-h-10 place-items-center rounded-[10px] border border-gold-line bg-gold-tint text-[14px] font-semibold text-gold-ink hover:brightness-95">
             عرض كل المواعيد
           </Link>
