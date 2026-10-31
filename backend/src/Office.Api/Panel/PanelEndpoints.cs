@@ -182,6 +182,42 @@ public static class PanelEndpoints
             return r.Outcome == PanelOutcome.Ok ? Results.Ok(new { recovery_codes = r.Value }) : Refused(r);
         }).RequireRateLimiting(PanelAuth.SensitiveLimiter);
 
+        // ---------- the account's photo, from «حسابي» (migration 0036) ----------
+        // The body is the image itself with its Content-Type (the panel sends a 256×256 JPEG).
+        var account = work.MapGroup("/account").RequireAuthorization(PanelAuth.Policy(Permissions.AccountSelf));
+
+        account.MapPut("/avatar", async (HttpContext ctx, PanelAvatars avatars, CancellationToken ct) =>
+        {
+            if (ctx.Request.ContentLength > PanelAvatars.MaxBytes)
+            {
+                return Results.BadRequest(new { error = PanelAvatars.TooLarge });
+            }
+
+            var r = await avatars.SetAsync(ctx.CurrentUser().Id, ctx.Request.ContentType, await ReadUpTo(ctx.Request.Body, PanelAvatars.MaxBytes + 1, ct), ct);
+            return r.Outcome == PanelOutcome.Ok ? Results.Ok(new { avatar_at = r.Value }) : Refused(r);
+        });
+
+        account.MapDelete("/avatar", async (HttpContext ctx, PanelAvatars avatars, CancellationToken ct) =>
+        {
+            await avatars.RemoveAsync(ctx.CurrentUser().Id, ct);
+            return Results.NoContent();
+        });
+
+        // Anyone signed in sees anyone's photo (the lists show them). The address carries ?v=<avatar_at>,
+        // so a day in the browser's own cache never shows an old photo.
+        work.MapGet("/users/{id:guid}/avatar", async (Guid id, HttpContext ctx, PanelAvatars avatars, CancellationToken ct) =>
+        {
+            if (await avatars.FindAsync(id, ct) is not { } avatar)
+            {
+                return Results.NotFound(new { error = "not_found" });
+            }
+
+            ctx.Response.Headers.CacheControl = "private, max-age=86400";
+            ctx.Response.Headers.Remove("Pragma");
+            ctx.Response.Headers.XContentTypeOptions = "nosniff";
+            return Results.File(avatar.Bytes, avatar.Type);
+        }).RequireAuthorization(PanelAuth.Policy(Permissions.AccountSelf));
+
         var tasks = work.MapGroup("/tasks");
         tasks.MapGet("", async (string? scope, string? state, int? page, string? q, HttpContext ctx, PanelTasks use, CancellationToken ct) =>
         {
@@ -322,7 +358,21 @@ public static class PanelEndpoints
 
     private static MeDto Me(PanelUser u, HttpContext ctx) =>
         new(u.Id, u.Username, u.DisplayName, u.Email, u.Role, Permissions.Of(u.Role), u.MustChangePassword, u.TotpEnabled,
-            PanelAuth.NeedsTwoFactor(ctx, u));
+            PanelAuth.NeedsTwoFactor(ctx, u), u.AvatarAt);
+
+    /// <summary>At most <paramref name="max"/> bytes of the body: a longer one is cut there (and then refused as too large).</summary>
+    private static async Task<byte[]> ReadUpTo(Stream body, int max, CancellationToken ct)
+    {
+        var buffer = new byte[max];
+        var read = 0;
+        int n;
+        while (read < max && (n = await body.ReadAsync(buffer.AsMemory(read, max - read), ct)) > 0)
+        {
+            read += n;
+        }
+
+        return buffer[..read];
+    }
 
     /// <summary>Encrypted and signed; the expiry inside is checked against the API's clock.</summary>
     private static IDataProtector SecondStepTicket(IDataProtectionProvider dp) => dp.CreateProtector("panel.login.second-step");
@@ -426,8 +476,9 @@ public sealed record AlertsReadRequest(IReadOnlyList<long>? Ids);
 
 // ---------- responses ----------
 
+/// <summary><see cref="AvatarAt"/>: null without a photo; the panel builds /users/{id}/avatar?v=… from it.</summary>
 public sealed record MeDto(Guid Id, string Username, string DisplayName, string Email, string Role,
-    IReadOnlyList<string> Permissions, bool MustChangePassword, bool TwoFactor, bool TwoFactorRequired);
+    IReadOnlyList<string> Permissions, bool MustChangePassword, bool TwoFactor, bool TwoFactorRequired, DateTimeOffset? AvatarAt);
 
 public sealed record StaffDto(Guid Id, string Name);
 

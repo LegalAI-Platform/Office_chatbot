@@ -1,8 +1,9 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { OwnerImg } from "../../shared/ui/Owner";
+import { ThemePicker } from "../../shared/ui/ThemePicker";
 import { Field } from "../../shared/ui/ui";
 
-/** The pages before a session (sign-in, sign-up, a forgotten password): the office's black panel and a card. */
+/** The pages before a session (sign-in, sign-up, a forgotten password): the office's black panel and a card, with «فاتح / غامق». */
 export function AuthLayout({ title, subtitle, children }: { title: string; subtitle?: ReactNode; children: ReactNode }) {
   return (
     <main className="grid min-h-dvh lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
@@ -16,7 +17,9 @@ export function AuthLayout({ title, subtitle, children }: { title: string; subti
         </div>
       </section>
 
-      <div className="grid place-items-center px-4 py-10">
+      <div className="relative grid place-items-center px-4 pt-20 pb-10 lg:py-10">
+        {/* the look before signing in too (the same choice as inside, kept in the browser) */}
+        <ThemePicker label="الشكل" className="absolute top-4 end-4 w-44" />
         <div className="surface grid w-full max-w-sm gap-5 rounded-[var(--radius-sheet)] p-6 lg:p-8">
           <div className="grid gap-1">
             <h1 className="text-2xl">{title}</h1>

@@ -9,7 +9,7 @@ import { makeQueryClient, routes } from "./App";
 const staff: Me = {
   id: "u1", username: "u", display_name: "ياسمين", email: "u@example.test", role: "staff",
   permissions: ["tasks.view_own", "tasks.update", "account.self", "schedule.manage"], must_change_password: false, two_factor: false,
-  two_factor_required: false,
+  two_factor_required: false, avatar_at: null,
 };
 const settings = { enabled: true, buffer_minutes: 10, min_notice_hours: 2, horizon_days: 14, max_per_day: null, slot_step_minutes: 15, offer_count: 4, calendar_id: "lawyer@example.test", calendar_key: true, texts_approved: true, hold_minutes: 120, hold_short_minutes: 60, hold_short_within_hours: 6, hold_gap_minutes: 15 };
 const day = (d: string, over: object = {}) => ({ day: d, status: "open", hours: [{ start: 600, end: 1440 }], bookings: 0, exceptions: [], ...over });

@@ -9,7 +9,7 @@ import { makeQueryClient, routes } from "./App";
 const staff: Me = {
   id: "u1", username: "u", display_name: "ياسمين", email: "u@example.test", role: "staff",
   permissions: ["tasks.view_own", "tasks.update", "account.self", "schedule.manage", "payments.verify", "payments.refund"],
-  must_change_password: false, two_factor: false, two_factor_required: false,
+  must_change_password: false, two_factor: false, two_factor_required: false, avatar_at: null,
 };
 const payment = (over: object = {}) => ({
   appointment_id: "a1", service: "consultation_phone_video", start: "2026-11-20T10:00:00Z", appointment: "confirmed", name: "محمد أحمد علي حسن",

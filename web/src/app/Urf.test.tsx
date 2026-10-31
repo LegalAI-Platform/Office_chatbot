@@ -10,7 +10,7 @@ import { makeQueryClient, routes } from "./App";
 const me = (role: "staff" | "lawyer"): Me => ({
   id: "u1", username: "u", display_name: "x", email: "u@example.test", role,
   permissions: ["tasks.view_own", "tasks.update", "account.self", "urf.manage", ...(role === "lawyer" ? ["urf.review" as const] : [])],
-  must_change_password: false, two_factor: false, two_factor_required: false,
+  must_change_password: false, two_factor: false, two_factor_required: false, avatar_at: null,
 });
 const urfCase = (over: object = {}) => ({
   id: "c1", kind: "marriage", state: "booked", name: "محمد أحمد علي حسن", wa_id: "201000000094", created_at: "2026-11-19T10:00:00Z",
