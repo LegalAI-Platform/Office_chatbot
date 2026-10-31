@@ -79,10 +79,10 @@ export function Layout() {
           <p className="text-[12px] text-side-ink/80">للمحاماة والاستشارات القانونية</p>
         </div>
         <nav aria-label="التنقل" className="relative z-10 flex min-h-0 flex-1 flex-col px-2.5 pb-3">
-          <div className="soft-scroll grid min-h-0 content-start gap-1 overflow-x-hidden overflow-y-auto pe-0.5">
+          <div className="soft-scroll grid min-h-0 grid-cols-[minmax(0,1fr)] content-start gap-1 overflow-x-hidden overflow-y-auto px-0.5">
             <SideLink item={home} />
             {shownGroups.map((g) => (
-              <section key={g.title} aria-label={g.title} className="mt-2.5 grid gap-1">
+              <section key={g.title} aria-label={g.title} className="mt-2.5 grid grid-cols-[minmax(0,1fr)] gap-1">
                 <h2 className="flex items-center gap-2 px-3 pb-0.5 text-[11.5px] font-semibold tracking-wide text-gold/85 [text-shadow:0_1px_3px_rgb(0_0_0/0.8)]">
                   {g.title}
                   <span aria-hidden className="h-px flex-1 bg-gradient-to-l from-gold/40 to-transparent" />
