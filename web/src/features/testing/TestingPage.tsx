@@ -72,10 +72,6 @@ export function TestingPage() {
           </span>
           <div className="grid min-w-0 gap-1">
             <h1 className="text-[26px] leading-tight font-bold">أدوات التجربة</h1>
-            <p className="text-[14px] leading-relaxed text-ink-soft">
-              علشان تجرّب محادثة من الأول: حازم ينسى رقم من أرقام التجربة كأنه أول مرة يكلّمه. الرقم بيفضل في أرقام التجربة.
-              الصفحة دي بتشتغل في <strong className="text-ink">وضع التجربة بس</strong>، وعلى أرقام التجربة بس.
-            </p>
           </div>
         </div>
       </header>

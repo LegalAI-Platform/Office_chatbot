@@ -98,9 +98,6 @@ function Intro({ count }: { count?: number | undefined }) {
                 <span className="tabular rounded-full border border-gold-line bg-gold-tint px-2.5 py-0.5 text-[12.5px] font-bold text-gold-ink">{count} إيصال</span>
               ) : null}
             </div>
-            <p className="text-[14px] leading-relaxed text-ink-soft">
-              حازم بيأكد الميعاد بصورة التحويل بس. افتح الإيصال، اتأكد إن الفلوس وصلت، وعلّم اللي لقيته.
-            </p>
           </div>
         </div>
       </div>

@@ -45,9 +45,6 @@ export function TextsPage() {
                 <span className="tabular rounded-full border border-gold-line bg-gold-tint px-2.5 py-0.5 text-[12.5px] font-bold text-gold-ink">{texts.data.length} نص</span>
               ) : null}
             </div>
-            <p className="text-[14px] leading-relaxed text-ink-soft">
-              ده الكلام اللي حازم بيبعته للعملاء <strong className="text-ink">بالحرف</strong>. أي تعديل بيشتغل على طول من الرسالة الجاية، والنسخة القديمة بتفضل محفوظة وترجع بضغطة.
-            </p>
           </div>
         </div>
       </header>

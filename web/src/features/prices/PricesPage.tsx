@@ -49,11 +49,6 @@ export function PricesPage() {
                 <span className="tabular rounded-full border border-gold-line bg-gold-tint px-2.5 py-0.5 text-[12.5px] font-bold text-gold-ink">{list.data.length} سعر</span>
               ) : null}
             </div>
-            <p className="max-w-2xl text-[14px] leading-relaxed text-ink-soft">
-              الأسعار اللي حازم بيقولها للعميل وبيطلبها في الحجز والخدمات. السعر الجديد <strong className="text-ink">للطلبات الجديدة بس</strong>:
-              الحجز أو الطلب اللي اتعمل قبل كده بيفضل بسعره.
-              {editor ? "" : " التعديل للأستاذ والمدير."}
-            </p>
           </div>
         </div>
       </header>

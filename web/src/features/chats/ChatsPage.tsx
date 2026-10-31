@@ -49,11 +49,6 @@ export function ChatsPage() {
           افتح المحادثات
         </Button>
         {state.error ? <p className="text-sm text-bad" role="alert">{errorMessage(state.error)}</p> : null}
-        <ul className="grid max-w-md gap-1.5 text-start text-[13px] leading-snug text-ink-soft">
-          <li>• ردك بيوصل للعميل على واتساب، وحازم بيسكت في المحادثة دي.</li>
-          <li>• لما تخلص، اقفل المحادثة (Resolve)، وحازم يرجع يرد على العميل.</li>
-          <li>• الصور والملفات بتظهر نوعها بس، وبتتفتح من لوحة المكتب.</li>
-        </ul>
       </section>
     </div>
   );

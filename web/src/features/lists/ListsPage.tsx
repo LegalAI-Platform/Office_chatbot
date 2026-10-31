@@ -140,9 +140,6 @@ function Intro() {
         </span>
         <div className="grid min-w-0 gap-1">
           <h1 className="text-[26px] leading-tight font-bold">قوايم المكتب</h1>
-          <p className="text-[14px] leading-relaxed text-ink-soft">
-            حازم بيستخدم القوايم دي علشان يعرف مين بيكلمه. لو الرقم في أكتر من قايمة: الممنوعين الأول، بعدين قايمة المستشار، بعدين الموكلين الحاليين.
-          </p>
         </div>
       </div>
     </header>

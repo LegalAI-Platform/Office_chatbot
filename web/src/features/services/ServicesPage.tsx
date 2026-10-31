@@ -96,9 +96,6 @@ function Intro({ count }: { count?: number | undefined }) {
                 <span className="tabular rounded-full border border-gold-line bg-gold-tint px-2.5 py-0.5 text-[12.5px] font-bold text-gold-ink">{count} طلب</span>
               ) : null}
             </div>
-            <p className="text-[14px] leading-relaxed text-ink-soft">
-              مراجعة وصياغة العقود، والإنذار، والرأي المكتوب: من الورق لحد ما الملف يوصل للعميل.
-            </p>
           </div>
         </div>
       </div>

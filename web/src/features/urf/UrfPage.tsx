@@ -96,9 +96,6 @@ function Intro({ count }: { count?: number | undefined }) {
                 <span className="tabular rounded-full border border-gold-line bg-gold-tint px-2.5 py-0.5 text-[12.5px] font-bold text-gold-ink">{count} حالة</span>
               ) : null}
             </div>
-            <p className="text-[14px] leading-relaxed text-ink-soft">
-              عقد الجواز والطلاق العرفي: إجابات العميل، والورق، والميعاد في المكتب. المستشار يراجع الورق قبل الميعاد.
-            </p>
           </div>
         </div>
       </div>
