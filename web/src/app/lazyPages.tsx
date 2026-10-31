@@ -55,11 +55,30 @@ const load = (path: LazyPath) => {
 
 const components = new Map<LazyPath, LazyExoticComponent<ComponentType>>();
 
+/**
+ * A tab opened before a deploy still runs the old build, and the old build's page files are gone from the server
+ * («Failed to fetch dynamically imported module»). Opening a page then loads the new build once instead of an error:
+ * not when offline (the error says so), and once a minute at most, so a file that is really missing never loops.
+ */
+function reloadForNewBuild(): boolean {
+  if (!navigator.onLine) return false;
+  try {
+    const last = Number(sessionStorage.getItem("hazem.reloadedAt") ?? 0);
+    if (Date.now() - last < 60_000) return false;
+    sessionStorage.setItem("hazem.reloadedAt", String(Date.now()));
+  } catch {
+    return false;
+  }
+  location.reload();
+  return true;
+}
+
 /** The page at `path`, rendered once its file has arrived (the panel's loader until then). */
 export function LazyPage({ path }: { path: LazyPath }) {
   let C = components.get(path);
   if (!C) {
-    C = lazy(() => load(path).then((p) => ({ default: p.C })));
+    // the loader stays up while the new build loads
+    C = lazy(() => load(path).then((p) => ({ default: p.C }), (e: unknown) => reloadForNewBuild() ? new Promise<never>(() => {}) : Promise.reject(e)));
     components.set(path, C);
   }
   return (
