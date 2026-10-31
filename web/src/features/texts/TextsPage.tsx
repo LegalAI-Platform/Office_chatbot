@@ -31,12 +31,10 @@ export function TextsPage() {
         <span className="absolute top-24 start-[10%] size-[20rem] rounded-full bg-blue/10 blur-[100px]" />
       </div>
 
-      <header className="liquid relative overflow-hidden rounded-[26px] p-5 sm:p-6">
-        <span aria-hidden className="absolute -top-20 -start-16 size-64 rounded-full bg-gradient-to-br from-gold/30 to-transparent blur-2xl" />
-        <span aria-hidden className="absolute inset-x-8 top-0 h-px bg-gradient-to-l from-transparent via-gold to-transparent opacity-70" />
+      <header className="relative">
         <div className="relative flex items-start gap-4">
-          <span aria-hidden className="grid size-14 shrink-0 place-items-center rounded-[18px] bg-gradient-to-br from-gold-tint to-card text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.6),0_8px_20px_-10px_rgb(140_98_58/0.7)]">
-            <Icon name="message" className="size-7" />
+          <span aria-hidden className="grid size-11 shrink-0 place-items-center rounded-[14px] bg-gradient-to-br from-gold-tint to-card text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.6),0_8px_20px_-10px_rgb(140_98_58/0.7)]">
+            <Icon name="message" className="size-6" />
           </span>
           <div className="grid min-w-0 gap-1">
             <div className="flex flex-wrap items-center gap-2">

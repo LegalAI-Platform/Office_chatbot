@@ -98,20 +98,16 @@ export function BookingPage() {
 
 function Intro() {
   return (
-    <header className="liquid relative overflow-hidden rounded-[26px] p-5 sm:p-6">
-      <span aria-hidden className="absolute -top-20 -start-16 size-64 rounded-full bg-gradient-to-br from-gold/30 to-transparent blur-2xl" />
-      <span aria-hidden className="absolute inset-x-8 top-0 h-px bg-gradient-to-l from-transparent via-gold to-transparent opacity-70" />
-      <div className="relative grid gap-4">
-        <div className="flex items-center gap-4">
-          <span aria-hidden className="grid size-14 shrink-0 place-items-center rounded-[18px] bg-gradient-to-br from-gold-tint to-card text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.6),0_8px_20px_-10px_rgb(140_98_58/0.7)]">
-            <Icon name="calendar" className="size-7" />
+    <header className="relative">
+      <div className="relative grid items-center gap-3 lg:grid-cols-[auto_minmax(0,1fr)_auto]">
+        <div className="flex items-center gap-3">
+          <span aria-hidden className="grid size-11 shrink-0 place-items-center rounded-[14px] bg-gradient-to-br from-gold-tint to-card text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.6),0_8px_20px_-10px_rgb(140_98_58/0.7)]">
+            <Icon name="calendar" className="size-6" />
           </span>
           <h1 className="text-[26px] leading-tight font-bold">المواعيد</h1>
         </div>
-        <div className="grid gap-3 border-t border-line/60 pt-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
-          <Status />
-          <Undo />
-        </div>
+        <Status />
+        <Undo />
       </div>
     </header>
   );

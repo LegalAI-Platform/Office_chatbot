@@ -48,9 +48,7 @@ function Detail({ task }: { task: TaskDetail }) {
   const late = task.state === "overdue";
   return (
     <>
-      <header className="liquid relative overflow-hidden rounded-[26px] p-5 sm:p-6">
-        <span aria-hidden className="absolute -top-20 -start-16 size-64 rounded-full bg-gradient-to-br from-gold/30 to-transparent blur-2xl" />
-        <span aria-hidden className="absolute inset-x-8 top-0 h-px bg-gradient-to-l from-transparent via-gold to-transparent opacity-70" />
+      <header className="relative">
         <span aria-hidden className={`absolute inset-y-6 start-0 w-1 rounded-e-full ${LOOK[isUrgent(task) && open ? "urgent" : task.state] ?? "bg-blue"}`} />
         <div className="relative">
           <div className="flex flex-wrap items-start gap-4">
