@@ -335,6 +335,31 @@ public sealed class UrgentApiTests(TestDatabase db) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task V136_a_client_without_a_name_is_his_whatsapp_name_marked_for_the_office_and_never_for_him()
+    {
+        await Turn(new JsonObject { ["type"] = "text", ["text"] = "السلام عليكم" });
+        await Press("sv:urgent"); // the name asked (v1.35)
+        var held = await Receipt(); // a photo instead of the name: held without it, the payment told
+        Assert.DoesNotContain(held, a => ((string?)a!["text"] ?? "").Contains("Ahmed", StringComparison.Ordinal)); // never said to him
+        Assert.Equal("Ahmed|Ahmed (اسم الواتساب)", await db.ScalarAsync<string>(
+            $"SELECT whatsapp_name || '|' || office_name FROM hazem.persons WHERE wa_id = '{Client}'"));
+
+        _clock.Advance(TimeSpan.FromMinutes(5));
+        await Receipt();
+        var before = _factory.N8n.Requests.Count;
+        Assert.Equal(1, await Worker());
+        var alert = Assert.Single(SentSince(before));
+        Assert.Equal("Ahmed (اسم الواتساب)", (string)alert["components"]![0]!["parameters"]![0]!["text"]!);
+
+        using var scope = _factory.Services.CreateScope();
+        var today = DateOnly.FromDateTime(Wednesday12.Date);
+        Assert.Equal("Ahmed (اسم الواتساب)", Assert.Single(await scope.ServiceProvider.GetRequiredService<PanelBooking>()
+            .AppointmentsAsync(today, today, Ct)).Name); // the panel's bookings
+        Assert.Equal(1, await scope.ServiceProvider.GetRequiredService<CalendarSync>().SyncAsync(Ct));
+        Assert.Contains("– Ahmed (اسم الواتساب) – +" + Client, Assert.Single(_factory.Google.Events.Values).Summary); // not «من غير اسم»
+    }
+
+    [Fact]
     public async Task V135_a_number_whose_urgent_call_was_alerted_can_be_forgotten()
     {
         await Paid();

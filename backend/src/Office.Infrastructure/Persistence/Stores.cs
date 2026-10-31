@@ -50,6 +50,16 @@ public sealed class TurnStore(HazemDbContext db) : ITurnStore
             await ConversationStore.SaveAsync(db, turn.TurnId, effects, ct);
         }
 
+        if (turn.ContactName is not null)
+        {
+            // v1.36 (migration 0038): his WhatsApp profile name, for the office only (cleaned, 60 characters at most).
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                UPDATE hazem.persons SET whatsapp_name = n.name
+                  FROM (SELECT left(btrim(regexp_replace({turn.ContactName}, '[[:cntrl:]]', '', 'g')), 60) AS name) n
+                 WHERE wa_id = {turn.WaId} AND n.name <> '' AND whatsapp_name IS DISTINCT FROM n.name
+                """, ct);
+        }
+
         await tx.CommitAsync(ct);
         return true;
     }

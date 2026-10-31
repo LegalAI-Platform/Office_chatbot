@@ -58,7 +58,7 @@ public sealed class PanelPayments(HazemDbContext db, BookingStore store, TimePro
                               join p in db.Persons.AsNoTracking() on a.PersonId equals p.Id
                               where !all || a.StartsAt >= since && a.State != AppointmentInfo.Expired
                               orderby pay.ProofAt ?? a.StartsAt
-                              select new Row(pay, a.Id, a.Service, a.StartsAt, a.State, p.NameRaw, p.WaId,
+                              select new Row(pay, a.Id, a.Service, a.StartsAt, a.State, p.OfficeName, p.WaId,
                                   db.PaymentReceipts.Count(r => r.PaymentId == pay.Id),
                                   db.PaymentReceipts.Any(r => r.PaymentId == pay.Id && r.DuplicateOf != null), false)).Take(300).ToListAsync(ct);
         var orders = await (from pay in payments
@@ -66,7 +66,7 @@ public sealed class PanelPayments(HazemDbContext db, BookingStore store, TimePro
                             join p in db.Persons.AsNoTracking() on o.PersonId equals p.Id
                             where !all || o.CreatedAt >= since
                             orderby pay.ProofAt ?? o.CreatedAt
-                            select new Row(pay, o.Id, o.Kind, o.CreatedAt, o.State, p.NameRaw, p.WaId,
+                            select new Row(pay, o.Id, o.Kind, o.CreatedAt, o.State, p.OfficeName, p.WaId,
                                 db.PaymentReceipts.Count(r => r.PaymentId == pay.Id),
                                 db.PaymentReceipts.Any(r => r.PaymentId == pay.Id && r.DuplicateOf != null), true)).Take(300).ToListAsync(ct);
         var list = bookings.Concat(orders).OrderBy(x => x.Pay.ProofAt ?? x.Start).ToList();

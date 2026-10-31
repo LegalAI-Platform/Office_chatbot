@@ -405,7 +405,7 @@ public sealed class PanelBooking(
                           from pay in pays.DefaultIfEmpty()
                           where a.StartsAt >= f && a.StartsAt < t
                           orderby a.StartsAt
-                          select new AppointmentView(a.Id, a.Service, a.StartsAt, a.EndsAt, a.State, p.NameRaw, p.WaId, a.MatterType, a.Reschedules,
+                          select new AppointmentView(a.Id, a.Service, a.StartsAt, a.EndsAt, a.State, p.OfficeName, p.WaId, a.MatterType, a.Reschedules,
                               a.CalendarState, a.HoldUntil, pay == null ? null : pay.State, a.AttendanceFor == a.StartsAt, null, a.CallApp)).Take(500).ToListAsync(ct);
 
         // TASK 12: the reminders of each appointment's current time (a moved appointment's old ones are cancelled).
@@ -531,7 +531,7 @@ public sealed class PanelBooking(
                      from pay in pays.DefaultIfEmpty()
                      where ids.Contains(a.Id)
                      orderby a.StartsAt
-                     select new AppointmentView(a.Id, a.Service, a.StartsAt, a.EndsAt, a.State, p.NameRaw, p.WaId, a.MatterType, a.Reschedules,
+                     select new AppointmentView(a.Id, a.Service, a.StartsAt, a.EndsAt, a.State, p.OfficeName, p.WaId, a.MatterType, a.Reschedules,
                          a.CalendarState, a.HoldUntil, pay == null ? null : pay.State)).ToListAsync(ct);
 
     /// <summary>
