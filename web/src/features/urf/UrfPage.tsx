@@ -18,7 +18,7 @@ const TONE: Record<string, string> = {
 const yesNo = (v: boolean | null) => (v == null ? "—" : v ? "أيوه" : "لأ");
 
 const SHOWS: Show[] = ["open", "done"];
-const listQuery = (show: Show) => queryOptions({ queryKey: ["urf", show], queryFn: () => urf.list(show) });
+const listQuery = (show: Show) => queryOptions({ queryKey: ["urf", show], queryFn: () => urf.list(show), refetchInterval: 60_000 });
 
 /** The open cases (the tab the page opens on), fetched while the pointer is still on the link (idea from PR #14). */
 export function prefetchData(qc: QueryClient) {

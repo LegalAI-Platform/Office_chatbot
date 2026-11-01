@@ -5,6 +5,7 @@ import { useMe } from "../../shared/api/session";
 import type { NewUserResult, PanelUser, Role } from "../../shared/api/types";
 import { label, ROLES } from "../../shared/lib/labels";
 import { cairoWhen } from "../../shared/lib/time";
+import { confirmAction } from "../../shared/ui/feedback";
 import { Icon, type IconName } from "../../shared/ui/Icon";
 import { Avatar, Button, Chip, ErrorState, Field, Loading } from "../../shared/ui/ui";
 
@@ -204,8 +205,20 @@ function AddUser({ onCancel, onCreated }: { onCancel: () => void; onCreated: (r:
     mutationFn: () => api<NewUserResult>("POST", "/users", { ...form, staff_name: form.role === "staff" ? form.staff_name || form.display_name : null }),
     onSuccess: (r) => { void qc.invalidateQueries({ queryKey: usersKey }); onCreated(r); },
   });
-  const fieldError = (name: string) =>
-    create.error instanceof ApiError ? create.error.fields?.[name]?.[0] : undefined;
+  // the API's per-field codes (invalid, username_taken, email_taken) in Arabic, like the sign-up page
+  const fieldError = (name: string) => {
+    const code = create.error instanceof ApiError ? create.error.fields?.[name]?.[0] : undefined;
+    if (!code) return undefined;
+    if (code === "invalid") {
+      return { username: "حروف إنجليزي صغيرة وأرقام ونقطة أو شرطة، من 3 لـ 32.", email: "اكتب إيميل صحيح.",
+        display_name: "اكتب الاسم.", staff_name: "الاسم ده مش صحيح." }[name] ?? "مش صحيح.";
+    }
+    return errorMessage(new ApiError(400, code, code));
+  };
+  // the general line only when no field under its input already says what is wrong
+  const shown = ["display_name", "username", "email", ...(form.role === "staff" ? ["staff_name"] : [])];
+  const onlyFields = create.error instanceof ApiError && Object.keys(create.error.fields ?? {}).length > 0
+    && Object.keys(create.error.fields ?? {}).every((k) => shown.includes(k));
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm({ ...form, [k]: e.target.value });
 
   function submit(e: FormEvent) {
@@ -241,7 +254,7 @@ function AddUser({ onCancel, onCreated }: { onCancel: () => void; onCreated: (r:
             hint="زي ما هو مكتوب في عمود الموظف في قايمة الموكلين. لو فاضي، هيتاخد الاسم اللي فوق."
             error={fieldError("staff_name")} />
         ) : null}
-        {create.isError && !fieldError("username") && !fieldError("email") ? (
+        {create.isError && !onlyFields ? (
           <p className="text-sm text-bad md:col-span-2" role="alert">{errorMessage(create.error)}</p>
         ) : null}
         <div className="flex flex-wrap gap-2 md:col-span-2">
@@ -354,7 +367,13 @@ function UserCard({ user, onSecret }: { user: PanelUser; onSecret: (s: { name: s
           {self ? label(ROLES, user.role ?? "") : (
             <select aria-label={`دور ${user.display_name}`} className="min-h-9 w-full rounded-[12px] border border-line/70 bg-card/70 px-2 font-normal text-ink focus:border-gold"
               value={user.role ?? "staff"} disabled={change.isPending}
-              onChange={(e) => change.mutate({ path: "role", payload: { role: e.target.value } })}>
+              onChange={async (e) => {
+                // the select is controlled by user.role: on «no» it stays where it was
+                const role = e.target.value as Role;
+                const ok = await confirmAction({ title: `تغيّر دور ${user.display_name} لـ ${label(ROLES, role)}؟`,
+                  body: "هيخرج من اللوحة ويدخل تاني.", yes: "أيوه، غيّره" });
+                if (ok) change.mutate({ path: "role", payload: { role } });
+              }}>
               {(["staff", "lawyer", "manager"] as Role[]).map((r) => <option key={r} value={r}>{label(ROLES, r)}</option>)}
             </select>
           )}

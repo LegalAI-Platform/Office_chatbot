@@ -78,4 +78,15 @@ describe("TASK 09 payments", () => {
     await vi.waitFor(() => expect(calls.some((c) => c.method === "POST")).toBe(true));
     expect(calls.find((c) => c.method === "POST")).toMatchObject({ path: "/payments/a1/refunded", body: { method: "فودافون كاش" } });
   });
+
+  it("a decimal amount is refused (whole pounds only), and the header counts payments", async () => {
+    serve({ "GET /auth/me": staff, "GET /payments?show=review": [payment()] });
+    renderAt("/receipts");
+    expect(await screen.findByText("1 عملية دفع")).toBeTruthy();
+    const card = (await screen.findByText(/محمد أحمد علي حسن/)).closest("li")!;
+    fireEvent.change(within(card).getByLabelText(/المبلغ اللي وصل/), { target: { value: "500.5" } });
+    expect((within(card).getByRole("button", { name: "تمام" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(card).getByRole("button", { name: "ناقص" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(within(card).getByText("اكتب المبلغ بالجنيه من غير كسور")).toBeTruthy();
+  });
 });

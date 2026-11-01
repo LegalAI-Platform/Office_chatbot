@@ -1,5 +1,5 @@
 import { useId, useState, type ReactNode } from "react";
-import { Link, useParams } from "react-router";
+import { Link, useLocation, useParams } from "react-router";
 import { openChatwoot } from "../../shared/api/chatwoot";
 import { errorMessage } from "../../shared/api/client";
 import type { ClientWord, TaskDetail } from "../../shared/api/types";
@@ -15,6 +15,9 @@ import { isUrgent } from "./TasksPage";
 export function TaskDetailPage() {
   const { id = "" } = useParams();
   const task = useTask(id);
+  // back to the list as it was left (filters, search, page) when we came from it
+  const from = (useLocation().state as { from?: unknown } | null)?.from;
+  const back = typeof from === "string" && from.startsWith("?") ? `/tasks${from}` : "/tasks";
 
   return (
     <div className="relative isolate grid gap-5 pb-4">
@@ -24,7 +27,7 @@ export function TaskDetailPage() {
         <span className="absolute top-24 start-[10%] size-[20rem] rounded-full bg-blue/10 blur-[100px]" />
       </div>
 
-      <Link to="/tasks" className="liquid inline-flex min-h-9 w-fit items-center gap-1.5 rounded-full px-3.5 text-[13px] font-semibold text-ink-soft transition hover:text-ink">
+      <Link to={back} className="liquid inline-flex min-h-9 w-fit items-center gap-1.5 rounded-full px-3.5 text-[13px] font-semibold text-ink-soft transition hover:text-ink">
         <Icon name="back" className="size-4" />
         رجوع لكل المهام
       </Link>
@@ -206,7 +209,7 @@ function Actions({ task }: { task: TaskDetail }) {
         <div className="grid gap-2">
           {main.map((a) => (
             <Button key={a.action} variant={a.action === first ? "primary" : "secondary"} busy={act.isPending && act.variables === a.action}
-              className="min-h-12 w-full text-[15px]" onClick={() => act.mutate(a.action)}>
+              className="min-h-12 w-full text-[15px]" onClick={() => { assign.reset(); act.mutate(a.action); }}>
               <Icon name={a.action === "start" ? "play" : "check"} className="size-4" />
               {a.text}
             </Button>
@@ -219,8 +222,9 @@ function Actions({ task }: { task: TaskDetail }) {
         </p>
       )}
 
+      {/* starting one clears the other's error, so this is always the last one that ran */}
       {act.isError || assign.isError ? (
-        <p className="text-sm text-bad" role="alert">{errorMessage(act.error ?? assign.error)}</p>
+        <p className="text-sm text-bad" role="alert">{errorMessage(act.isError ? act.error : assign.error)}</p>
       ) : null}
 
       <div className="grid gap-1 border-t border-line/70 pt-3">
@@ -241,7 +245,7 @@ function Actions({ task }: { task: TaskDetail }) {
             <span className="flex items-center gap-1.5 font-semibold"><Icon name="user-plus" className="size-4 text-gold-ink" />حوّل المهمة لـ</span>
             <select className="min-h-11 rounded-[12px] border border-line-strong bg-card/70 px-3 text-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.4)] focus:border-gold" value={task.staff?.id ?? ""}
               disabled={assign.isPending || staff.isPending}
-              onChange={(e) => assign.mutate(e.target.value || null)}>
+              onChange={(e) => { act.reset(); assign.mutate(e.target.value || null); }}>
               <option value="">مش متعيّنة</option>
               {staff.data?.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
@@ -255,7 +259,7 @@ function Actions({ task }: { task: TaskDetail }) {
             <div className="grid gap-2 rounded-[12px] border border-red-ink/30 bg-red-bg p-3">
               <span className="text-sm font-semibold text-red-ink">متأكد إنك عايز تلغيها؟</span>
               <span className="flex flex-wrap gap-2">
-                <Button variant="danger" busy={act.isPending} onClick={() => act.mutate("cancel")}>أيوه، الغيها</Button>
+                <Button variant="danger" busy={act.isPending} onClick={() => { assign.reset(); act.mutate("cancel"); }}>أيوه، الغيها</Button>
                 <Button variant="ghost" onClick={() => setConfirmCancel(false)}>لأ</Button>
               </span>
             </div>

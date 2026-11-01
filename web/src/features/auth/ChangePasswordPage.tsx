@@ -76,7 +76,11 @@ export function ChangePasswordPage() {
               خروج
             </Button>
           ) : (
-            <Button variant="ghost" className="rounded-full" onClick={() => navigate(-1)}>رجوع</Button>
+            <Button variant="ghost" className="rounded-full" onClick={() => {
+              // opened straight from a link: no page of the panel to go back to, so «حسابي»
+              if ((window.history.state as { idx?: number } | null)?.idx) navigate(-1);
+              else navigate("/account");
+            }}>رجوع</Button>
           )}
         </div>
       </form>

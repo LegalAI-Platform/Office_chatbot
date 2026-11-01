@@ -30,6 +30,10 @@ function UrgentWindow() {
       toast(r.on ? "تنبيه العاجل هيوصل رسالة عادية جوه الـ 24 ساعة ✅" : "تنبيه العاجل رجع قالب بس ✅");
     },
   });
+  // 404: not the test environment, the switch is simply not there
+  if (state.isError && !(state.error instanceof ApiError && state.error.status === 404)) {
+    return <ErrorState message={errorMessage(state.error)} onRetry={() => void state.refetch()} />;
+  }
   if (!state.data) return null;
   const on = state.data.on;
 
@@ -78,13 +82,19 @@ export function TestingPage() {
   const qc = useQueryClient();
   const list = useQuery({ queryKey: ["testing", "numbers"], queryFn: testing.numbers, retry: false });
   const forget = useMutation({
-    mutationFn: async (keys: string[]) => {
+    mutationFn: async (items: TestNumber[]) => {
       const done: Forgot[] = [];
-      for (const k of keys) done.push(await testing.forget(k)); // one at a time, in order
-      return done;
+      const failed: { masked: string; error: unknown }[] = [];
+      // one at a time, in order; a number that fails does not stop the next (the ones before it are already forgotten)
+      for (const n of items) {
+        try { done.push(await testing.forget(n.key)); } catch (error) { failed.push({ masked: n.masked, error }); }
+      }
+      return { done, failed };
     },
-    onSuccess: (done) => {
-      void qc.invalidateQueries();
+    // whatever happened, the list shows what is left
+    onSettled: () => void qc.invalidateQueries(),
+    onSuccess: ({ done, failed }) => {
+      for (const f of failed) toast(`حازم ما نسيش الرقم اللي آخره ${ending(f.masked)}: ${errorMessage(f.error)}`, "bad");
       for (const r of done) {
         toast(`حازم نسي الرقم اللي آخره ${ending(r.masked)} ✅`);
         if (r.chatwoot === "failed") toast(`محادثته القديمة لسه في Chatwoot: امسحها من هناك لو عايز`, "bad");
@@ -101,7 +111,7 @@ export function TestingPage() {
       yes: items.length === 1 ? "أيوه، انساه" : "أيوه، انساهم",
       danger: true,
     });
-    if (ok) forget.mutate(items.map((n) => n.key));
+    if (ok) forget.mutate(items);
   };
 
   const off = list.error instanceof ApiError && list.error.status === 404;
@@ -150,7 +160,7 @@ export function TestingPage() {
                     الرقم اللي آخره <span dir="ltr" className="tabular">{ending(n.masked)}</span>
                   </span>
                 </span>
-                <Button variant="danger" busy={forget.isPending && forget.variables?.length === 1 && forget.variables[0] === n.key}
+                <Button variant="danger" busy={forget.isPending && forget.variables?.length === 1 && forget.variables[0]?.key === n.key}
                   disabled={forget.isPending} onClick={() => void ask([n])}>
                   انسى الرقم ده
                 </Button>

@@ -104,4 +104,28 @@ describe("أدوات التجربة", () => {
     expect(await screen.findByText("حسابي")).toBeTruthy();
     expect(screen.queryByText("أدوات التجربة")).toBeNull();
   });
+
+  it("forgetting both: when the second fails, says which went and which did not, and asks for the list again", async () => {
+    const calls = serve({ "GET /auth/me": { body: lawyer }, "GET /testing/numbers": { body: numbers } });
+    const real = vi.mocked(globalThis.fetch).getMockImplementation()!;
+    vi.mocked(globalThis.fetch).mockImplementation(async (url, init) => {
+      if (init?.body && String(init.body).includes("bbbb")) {
+        calls.push({ method: "POST", path: "/testing/forget", body: JSON.parse(String(init.body)) });
+        return Response.json({ error: "x" }, { status: 500 });
+      }
+      return real(url, init);
+    });
+    renderAt("/testing");
+    fireEvent.click(await screen.findByRole("button", { name: "انسى كل الأرقام (2)" }));
+    await confirmYes();
+    expect(await screen.findByText("حازم نسي الرقم اللي آخره 589 ✅")).toBeTruthy();
+    expect(await screen.findByText(/حازم ما نسيش الرقم اللي آخره 471/)).toBeTruthy();
+    await vi.waitFor(() => expect(calls.filter((c) => c.path === "/testing/numbers").length).toBeGreaterThan(1));
+  });
+
+  it("shows the urgent switch's load error with a retry", async () => {
+    serve({ "GET /auth/me": { body: lawyer }, "GET /testing/numbers": { body: numbers }, "GET /testing/urgent-window": { status: 500, body: { error: "x" } } });
+    renderAt("/testing");
+    expect(await screen.findByRole("button", { name: /جرّب تاني/ })).toBeTruthy();
+  });
 });

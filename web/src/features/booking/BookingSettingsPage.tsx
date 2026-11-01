@@ -6,7 +6,7 @@ import { can, useMe } from "../../shared/api/session";
 import { cairoWhen } from "../../shared/lib/time";
 import { useUrlState } from "../../shared/lib/url";
 import { Icon, type IconName } from "../../shared/ui/Icon";
-import { toast } from "../../shared/ui/feedback";
+import { confirmAction, toast } from "../../shared/ui/feedback";
 import { Button, Chip, ErrorState, Field, Loading } from "../../shared/ui/ui";
 import { booking, type Appointment, type Office, type Settings, type WeekDay } from "./api";
 import { Confirm, DAY_NAMES, GOLD_ON, Glow, ROW, SaveBar, SELECT, settingsQuery, Sheet, TimeSelect, TitleTile, WEEK } from "./parts";
@@ -71,6 +71,11 @@ export function BookingSettingsPage() {
   );
 }
 
+// what each change in the record was (hazem.booking_changes.what)
+const CHANGE_WORDS: Record<string, string> = {
+  weekly: "ساعات الأسبوع", exception_add: "تعديل يوم", exception_remove: "شيل تعديل يوم", settings: "إعدادات الحجز", office: "بيانات المكتب",
+};
+
 /** Puts back the last change; when that would leave bookings outside the hours it asks first, like any change. */
 function Undo() {
   const qc = useQueryClient();
@@ -78,20 +83,26 @@ function Undo() {
   const [affected, setAffected] = useState<Appointment[] | null>(null);
   const undo = useMutation({
     mutationFn: (confirm: boolean) => booking.undo(confirm),
-    onSuccess: () => { setAffected(null); void qc.invalidateQueries({ queryKey: ["booking"] }); },
+    onSuccess: () => { setAffected(null); void qc.invalidateQueries({ queryKey: ["booking"] }); toast("رجع زي ما كان ✅"); },
     onError: (e) => { if (e instanceof ApiError && e.code === "has_bookings") setAffected(e.data?.appointments as Appointment[]); },
   });
   const last = changes.data?.find((c) => !c.undone);
   if (!last) return null;
+  const what = CHANGE_WORDS[last.what] ?? last.what;
   return (
     <div className="grid gap-2">
       <span className="flex flex-wrap items-center gap-2 rounded-[16px] border border-line/60 bg-card/55 py-1 ps-3.5 pe-1 text-[13px] text-ink-soft shadow-[inset_0_1px_0_rgb(255_255_255/0.45)]">
         <Icon name="clock" className="size-4 shrink-0 text-gold-ink" />
-        آخر تعديل: {last.by ?? "—"}، {cairoWhen(last.at)}
-        <Button variant="ghost" className="!min-h-9 !px-3" busy={undo.isPending && !affected} onClick={() => undo.mutate(false)}><Icon name="back" className="size-4" />تراجع</Button>
+        آخر تعديل: {what} · {last.by ?? "—"}، {cairoWhen(last.at)}
+        <Button variant="ghost" className="!min-h-9 !px-3" busy={undo.isPending && !affected}
+          onClick={async () => {
+            if (await confirmAction({ title: `ترجّع «${what}» زي ما كان؟`, body: `التعديل ده عمله ${last.by ?? "—"}، ${cairoWhen(last.at)}.`, yes: "أيوه، رجّعه" })) undo.mutate(false);
+          }}>
+          <Icon name="back" className="size-4" />تراجع
+        </Button>
         {undo.isError && !affected ? <span className="text-bad" role="alert">{errorMessage(undo.error)}</span> : null}
       </span>
-      {affected ? <Confirm list={affected} busy={undo.isPending} onYes={() => undo.mutate(true)} onNo={() => setAffected(null)} /> : null}
+      {affected ? <Confirm list={affected} busy={undo.isPending} onYes={() => undo.mutate(true)} onNo={() => { setAffected(null); undo.reset(); }} /> : null}
     </div>
   );
 }
@@ -148,13 +159,16 @@ function Week() {
                     <Button variant="ghost" className="!min-h-9 !px-2" aria-label="شيل الفترة" onClick={() => edit(w, d.ranges.filter((_, j) => j !== i))}><Icon name="x" className="size-4" /></Button>
                   </Row>
                 ))}
-                <Button variant="ghost" className="!min-h-9 !px-3 text-gold-ink" onClick={() => edit(w, [...d.ranges, { start: d.ranges.at(-1)?.end ?? 600, end: 1440 }])}>+ فترة</Button>
+                {/* a period that ends at midnight leaves nothing after it */}
+                {(d.ranges.at(-1)?.end ?? 0) < 1440 ? (
+                  <Button variant="ghost" className="!min-h-9 !px-3 text-gold-ink" onClick={() => edit(w, [...d.ranges, { start: d.ranges.at(-1)?.end ?? 600, end: 1440 }])}>+ فترة</Button>
+                ) : null}
                 {d.ranges.length ? <span className="ms-auto tabular rounded-full bg-card/70 px-2.5 py-0.5 text-xs text-ink-soft">{hoursWords(minutesIn(d))}</span> : null}
               </li>
             );
           })}
         </ul>
-        {affected ? <Confirm list={affected} busy={save.isPending} onYes={() => save.mutate(true)} onNo={() => setAffected(null)} /> : null}
+        {affected ? <Confirm list={affected} busy={save.isPending} onYes={() => save.mutate(true)} onNo={() => { setAffected(null); save.reset(); }} /> : null}
         {save.isError && !affected ? <p className="text-sm text-bad" role="alert">{errorMessage(save.error)}</p> : null}
       </Sheet>
       <SaveBar>
@@ -182,10 +196,13 @@ const Row = ({ children }: { children: ReactNode }) => (
 
 function SettingsForm() {
   const qc = useQueryClient();
+  const { data: me } = useMe();
+  // the lawyer's calendar receives every appointment: only office.manage points it elsewhere (calendar_id_forbidden)
+  const mayCalendar = can(me, "office.manage");
   const s = useQuery(settingsQuery);
   const [draft, setDraft] = useState<Settings | null>(null);
   const v = draft ?? s.data;
-  const save = useMutation({ mutationFn: booking.saveSettings, onSuccess: () => { setDraft(null); void qc.invalidateQueries({ queryKey: ["booking"] }); toast("إعدادات الحجز اتحفظت ✅"); } });
+  const save = useMutation({ mutationFn: (x: Settings) => booking.saveSettings(mayCalendar || !s.data ? x : { ...x, calendar_id: s.data.calendar_id }), onSuccess:() => { setDraft(null); void qc.invalidateQueries({ queryKey: ["booking"] }); toast("إعدادات الحجز اتحفظت ✅"); } });
   if (s.isPending) return <Loading />;
   if (s.isError || !v) return <ErrorState message={errorMessage(s.error)} onRetry={() => void s.refetch()} />;
   const num = (k: keyof Settings) => (e: { target: { value: string } }) => setDraft({ ...v, [k]: e.target.value === "" ? null : Number(e.target.value) });
@@ -213,8 +230,9 @@ function SettingsForm() {
             </label>
             <Field label="عدد المواعيد اللي حازم يعرضها مرة واحدة" type="number" min={1} max={9} value={v.offer_count} onChange={num("offer_count")} />
             <div className="md:col-span-2">
-              <Field label="إيميل كالندر المستشار (Google)" dir="ltr" value={v.calendar_id} onChange={(e) => setDraft({ ...v, calendar_id: e.target.value })}
-                hint={v.calendar_key ? "مفتاح Google موجود." : "مفتاح Google لسه مش متحط (صاحب المشروع)."} />
+              <Field label="إيميل كالندر المستشار (Google)" dir="ltr" value={v.calendar_id} readOnly={!mayCalendar}
+                onChange={(e) => { if (mayCalendar) setDraft({ ...v, calendar_id: e.target.value }); }}
+                hint={`${v.calendar_key ? "مفتاح Google موجود." : "مفتاح Google لسه مش متحط (صاحب المشروع)."}${mayCalendar ? "" : " بيغيّره المدير أو المستشار بس."}`} />
             </div>
           </div>
         </Sheet>

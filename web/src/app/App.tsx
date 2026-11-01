@@ -1,7 +1,7 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createBrowserRouter, Navigate, Outlet, RouterProvider, useLocation } from "react-router";
-import { errorMessage } from "../shared/api/client";
-import { can, useMe } from "../shared/api/session";
+import { ApiError, errorMessage } from "../shared/api/client";
+import { can, meKey, useMe } from "../shared/api/session";
 import type { Permission } from "../shared/api/types";
 import { ErrorState, Loading } from "../shared/ui/ui";
 import { LoginPage } from "../features/auth/LoginPage";
@@ -11,11 +11,19 @@ import { Layout } from "./Layout";
 import { ComingSoon, SettingsPage } from "./Pages";
 
 export function makeQueryClient() {
-  return new QueryClient({
+  // A session that ended while the panel was open (signed out elsewhere, a new role or password, disabled): the
+  // first refused call takes the person to the sign-in, back to the same page after it, instead of a page of errors.
+  const ended = (e: unknown) => {
+    if (e instanceof ApiError && e.status === 401 && qc.getQueryData(meKey)) qc.setQueryData(meKey, null);
+  };
+  const qc = new QueryClient({
+    queryCache: new QueryCache({ onError: ended }),
+    mutationCache: new MutationCache({ onError: ended }),
     defaultOptions: {
-      queries: { retry: 1, refetchOnWindowFocus: true },
+      queries: { retry: (n, e) => !(e instanceof ApiError && e.status === 401) && n < 1, refetchOnWindowFocus: true },
     },
   });
+  return qc;
 }
 
 /** Signed in, and a temporary password already changed; otherwise to the right page. */
@@ -24,7 +32,7 @@ export function RequireAuth() {
   const location = useLocation();
   if (me.isPending) return <div className="p-6"><Loading /></div>;
   if (me.isError) return <div className="p-6"><ErrorState message={errorMessage(me.error)} onRetry={() => void me.refetch()} /></div>;
-  if (!me.data) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  if (!me.data) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
   if (me.data.must_change_password && location.pathname !== "/change-password") return <Navigate to="/change-password" replace />;
   if (!me.data.must_change_password && me.data.two_factor_required && location.pathname !== "/setup-2fa") {
     return <Navigate to="/setup-2fa" replace />;

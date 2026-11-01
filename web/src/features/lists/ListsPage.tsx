@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError, errorMessage } from "../../shared/api/client";
 import { can, useMe } from "../../shared/api/session";
@@ -6,6 +6,7 @@ import type { ListEntry, ListKind, MutedConversation, StaffRef } from "../../sha
 import { label, LIST_KINDS } from "../../shared/lib/labels";
 import { cairoWhen } from "../../shared/lib/time";
 import { phoneOf } from "../../shared/ui/caseCard";
+import { confirmAction } from "../../shared/ui/feedback";
 import { Icon, type IconName } from "../../shared/ui/Icon";
 import { Avatar, Button, ErrorState, Field, Loading } from "../../shared/ui/ui";
 
@@ -49,6 +50,10 @@ export function ListsPage() {
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["lists"] }),
   });
   const look = KIND_LOOK[kind];
+  // the last row of the last page removed: back to the page that still has rows
+  useEffect(() => {
+    if (list.data && page > pages) setPage(pages);
+  }, [list.data, page, pages]);
 
   return (
     <div className="relative isolate grid gap-5 pb-4">
@@ -79,7 +84,8 @@ export function ListsPage() {
 
       <div className="grid gap-5 xl:grid-cols-2">
         <AddEntry kind={kind} />
-        <ImportCsv kind={kind} />
+        {/* keyed by the list: «replace it all» never carries over to another list */}
+        <ImportCsv key={kind} kind={kind} />
       </div>
 
       <GlassCard icon={look.icon} title={label(LIST_KINDS, kind)} count={list.data?.total}
@@ -111,7 +117,10 @@ export function ListsPage() {
                     <Icon name="clock" className="size-3.5" />
                     <span className="tabular">{cairoWhen(e.imported_at)}</span>
                   </span>
-                  <Button variant="ghost" className="min-h-9 rounded-full px-3.5" busy={remove.isPending && remove.variables === e.id} onClick={() => remove.mutate(e.id)}
+                  <Button variant="ghost" className="min-h-9 rounded-full px-3.5" busy={remove.isPending && remove.variables === e.id} onClick={async () => {
+                      if (await confirmAction({ title: `تشيل ${e.name ?? `+${e.wa_id}`} من ${label(LIST_KINDS, kind)}؟`, yes: "أيوه، شيله", danger: true }))
+                        remove.mutate(e.id);
+                    }}
                     aria-label={`شيل ${e.name ?? e.wa_id} من القايمة`}>
                     <Icon name="x" className="size-4" />شيل
                   </Button>
@@ -260,11 +269,15 @@ function ImportCsv({ kind }: { kind: ListKind }) {
         </span>
         {run.isPending ? "بيستورد…" : "ملف CSV، أقل من 600 كيلو."}
         <input type="file" accept=".csv,text/csv" aria-label="ملف CSV" disabled={run.isPending} className="sr-only"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
+          onChange={async (e) => {
+            const input = e.target;
+            const f = input.files?.[0];
+            input.value = "";
             setTooBig(!!f && f.size > MAX_CSV_BYTES);
-            if (f && f.size <= MAX_CSV_BYTES) run.mutate(f);
-            e.target.value = "";
+            if (!f || f.size > MAX_CSV_BYTES) return;
+            if (replace && !(await confirmAction({ title: `تستبدل ${label(LIST_KINDS, kind)} كلها بالملف ده؟`,
+              body: "كل الأرقام اللي فيها دلوقتي هتتشال، ويفضل اللي في الملف بس.", yes: "أيوه، استبدلها", danger: true }))) return;
+            run.mutate(f);
           }} />
       </label>
       {tooBig ? <p className="text-sm text-bad" role="alert">الملف كبير. قسّمه لملفات أصغر من 600 كيلو (حوالي 6,000 سطر) واستوردها واحد ورا التاني.</p> : null}
@@ -292,7 +305,7 @@ function Muted() {
   return (
     <GlassCard icon="alert-circle" title="محادثات حازم ساكت فيها" count={muted.data?.length}
       hint="بسبب شتيمة أو سبام أو رقم ممنوع. لو رجّعتها، حازم بيرد على الرقم ده تاني.">
-      {muted.isPending ? <Loading /> : muted.isError ? <ErrorState message={errorMessage(muted.error)} /> :
+      {muted.isPending ? <Loading /> : muted.isError ? <ErrorState message={errorMessage(muted.error)} onRetry={() => void muted.refetch()} /> :
         muted.data.length === 0 ? <Nothing title="مفيش محادثات ساكتة" /> : (
           <ul className="grid gap-2">
             {muted.data.map((m) => (

@@ -166,4 +166,50 @@ describe("sign-in, sign-up and the authenticator (v1.9)", () => {
     await vi.waitFor(() => expect(calls.some((c) => c.path === "/users/p1/approve")).toBe(true));
     expect(calls.find((c) => c.path === "/users/p1/approve")!.body).toEqual({ role: "lawyer", staff_name: null });
   });
+
+  it("asks before changing an account's role, and keeps the old one on «no»", async () => {
+    const sara: PanelUser = {
+      id: "s1", username: "sara", display_name: "سارة", email: "sara@example.test", role: "staff", active: true,
+      locked: false, must_change_password: false, pending: false, email_verified: true, two_factor: false,
+      created_at: "2026-10-20T08:00:00Z",
+    };
+    const calls = serve({
+      "GET /auth/me": { body: boss },
+      "GET /users": { body: [sara] },
+      "POST /users/s1/role": { body: { ...sara, role: "lawyer" } },
+      "GET /dashboard": { body: { urgent: 0, overdue: 0, unassigned: 0, active: 0, urgent_by_day: [], overdue_by_day: [], recent: [], priority: [] } },
+    });
+    renderAt("/users");
+    const role = (await screen.findByRole("combobox", { name: "دور سارة" })) as HTMLSelectElement;
+    fireEvent.change(role, { target: { value: "lawyer" } });
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog.textContent).toContain("هيخرج من اللوحة");
+    fireEvent.click(within(dialog).getByRole("button", { name: "لأ، ارجع" }));
+    await vi.waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(role.value).toBe("staff");
+    expect(calls.some((c) => c.path === "/users/s1/role")).toBe(false);
+
+    fireEvent.change(role, { target: { value: "lawyer" } });
+    fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "أيوه، غيّره" }));
+    await vi.waitFor(() => expect(calls.find((c) => c.path === "/users/s1/role")?.body).toEqual({ role: "lawyer" }));
+  });
+
+  it("shows a new account's field errors in Arabic, without the general line", async () => {
+    serve({
+      "GET /auth/me": { body: boss },
+      "GET /users": { body: [] },
+      "POST /users": { status: 400, body: { error: "validation", errors: { username: ["username_taken"], email: ["invalid"] } } },
+      "GET /dashboard": { body: { urgent: 0, overdue: 0, unassigned: 0, active: 0, urgent_by_day: [], overdue_by_day: [], recent: [], priority: [] } },
+    });
+    renderAt("/users");
+    fireEvent.click(await screen.findByRole("button", { name: /ضيف حساب/ }));
+    type(/الاسم اللي هيظهر/, "منى");
+    type(/اسم المستخدم/, "mona");
+    type(/الإيميل/, "mona@x");
+    fireEvent.click(screen.getByRole("button", { name: "اعمل الحساب" }));
+    expect(await screen.findByText("اسم المستخدم ده موجود قبل كده.")).toBeTruthy();
+    expect(screen.getByText("اكتب إيميل صحيح.")).toBeTruthy();
+    expect(screen.queryByText("username_taken")).toBeNull();
+    expect(screen.queryByText("في حاجة مش مظبوطة في اللي اتكتب. راجعه وجرّب تاني.")).toBeNull();
+  });
 });
