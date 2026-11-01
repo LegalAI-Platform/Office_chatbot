@@ -189,6 +189,14 @@
 }
 
 @layer base {
+  /* the page scrolls with the wheel, the keys and a finger, without the browser's grey bar beside the side menu
+     (the owner) */
+  html {
+    scrollbar-width: none;
+  }
+  html::-webkit-scrollbar {
+    display: none;
+  }
   html,
   body {
     background-color: var(--page);
