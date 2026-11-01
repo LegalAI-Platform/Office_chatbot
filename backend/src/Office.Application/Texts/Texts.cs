@@ -194,6 +194,7 @@ public static class TextKeys
     public const string UrfConfirmed = "urf_confirmed";                     // B-11.7, the worker after the lawyer's approval
     public const string UrfAgesAgain = "urf_ages_again";
     public const string UrfStepAgain = "urf_step_again";                    // v1.46: before a question asked last time too
+    public const string BookingStepAgain = "booking_step_again";            // v1.47 (B-32): the booking step waiting, again
     public const string UrfChooseSlot = "urf_choose_slot";                  // the price, the documents and the free times
     public const string UrfSendDocuments = "urf_send_documents";            // after the receipt
     public const string UrfDocumentsReceived = "urf_documents_received";

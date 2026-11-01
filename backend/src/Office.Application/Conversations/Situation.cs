@@ -1,6 +1,7 @@
 using Office.Application.Booking;
 using Office.Application.Services;
 using Office.Application.Texts;
+using Office.Application.Turns;
 using Office.Domain.Clients;
 
 namespace Office.Application.Conversations;
@@ -31,9 +32,11 @@ public sealed record OpenOrder(string Kind, string State);
 
 /// <summary>
 /// What the database knows: the client's next appointment, his newest open order, and the approved texts of his last
-/// answered turn (<see cref="LastReplyKeys"/>: the forbidden rule 2 and the wordings taken in turn).
+/// answered turn (<see cref="LastReplyKeys"/>: the forbidden rule 2 and the wordings taken in turn). v1.47 (B-32):
+/// <see cref="Waiting"/>, the buttons or list rows that turn ended with (its last message), still waiting for his choice.
 /// </summary>
-public sealed record SituationFacts(OpenAppointment? Appointment, OpenOrder? Order, IReadOnlyList<string> LastReplyKeys)
+public sealed record SituationFacts(OpenAppointment? Appointment, OpenOrder? Order, IReadOnlyList<string> LastReplyKeys,
+    IReadOnlyList<InteractiveChoice>? Waiting = null)
 {
     public static SituationFacts Empty { get; } = new(null, null, []);
 }

@@ -1,7 +1,10 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Office.Application.Booking;
 using Office.Application.Conversations;
 using Office.Application.Ratings;
+using Office.Application.Turns;
+using Office.Infrastructure.Json;
 using Office.Infrastructure.Persistence;
 
 namespace Office.Infrastructure.Ratings;
@@ -97,13 +100,20 @@ public sealed class RatingStore(HazemDbContext db) : IRatingStore, IIntakeHistor
                                                    || x.State == "in_progress"))
             .OrderByDescending(x => x.UpdatedAt)
             .Select(x => new OpenOrder(x.Kind, x.State)).FirstOrDefaultAsync(ct);
-        var keys = await db.Database.SqlQuery<string>($"""
-            SELECT r.text_key AS "Value" FROM hazem.turn_replies r
-             WHERE r.turn_id = (SELECT t.turn_id FROM hazem.turns t
-                                 WHERE t.wa_id = {waId} AND EXISTS (SELECT 1 FROM hazem.turn_replies x WHERE x.turn_id = t.turn_id)
-                                 ORDER BY t.created_at DESC LIMIT 1)
-             ORDER BY r.idempotency_key
+        var lastId = await db.Database.SqlQuery<string>($"""
+            SELECT t.turn_id AS "Value" FROM hazem.turns t
+             WHERE t.wa_id = {waId} AND EXISTS (SELECT 1 FROM hazem.turn_replies x WHERE x.turn_id = t.turn_id)
+             ORDER BY t.created_at DESC LIMIT 1
+            """).FirstOrDefaultAsync(ct);
+        var keys = lastId is null ? [] : await db.Database.SqlQuery<string>($"""
+            SELECT r.text_key AS "Value" FROM hazem.turn_replies r WHERE r.turn_id = {lastId} ORDER BY r.idempotency_key
             """).ToListAsync(ct);
-        return new SituationFacts(a, o, keys);
+        var last = lastId is null ? null
+            : await db.Turns.AsNoTracking().Where(t => t.TurnId == lastId).Select(t => new { t.Actions, t.CreatedAt }).FirstOrDefaultAsync(ct);
+        // v1.47 (B-32): the choices his last answer ended with, for a day (a list of times older than that is gone anyway)
+        var waiting = last is not null && last.CreatedAt > n.AddHours(-24)
+            ? (JsonSerializer.Deserialize<List<OutboundAction>>(last.Actions, HazemJson.Options) ?? []).LastOrDefault()?.Interactive?.Choices
+            : null;
+        return new SituationFacts(a, o, keys, waiting);
     }
 }

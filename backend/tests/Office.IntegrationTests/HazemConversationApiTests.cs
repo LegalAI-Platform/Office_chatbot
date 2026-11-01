@@ -270,7 +270,8 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
                         + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.42.md"), Ct) // B-09: urgent_later (1.42)
                         + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.43.md"), Ct) // B-16: btn_start_order (1.43)
                         + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.45.md"), Ct) // B-28: the transfer under review and the topic line (1.45)
-                        + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.46.md"), Ct); // B-31: no loops (1.46)
+                        + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.46.md"), Ct) // B-31: no loops (1.46)
+                        + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.47.md"), Ct); // B-32: typed choices (1.47)
         decisions = decisions.Replace("\r\n", "\n", StringComparison.Ordinal); // a Windows checkout (core.autocrlf) has CRLF; the texts have \n
         await using var c = new NpgsqlConnection(db.ApiConnectionString);
         await c.OpenAsync(Ct);

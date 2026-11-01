@@ -252,6 +252,35 @@ public sealed class HazemResponder(
             var flow = new Flow(turn, state, list, null, plan, settings.Flag(HandoffEnabledKey), bookingOn ? bookingSettings : null, servicesOn,
                 urfOn, urfOpen, ageRefusal: ageRefusal, urgentOn: urgentOn, situation: situation);
             var freeText = false;
+            // v1.47 (B-32): words typed while Hazem's buttons or list rows wait. The AI reads them with the choices in its context;
+            // a choice they pick (or a day or a time asked on a list of times) is answered as its press, by the code, like
+            // every press below. Anything else goes on with that reading (no second call).
+            Classification? typedReading = null;
+            if (!firstContact && chat is not null && situation.Facts.Waiting is { Count: > 0 } waiting
+                && turn.Messages.All(m => m.Interactive is null && m.Button is null) && FileIn(turn) is null
+                && AiInput.Build(turn) is { } typedWords && !Courtesy.Read(typedWords).EndsTheChat)
+            {
+                var understood = await WithContextAsync(turn, typedWords, situation, ct);
+                typedReading = Backstop.Apply(Classification.From(await classifier.ClassifyAsync(understood, settings, ct), settings), typedWords);
+                var raw = typedReading.Call?.Answer;
+                var typedPress = TypedChoice.Picked(waiting, raw);
+                if (typedPress is null && bookingOn && TypedChoice.Times(waiting, raw, now) is { } asked)
+                {
+                    typedPress = asked.Shown ?? (asked.Exact && await FreeAtAsync(booking!, bookingSettings, settings, asked, now, ct)
+                        ? TypedChoice.PickAt(asked.Times, asked.At)
+                        : TypedChoice.TimesFrom(asked.Times, asked.At));
+                }
+
+                if (typedPress is not null)
+                {
+                    turn = turn with { Messages = [turn.Messages[^1] with { Type = MessageType.Interactive, Text = null, Interactive = typedPress }] };
+                    classification = typedReading; // kept in the log: what the AI read
+                    typedReading = null;
+                    flow = new Flow(turn, state, list, null, plan, settings.Flag(HandoffEnabledKey), bookingOn ? bookingSettings : null,
+                        servicesOn, urfOn, urfOpen, ageRefusal: ageRefusal, urgentOn: urgentOn, situation: situation);
+                }
+            }
+
             // TASK 08: a button or a list row Hazem sent is read without the AI. TASK 12: a reminder's two buttons
             // whenever the reminders run (an appointment booked before the booking was switched off still gets them).
             var pressed = ChoiceIn(turn);
@@ -369,7 +398,11 @@ public sealed class HazemResponder(
                 }
                 else
                 {
-                    if (aiText is not null)
+                    if (typedReading is not null)
+                    {
+                        classification = typedReading; // v1.47 (B-32): read once, with the choices waiting
+                    }
+                    else if (aiText is not null)
                     {
                         // 0032: the AI down → an insult or a plain thanks is still read by code (Backstop)
                         // v1.41 (TASK 17, part B): the AI reads the message with what a person would know before it
@@ -398,6 +431,11 @@ public sealed class HazemResponder(
 
                     flow.Respond(firstContact);
                 }
+            }
+
+            if (freeText)
+            {
+                flow.KeepTheStep(); // v1.47 (B-32): never back to the offer while a later booking step waits
             }
 
             if (flow.HasBookingWork)
@@ -478,7 +516,26 @@ public sealed class HazemResponder(
             SituationKind.Order => "طلب خدمة مكتوبة شغال",
             _ => "مفيش حاجة مفتوحة",
         };
-        return AiContext.Build(message, lines.LastOrDefault(l => !l.FromClient)?.Text, lines.LastOrDefault(l => l.FromClient)?.Text, open);
+        // v1.47 (B-32): the choices still waiting, for the one his words pick (and now, for a day or a time he asks for)
+        var waiting = situation.Facts.Waiting is { Count: > 0 } w ? TypedChoice.Titles(w) : null;
+        var local = TimeZoneInfo.ConvertTime(clock.GetUtcNow(), OfficeHours.Cairo);
+        var today = waiting is null ? null
+            : $"{BookingWords.DayName(local.DayOfWeek)} {local.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture)}";
+        return AiContext.Build(message, lines.LastOrDefault(l => !l.FromClient)?.Text, lines.LastOrDefault(l => l.FromClient)?.Text, open,
+            waiting, today);
+    }
+
+    /// <summary>v1.47 (B-32): the exact time he typed is free to book (moving an appointment always goes through its list).</summary>
+    private static async Task<bool> FreeAtAsync(BookingDesk desk, BookingSettings b, HazemSettings settings, TimesAsked asked,
+        DateTimeOffset now, CancellationToken ct)
+    {
+        if (asked.Times.Service is not { } service || asked.Times.AppointmentId is not null)
+        {
+            return false;
+        }
+
+        var found = await desk.FindAsync(b, settings, service, now, asked.At.AddTicks(-1), BookingDesk.Today(asked.At), 1, null, ct);
+        return found.CalendarAvailable && found.Slots is [var first] && first.Start == asked.At;
     }
 
     /// <summary>v1.43: the written service whose text (asking for the papers) the client got last, if any.</summary>
@@ -1912,6 +1969,31 @@ public sealed class HazemResponder(
         /// follows it in the same answer — once per request, never on the urgent path.
         /// TASK 08: with buttons for the kind of consultation, or the free times when the kind is known.
         /// </summary>
+        /// <summary>
+        /// v1.47 (B-32, the owner: «اي الحل العام»): a client who already chose the kind (his times are on the screen, or where
+        /// the lawyer calls him) never gets the consultation offer again for words that answered none of it. The step waiting
+        /// comes back instead, with «علشان نكمّل الحجز…» (its buttons or its times again); the next time the office takes it.
+        /// </summary>
+        public void KeepTheStep()
+        {
+            var waiting = situation.Facts.Waiting?.Select(c => BookingChoice.Parse(c.Id)).FirstOrDefault(p => p is { Kind: 's' or 'n' or 'v' });
+            if (waiting is null || booking is null || work is not null
+                || !plan.Steps.Any(s => s.Key is TextKeys.ConsultationOffer or TextKeys.CaseOffer))
+            {
+                return;
+            }
+
+            plan.Steps.RemoveAll(s => s.Key is TextKeys.ConsultationOffer or TextKeys.CaseOffer);
+            if (situation.RepliedLast(TextKeys.BookingStepAgain))
+            {
+                HandToOffice(TextKeys.UnclearAgain, PendingTask.UnclearMessage);
+                return;
+            }
+
+            plan.Say(TextKeys.BookingStepAgain);
+            work = waiting.Kind == 'v' ? new AskCallApp() : new OfferTimes(waiting.Service!, null, TextKeys.BookingChooseSlot, null, App: waiting.App);
+        }
+
         private void Offer(bool askTopic = true)
         {
             if (UrfWaitsForTime)
