@@ -21,9 +21,12 @@ export function LoginPage() {
   const [waiting, setWaiting] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  // back where the session ended (RequireAuth keeps it), with nothing left from the account before
+  const from = (location.state as { from?: string } | null)?.from;
   function enter(me: Me) {
+    qc.clear();
     qc.setQueryData(meKey, me);
-    navigate(me.must_change_password ? "/change-password" : "/", { replace: true });
+    navigate(me.must_change_password ? "/change-password" : from?.startsWith("/") && !from.startsWith("//") ? from : "/", { replace: true });
   }
 
   async function submit(e: FormEvent) {

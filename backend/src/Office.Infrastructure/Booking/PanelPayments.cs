@@ -53,23 +53,30 @@ public sealed class PanelPayments(HazemDbContext db, BookingStore store, TimePro
         };
 
         var all = show == ShowAll;
-        var bookings = await (from pay in payments
-                              join a in db.Appointments.AsNoTracking() on pay.AppointmentId equals (Guid?)a.Id
-                              join p in db.Persons.AsNoTracking() on a.PersonId equals p.Id
-                              where !all || a.StartsAt >= since && a.State != AppointmentInfo.Expired
-                              orderby pay.ProofAt ?? a.StartsAt
-                              select new Row(pay, a.Id, a.Service, a.StartsAt, a.State, p.OfficeName, p.WaId,
-                                  db.PaymentReceipts.Count(r => r.PaymentId == pay.Id),
-                                  db.PaymentReceipts.Any(r => r.PaymentId == pay.Id && r.DuplicateOf != null), false)).Take(300).ToListAsync(ct);
-        var orders = await (from pay in payments
-                            join o in db.ServiceOrders.AsNoTracking() on pay.ServiceOrderId equals (Guid?)o.Id
-                            join p in db.Persons.AsNoTracking() on o.PersonId equals p.Id
-                            where !all || o.CreatedAt >= since
-                            orderby pay.ProofAt ?? o.CreatedAt
-                            select new Row(pay, o.Id, o.Kind, o.CreatedAt, o.State, p.OfficeName, p.WaId,
-                                db.PaymentReceipts.Count(r => r.PaymentId == pay.Id),
-                                db.PaymentReceipts.Any(r => r.PaymentId == pay.Id && r.DuplicateOf != null), true)).Take(300).ToListAsync(ct);
-        var list = bookings.Concat(orders).OrderBy(x => x.Pay.ProofAt ?? x.Start).ToList();
+        // «الكل» is newest first, so in a busy period the cap of 300 drops the oldest, never the newest; the
+        // review and refunds lists stay oldest first (the longest waiting on top).
+        var bookingRows = from pay in payments
+                          join a in db.Appointments.AsNoTracking() on pay.AppointmentId equals (Guid?)a.Id
+                          join p in db.Persons.AsNoTracking() on a.PersonId equals p.Id
+                          where !all || a.StartsAt >= since && a.State != AppointmentInfo.Expired
+                          select new { pay, a, p };
+        bookingRows = all ? bookingRows.OrderByDescending(x => x.pay.ProofAt ?? x.a.StartsAt) : bookingRows.OrderBy(x => x.pay.ProofAt ?? x.a.StartsAt);
+        var bookings = await bookingRows
+            .Select(x => new Row(x.pay, x.a.Id, x.a.Service, x.a.StartsAt, x.a.State, x.p.OfficeName, x.p.WaId,
+                db.PaymentReceipts.Count(r => r.PaymentId == x.pay.Id),
+                db.PaymentReceipts.Any(r => r.PaymentId == x.pay.Id && r.DuplicateOf != null), false)).Take(300).ToListAsync(ct);
+        var orderRows = from pay in payments
+                        join o in db.ServiceOrders.AsNoTracking() on pay.ServiceOrderId equals (Guid?)o.Id
+                        join p in db.Persons.AsNoTracking() on o.PersonId equals p.Id
+                        where !all || o.CreatedAt >= since
+                        select new { pay, o, p };
+        orderRows = all ? orderRows.OrderByDescending(x => x.pay.ProofAt ?? x.o.CreatedAt) : orderRows.OrderBy(x => x.pay.ProofAt ?? x.o.CreatedAt);
+        var orders = await orderRows
+            .Select(x => new Row(x.pay, x.o.Id, x.o.Kind, x.o.CreatedAt, x.o.State, x.p.OfficeName, x.p.WaId,
+                db.PaymentReceipts.Count(r => r.PaymentId == x.pay.Id),
+                db.PaymentReceipts.Any(r => r.PaymentId == x.pay.Id && r.DuplicateOf != null), true)).Take(300).ToListAsync(ct);
+        var merged = bookings.Concat(orders);
+        var list = (all ? merged.OrderByDescending(x => x.Pay.ProofAt ?? x.Start) : merged.OrderBy(x => x.Pay.ProofAt ?? x.Start)).ToList();
         var people = list.SelectMany(x => new[] { x.Pay.ReviewedBy, x.Pay.RefundedBy }).OfType<Guid>().Distinct().ToList();
         var names = await db.PanelUsers.AsNoTracking().Where(u => people.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.DisplayName, ct);
         string? Who(Guid? id) => id is { } g && names.TryGetValue(g, out var n) ? n : null;

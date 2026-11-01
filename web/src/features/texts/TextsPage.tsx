@@ -134,6 +134,14 @@ function TextCard({ text }: { text: ApprovedText }) {
   );
 }
 
+/** Where a version came from, in Arabic: the API's `source` is a note for us («panel 2026-10-30», «proposal TASK 04…»). */
+function sourceLabel(source: string): string | null {
+  if (source.startsWith("panel")) return "من اللوحة";
+  if (source.startsWith("proposal")) return "اقتراح";
+  if (source.startsWith("DECISIONS")) return "النص الأصلي";
+  return null;
+}
+
 function History({ textKey }: { textKey: string }) {
   const qc = useQueryClient();
   const versions = useQuery({ queryKey: ["text", textKey], queryFn: () => api<TextVersion[]>("GET", `/texts/${textKey}`) });
@@ -142,14 +150,14 @@ function History({ textKey }: { textKey: string }) {
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ["texts"] }); void qc.invalidateQueries({ queryKey: ["text", textKey] }); toast("النسخة دي بقت الشغالة ✅"); },
   });
   if (versions.isPending) return <Loading />;
-  if (versions.isError) return <ErrorState message={errorMessage(versions.error)} />;
+  if (versions.isError) return <ErrorState message={errorMessage(versions.error)} onRetry={() => void versions.refetch()} />;
   return (
     <div className="grid gap-2 border-t border-line/60 pt-3">
       <ol className="soft-scroll grid max-h-[28rem] gap-2 overflow-y-auto">
         {versions.data.filter((v) => !v.active).map((v) => (
           <li key={v.version} className="grid gap-1.5 rounded-[14px] border border-line/60 bg-card/45 p-3 shadow-[inset_0_1px_0_rgb(255_255_255/0.35)]">
             <span className="flex flex-wrap items-center gap-2 text-xs text-ink-soft">
-              نسخة {v.version} · {v.source}{v.updated_by ? ` · ${v.updated_by}` : ""} · {cairoWhen(v.updated_at)}
+              نسخة {v.version}{sourceLabel(v.source) ? ` · ${sourceLabel(v.source)}` : ""}{v.updated_by ? ` · ${v.updated_by}` : ""} · {cairoWhen(v.updated_at)}
             </span>
             <p className="whitespace-pre-wrap text-sm">{v.text}</p>
             <div><Button variant="ghost" busy={activate.isPending && activate.variables === v.version} onClick={() => activate.mutate(v.version)}>رجّع النسخة دي</Button></div>

@@ -56,8 +56,8 @@ export function ReportsPage() {
               <Icon name="calendar" className="size-4" />
               الشهر
             </span>
-            <input type="month" className="tabular min-h-11 rounded-full border border-line/60 bg-card/60 px-4 text-ink shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)] focus:border-gold" value={month} max={thisMonth()}
-              onChange={(e) => e.target.value && setMonth(e.target.value)} />
+            <input type="month" className="tabular min-h-11 rounded-full border border-line/60 bg-card/60 px-4 text-ink shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)] focus:border-gold" value={month} min="2024-01" max={thisMonth()}
+              onChange={(e) => { const v = e.target.value; if (v >= "2024-01" && v <= thisMonth()) setMonth(v); }} />
           </label>
         </div>
       </header>
@@ -248,7 +248,7 @@ const RATED_SERVICES: Record<string, string> = { ...BOOKING_SERVICES, ...SERVICE
 
 function Ratings({ ratings }: { ratings: RatingReport }) {
   const score = (n: number | null) => (n === null ? "—" : n.toFixed(1));
-  const cairoDay = (at: string) => new Intl.DateTimeFormat("ar-EG", { timeZone: "Africa/Cairo", day: "numeric", month: "numeric" }).format(new Date(at));
+  const cairoDay = (at: string) => new Intl.DateTimeFormat("ar-EG-u-nu-latn", { timeZone: "Africa/Cairo", day: "numeric", month: "numeric" }).format(new Date(at));
   return (
     <section className="grid gap-3" aria-labelledby="ratings-title">
       <GroupHead id="ratings-title" icon="message" title="تقييمات العملاء" />
@@ -320,7 +320,7 @@ const REVIEW_REASONS: Record<ReviewRow["reason"], string> = {
  */
 function Review({ rows }: { rows: ReviewRow[] }) {
   const when = (at: string) =>
-    new Intl.DateTimeFormat("ar-EG", { timeZone: "Africa/Cairo", day: "numeric", month: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(at));
+    new Intl.DateTimeFormat("ar-EG-u-nu-latn", { timeZone: "Africa/Cairo", day: "numeric", month: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(at));
   const alarm = (x: ReviewRow) => (x.reason === "offer_after_payment" ? 1 : 0);
   const sorted = [...rows].sort((a, b) => alarm(b) - alarm(a));
   return (

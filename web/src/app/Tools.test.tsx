@@ -136,4 +136,22 @@ describe("TASK 07c tools", () => {
     expect(link.getAttribute("href")).toBe("/api/panel/tasks/t1/files/1");
     expect(link.getAttribute("rel")).toContain("noopener");
   });
+
+  it("asks before removing a number from a list", async () => {
+    const calls = serve({
+      "GET /auth/me": { body: lawyer },
+      "GET /lists": { body: { total: 1, items: [{ id: "e1", kind: "existing_client", wa_id: "201000000001", name: "منى", imported_at: "2026-10-20T10:00:00Z" }] } },
+      "DELETE /lists/e1": { status: 204 },
+    });
+    renderAt("/lists");
+    fireEvent.click(await screen.findByRole("button", { name: "شيل منى من القايمة" }));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog.textContent).toContain("تشيل منى");
+    fireEvent.click(within(dialog).getByRole("button", { name: "لأ، ارجع" }));
+    await vi.waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(calls.some((c) => c.method === "DELETE")).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "شيل منى من القايمة" }));
+    fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "أيوه، شيله" }));
+    await vi.waitFor(() => expect(calls.some((c) => c.method === "DELETE" && c.path === "/lists/e1")).toBe(true));
+  });
 });

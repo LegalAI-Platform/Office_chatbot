@@ -62,7 +62,8 @@ public static class PanelBookingEndpoints
         booking.MapPost("/undo", async (UndoRequest? body, HttpContext ctx, PanelBooking b, CancellationToken ct) =>
         {
             var me = ctx.CurrentUser();
-            return Answer(await b.UndoAsync(me.Id, me.Username, body?.Confirm == true, ct));
+            // The office's details and the calendar's email are office.manage's (as when they are changed).
+            return Answer(await b.UndoAsync(me.Id, me.Username, Permissions.Has(me.Role, Permissions.OfficeManage), body?.Confirm == true, ct));
         });
 
         booking.MapGet("/appointments", async (string? from, string? to, PanelBooking b, TimeProvider clock, CancellationToken ct) =>
@@ -303,6 +304,7 @@ public static class PanelBookingEndpoints
         { Error: PanelBooking.ErrHasBookings } => Results.Conflict(new { error = r.Error, appointments = r.Affected }),
         { Error: PanelBooking.ErrNotFound } => Results.NotFound(new { error = r.Error }),
         { Error: PanelBooking.ErrNothingToUndo } => Results.Conflict(new { error = r.Error }),
+        { Error: PanelBooking.ErrOfficeForbidden } => Results.Json(new { error = r.Error }, statusCode: StatusCodes.Status403Forbidden),
         _ => Results.BadRequest(new { error = r.Error }),
     };
 

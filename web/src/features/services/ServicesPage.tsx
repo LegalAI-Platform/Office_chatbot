@@ -4,7 +4,7 @@ import { errorMessage } from "../../shared/api/client";
 import { can, useMe } from "../../shared/api/session";
 import { label, PAYMENT_STATES, SERVICE_KINDS, SERVICE_STATES } from "../../shared/lib/labels";
 
-import { cairoDate, cairoWhen } from "../../shared/lib/time";
+import { cairoDate, cairoLongDate, cairoWhen } from "../../shared/lib/time";
 import { useUrlState } from "../../shared/lib/url";
 import { ActionBar, CaseCard, CaseHead, CaseNote, Facts, Files, Meta, Phone } from "../../shared/ui/caseCard";
 import { Icon, type IconName } from "../../shared/ui/Icon";
@@ -19,7 +19,10 @@ const TONE: Record<string, string> = {
 const DELIVERY: Record<string, string> = { file: "ملف على واتساب", call: "مكالمة من المستشار" };
 
 const SHOWS: Show[] = ["open", "done"];
-const listQuery = (show: Show) => queryOptions({ queryKey: ["services", show], queryFn: () => services.list(show) });
+
+/** A delivery day («2026-11-25») as the panel writes dates: «الأربعاء 25 نوفمبر 2026». Noon UTC stays the same day in Cairo. */
+const dayText = (d: string): string => cairoLongDate(new Date(`${d}T12:00:00Z`));
+const listQuery = (show: Show) => queryOptions({ queryKey: ["services", show], queryFn: () => services.list(show), refetchInterval: 60_000 });
 
 /** The open orders (the tab the page opens on), fetched while the pointer is still on the link (idea from PR #14). */
 export function prefetchData(qc: QueryClient) {
@@ -122,7 +125,7 @@ function OrderCard({ o }: { o: ServiceOrder }) {
 
   const facts: [string, ReactNode][] = [];
   if (o.price != null) facts.push(["السعر", <><span className="tabular">{o.price.toLocaleString("en-US")}</span> جنيه{o.price_exception ? " (استثناء)" : ""}</>]);
-  if (o.due_on) facts.push(["التسليم", o.due_on]);
+  if (o.due_on) facts.push(["التسليم", dayText(o.due_on)]);
   if (o.delivery) facts.push(["إزاي", DELIVERY[o.delivery]]);
   if (o.payment) facts.push(["الدفع", label(PAYMENT_STATES, o.payment)]);
 
@@ -147,7 +150,7 @@ function OrderCard({ o }: { o: ServiceOrder }) {
         <CaseNote tone="bad">
           {o.notice_error === "OUTSIDE_24H_WINDOW" || !o.notice_error
             ? "آخر رسالة ما وصلتش للعميل (عدّى 24 ساعة من آخر رسالة منه). هتتبعت تاني لوحدها أول ما يكتب، أو كلّموه."
-            : `آخر رسالة ما وصلتش للعميل: واتساب رفضها (${o.notice_error}). جرّب «ابعت الملف تاني»، ولو اتكررت كلّموه.`}
+            : "آخر رسالة ما وصلتش للعميل: واتساب رفضها. جرّب «ابعت الملف تاني»، ولو اتكررت كلّموه."}
         </CaseNote>
       ) : null}
 
@@ -196,12 +199,15 @@ function PriceFields({ o, onDone, list }: { o: ServiceOrder; onDone: () => void;
   const [exception, setException] = useState(false);
   const save = useMutation({ mutationFn: () => services.price(o.id, { price: Number(shown), exception, due_on: due, delivery }), onSuccess: () => { onDone(); toast("السعر اتبعت للعميل ✅"); } });
   const out = !inRange(o.kind, Number(shown), list);
+  // whole pounds only (the API's price is an int): a decimal is refused, never rounded
+  const whole = shown.trim() !== "" && Number.isInteger(Number(shown));
 
   return (
     <fieldset className="grid gap-2 border-t border-line pt-3">
       <legend className="text-sm font-semibold">السعر</legend>
       <div className="grid gap-2 md:grid-cols-3">
-        <Field label="السعر (جنيه)" type="number" min={1} inputMode="numeric" value={shown} onChange={(e) => setPrice(e.target.value)} />
+        <Field label="السعر (جنيه)" type="number" min={1} step={1} inputMode="numeric" value={shown} onChange={(e) => setPrice(e.target.value)}
+          error={shown.trim() !== "" && !whole ? "اكتب السعر بالجنيه من غير كسور" : undefined} />
         <Field label="يوم التسليم" type="date" min={cairoDate(new Date())} value={due} onChange={(e) => setDue(e.target.value)} />
         <label className="grid gap-1.5 text-sm font-semibold">
           التسليم
@@ -217,9 +223,9 @@ function PriceFields({ o, onDone, list }: { o: ServiceOrder; onDone: () => void;
         </label>
       ) : null}
       <div>
-        <Button variant="primary" busy={save.isPending} disabled={!(Number(shown) > 0) || !due || (out && !exception)}
+        <Button variant="primary" busy={save.isPending} disabled={!whole || !(Number(shown) > 0) || !due || (out && !exception)}
           onClick={async () => {
-            if (await confirmAction({ title: "تبعت السعر للعميل؟", body: `حازم هيبعت للعميل: ${Number(shown).toLocaleString("en-US")} جنيه، والتسليم يوم ${due}.`, yes: "ابعت السعر" })) save.mutate();
+            if (await confirmAction({ title: "تبعت السعر للعميل؟", body: `حازم هيبعت للعميل: ${Number(shown).toLocaleString("en-US")} جنيه، والتسليم يوم ${dayText(due)}.`, yes: "ابعت السعر" })) save.mutate();
           }}>
           ابعت السعر للعميل
         </Button>
@@ -237,7 +243,7 @@ function Deliver({ o, onDone }: { o: ServiceOrder; onDone: () => void }) {
 
   return (
     <div className="grid gap-2 border-t border-line pt-3">
-      <p className="text-sm font-semibold">الشغل بدأ. التسليم يوم {o.due_on}.</p>
+      <p className="text-sm font-semibold">الشغل بدأ.{o.due_on ? ` التسليم يوم ${dayText(o.due_on)}.` : ""}</p>
       {o.delivery === "file" ? (
         <div className="flex flex-wrap items-center gap-2">
           <input ref={input} type="file" accept={ACCEPT} aria-label="الملف" className="text-sm"
@@ -249,7 +255,12 @@ function Deliver({ o, onDone }: { o: ServiceOrder; onDone: () => void }) {
           {file && file.size > 20 * 1024 * 1024 ? <span className="text-sm text-bad">الملف أكبر من 20 ميجا.</span> : null}
         </div>
       ) : (
-        <div><Button variant="primary" busy={send.isPending} onClick={() => send.mutate()}>المكالمة خلصت: اتسلّم</Button></div>
+        <div>
+          <Button variant="primary" busy={send.isPending}
+            onClick={async () => { if (await confirmAction({ title: "المكالمة خلصت؟", body: "الطلب هيتسجّل إنه اتسلّم، وحازم هيبلّغ العميل. مفيش رجوع.", yes: "أيوه، اتسلّم" })) send.mutate(); }}>
+            المكالمة خلصت: اتسلّم
+          </Button>
+        </div>
       )}
       {send.isError ? <p className="text-sm text-bad" role="alert">{errorMessage(send.error)}</p> : null}
     </div>

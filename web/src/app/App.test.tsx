@@ -140,4 +140,28 @@ describe("routing and permissions", () => {
     expect(within(who).queryByRole("button", { name: "الكل" })).toBeNull();
     expect(within(who).getByRole("button", { name: "مهامي" }).getAttribute("aria-pressed")).toBe("true");
   });
+
+  it("moves a page past the end back to the last page, and «رجوع لكل المهام» returns to it", async () => {
+    const card = { id: "t7", type: "human_requested", state: "done", due_at: "2026-10-23T10:00:00Z", created_at: "2026-10-23T09:00:00Z", client_name: "منى علي", phone_last3: "123" };
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
+      const path = String(url);
+      if (path.endsWith("/auth/me")) return Response.json(me());
+      if (path.includes("/tasks/t7")) {
+        return Response.json({ ...card, client: { name: "منى علي", phone: "201000000123" }, client_words: [], can: { start: false, done: false, cancel: false, assign: false } });
+      }
+      if (path.includes("/tasks?")) {
+        const page = Number(new URL(path, "http://x").searchParams.get("page"));
+        return Response.json({ items: page === 2 ? [card] : [], total: 26, page, page_size: 25 });
+      }
+      return new Response(null, { status: 404 });
+    });
+    const router = renderAt("/tasks?state=done&page=5");
+    const link = await screen.findByRole("link", { name: /منى علي/ });
+    expect(router.state.location.search).toBe("?state=done&page=2");
+    fireEvent.click(link);
+    expect(router.state.location.pathname).toBe("/tasks/t7");
+    fireEvent.click(await screen.findByRole("link", { name: /رجوع لكل المهام/ }));
+    expect(router.state.location.pathname).toBe("/tasks");
+    expect(router.state.location.search).toBe("?state=done&page=2");
+  });
 });

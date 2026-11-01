@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import qrcode from "qrcode-generator";
 import { errorMessage } from "../../shared/api/client";
 import { meKey } from "../../shared/api/session";
-import { Button, Card, Chip, Field, Loading } from "../../shared/ui/ui";
+import { Button, Card, Chip, ErrorState, Field, Loading } from "../../shared/ui/ui";
 import { newRecoveryCodes, twoFactorDisable, twoFactorEnable, twoFactorKey, twoFactorSetup, twoFactorStatus } from "./api";
 import { CodeField, Notice } from "./AuthLayout";
 
@@ -46,7 +46,7 @@ export function TwoFactorCard() {
   );
 
   if (status.isPending) return <Card>{header}<Loading /></Card>;
-  if (status.isError) return <Card>{header}<Notice>{errorMessage(status.error)}</Notice></Card>;
+  if (status.isError) return <Card>{header}<ErrorState message={errorMessage(status.error)} onRetry={() => void status.refetch()} /></Card>;
   const s = status.data;
 
   if (codes) {

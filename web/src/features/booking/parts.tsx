@@ -21,7 +21,7 @@ export const STATUS: Record<Day["status"], { word: string; tone: string }> = {
 export const longDay = (day: string) =>
   new Intl.DateTimeFormat("ar-EG-u-nu-latn", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(new Date(`${day}T12:00:00Z`));
 
-export const monthQuery = (month: string) => queryOptions({ queryKey: ["booking", "month", month], queryFn: () => booking.month(month) });
+export const monthQuery = (month: string) => queryOptions({ queryKey: ["booking", "month", month], queryFn: () => booking.month(month), refetchInterval: 60_000 });
 export const settingsQuery = queryOptions({ queryKey: ["booking", "settings"], queryFn: booking.settings });
 
 export const ROW = "relative overflow-hidden rounded-[14px] border border-line/60 bg-card/55 shadow-[inset_0_1px_0_rgb(255_255_255/0.45),0_4px_14px_-8px_rgb(60_44_20/0.25)]";

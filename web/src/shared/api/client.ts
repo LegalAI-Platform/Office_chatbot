@@ -28,7 +28,7 @@ const MESSAGES: Record<string, string> = {
   too_many_attempts: "محاولات كتير. استنى شوية وجرّب تاني.",
   must_change_password: "لازم تغيّر كلمة السر الأول.",
   wrong_current_password: "كلمة السر الحالية غلط.",
-  weak_password: "كلمة السر لازم تبقى 12 حرف على الأقل.",
+  weak_password: "كلمة السر لازم تبقى من 12 لـ 128 حرف.",
   same_password: "كلمة السر الجديدة لازم تبقى مختلفة عن الحالية.",
   transition_not_allowed: "الحالة دي مش متاحة للمهمة دلوقتي.",
   actor_not_allowed: "مش مسموح لك تغيّر الحالة دي.",
@@ -79,6 +79,18 @@ const MESSAGES: Record<string, string> = {
   avatar_type: "الصورة لازم تبقى JPG أو PNG أو WebP.",
   avatar_too_large: "الصورة أكبر من 300 كيلو. اختار صورة أصغر.",
   avatar_not_image: "الملف ده مش صورة سليمة. جرّب صورة تانية.",
+  // codes that showed in English («Bad Request», «Conflict») before
+  antiforgery: "الصفحة قديمة. اعمل ريفرش وجرّب تاني.",
+  changed_meanwhile: "حد تاني غيّر ده دلوقتي. الصفحة اتحدّثت، بص عليها وجرّب تاني.",
+  has_bookings: "فيه حجوزات هتتأثر بالتعديل ده.",
+  calendar_id_forbidden: "إيميل الكالندر بيغيّره المدير بس.",
+  office_forbidden: "التعديل ده بيرجّعه المدير بس.",
+  invalid_price: "السعر لازم يبقى رقم صحيح من 1 لـ 1,000,000.",
+  review_range: "أقل سعر للمراجعة لازم يبقى أقل من أو قد أعلى سعر.",
+  invalid_month: "اختار شهر من 2024 ولحد دلوقتي.",
+  invalid_phone: "الرقم مش صحيح. اكتبه زي 01012345678 أو +201012345678.",
+  invalid_kind: "النوع ده مش موجود.",
+  invalid_filter: "الفلتر ده مش موجود.",
 };
 
 export function errorMessage(error: unknown): string {
@@ -89,7 +101,9 @@ export function errorMessage(error: unknown): string {
     if (error.status === 404) return "مش لاقيين ده. يمكن اتمسح أو مش من حقك تشوفه.";
     if (error.status === 429) return MESSAGES.too_many_attempts!;
     if (error.status >= 500) return "حصلت مشكلة عندنا. جرّب تاني بعد شوية.";
-    return error.message;
+    // a code with no Arabic text yet: never the browser's English («Bad Request», «Conflict»)
+    if (error.status === 409) return "اللي بتحاول تعمله ما ينفعش دلوقتي. اعمل ريفرش وجرّب تاني.";
+    return "في حاجة مش مظبوطة في اللي اتكتب. راجعه وجرّب تاني.";
   }
   return "مش قادرين نوصل للسيرفر. اتأكد من الاتصال وجرّب تاني.";
 }
