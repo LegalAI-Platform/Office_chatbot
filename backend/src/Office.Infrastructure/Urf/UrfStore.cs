@@ -14,7 +14,10 @@ public sealed class UrfStore(HazemDbContext db) : IUrfStore
             .Where(c => c.PersonId == personId && (c.State == UrfCase.Collecting || c.State == UrfCase.DocumentsPending || c.State == UrfCase.Booked))
             .OrderByDescending(c => c.CreatedAt).ToListAsync(ct)).Select(ToCase).ToList();
 
-    public Task SaveAsync(UrfCase c, Guid? intakeId, CancellationToken ct) =>
+    public Task SaveAsync(UrfCase c, Guid? intakeId, CancellationToken ct) => Write(db, c, intakeId, ct);
+
+    /// <summary>TASK 18: also called inside the turn's transaction, after the person and the intake it points to are written.</summary>
+    internal static Task Write(HazemDbContext db, UrfCase c, Guid? intakeId, CancellationToken ct) =>
         db.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO hazem.urf_cases (id, person_id, intake_id, kind, state, step, husband_age, wife_age, wife_past, guardian, witnesses,
                                          has_copy, agreed, children, age_tries, appointment_id, policy_version)

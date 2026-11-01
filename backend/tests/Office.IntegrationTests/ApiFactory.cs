@@ -56,6 +56,12 @@ public sealed class ApiFactory(TestDatabase db, TimeProvider? clock = null) : We
     /// <summary>Tries at the current password or a code inside a session, per account; high unless a test is about it.</summary>
     public int SensitivePer15Minutes { get; init; } = 1000;
 
+    /// <summary>
+    /// TASK 18 (the conversation test suite): the real Anthropic key, so the real classifier and writer answer; OpenAI is
+    /// then off (no key) and never faked. Null in every other test.
+    /// </summary>
+    public string? RealAnthropicKey { get; init; }
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("test");
@@ -63,7 +69,13 @@ public sealed class ApiFactory(TestDatabase db, TimeProvider? clock = null) : We
         builder.UseSetting("Hazem:ApiToken", ApiToken);
         builder.UseSetting("Hazem:N8nInternalSendUrl", N8nUrl);
         builder.UseSetting("Hazem:N8nInternalSendToken", N8nToken);
-        builder.UseSetting("Hazem:OpenAiApiKey", OpenAiKey);
+        builder.UseSetting("Hazem:OpenAiApiKey", RealAnthropicKey is null ? OpenAiKey : "");
+        if (RealAnthropicKey is not null)
+        {
+            builder.UseSetting("Hazem:AnthropicApiKey", RealAnthropicKey);
+            builder.UseSetting("Hazem:AnthropicModel", "claude-opus-5-5"); // the test server's classifier
+        }
+
         builder.UseSetting("Panel:LoginsPerMinute", LoginsPerMinute.ToString(System.Globalization.CultureInfo.InvariantCulture));
         builder.UseSetting("Panel:SensitivePer15Minutes", SensitivePer15Minutes.ToString(System.Globalization.CultureInfo.InvariantCulture));
         builder.UseSetting("Panel:SecretKey", SignupConfigured ? PanelSecretKey : "");

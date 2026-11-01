@@ -306,6 +306,12 @@ public sealed partial class BookingFlowTests
         if (d.Effects is { } e)
         {
             _rows[turn.WaId] = e.State; // v1.37: per client key (a number or a BSUID)
+            if (e.Urf is { } urf)
+            {
+                // TASK 18: the case is written with the turn (after the person), as the turn store does
+                await new MemoryUrf(_booking, () => _now).SaveAsync(urf, e.State.Intake.Id, CancellationToken.None);
+            }
+
             if (e.Replies.Count > 0)
             {
                 _lastReplies[turn.WaId] = e.Replies.Select(r => r.Key).ToList();
@@ -1366,7 +1372,7 @@ public sealed partial class BookingFlowTests
         _settings[OfficeInfo.AddressKey] = "183 شارع التحرير";
         _settings[OfficeInfo.MapUrlKey] = "https://maps.example.test/office";
         var d = await Say("المكتب فين");
-        Assert.Equal([TextKeys.OfficeAddress, TextKeys.ConsultationOffer], Keys(d));
+        Assert.Equal([TextKeys.OfficeAddress], Keys(d)); // TASK 18: the offer was his last answer: the address alone, no offer again
         Assert.Equal("📍 183 شارع التحرير https://maps.example.test/office", d.Actions[0].Text);
         Assert.DoesNotContain(PendingTask.OfficeInfoMissing, TaskKinds(d));
     }

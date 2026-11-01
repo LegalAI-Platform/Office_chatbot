@@ -85,6 +85,11 @@ public static class TextKeys
     public const string AboutHazem = "about_hazem";
     public const string AboutLawyer = "about_lawyer";
     public const string ServiceCheck = "service_check";
+
+    // v1.45 (TASK 18 §3.2): «حقايق المكتب», never sent: the writer answers a question from them (their prices the panel's).
+    public const string OfficeFacts = "office_facts";
+    public const string OfficeFactsMore = "office_facts_more";
+    public const string OfficeFactsOther = "office_facts_other";
     public const string UrfQuestionLater = "urf_question_later";
 
     // v1.21 (B-01.6): the client's greeting answered in kind, before Hazem's answer (read by code, Courtesy).
@@ -261,6 +266,8 @@ public static class TextKeys
     public const string SituationConfirmed = "situation_confirmed"; // a confirmed appointment to come
     public const string SituationOrder = "situation_order";         // a written service order: {{status}}
     public const string SituationTopic = "situation_topic";         // the topic told for an open item
+    public const string SituationReview = "situation_review";       // v1.45: paid, the transfer not reviewed yet
+    public const string SituationAskTopic = "situation_ask_topic";  // v1.45: «لو حابب تكتب الموضوع…», once, if not told
     public const string RepeatChoice = "repeat_choice";             // the same answer again: the services or a person
     public const string BtnTalkToOffice = "btn_talk_to_office";     // «أكلم حد من المكتب»
     public const string Greeting2 = "greeting_2";                   // more wordings, taken in turn (3.6)

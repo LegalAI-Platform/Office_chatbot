@@ -122,4 +122,5 @@ public sealed record TurnEffects(
     IReadOnlyList<PendingTask> Tasks,
     ClassificationRecord? Classification,
     IReadOnlyList<ReplyRecord> Replies,
-    Writing.WrittenReply? Written = null); // v1.41 (TASK 17): the everyday reply in the writer's words, or why not
+    Writing.WrittenReply? Written = null, // v1.41 (TASK 17): the everyday reply in the writer's words, or why not
+    Urf.UrfCase? Urf = null); // TASK 18: the Urfi case this turn changed, written after the person and the intake

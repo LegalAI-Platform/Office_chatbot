@@ -20,8 +20,11 @@ public enum SituationKind
     Order,
 }
 
-/// <summary>An appointment still to come (held or confirmed), as the situation needs it.</summary>
-public sealed record OpenAppointment(string Service, string State, DateTimeOffset Start, DateTimeOffset? HoldUntil);
+/// <summary>
+/// An appointment still to come (held or confirmed), as the situation needs it. v1.45: <paramref name="Reviewed"/> false while
+/// its transfer waits for the office's review (the photo came, not verified yet).
+/// </summary>
+public sealed record OpenAppointment(string Service, string State, DateTimeOffset Start, DateTimeOffset? HoldUntil, bool Reviewed = true);
 
 /// <summary>A written service order not delivered yet (S-07: collecting, awaiting_price, awaiting_payment, in_progress).</summary>
 public sealed record OpenOrder(string Kind, string State);
@@ -72,6 +75,12 @@ public sealed record ClientSituation(SituationKind Kind, SituationFacts Facts)
                 fill["service"] = (BookingService.ByCode(h.Service) ?? BookingService.PhoneVideo).Name;
                 fill["day"] = BookingWords.Day(h.Start, now);
                 fill["time"] = BookingWords.Time(h.Start);
+                if (Kind == SituationKind.Confirmed && !h.Reviewed)
+                {
+                    // v1.45: the photo came, the office has not reviewed it: held for him, never «متأكد» yet
+                    return new ReplyStep(TextKeys.SituationReview, TextKeys.SituationConfirmed, fill);
+                }
+
                 if (Kind == SituationKind.Confirmed)
                 {
                     return new ReplyStep(TextKeys.SituationConfirmed, null, fill);

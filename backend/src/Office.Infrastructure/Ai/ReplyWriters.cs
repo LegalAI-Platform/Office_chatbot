@@ -18,7 +18,7 @@ namespace Office.Infrastructure.Ai;
 /// </summary>
 public static class WriterPrompt
 {
-    public const string PromptVersion = "write-v1";
+    public const string PromptVersion = "write-v2"; // v1.45 (TASK 18): the office facts, his question first, the client's gender
 
     /// <summary>The whole call within this time (a written reply is never worth a late answer: the approved text goes).</summary>
     public static readonly TimeSpan Budget = TimeSpan.FromSeconds(6);
@@ -46,7 +46,14 @@ public static class WriterPrompt
     {
         var sb = new StringBuilder();
         sb.Append("PURPOSE: ").Append(r.Purpose).Append('\n');
-        sb.Append("APPROVED TEXT (keep its meaning; its facts are the only facts you may use):\n").Append(r.Approved).Append('\n');
+        sb.Append("APPROVED TEXT (keep its meaning and its next step):\n").Append(r.Approved).Append('\n');
+        sb.Append("OFFICE FACTS (with the approved text, the only facts you may use):\n").Append(r.Facts.Length > 0 ? r.Facts : "(none)").Append('\n');
+        sb.Append("CLIENT: ").Append(r.Client).Append('\n');
+        if (r.Before.Length > 0)
+        {
+            sb.Append("ALREADY SENT IN THIS TURN, just before your message (never repeat it; go on from it):\n").Append(r.Before).Append('\n');
+        }
+
         sb.Append("CALL HIM: ").Append(r.Call.Length > 0 ? r.Call : "(no name: say «حضرتك»)").Append('\n');
         sb.Append("CONVERSATION (oldest first; the last line is his message you answer now):\n");
         foreach (var line in r.History)

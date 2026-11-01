@@ -46,13 +46,50 @@ public sealed class ReplyGuardTests
         Assert.Null(ReplyGuard.Problem("ميعادك ممسوك ومستني صورة التحويل بس يا فندم ✅", R("ميعاد حضرتك ممسوك، ومستني صورة التحويل بس."), null));
     }
 
+    [Fact]
+    public void A_fact_of_the_office_may_answer_his_question_and_a_number_outside_the_facts_may_not()
+    {
+        // v1.45 (TASK 18): «مدتها قد إيه؟» answered from «حقايق المكتب»; «1,000» and «1000» are one number
+        var asked = R("المستشار يقدر يشوف الموضوع مع حضرتك في استشارة: بالتليفون بـ500 أو في المكتب بـ1,000.")
+            with { Facts = "استشارة التليفون أو الفيديو ربع ساعة بـ500 جنيه.\nالمقابلة في المكتب نص ساعة بـ1,000 جنيه." };
+        Assert.Null(ReplyGuard.Problem("مدتها ربع ساعة بـ500 جنيه، والمقابلة في المكتب نص ساعة بـ1000. تحب أنهي واحدة؟", asked, null));
+        Assert.Equal("number_not_given", ReplyGuard.Problem("مدتها 20 دقيقة بـ500. تحب أنهي واحدة؟", asked, null));
+    }
+
+    [Theory]
+    [InlineData("المستشار هو اللي هيجاوب حضرتك على ده في الاستشارة. تحب تحجز؟")] // four words of the refusal sent just before
+    [InlineData("السعر اتقال فوق، تحب تحجز؟")] // a pointer to it
+    [InlineData("تحب تحجز استشارة إيهؤ")] // a misspelt end
+    public void What_was_sent_before_in_the_turn_is_never_said_again_and_a_typo_never_goes(string reply)
+    {
+        var request = R("المستشار يقدر يشوف الموضوع مع حضرتك في استشارة.") with { Before = "المستشار هو اللي هيجاوب حضرتك على ده في الاستشارة." };
+        Assert.NotNull(ReplyGuard.Problem(reply, request, null));
+        Assert.Null(ReplyGuard.Problem("لو تحب، المستشار يقدر يشوف الموضوع مع حضرتك في استشارة.", request, null));
+    }
+
+    [Theory]
+    [InlineData(null, "عايزه اخلع جوزي", ClientGender.Woman)]
+    [InlineData("male", "محتاجه استشارة", ClientGender.Woman)] // her own words win over the name's gender
+    [InlineData("female", "السلام عليكم", ClientGender.Woman)]
+    [InlineData("male", "عايز احجز", ClientGender.Man)]
+    [InlineData(null, "عايز احجز", ClientGender.Unknown)]
+    public void The_client_s_gender_comes_from_the_name_and_from_her_own_words(string? nameGender, string said, string expected) =>
+        Assert.Equal(expected, ClientGender.Of(nameGender, [new ChatLine(true, said)]));
+
+    [Theory]
+    [InlineData("1️⃣ حوّل 500 جنيه على InstaPay: office@instapay.", "1️⃣ حوّلي 500 جنيه على InstaPay: office@instapay.")]
+    [InlineData("اختار الميعاد اللي يناسبك من القايمة 👇", "اختاري الميعاد اللي يناسبك من القايمة 👇")]
+    [InlineData("لو حوّلت دلوقتي، ابعت الصورة هنا.", "لو حوّلتي دلوقتي، ابعتي الصورة هنا.")]
+    [InlineData("تحبي تكوني أنهي واحدة؟", "تحبي تكوني أنهي واحدة؟")] // already hers: unchanged
+    [InlineData("صورة التحويل وصلت ✅", "صورة التحويل وصلت ✅")] // «التحويل» is no verb to him
+    public void To_a_woman_the_approved_words_to_him_are_said_to_her_and_nothing_else_changes(string text, string expected) =>
+        Assert.Equal(expected, ClientGender.Feminine(text));
+
     [Theory]
     [InlineData(TextKeys.UrgentPay)]
     [InlineData(TextKeys.BookingHold)]
     [InlineData(TextKeys.BookingPaid)]
     [InlineData(TextKeys.ServicesMenu)]
-    [InlineData(TextKeys.LegalQuestion)]
-    [InlineData(TextKeys.ConsultationOffer)]
     [InlineData(TextKeys.AbuseWarning)]
     public void Where_to_pay_confirmations_prices_and_the_legal_refusal_always_stay_approved(string key) =>
         Assert.False(Conversational.MayWrite(key));
@@ -149,6 +186,32 @@ public sealed partial class BookingFlowTests
         _writer.Reply = "حوّل أي مبلغ وخلاص.";
         var d = await Send(Pressed(ServiceRow.Id(ServiceRow.Urgent)));
         Assert.DoesNotContain(d.Actions, a => a.Text == _writer.Reply);
+    }
+
+    [Fact]
+    public async Task V145_a_legal_refusal_written_without_the_consultation_sends_the_approved_texts()
+    {
+        await InSituation("new");
+        ConversationalOn();
+        _script["الحضانة بتبقى لمين"] = new("legal_question", null, "unknown", null, 0.9);
+        _writer.Reply = "الحضانة بتفرق من حالة لحالة، تحب تحجز؟"; // no lawyer, no consultation: the refusal dropped
+        var d = await Say("الحضانة بتبقى لمين");
+        Assert.Contains(TextKeys.LegalQuestion, Keys(d));
+        Assert.DoesNotContain(d.Actions, a => a.Text == _writer.Reply);
+        Assert.Equal("refusal_dropped", d.Effects!.Written!.Guard);
+    }
+
+    [Fact]
+    public async Task V145_a_legal_refusal_and_the_offer_become_one_written_message()
+    {
+        await InSituation("new");
+        ConversationalOn();
+        _script["الحضانة بتبقى لمين"] = new("legal_question", null, "unknown", null, 0.9);
+        _writer.Reply = "سؤال الحضانة ده المستشار سعد بنفسه هو اللي هيجاوب حضرتك عليه في الاستشارة. تحب تحجز؟";
+        var d = await Say("الحضانة بتبقى لمين");
+        Assert.Equal(WrittenReply.Passed, d.Effects!.Written!.Guard);
+        Assert.Single(d.Actions, a => a.Text == _writer.Reply);
+        Assert.DoesNotContain(d.Actions, a => a.Text == _texts[TextKeys.LegalQuestion].Text); // never sent again beside it
     }
 
     /// <summary>The writer and the conversation it sees, in memory.</summary>

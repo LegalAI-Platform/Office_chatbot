@@ -233,7 +233,7 @@ public sealed class Task06ApiTests(TestDatabase db) : IAsyncLifetime
             """);
         var d = await Say(First, "المكتب فين؟");
         Assert.StartsWith("📍 عنوان المكتب: 183 شارع التحرير، وسط البلد، القاهرة.\nالخريطة: https://maps.example.test/office", Text(d));
-        Assert.Contains("المستشار يقدر يشوف الموضوع", Text(d));
+        Assert.DoesNotContain("المستشار يقدر يشوف الموضوع", Text(d)); // TASK 18: the offer was his last answer: the address alone
     }
 
     [Fact]

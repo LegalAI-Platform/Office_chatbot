@@ -90,7 +90,8 @@ public sealed class RatingStore(HazemDbContext db) : IRatingStore, IIntakeHistor
             .OrderBy(x => x.State == AppointmentInfo.Confirmed && x.Service == BookingService.Urgent.Code ? 0
                 : x.State == AppointmentInfo.PendingPayment ? 1 : 2)
             .ThenBy(x => x.StartsAt)
-            .Select(x => new OpenAppointment(x.Service, x.State, x.StartsAt, x.HoldUntil)).FirstOrDefaultAsync(ct);
+            .Select(x => new OpenAppointment(x.Service, x.State, x.StartsAt, x.HoldUntil,
+                !db.Payments.Any(p => p.AppointmentId == x.Id && p.State != "verified"))).FirstOrDefaultAsync(ct);
         var o = await db.ServiceOrders.AsNoTracking()
             .Where(x => x.PersonId == personId && (x.State == "collecting" || x.State == "awaiting_price" || x.State == "awaiting_payment"
                                                    || x.State == "in_progress"))
