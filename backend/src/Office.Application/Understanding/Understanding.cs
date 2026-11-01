@@ -87,6 +87,12 @@ public enum InfoTopic
 
     /// <summary>v1.22: whether the office does one specific thing (a licence, a registration…): the office answers.</summary>
     ServiceCheck,
+
+    /// <summary>
+    /// v1.46: a question about how one of the office's services goes (is it private, how long, which papers), not a wish
+    /// for it: the office answers it, and the service's own path goes on.
+    /// </summary>
+    ServiceDetail,
 }
 
 /// <summary>B-25: the topic of the request (for the office only, never told to the client).</summary>

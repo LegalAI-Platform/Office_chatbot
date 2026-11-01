@@ -85,6 +85,7 @@ public static class TextKeys
     public const string AboutHazem = "about_hazem";
     public const string AboutLawyer = "about_lawyer";
     public const string ServiceCheck = "service_check";
+    public const string ServiceDetail = "service_detail";   // v1.46: a question about how a service goes: the office answers
 
     // v1.45 (TASK 18 §3.2): «حقايق المكتب», never sent: the writer answers a question from them (their prices the panel's).
     public const string OfficeFacts = "office_facts";
@@ -191,6 +192,7 @@ public static class TextKeys
     public const string UrfAskChildren = "urf_ask_children";
     public const string UrfConfirmed = "urf_confirmed";                     // B-11.7, the worker after the lawyer's approval
     public const string UrfAgesAgain = "urf_ages_again";
+    public const string UrfStepAgain = "urf_step_again";                    // v1.46: before a question asked last time too
     public const string UrfChooseSlot = "urf_choose_slot";                  // the price, the documents and the free times
     public const string UrfSendDocuments = "urf_send_documents";            // after the receipt
     public const string UrfDocumentsReceived = "urf_documents_received";

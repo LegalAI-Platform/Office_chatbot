@@ -99,7 +99,7 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
         await Say("السلام عليكم");
         await Say("محمد أحمد علي حسن");
         _factory.OpenAi.Down = true;
-        Assert.Equal(["معلش مش واضحلي المطلوب. ممكن تكتبلي حضرتك محتاج إيه؟"], Texts(await Say("عايز أحجز"))); // «unclear» (0007)
+        Assert.Equal(["معلش، ممكن توضّحلي أكتر حضرتك محتاج إيه؟ وأنا معاك 🙏"], Texts(await Say("عايز أحجز"))); // «unclear» (v2, 0047)
         Assert.Equal("other|error", await db.ScalarAsync<string>(
             "SELECT intent || '|' || fallback_reason FROM hazem.classifications ORDER BY created_at DESC LIMIT 1"));
     }
@@ -269,7 +269,8 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
                         + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.39.md"), Ct) // B-28: the situation replies and the wordings (1.39)
                         + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.42.md"), Ct) // B-09: urgent_later (1.42)
                         + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.43.md"), Ct) // B-16: btn_start_order (1.43)
-                        + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.45.md"), Ct); // B-28: the transfer under review and the topic line (1.45)
+                        + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.45.md"), Ct) // B-28: the transfer under review and the topic line (1.45)
+                        + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.46.md"), Ct); // B-31: no loops (1.46)
         decisions = decisions.Replace("\r\n", "\n", StringComparison.Ordinal); // a Windows checkout (core.autocrlf) has CRLF; the texts have \n
         await using var c = new NpgsqlConnection(db.ApiConnectionString);
         await c.OpenAsync(Ct);

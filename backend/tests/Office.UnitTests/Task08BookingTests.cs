@@ -1314,7 +1314,9 @@ public sealed partial class BookingFlowTests
         Assert.Contains(PendingTask.HumanRequested, TaskKinds(human));
 
         _script["مش فاهم"] = new("other", null, "unknown", null, 0.9);
-        Assert.Equal([TextKeys.UrfAskAges], Keys(await Say("مش فاهم"))); // unclear: the question still waiting, again
+        // unclear: the question still waiting, again. Here the last text sent was that question (human_request has no text in
+        // this test), so v1.46 (B-31) asks it in other words: «اكتبلي السن بالأرقام…»
+        Assert.Equal([TextKeys.UrfAgesAgain], Keys(await Say("مش فاهم")));
         Assert.Equal(0, TheCase.AgeTries);
     }
 
