@@ -4,6 +4,7 @@ using Office.Application.Conversations;
 using Office.Application.Ports;
 using Office.Application.Responders;
 using Office.Application.Turns;
+using Office.Application.UseCases;
 using Office.Infrastructure.Json;
 
 namespace Office.Infrastructure.Persistence;
@@ -80,7 +81,7 @@ public sealed class SettingsReader(HazemDbContext db) : ISettingsReader
         new(await db.Settings.AsNoTracking().ToDictionaryAsync(s => s.Key, s => s.Value, StringComparer.Ordinal, ct));
 }
 
-public sealed class SendResultStore(HazemDbContext db) : ISendResultStore
+public sealed class SendResultStore(HazemDbContext db, TimeProvider clock) : ISendResultStore
 {
     public async Task<int> UpsertAsync(string? turnId, IReadOnlyList<SendResult> results, string reportedBy, CancellationToken ct)
     {
@@ -96,6 +97,19 @@ public sealed class SendResultStore(HazemDbContext db) : ISendResultStore
                   ok = EXCLUDED.ok, outbound_id = EXCLUDED.outbound_id, wamid = EXCLUDED.wamid,
                   status = EXCLUDED.status, error_code = EXCLUDED.error_code,
                   error_message = EXCLUDED.error_message, reported_by = EXCLUDED.reported_by
+                """, ct);
+        }
+
+        // v1.44: a reply of Hazem's that did not reach the client in the end (n8n already tried it again) is a task for the
+        // office, once per turn: «رسالة ما وصلتش للعميل». The client's words are in the turn; the office answers him.
+        if (turnId is not null && reportedBy == RecordSendResults.ReportedByN8n && results.Any(r => !r.Ok))
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO hazem.staff_tasks (person_id, turn_id, type, due_at)
+                SELECT p.id, {turnId}, {PendingTask.BookingMessageFailed}, {Office.Domain.Tasks.OfficeHours.DueAt(clock.GetUtcNow()).ToUniversalTime()}
+                  FROM hazem.turns t JOIN hazem.persons p ON p.wa_id = t.wa_id
+                 WHERE t.turn_id = {turnId}
+                ON CONFLICT (turn_id, type) DO NOTHING
                 """, ct);
         }
 
