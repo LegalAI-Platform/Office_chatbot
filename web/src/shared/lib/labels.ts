@@ -17,7 +17,7 @@ export const TASK_TYPES: Record<string, string> = {
   reschedule_or_cancel: "تغيير أو إلغاء ميعاد",
   booking_unavailable: "حجز: مفيش مواعيد أو الكالندر مش متاح",
   booking_cancelled: "عميل لغى حجزه",
-  booking_message_failed: "رسالة حجز ما وصلتش للعميل",
+  booking_message_failed: "رسالة ما وصلتش للعميل", // v1.44: a booking notice or any reply of Hazem's
   calendar_conflict: "حدث في الكالندر فوق حجز",
   office_cancelled: "المكتب لغى حجز: ميعاد تاني أو استرداد",
   service_pricing: "ورق خدمة وصل: حدّد السعر",

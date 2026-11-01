@@ -333,7 +333,7 @@
           "conditions": [
             {
               "id": "08ad2dcb-d47b-5685-b6d2-1a273f537ff4",
-              "leftValue": "={{ [429, 502, 503, 504].includes($json.statusCode) }}",
+              "leftValue": "={{ [429, 502, 503, 504].includes($json.statusCode) || ($json.statusCode === undefined && !!$json.error) }}",
               "rightValue": "",
               "operator": {
                 "type": "boolean",

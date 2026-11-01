@@ -235,6 +235,39 @@ public sealed class HazemApiTests(TestDatabase db) : IAsyncLifetime
             """));
     }
 
+    [Fact]
+    public async Task V144_a_reply_that_never_reached_the_client_is_one_task_for_the_office()
+    {
+        // «احمد امين» (2026-11-01 15:33): a reply timed out at Meta and nobody in the office knew.
+        await db.ExecAsync($"""
+            INSERT INTO hazem.persons (id, wa_id) VALUES ('{Guid.NewGuid()}', '201000000144') ON CONFLICT DO NOTHING;
+            INSERT INTO hazem.turns (turn_id, wa_id, messages, status, responder, actions)
+            VALUES ('wt:v144', '201000000144', '[]', 'processed', 'hazem', '[]') ON CONFLICT DO NOTHING;
+            """);
+        async Task Report(int part, bool ok) => Assert.Equal(HttpStatusCode.OK, (await _n8n.PostAsJsonAsync("/api/hazem/send-results", new JsonObject
+        {
+            ["turn_id"] = "wt:v144",
+            ["results"] = new JsonArray(new JsonObject
+            {
+                ["idempotency_key"] = $"hazem:wt:v144:{part}", ["ok"] = ok, ["status"] = ok ? "sent" : "failed",
+                ["error_code"] = ok ? null : "NETWORK_OR_UNKNOWN",
+            }),
+        }, Ct)).StatusCode);
+
+        await Report(0, ok: true);
+        Assert.Equal(0L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.staff_tasks WHERE turn_id = 'wt:v144'"));
+        await Report(1, ok: false);
+        await Report(1, ok: false); // reported again: still one task
+        Assert.Equal("booking_message_failed|1", await db.ScalarAsync<string>(
+            "SELECT min(type) || '|' || count(*) FROM hazem.staff_tasks WHERE turn_id = 'wt:v144'"));
+        await db.ExecAsync("""
+            DELETE FROM hazem.staff_tasks WHERE turn_id = 'wt:v144';
+            DELETE FROM hazem.send_results WHERE turn_id = 'wt:v144';
+            DELETE FROM hazem.turns WHERE turn_id = 'wt:v144';
+            DELETE FROM hazem.persons WHERE wa_id = '201000000144';
+            """);
+    }
+
     // ---------- API -> n8n ----------
 
     [Fact]
