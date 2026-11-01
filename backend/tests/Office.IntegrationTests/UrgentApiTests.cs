@@ -388,8 +388,10 @@ public sealed class UrgentApiTests(TestDatabase db) : IAsyncLifetime
             "SELECT count(*) FROM hazem.turn_replies WHERE text_key IN ('consultation_offer', 'case_offer', 'urgent_price', 'urgent_pay', 'booking_hold')");
 
         static string Last(JsonArray a) => (string)a[^1]!["text"]!;
-        Assert.Equal("أكيد يا أستاذ محمد 👋 حضرتك عندك استشارة عاجلة مدفوعة، والمستشار هيكلم حضرتك خلال دقايق. لو حابب تكتب الموضوع باختصار، اكتبه هنا ويوصل للمستشار.",
-            Last(await Turn(new JsonObject { ["type"] = "text", ["text"] = "السلام عليكم" })));
+        // v1.45: his situation, then «لو حابب تكتب الموضوع…» once (he has not told his matter), never again after
+        var hello = await Turn(new JsonObject { ["type"] = "text", ["text"] = "السلام عليكم" });
+        Assert.Equal(["أكيد يا أستاذ محمد 👋 حضرتك عندك استشارة عاجلة مدفوعة، والمستشار هيكلم حضرتك خلال دقايق.",
+            "لو حابب تكتب الموضوع باختصار قبل الميعاد، اكتبه هنا ويوصل للمستشار."], hello.Select(a => (string)a!["text"]!).TakeLast(2).ToArray()); // after «وعليكم السلام»
         Assert.StartsWith("أكيد يا أستاذ محمد 👋", Last(await Turn(new JsonObject { ["type"] = "text", ["text"] = "انت فاكرني؟" })));
         var services = await Turn(new JsonObject { ["type"] = "text", ["text"] = "خدمات" });
         Assert.Equal("list", (string)services[^1]!["interactive"]!["kind"]!);
@@ -432,7 +434,7 @@ public sealed class UrgentApiTests(TestDatabase db) : IAsyncLifetime
         {
             // The tests' fake OpenAI answers a classification, never {"reply"}: the approved text goes, and the table says why.
             var d = await Turn(new JsonObject { ["type"] = "text", ["text"] = "انت فاكرني؟" });
-            Assert.StartsWith("أكيد يا أستاذ محمد 👋", (string)d[^1]!["text"]!);
+            Assert.StartsWith("أكيد يا أستاذ محمد 👋", (string)d[0]!["text"]!); // v1.45: the topic line may follow it
             Assert.Equal("situation_urgent|invalid_output|", await db.ScalarAsync<string>(
                 "SELECT purpose || '|' || guard || '|' || coalesce(text, '') FROM hazem.generated_replies ORDER BY created_at DESC LIMIT 1"));
 

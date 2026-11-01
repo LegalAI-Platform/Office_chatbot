@@ -102,11 +102,18 @@ public sealed class HazemResponder(
     /// approved texts) gets «معلش لو مش واضح…» with the services and a person instead, never the same words again. A client
     /// asking his situation («فاكرني؟») is told it again: he asked for it.
     /// </summary>
-    private static void NotTwiceInARow(Plan plan, ClientSituation situation, IReadOnlyDictionary<string, ApprovedText> texts)
+    private static void NotTwiceInARow(Plan plan, ClientSituation situation, IReadOnlyDictionary<string, ApprovedText> texts, bool wantsToBook = false)
     {
         // The whole answer (the greeting in kind aside) is what he got last time, and it is a general answer: a new part (the
         // address he asked) makes it a new answer.
         var said = plan.Steps.Where(s => !s.Key.StartsWith("greet_", StringComparison.Ordinal)).ToList();
+        // v1.45 (TASK 18): «عايز احجز» after the offer wants its two buttons again (the writer says them differently), not the
+        // services-or-a-person question
+        if (wantsToBook && said.Any(s => s.Key is TextKeys.ConsultationOffer or TextKeys.CaseOffer))
+        {
+            return;
+        }
+
         if (!said.Any(s => RepeatWatched.Contains(s.Key)) || !said.All(s => situation.RepliedLast(s.Key))
             || !texts.TryGetValue(TextKeys.RepeatChoice, out var t) || !t.Active)
         {
@@ -192,6 +199,7 @@ public sealed class HazemResponder(
         var plan = new Plan(now);
         Check(state.Conversation.ClientWroteAt(now)); // B-12: 12 hours after the staff
         Classification? classification = null;
+        UrfCase? urfToSave = null; // TASK 18: saved with the turn, after the person and the intake (a first message may open it)
         var texts = await approvedTexts.GetActiveAsync(settings, ct);
         var bookingSettings = BookingSettings.From(settings);
         var bookingOn = booking is not null && bookingSettings.Enabled && BookingTextKeys.All(k => texts.TryGetValue(k, out var t) && t.Active);
@@ -408,12 +416,12 @@ public sealed class HazemResponder(
 
             if (flow.UrfChanged && flow.Urf is { } changed)
             {
-                await urf!.SaveAsync(changed, flow.State.Intake.Id, ct);
+                urfToSave = changed;
             }
 
             if (freeText && !flow.AskedStatus)
             {
-                NotTwiceInARow(plan, situation, texts);
+                NotTwiceInARow(plan, situation, texts, classification is { Intent: Intent.ConsultationRequest });
             }
 
             state = flow.State;
@@ -425,7 +433,14 @@ public sealed class HazemResponder(
         WrittenReply? written = null;
         if (writer is not null && chat is not null && settings.Flag(Conversational.SwitchKey) && composed.Actions.Count > 0)
         {
-            (composed, written) = await Conversational.RewriteAsync(composed, writer, chat, turn, Salutation.Call(state.Person), settings, ct);
+            // v1.45 (TASK 18 §3.2): «حقايق المكتب» with the panel's prices; the writer answers his question from them
+            var prices = Prices.PriceList.From(settings);
+            var facts = string.Join("\n", Conversational.FactKeys.Select(k => texts.TryGetValue(k, out var t) && t.Active ? prices.Fill(t.Text) : null)
+                .Where(t => t is not null)
+                .Append(settings.Get(OfficeInfo.AddressKey) is { Length: > 0 } address ? $"عنوان المكتب: {address}." : null)
+                .Where(t => t is not null));
+            (composed, written) = await Conversational.RewriteAsync(composed, writer, chat, turn, Salutation.Call(state.Person), settings, ct,
+                facts, state.Person.NameGender);
         }
 
         // Keys and reasons only (never a text): the API logs them with the turn.
@@ -444,7 +459,7 @@ public sealed class HazemResponder(
         }
 
         var effects = new TurnEffects(state, plan.Tasks,
-            classification is null ? null : ClassificationRecord.From(turn.TurnId, classification), composed.Records, written);
+            classification is null ? null : ClassificationRecord.From(turn.TurnId, classification), composed.Records, written, urfToSave);
         return new TurnDecision(ResponderName, composed.Actions, effects, notes);
     }
 
@@ -889,6 +904,32 @@ public sealed class HazemResponder(
             Check(Intake.MoveTo(IntakeState.OfferSent));
         }
 
+        /// <summary>
+        /// TASK 18 (3.3): «أنا حازم… محتاج إيه؟» never comes bare: the welcome's two buttons go under it, so he can always pick.
+        /// </summary>
+        private void AboutHazem()
+        {
+            if (!MayOrder)
+            {
+                plan.Say(TextKeys.AboutHazem);
+                return;
+            }
+
+            plan.Ask(TextKeys.AboutHazem, new ReplyChoices(InteractivePayload.Buttons,
+            [
+                new ReplyChoice(ServiceRow.Id(ServiceRow.Menu), TextKeys.BtnServicesList),
+                new ReplyChoice(ServiceRow.Id(ServiceRow.Tell), TextKeys.RowTell),
+            ]));
+        }
+
+        /// <summary>
+        /// TASK 18 (3.3): a booking step is on the screen (the call's app or the free times), or the offer was his last answer.
+        /// An office question then gets its answer alone: a new offer would replace the step he is on, or repeat itself.
+        /// </summary>
+        private bool OfferWouldStack =>
+            situation.RepliedLast(TextKeys.AskCallApp) || situation.RepliedLast(TextKeys.BookingChooseSlot)
+            || situation.RepliedLast(TextKeys.ConsultationOffer) || situation.RepliedLast(TextKeys.CaseOffer);
+
         /// <summary>v1.32: the welcome's «خدمات المكتب» button.</summary>
         public void ShowServices() => ServicesMenu();
 
@@ -1308,7 +1349,13 @@ public sealed class HazemResponder(
             if (situation.Reply(Salutation.Call(State.Person), plan.Now, booking?.Urgent.CallWithinMinutes ?? UrgentRules.Default.CallWithinMinutes)
                 is { } step)
             {
-                plan.Say(step.Key, null, step.Fill);
+                plan.Say(step.Key, step.Fallback, step.Fill);
+                // v1.45 (the owner): «لو حابب تكتب الموضوع…» only to a client who has not told his matter, and once
+                if (situation.Kind is SituationKind.Confirmed or SituationKind.UrgentWaiting && !Intake.MatterKnown && !Intake.MatterAsked)
+                {
+                    plan.Say(TextKeys.SituationAskTopic);
+                    Intake.MarkMatterAsked();
+                }
             }
         }
 
@@ -1570,7 +1617,7 @@ public sealed class HazemResponder(
                     }
                     else
                     {
-                        plan.Say(TextKeys.AboutHazem);
+                        AboutHazem();
                     }
 
                     break;
@@ -1662,7 +1709,7 @@ public sealed class HazemResponder(
             // never a guess). Neither depends on a matter, so no offer after them.
             if (topic == InfoTopic.Assistant)
             {
-                plan.Say(TextKeys.AboutHazem);
+                AboutHazem();
                 return;
             }
 
@@ -1700,7 +1747,9 @@ public sealed class HazemResponder(
                 }
             }
 
-            if (!existingClient)
+            // TASK 18 (3.3): his question answered is the whole reply while a booking step is on the screen or the offer was
+            // just said; otherwise the offer follows the answer, as B-20 says.
+            if (!existingClient && !(answered && OfferWouldStack))
             {
                 Offer(askTopic: false);
             }
@@ -1724,6 +1773,24 @@ public sealed class HazemResponder(
                 Service.CaseRepresentation => TextKeys.PriceCaseRepresentation, // never a number (B-23)
                 _ => null, // consultations: the offer itself has the prices
             };
+
+            // v1.45 (TASK 18 §3.3): the urgent call's or the Urfi contract's price with its own start button, never the general
+            // consultation's two buttons under it (they do not fit what he asked about)
+            var row = service switch
+            {
+                Service.ConsultationUrgent when urgentOn => ServiceRow.Urgent,
+                Service.UrfMarriage or Service.UrfDivorce or Service.UrfUnclear when urfOn => ServiceRow.Urf,
+                Service.DocumentReview => ServiceRow.Review, // v1.45: a written service's price starts that service, not a consultation
+                Service.ContractDrafting => ServiceRow.Drafting,
+                Service.FormalNotice => ServiceRow.Notice,
+                _ => null,
+            };
+            if (key is not null && row is not null && servicesOn && MayOrder && !situation.BlocksPaidOffer)
+            {
+                plan.Ask(key, new ReplyChoices(InteractivePayload.Buttons, [new ReplyChoice(ServiceRow.Id(row), TextKeys.BtnStartOrder)]),
+                    fallback: TextKeys.ConsultationOffer);
+                return;
+            }
 
             if (key is not null)
             {
@@ -1813,7 +1880,8 @@ public sealed class HazemResponder(
                 plan.Say(offer, TextKeys.ConsultationOffer);
             }
 
-            if (askTopic && !Intake.MatterKnown && !Intake.MatterAsked)
+            // v1.45 (TASK 18, the owner): never a separate «قولّي الموضوع» with a booking step (the offer's buttons, the times)
+            if (askTopic && !Intake.MatterKnown && !Intake.MatterAsked && !MayBook)
             {
                 plan.Say(TextKeys.AskTopic);
                 Intake.MarkMatterAsked();
@@ -1865,13 +1933,26 @@ public sealed class HazemResponder(
             Check(Intake.MoveTo(IntakeState.OfferSent));
         }
 
-        /// <summary>The kind of consultation the client already named (by service or by phone / office).</summary>
-        private BookingService? KindAsked() => answering switch
-        {
-            { Service: Service.ConsultationOffice } or { Mode: ConsultationMode.Office } => BookingService.Office,
-            { Service: Service.ConsultationPhoneVideo } or { Mode: ConsultationMode.PhoneVideo } => BookingService.PhoneVideo,
-            _ => null,
-        };
+        /// <summary>
+        /// The kind of consultation the client already named (by service or by phone / office). TASK 18 (3.3): only when he
+        /// asks to book and his own words name the kind; a question («بالتليفون مدتها قد إيه؟») or a kind the AI guessed from
+        /// «استشارة» alone starts no booking step (he picks it from the offer's two buttons).
+        /// </summary>
+        private BookingService? KindAsked() => answering is { Intent: Intent.ConsultationRequest or Intent.ServiceByName } && WordsNameKind()
+            ? answering switch
+            {
+                { Service: Service.ConsultationOffice } or { Mode: ConsultationMode.Office } => BookingService.Office,
+                { Service: Service.ConsultationPhoneVideo } or { Mode: ConsultationMode.PhoneVideo } => BookingService.PhoneVideo,
+                _ => null,
+            }
+            : null;
+
+        private static readonly string[] KindWords =
+            ["تليفون", "تلفون", "تيلفون", "فون", "مكالم", "فيديو", "واتس", "فيس تايم", "فيستايم", "مكتب", "مقابل", "اجي", "أجي", "آجي",
+             "اقابل", "أقابل", "حضوري", "phone", "call", "video", "office", "visit"];
+
+        private bool WordsNameKind() =>
+            AiInput.Build(turn) is { } words && KindWords.Any(w => words.Contains(w, StringComparison.OrdinalIgnoreCase));
 
         // ---------- TASK 08: the booking (B-08, B-09, B-15, B-22) ----------
 

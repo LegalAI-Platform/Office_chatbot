@@ -76,6 +76,10 @@ public sealed class ConversationStore(HazemDbContext db) : IConversationStore
         }
 
         await SaveIntake(db, person, intake, ct);
+        if (e.Urf is { } urf)
+        {
+            await Office.Infrastructure.Urf.UrfStore.Write(db, urf, intake.Id, ct);
+        }
 
         foreach (var task in e.Tasks)
         {

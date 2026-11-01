@@ -157,6 +157,18 @@ public sealed class Task11ApiTests(TestDatabase db) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_first_message_that_asks_for_the_urfi_contract_opens_the_case()
+    {
+        // TASK 18 (the conversation suite): the case was written before the new person and the API answered 500, so a
+        // client whose very first message was «عايز اعمل جواز عرفي» got no reply at all.
+        await UrfOn();
+        var first = await Say("عايز اعمل جواز عرفي");
+        Assert.NotEmpty(first);
+        Assert.Equal(1, await db.ScalarAsync<long>(
+            $"SELECT count(*) FROM hazem.urf_cases c JOIN hazem.persons p ON p.id = c.person_id WHERE p.wa_id = '{Client}' AND c.state = 'collecting'"));
+    }
+
+    [Fact]
     public async Task The_lawyer_approves_and_the_client_hears_who_must_come()
     {
         var id = await BookedWithDocuments();
