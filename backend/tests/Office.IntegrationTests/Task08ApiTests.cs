@@ -356,6 +356,40 @@ public sealed class Task08ApiTests(TestDatabase db) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Undo_of_the_office_s_details_or_the_calendar_s_email_needs_office_manage()
+    {
+        await BookingOn();
+        var staff = await SignIn("yasmin", Permissions.Staff, "ياسمين");
+        var lawyer = await SignIn("saad", Permissions.Lawyer);
+        string Instapay() => "SELECT value FROM hazem.settings WHERE key = 'office.instapay'";
+
+        // The office's details: a staff member cannot change them, so cannot undo them either.
+        var body = new { instapay = "new@instapay", wallet_number = "01000000000", wallet_provider = "", address = "", map_url = "" };
+        Assert.Equal(HttpStatusCode.NoContent, (await lawyer.PutAsJsonAsync("/api/panel/office", body, Ct)).StatusCode);
+        var refused = await staff.PostAsJsonAsync("/api/panel/booking/undo", new { confirm = false }, Ct);
+        Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+        Assert.Equal("office_forbidden", (string?)(await refused.Content.ReadFromJsonAsync<JsonNode>(Ct))!["error"]);
+        Assert.Equal("new@instapay", await db.ScalarAsync<string>(Instapay()));
+        Assert.Equal(HttpStatusCode.OK, (await lawyer.PostAsJsonAsync("/api/panel/booking/undo", new { confirm = false }, Ct)).StatusCode);
+        Assert.Equal("office@instapay", await db.ScalarAsync<string>(Instapay()));
+
+        // The calendar's email: the same.
+        var settings = (await lawyer.GetFromJsonAsync<JsonNode>("/api/panel/booking/settings", Ct))!.AsObject();
+        settings["calendar_id"] = "other@example.test";
+        Assert.Equal(HttpStatusCode.NoContent, (await lawyer.PutAsJsonAsync("/api/panel/booking/settings", settings, Ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await staff.PostAsJsonAsync("/api/panel/booking/undo", new { confirm = false }, Ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await lawyer.PostAsJsonAsync("/api/panel/booking/undo", new { confirm = false }, Ct)).StatusCode);
+        Assert.Equal("lawyer@example.test", await db.ScalarAsync<string>("SELECT value FROM hazem.settings WHERE key = 'booking.calendar_id'"));
+
+        // A settings change that leaves the calendar as it was is anyone's to undo.
+        settings["calendar_id"] = "lawyer@example.test";
+        settings["slot_step_minutes"] = 30;
+        Assert.Equal(HttpStatusCode.NoContent, (await staff.PutAsJsonAsync("/api/panel/booking/settings", settings, Ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await staff.PostAsJsonAsync("/api/panel/booking/undo", new { confirm = false }, Ct)).StatusCode);
+        Assert.Equal("15", await db.ScalarAsync<string>("SELECT value FROM hazem.settings WHERE key = 'booking.slot_step_minutes'"));
+    }
+
+    [Fact]
     public async Task A_calendar_that_does_not_answer_offers_nothing_and_opens_a_task()
     {
         await BookingOn();

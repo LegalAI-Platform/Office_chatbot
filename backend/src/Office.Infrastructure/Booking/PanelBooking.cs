@@ -76,6 +76,7 @@ public sealed class PanelBooking(
     public const string ErrNotFound = "not_found";
     public const string ErrNothingToUndo = "nothing_to_undo";
     public const string ErrHasBookings = "has_bookings";
+    public const string ErrOfficeForbidden = "office_forbidden";
 
     private static TimeZoneInfo Zone => BookingDesk.Zone;
 
@@ -309,8 +310,9 @@ public sealed class PanelBooking(
     /// <summary>
     /// The last change not undone yet, put back as it was. Hours that would leave confirmed bookings
     /// outside are checked like any other change (asks first; appointments already cancelled stay cancelled).
+    /// The office's details and the calendar's email need office.manage to change, so also to undo.
     /// </summary>
-    public async Task<ChangeResult> UndoAsync(Guid by, string username, bool confirm, CancellationToken ct)
+    public async Task<ChangeResult> UndoAsync(Guid by, string username, bool officeManage, bool confirm, CancellationToken ct)
     {
         var last = await db.BookingChanges.AsNoTracking().Where(c => c.UndoneAt == null).OrderByDescending(c => c.Id).FirstOrDefaultAsync(ct);
         if (last is null)
@@ -318,7 +320,19 @@ public sealed class PanelBooking(
             return new ChangeResult(ErrNothingToUndo);
         }
 
+        if (!officeManage && (last.What == "office" || (last.What == "settings" && TouchedCalendarId(last))))
+        {
+            return new ChangeResult(ErrOfficeForbidden);
+        }
+
         return await ChangeHoursAsync(by, confirm, () => UndoChangeAsync(by, username, last, ct), ct);
+    }
+
+    private static bool TouchedCalendarId(BookingChangeRow change)
+    {
+        static string Of(string? json) =>
+            (JsonSerializer.Deserialize<Dictionary<string, string>>(json ?? "{}", HazemJson.Options) ?? []).GetValueOrDefault(BookingSettings.CalendarIdKey) ?? "";
+        return !string.Equals(Of(change.Before), Of(change.After), StringComparison.Ordinal);
     }
 
     private async Task UndoChangeAsync(Guid by, string username, BookingChangeRow last, CancellationToken ct)

@@ -218,6 +218,27 @@ public sealed class Task09ApiTests(TestDatabase db) : IAsyncLifetime
             """));
     }
 
+    [Fact]
+    public async Task All_the_payments_list_the_newest_first_and_the_review_the_oldest_first()
+    {
+        await BookingOn();
+        await HeldTomorrow();
+        await Receipt(sha: "first");
+        await Press("bk:s:of:" + new DateTimeOffset(2026, 11, 21, 12, 0, 0, TimeSpan.FromHours(2)).ToUnixTimeSeconds());
+        await Receipt(sha: "second");
+        await db.ExecAsync("""
+            UPDATE hazem.payments p SET proof_at = CASE WHEN a.service = 'consultation_office' THEN '2026-11-19 11:00+02'::timestamptz ELSE '2026-11-19 09:00+02'::timestamptz END
+              FROM hazem.appointments a WHERE a.id = p.appointment_id
+            """);
+        var staff = await SignIn("yasmin", Permissions.Staff, "ياسمين");
+
+        // the 300 cap of «الكل» then drops the oldest in a busy period, never what just came
+        var all = (await staff.GetFromJsonAsync<JsonArray>("/api/panel/payments?show=all", Ct))!;
+        Assert.Equal(["consultation_office", "consultation_phone_video"], all.Select(p => (string)p!["service"]!));
+        var review = (await staff.GetFromJsonAsync<JsonArray>("/api/panel/payments?show=review", Ct))!;
+        Assert.Equal(["consultation_phone_video", "consultation_office"], review.Select(p => (string)p!["service"]!));
+    }
+
     // ---------- 1.25 (B-08, B-23): only the review confirms; where the lawyer calls; the late review ----------
 
     [Fact]

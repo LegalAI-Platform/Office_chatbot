@@ -33,7 +33,11 @@ export function useTasks(filter: TaskFilter) {
 }
 
 export function useTask(id: string) {
-  return useQuery({ queryKey: taskKey(id), queryFn: () => api<TaskDetail>("GET", `/tasks/${id}`) });
+  return useQuery({
+    queryKey: taskKey(id),
+    queryFn: () => api<TaskDetail>("GET", `/tasks/${id}`),
+    refetchInterval: 60_000, // someone else starting or finishing it shows up without a reload
+  });
 }
 
 export function useStaff(enabled: boolean) {
@@ -50,6 +54,8 @@ export function useTaskAction(id: string) {
       qc.setQueryData(taskKey(id), detail);
       void qc.invalidateQueries({ queryKey: tasksKey() });
     },
+    // e.g. 409 changed_meanwhile: show the task as it is now, not the old buttons
+    onError: () => void qc.invalidateQueries({ queryKey: taskKey(id) }),
   });
 }
 
@@ -61,5 +67,7 @@ export function useAssign(id: string) {
       qc.setQueryData(taskKey(id), detail);
       void qc.invalidateQueries({ queryKey: tasksKey() });
     },
+    // e.g. 409 changed_meanwhile: show the task as it is now, not the old buttons
+    onError: () => void qc.invalidateQueries({ queryKey: taskKey(id) }),
   });
 }

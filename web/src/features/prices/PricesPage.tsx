@@ -8,6 +8,10 @@ import { Icon } from "../../shared/ui/Icon";
 import { Button, ErrorState, Loading } from "../../shared/ui/ui";
 import { confirmAction, toast } from "../../shared/ui/feedback";
 
+/** A price as the API takes it (hazem.price): whole pounds from 1 to a million, so an emptied field is never a 0. */
+const MAX = 1_000_000;
+const validPrice = (v: string): boolean => /^\d+$/.test(v.trim()) && Number(v) >= 1 && Number(v) <= MAX;
+
 /**
  * «الأسعار» (TASK 06, DECISIONS v1.17 B-23): the price list Hazem quotes and the booking asks for. Everyone sees it; the lawyer
  * and the manager change it. A new price counts for new requests only: a booking or an order made before keeps its amount.
@@ -26,6 +30,15 @@ export function PricesPage() {
     onSuccess: () => { setDraft({}); void qc.invalidateQueries({ queryKey: ["prices"] }); void qc.invalidateQueries({ queryKey: ["price-changes"] }); toast("الأسعار اتحفظت ✅"); },
   });
   const changed = (list.data ?? []).filter((p) => draft[p.key] !== undefined && Number(draft[p.key]) !== p.value);
+  const shown = (key: string): number | undefined => {
+    const v = draft[key] ?? list.data?.find((p) => p.key === key)?.value;
+    return v === undefined ? undefined : Number(v);
+  };
+  const bad = (list.data ?? []).some((p) => draft[p.key] !== undefined && !validPrice(draft[p.key]!));
+  const [reviewMin, reviewMax] = [shown("price.review_min"), shown("price.review_max")];
+  const why = bad ? "كل سعر لازم يبقى رقم صحيح من 1 لحد 1,000,000 جنيه."
+    : reviewMin !== undefined && reviewMax !== undefined && reviewMin > reviewMax ? "أقل سعر للمراجعة لازم يبقى أقل من أو قد أعلى سعر."
+    : null;
 
   return (
     <div className="relative isolate grid gap-5 pb-4">
@@ -61,6 +74,7 @@ export function PricesPage() {
           <ul className="grid gap-2">
             {list.data.map((p) => {
               const edited = draft[p.key] !== undefined && Number(draft[p.key]) !== p.value;
+              const wrong = draft[p.key] !== undefined && !validPrice(draft[p.key]!);
               return (
                 <li key={p.key}
                   className={`relative flex flex-wrap items-center gap-x-3 gap-y-2 overflow-hidden rounded-[16px] border bg-card/55 py-3 ps-5 pe-4 shadow-[inset_0_1px_0_rgb(255_255_255/0.45),0_4px_14px_-8px_rgb(60_44_20/0.25)] transition motion-reduce:transition-none ${edited ? "border-gold-line bg-gold-tint/40" : "border-line/60 hover:border-gold-line"}`}>
@@ -72,8 +86,8 @@ export function PricesPage() {
                   <span className="flex items-center gap-2">
                     {edited ? <span className="tabular rounded-full bg-gold-tint px-2 py-0.5 text-[11.5px] font-bold text-gold-ink">كان {p.value.toLocaleString("en-US")}</span> : null}
                     {editor ? (
-                      <input id={p.key} type="number" min={1} inputMode="numeric" dir="ltr"
-                        className="tabular min-h-10 w-32 rounded-full border border-line/60 bg-card/70 px-4 text-left text-ink shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)] focus:border-gold"
+                      <input id={p.key} type="number" min={1} max={MAX} step={1} inputMode="numeric" dir="ltr" aria-invalid={wrong || undefined}
+                        className={`tabular min-h-10 w-32 rounded-full border ${wrong ? "border-red-ink/60" : "border-line/60"} bg-card/70 px-4 text-left text-ink shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)] focus:border-gold`}
                         value={draft[p.key] ?? String(p.value)} onChange={(e) => setDraft({ ...draft, [p.key]: e.target.value })} />
                     ) : <b id={p.key} className="tabular text-[17px]">{p.value.toLocaleString("en-US")}</b>}
                     <span className="text-[13px] text-ink-soft">جنيه</span>
@@ -86,13 +100,14 @@ export function PricesPage() {
             <div className="grid gap-2 border-t border-line/60 pt-3">
               {save.isError ? <p className="text-sm text-bad" role="alert">{errorMessage(save.error)}</p> : null}
               <div className="flex flex-wrap items-center gap-3">
-                <Button variant="primary" busy={save.isPending} disabled={changed.length === 0}
+                <Button variant="primary" busy={save.isPending} disabled={changed.length === 0 || why !== null}
                   onClick={async () => {
                     const lines = changed.map((p) => `${p.name}: ${p.value.toLocaleString("en-US")} ← ${Number(draft[p.key]).toLocaleString("en-US")}`).join("\n");
                     if (await confirmAction({ title: "تحفظ الأسعار الجديدة؟", body: `للطلبات الجديدة بس:\n${lines}`, yes: "احفظ الأسعار" })) save.mutate();
                   }}>
                   احفظ الأسعار
                 </Button>
+                {why ? <span className="text-sm text-bad">{why}</span> : null}
               </div>
             </div>
           ) : null}
@@ -107,6 +122,9 @@ export function PricesPage() {
 function Changes() {
   const changes = useQuery({ queryKey: ["price-changes"], queryFn: prices.changes });
   const names = Object.fromEntries((usePrices().data ?? []).map((p) => [p.key, p.name]));
+  if (changes.isError) {
+    return <ErrorState message={`آخر التغييرات ما اتحمّلتش: ${errorMessage(changes.error)}`} onRetry={() => void changes.refetch()} />;
+  }
   if (!changes.data || changes.data.length === 0) return null;
   return (
     <section aria-labelledby="prices-changes" className="liquid relative isolate grid gap-3 overflow-hidden rounded-[22px] p-4 sm:p-5">

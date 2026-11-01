@@ -93,7 +93,8 @@ describe("TASK 10 service orders", () => {
     renderAt("/services");
     fireEvent.click(await screen.findByRole("tab", { name: "اتسلّمت أو اتقفلت" }));
     const card = (await screen.findByText(/محمد أحمد علي حسن/)).closest("li")!;
-    expect(within(card).getByText(/آخر رسالة ما وصلتش للعميل: واتساب رفضها \(META_ERROR\)/)).toBeTruthy(); // v1.28: the real reason
+    expect(within(card).getByText(/آخر رسالة ما وصلتش للعميل: واتساب رفضها\./)).toBeTruthy(); // v1.28, without the raw code
+    expect(within(card).queryByText(/META_ERROR/)).toBeNull();
     fireEvent.click(within(card).getByRole("button", { name: /ابعت الملف تاني/ }));
     await confirmYes();
     await vi.waitFor(() => expect(calls.some((c) => c.path === "/services/o1/resend")).toBe(true));
@@ -116,5 +117,19 @@ describe("TASK 10 service orders", () => {
       "POST /services/o1/upload", `PUT ${url}`, "POST /services/o1/deliver",
     ]);
     expect(calls.find((c) => c.path === "/services/o1/deliver")).toMatchObject({ body: { key: "deliverables/o1/x.pdf", filename: "مراجعة.pdf" } });
+  });
+
+  it("«the call is done» asks first, then delivers", async () => {
+    const calls = serve({
+      "GET /auth/me": me("staff"),
+      "GET /services?show=open": [order({ state: "in_progress", price: 2500, due_on: null, delivery: "call", payment: "verified" })],
+    });
+    renderAt("/services");
+    const card = (await screen.findByText(/محمد أحمد علي حسن/)).closest("li")!;
+    expect(within(card).getByText("الشغل بدأ.")).toBeTruthy(); // no «التسليم يوم» without a day
+    fireEvent.click(within(card).getByRole("button", { name: "المكالمة خلصت: اتسلّم" }));
+    expect(calls.some((c) => c.path === "/services/o1/deliver")).toBe(false);
+    await confirmYes();
+    await vi.waitFor(() => expect(calls.some((c) => c.path === "/services/o1/deliver")).toBe(true));
   });
 });

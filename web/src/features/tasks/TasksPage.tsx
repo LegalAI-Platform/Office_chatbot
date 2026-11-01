@@ -1,6 +1,6 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import type { QueryClient } from "@tanstack/react-query";
-import { Link, useSearchParams } from "react-router";
+import { Link, useLocation, useSearchParams } from "react-router";
 import { errorMessage } from "../../shared/api/client";
 import { can, useMe } from "../../shared/api/session";
 import type { Me, TaskListItem } from "../../shared/api/types";
@@ -41,17 +41,30 @@ export function TasksPage() {
   const seesAll = can(me, "tasks.view_all");
   // the filters live in the address (idea from PR #14): a refresh, the back button from a task or a shared link keep them
   const scopes = SCOPES.filter((s) => !s.needsAll || seesAll);
-  const [scope, setScope] = useUrlState<Scope>("scope", seesAll ? "all" : "mine", scopes.map((s) => s.value));
-  const [state, setState] = useUrlState<StateFilter>("state", "active", STATES.map((s) => s.value));
+  const scopeFallback: Scope = seesAll ? "all" : "mine";
+  const [scope] = useUrlState<Scope>("scope", scopeFallback, scopes.map((s) => s.value));
+  const [state] = useUrlState<StateFilter>("state", "active", STATES.map((s) => s.value));
   const [params, setParams] = useSearchParams();
   const q = params.get("q")?.trim() || undefined;
-  const [page, setPage] = useState(1);
+  // the page too (?page=2), so «رجوع» from a task lands on the same page; page 1 is left out
+  const page = Math.max(1, Number.parseInt(params.get("page") ?? "", 10) || 1);
   const tasks = useTasks({ scope, state, page, ...(q ? { q } : {}) });
 
-  const pick = <T,>(set: (v: T) => void) => (v: T) => {
-    set(v);
-    setPage(1);
-  };
+  // one change of the address at a time: two setParams in the same click would drop the first
+  const change = (edit: (next: URLSearchParams) => void) =>
+    setParams((p) => { const next = new URLSearchParams(p); edit(next); return next; }, { replace: true });
+  const setPage = (n: number) => change((next) => (n > 1 ? next.set("page", String(n)) : next.delete("page")));
+  // a new filter or search starts again from page 1
+  const pick = (key: string, fallback: string) => (v: string) =>
+    change((next) => { if (v === fallback) next.delete(key); else next.set(key, v); next.delete("page"); });
+
+  // past the last page (fewer tasks than when the link was made): go to the last one that has tasks
+  const data = tasks.data;
+  const lastPage = data && data.total > 0 && data.items.length === 0 && !tasks.isPlaceholderData ? Math.max(1, Math.ceil(data.total / data.page_size)) : null;
+  const outOfRange = lastPage !== null && page > lastPage;
+  useEffect(() => {
+    if (outOfRange && lastPage !== null) setPage(lastPage);
+  }, [outOfRange, lastPage]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="relative isolate grid gap-5 pb-4">
@@ -67,18 +80,18 @@ export function TasksPage() {
         <p className="liquid flex flex-wrap items-center gap-2 rounded-full px-4 py-2 text-sm">
           <Icon name="search" className="size-4 text-gold-ink" />
           نتايج البحث عن <strong className="rounded-md bg-gold-tint px-2 text-gold-ink">{q}</strong>
-          <button type="button" onClick={() => setParams((p) => { const next = new URLSearchParams(p); next.delete("q"); return next; }, { replace: true })} className="ms-auto inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-ink-soft hover:bg-card-2 hover:text-ink">
+          <button type="button" onClick={() => change((next) => { next.delete("q"); next.delete("page"); })} className="ms-auto inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-ink-soft hover:bg-card-2 hover:text-ink">
             <Icon name="x" className="size-4" /> امسح البحث
           </button>
         </p>
       ) : null}
 
       <section aria-label="الفلاتر" className="liquid grid gap-3 rounded-[22px] p-3 sm:p-4 2xl:grid-cols-2">
-        <FilterRow label="مين" value={scope} onChange={pick(setScope)} options={scopes} />
-        <FilterRow label="الحالة" value={state} onChange={pick(setState)} options={STATES} />
+        <FilterRow label="مين" value={scope} onChange={pick("scope", scopeFallback)} options={scopes} />
+        <FilterRow label="الحالة" value={state} onChange={pick("state", "active")} options={STATES} />
       </section>
 
-      {tasks.isPending ? (
+      {tasks.isPending || outOfRange ? (
         <Loading />
       ) : tasks.isError ? (
         <ErrorState message={errorMessage(tasks.error)} onRetry={() => void tasks.refetch()} />
@@ -169,8 +182,10 @@ function TaskCard({ task: t }: { task: TaskListItem }) {
   const live = t.state !== "done" && t.state !== "cancelled";
   const look = LOOK[isUrgent(t) && live ? "urgent" : t.state] ?? LOOK.open!;
   const late = t.state === "overdue";
+  // the list's filters and page go along, for the task's «رجوع لكل المهام»
+  const { search } = useLocation();
   return (
-    <Link to={`/tasks/${t.id}`}
+    <Link to={`/tasks/${t.id}`} state={{ from: search }}
       className={`group relative grid items-center gap-x-5 gap-y-3 overflow-hidden rounded-[18px] border border-line/60 bg-card/60 py-3.5 ps-5 pe-4 shadow-[inset_0_1px_0_rgb(255_255_255/0.45),0_6px_18px_-12px_rgb(60_44_20/0.35)] backdrop-blur-md transition hover:-translate-y-px hover:bg-card/85 hover:shadow-[0_14px_30px_-14px_rgb(60_44_20/0.4)] motion-reduce:transition-none motion-reduce:hover:translate-y-0 sm:grid-cols-2 xl:grid-cols-[minmax(12rem,1.1fr)_minmax(0,2fr)_minmax(9rem,0.9fr)_minmax(9rem,0.9fr)_auto] ${look.ring}`}>
       <span aria-hidden className={`absolute inset-y-3 start-0 w-1 rounded-e-full ${look.bar}`} />
 

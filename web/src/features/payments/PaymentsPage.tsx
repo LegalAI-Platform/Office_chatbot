@@ -17,7 +17,7 @@ const TONE: Record<string, string> = {
 };
 
 const SHOWS: Show[] = ["review", "refunds", "all"];
-const listQuery = (show: Show) => queryOptions({ queryKey: ["payments", show], queryFn: () => payments.list(show) });
+const listQuery = (show: Show) => queryOptions({ queryKey: ["payments", show], queryFn: () => payments.list(show), refetchInterval: 60_000 });
 
 /** The tab the page opens on and the refunds, fetched while the pointer is still on the link (idea from PR #14). */
 export function prefetchData(qc: QueryClient) {
@@ -93,7 +93,7 @@ function Intro({ count }: { count?: number | undefined }) {
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-[26px] leading-tight font-bold">الإيصالات والمدفوعات</h1>
               {count !== undefined ? (
-                <span className="tabular rounded-full border border-gold-line bg-gold-tint px-2.5 py-0.5 text-[12.5px] font-bold text-gold-ink">{count} إيصال</span>
+                <span className="tabular rounded-full border border-gold-line bg-gold-tint px-2.5 py-0.5 text-[12.5px] font-bold text-gold-ink">{count} عملية دفع</span>
               ) : null}
             </div>
           </div>
@@ -129,6 +129,8 @@ function PaymentCard({ p }: { p: Payment }) {
   const refunded = useMutation({ mutationFn: () => payments.refunded(p.appointment_id, method, note || undefined), onSuccess: () => { done(); toast("الاسترداد اتسجّل، وحازم هيبلّغ العميل ✅"); } });
   const reviewable = can(me, "payments.verify") && ["proof_received", "duplicate_suspected", "verified", "partial", "not_received"].includes(p.state);
   const received = Number(amount);
+  // The API takes whole pounds only: a decimal is refused here, not rounded behind the person's back.
+  const whole = amount.trim() !== "" && Number.isInteger(received);
   const what: Record<Review, string> = {
     verified: received > p.amount_due ? `تمام، ووصل ${pounds(received)} جنيه: الزيادة (${pounds(received - p.amount_due)}) هتتعمل بيها مهمة استرداد.` : `تمام: وصل ${pounds(received)} جنيه.`,
     partial: `ناقص: وصل ${pounds(received)} من ${pounds(p.amount_due)}. حازم هيبعت للعميل يكمّل ${pounds(p.amount_due - received)} جنيه.`,
@@ -165,9 +167,10 @@ function PaymentCard({ p }: { p: Payment }) {
         {reviewable ? (
           <div className="grid gap-2">
             <div className="flex flex-wrap items-end gap-2">
-              <Field label="المبلغ اللي وصل فعلًا (جنيه)" type="number" min={1} inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value)} />
-              <Button variant="primary" disabled={!(received >= p.amount_due)} onClick={() => setAsk("verified")}>تمام</Button>
-              <Button disabled={!(received > 0 && received < p.amount_due)} onClick={() => setAsk("partial")}>ناقص</Button>
+              <Field label="المبلغ اللي وصل فعلًا (جنيه)" type="number" min={1} inputMode="numeric" step={1} value={amount} onChange={(e) => setAmount(e.target.value)}
+                error={amount.trim() !== "" && !whole ? "اكتب المبلغ بالجنيه من غير كسور" : undefined} />
+              <Button variant="primary" disabled={!(whole && received >= p.amount_due)} onClick={() => setAsk("verified")}>تمام</Button>
+              <Button disabled={!(whole && received > 0 && received < p.amount_due)} onClick={() => setAsk("partial")}>ناقص</Button>
               <Button variant="danger" onClick={() => setAsk("not_received")}>ما وصلش</Button>
             </div>
             {ask && ask !== "refunded" ? (

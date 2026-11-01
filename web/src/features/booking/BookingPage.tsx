@@ -188,7 +188,8 @@ function DayPanel({ day, today, mayChange }: { day: string; today: string; mayCh
             </p>
           ) : null}
         </div>
-        {mayChange && info ? (
+        {/* a past day can't be changed (the API answers past_day) */}
+        {mayChange && info && day >= today ? (
           <Button variant="primary" className="!min-h-10" onClick={() => setEditing(true)}><Icon name="calendar" className="size-4" />تعديل اليوم ده</Button>
         ) : null}
       </div>
@@ -279,7 +280,7 @@ function DayDialog({ day, isToday, onClose, onDone }: { day: Day; isToday: boole
         </div>
       </fieldset>
       {ask ? (
-        <Confirm list={ask.list} busy={add.isPending || remove.isPending} onYes={ask.again} onNo={() => setAsk(null)} />
+        <Confirm list={ask.list} busy={add.isPending || remove.isPending} onYes={ask.again} onNo={() => { setAsk(null); add.reset(); remove.reset(); }} />
       ) : add.isError || remove.isError ? <p className="text-sm text-bad" role="alert">{errorMessage(add.error ?? remove.error)}</p> : null}
       {done && done.cancelled > 0 ? <Told n={done.cancelled} /> : null}
       <PreviewOf day={day.day} />
@@ -364,6 +365,15 @@ function BookingCard({ a, now }: { a: Appointment; now: Date }) {
   });
   const cancel = useMutation({ mutationFn: () => booking.cancel(a.id), onSuccess: () => { refresh(); toast("الحجز اتلغى، وحازم هيبلّغ العميل"); } });
   const notes = notesOf(a, now);
+  // marking can't be taken back («خلص» starts the client's rating clock): only once the appointment has started
+  const started = new Date(a.start).getTime() <= now.getTime();
+  const acting = mark.isPending || cancel.isPending;
+  const markAs = async (state: "completed" | "no_show") => {
+    const ok = await confirmAction(state === "completed"
+      ? { title: "الميعاد خلص؟", body: "مش هينفع ترجع فيها، وحازم هيطلب من العميل تقييم.", yes: "أيوه، خلص" }
+      : { title: "العميل ماحضرش؟", body: "مش هينفع ترجع فيها.", yes: "أيوه، ماحضرش" });
+    if (ok) mark.mutate(state);
+  };
 
   return (
     <li className={`flex flex-wrap items-start gap-3 py-3 ps-4 pe-3 transition hover:bg-card/80 motion-reduce:transition-none ${ROW}`}>
@@ -400,17 +410,17 @@ function BookingCard({ a, now }: { a: Appointment; now: Date }) {
       {a.state === "completed" && can(me, "services.price") ? <Opinion id={a.id} /> : null}
       {isLive(a) ? (
         <span className="flex w-full flex-wrap justify-end gap-1">
-          {a.state === "confirmed" ? (
+          {a.state === "confirmed" && started ? (
             <>
-              <Button variant="ghost" className={`${ACT} !border-green/30 !bg-green-bg !text-green-ink hover:!bg-green/15`} busy={mark.isPending && mark.variables === "completed"} onClick={() => mark.mutate("completed")}>
+              <Button variant="ghost" className={`${ACT} !border-green/30 !bg-green-bg !text-green-ink hover:!bg-green/15`} busy={mark.isPending && mark.variables === "completed"} disabled={acting} onClick={() => void markAs("completed")}>
                 <Icon name="check-circle" className="size-4" />خلص
               </Button>
-              <Button variant="ghost" className={`${ACT} !border-orange/30 !bg-orange-bg !text-orange-ink hover:!bg-orange/15`} busy={mark.isPending && mark.variables === "no_show"} onClick={() => mark.mutate("no_show")}>
+              <Button variant="ghost" className={`${ACT} !border-orange/30 !bg-orange-bg !text-orange-ink hover:!bg-orange/15`} busy={mark.isPending && mark.variables === "no_show"} disabled={acting} onClick={() => void markAs("no_show")}>
                 <Icon name="alert-circle" className="size-4" />ماحضرش
               </Button>
             </>
           ) : null}
-          <Button variant="ghost" className={`${ACT} !border-red/30 !bg-red-bg !text-red-ink hover:!bg-red/15`} busy={cancel.isPending}
+          <Button variant="ghost" className={`${ACT} !border-red/30 !bg-red-bg !text-red-ink hover:!bg-red/15`} busy={cancel.isPending} disabled={acting}
             onClick={async () => {
               if (await confirmAction({ title: "تلغي الحجز ده؟", body: "حازم هيبعت للعميل يختار ميعاد تاني، أو استرداد كامل لو كان دفع.", yes: "أيوه، الغيه", danger: true })) cancel.mutate();
             }}>
@@ -449,8 +459,10 @@ function Opinion({ id }: { id: string }) {
   const [due, setDue] = useState(cairoDate(new Date(Date.now() + 7 * 86_400_000)));
   const ask = useMutation({
     mutationFn: () => booking.opinion(id, due, "file"),
-    onSuccess: () => { setOpen(false); void qc.invalidateQueries({ queryKey: ["services"] }); },
+    onSuccess: () => { setOpen(false); void qc.invalidateQueries({ queryKey: ["services"] }); toast("طلب الرأي المكتوب اتبعت ✅ (في «طلبات الخدمات»)"); },
   });
+  // once sent the order exists: asking again would only get not_allowed
+  if (ask.isSuccess) return <span className="text-sm text-green-ink" role="status">اتطلب رأي مكتوب ✓</span>;
   if (!open) return <Button variant="ghost" className="!min-h-9 !px-3" onClick={() => setOpen(true)}>مطلوب رأي مكتوب</Button>;
   return (
     <span className="flex w-full flex-wrap items-end gap-2 rounded-[14px] border border-gold-line bg-gold-tint/60 p-2.5">
@@ -458,7 +470,6 @@ function Opinion({ id }: { id: string }) {
       <Button variant="primary" busy={ask.isPending} onClick={() => ask.mutate()}>ابعت طلب الـ 2,000</Button>
       <Button onClick={() => setOpen(false)}>لأ</Button>
       {ask.isError ? <span className="text-sm text-bad" role="alert">{errorMessage(ask.error)}</span> : null}
-      {ask.isSuccess ? <span className="text-sm" role="status">اتبعت. الطلب في «طلبات الخدمات».</span> : null}
     </span>
   );
 }

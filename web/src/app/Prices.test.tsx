@@ -63,4 +63,30 @@ describe("TASK 06 prices", () => {
     expect(await screen.findByText("الأسعار اتحفظت ✅")).toBeTruthy(); // the toast
     expect(calls.find((c) => c.method === "PUT")).toEqual({ method: "PUT", path: "/prices", body: { values: { "price.phone_video": 600 } } });
   });
+
+  it("an emptied price or a review range upside down is never saved", async () => {
+    const review = [
+      { key: "price.review_min", name: "مراجعة عقد أو مستندات: من", value: 1500, default: 1500 },
+      { key: "price.review_max", name: "مراجعة عقد أو مستندات: لحد", value: 3000, default: 3000 },
+    ];
+    serve({ "GET /auth/me": me("lawyer"), "GET /prices": review, "GET /prices/changes": [] });
+    renderAt("/prices");
+    const save = () => screen.getByRole("button", { name: "احفظ الأسعار" }) as HTMLButtonElement;
+    fireEvent.change(await screen.findByLabelText("مراجعة عقد أو مستندات: من"), { target: { value: "" } });
+    expect(save().disabled).toBe(true);
+    expect(screen.getByText(/رقم صحيح من 1/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("مراجعة عقد أو مستندات: من"), { target: { value: "4000" } });
+    expect(save().disabled).toBe(true);
+    expect(screen.getByText(/أقل سعر للمراجعة/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("مراجعة عقد أو مستندات: من"), { target: { value: "2000" } });
+    expect(save().disabled).toBe(false);
+  });
+
+  it("the last changes that did not load say so, with a retry", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    serve({ "GET /auth/me": me("lawyer"), "GET /prices": list });
+    renderAt("/prices");
+    expect(await screen.findByText(/آخر التغييرات ما اتحمّلتش/, undefined, { timeout: 5000 })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /جرّب تاني/ })).toBeTruthy();
+  });
 });
