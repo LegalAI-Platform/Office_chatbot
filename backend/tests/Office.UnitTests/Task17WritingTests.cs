@@ -203,3 +203,26 @@ public sealed partial class BookingFlowTests
         Assert.Contains(TextKeys.ServiceCheck, Keys(await Say("بتطلعوا رخصة محل؟"))); // not on the list: the office answers
     }
 }
+
+public sealed partial class BookingFlowTests
+{
+    [Fact]
+    public async Task V143_asking_about_a_contract_opens_no_order_and_the_start_button_does()
+    {
+        // 2026-11-01 03:39: «لو عاوز اعمل عقد عمل بتعلوه» opened an order, then «انت فاهمني طيب؟» got «طلبك مستني الورق».
+        await InSituation("new");
+        ServicesOn();
+        _texts[TextKeys.BtnStartOrder] = new ApprovedText(TextKeys.BtnStartOrder, 1, "✅ ابدأ الطلب", 20, true);
+        _texts[TextKeys.ContractDraftingRequest] = new ApprovedText(TextKeys.ContractDraftingRequest, 1, "صياغة العقد بتبدأ من 3,000 جنيه.", 300, true);
+        _script["لو عاوز اعمل عقد عمل بتعلوه"] = new("service_by_name", "contract_drafting", "unknown", null, 0.95);
+        _script["انت فاهمني طيب ؟"] = new("other", "contract_drafting", "unknown", null, 0.95);
+        var asked = await Say("لو عاوز اعمل عقد عمل بتعلوه");
+        Assert.Contains(TextKeys.ContractDraftingRequest, Keys(asked));
+        Assert.Empty(_booking.Orders);
+        Assert.DoesNotContain(TextKeys.SituationOrder, Keys(await Say("انت فاهمني طيب ؟")));
+        Assert.Empty(_booking.Orders);
+
+        await Press(ServiceRow.Id(ServiceRow.Drafting)); // «✅ ابدأ الطلب»
+        Assert.Equal(("contract_drafting", "collecting"), (Assert.Single(_booking.Orders).Kind, _booking.Orders[0].State));
+    }
+}

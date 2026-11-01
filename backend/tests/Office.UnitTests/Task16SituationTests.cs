@@ -78,6 +78,9 @@ public sealed partial class BookingFlowTests
                 _booking.Appointments.Add(new AppointmentInfo(Guid.NewGuid(), person, BookingService.Office.Code, tomorrow, tomorrow.AddHours(1),
                     AppointmentInfo.Confirmed, 0, 1000, null));
                 break;
+            case "order_priced":
+                _booking.Orders.Add(new MemoryBooking.Order(person, "document_review") { State = "awaiting_price" });
+                break;
             case "order":
                 _booking.Orders.Add(new MemoryBooking.Order(person, "document_review"));
                 break;
@@ -117,12 +120,16 @@ public sealed partial class BookingFlowTests
         { "confirmed", "ألو", TextKeys.SituationConfirmed },
         { "confirmed", "انت فاكرني؟", TextKeys.SituationConfirmed },
         // a written service waiting for its papers: no consultation open, so a price still gets the offer
-        { "order", "السلام عليكم", TextKeys.SituationOrder },
-        { "order", "عايز أحجز", TextKeys.SituationOrder },
+        { "order", "السلام عليكم", TextKeys.Greeting }, // v1.43: waiting for his papers is no answer to a greeting
+        { "order", "عايز أحجز", TextKeys.ConsultationOffer },
         { "order", "الاستشارة بكام", TextKeys.ConsultationOffer },
         { "order", "عاوز احكي مشكلتي", TextKeys.ServicesTell },
-        { "order", "ألو", TextKeys.SituationOrder },
-        { "order", "انت فاكرني؟", TextKeys.SituationOrder },
+        { "order", "ألو", TextKeys.Unclear },
+        { "order", "انت فاكرني؟", TextKeys.SituationOrder }, // he asked
+        // v1.43: a written order the office works on (its price being set): his situation first, as before
+        { "order_priced", "السلام عليكم", TextKeys.SituationOrder },
+        { "order_priced", "ألو", TextKeys.SituationOrder },
+        { "order_priced", "انت فاكرني؟", TextKeys.SituationOrder },
     };
 
     [Theory]

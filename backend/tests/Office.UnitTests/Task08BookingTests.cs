@@ -949,20 +949,23 @@ public sealed partial class BookingFlowTests
             new MediaRef(MediaStatus.Stored, "office-sensitive", $"k{_turn}", f.Mime, 1000, $"sha{_turn}", "contract"))).ToList()));
 
     [Fact]
-    public async Task A_named_service_opens_an_order_and_its_documents_never_reach_the_ai()
+    public async Task A_named_service_opens_its_order_with_his_papers_and_its_documents_never_reach_the_ai()
     {
         ServicesOn();
+        _texts[TextKeys.BtnStartOrder] = new ApprovedText(TextKeys.BtnStartOrder, 1, "✅ ابدأ الطلب", 20, true);
         await ToTheOffer();
         var asked = await Say("عايز حد يراجعلي عقد");
         Assert.Equal([TextKeys.DocumentReviewRequest], Keys(asked));
-        var order = Assert.Single(_booking.Orders);
-        Assert.Equal(("document_review", "collecting"), (order.Kind, order.State));
+        Assert.Empty(_booking.Orders); // v1.43: words are a question, not an order
+        Assert.Equal(ServiceRow.Id(ServiceRow.Review), Assert.Single(asked.Actions[^1].Interactive!.Choices).Id); // «✅ ابدأ الطلب»
+        Assert.DoesNotContain(PendingTask.ServiceRequest, TaskKinds(asked));
 
-        var pages = await Files((MessageType.Image, "image/jpeg"), (MessageType.Image, "image/jpeg"));
+        var pages = await Files((MessageType.Image, "image/jpeg"), (MessageType.Image, "image/jpeg")); // his papers start it
         Assert.Null(pages.Effects!.Classification); // T-09
         Assert.Equal([TextKeys.ServiceFilesReceived], Keys(pages));
         Assert.Contains(PendingTask.ServicePricing, TaskKinds(pages));
-        Assert.Equal(("awaiting_price", 2), (order.State, order.Files.Count));
+        var order = Assert.Single(_booking.Orders);
+        Assert.Equal(("document_review", "awaiting_price", 2), (order.Kind, order.State, order.Files.Count));
 
         var more = await Files((MessageType.Document, "application/pdf")); // a PDF is a document here, not a receipt
         Assert.Equal([TextKeys.MediaReceived], Keys(more));
@@ -976,6 +979,8 @@ public sealed partial class BookingFlowTests
         ServicesOn();
         await ToTheOffer();
         await Say("عايز حد يراجعلي عقد");
+        await Press(ServiceRow.Id(ServiceRow.Review)); // v1.43: «✅ ابدأ الطلب» opens the order
+        Assert.Equal(("document_review", "collecting"), (Assert.Single(_booking.Orders).Kind, _booking.Orders[0].State));
         await Press(BookingChoice.Pick(BookingService.PhoneVideo, AvailabilityTests.At(20, 12)));
         Assert.Equal([TextKeys.BookingPaid], Keys(await Files((MessageType.Image, "image/jpeg"))));
         Assert.Equal(AppointmentInfo.Confirmed, Assert.Single(_booking.Appointments).State);
