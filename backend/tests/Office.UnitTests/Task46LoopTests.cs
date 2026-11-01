@@ -7,8 +7,9 @@ using Office.Application.Urf;
 namespace Office.UnitTests;
 
 /// <summary>
-/// DECISIONS v1.46: the test chat of 2026-11-01 («لو هتجوز عرفي هل في خصوصية» → «سن الزوج كام…» twice). A question about
-/// how a service goes reaches the office and the path goes on; a Urfi question is never sent the same way twice in a row
+/// DECISIONS v1.46: the test chat of 2026-11-01 («لو هتجوز عرفي هل في خصوصية» → «سن الزوج كام…» twice). «في خصوصية؟» is
+/// answered by Hazem (the office keeps its clients' secrets), any other question about how a service goes reaches the office,
+/// and the path goes on; a Urfi question is never sent the same way twice in a row
 /// (the second time «علشان نكمّل…», the third the office); a legal question in the middle keeps the Urfi path.
 /// </summary>
 public sealed partial class BookingFlowTests
@@ -18,6 +19,7 @@ public sealed partial class BookingFlowTests
         UrfOn();
         foreach (var (k, v) in new Dictionary<string, string>
                  {
+                     [TextKeys.OfficePrivacy] = "أكيد يا فندم 🔒 كل كلام حضرتك مع المكتب سري تمامًا، والمكتب عمره ما بيفشي أسرار عملائه.",
                      [TextKeys.ServiceDetail] = "سؤال مهم 👌 هوصّله للمكتب، ويردوا على حضرتك هنا.",
                      [TextKeys.UrfStepAgain] = "علشان نكمّل طلب حضرتك، محتاج إجابة السؤال ده 👇",
                      [TextKeys.ServiceCheck] = "هسأل المكتب عن ده، ويردوا على حضرتك هنا.",
@@ -29,19 +31,21 @@ public sealed partial class BookingFlowTests
         }
 
         _script["لو هتجوز عرفي هل في خصوصية ولا لا"] = new("office_info", "urf_marriage", "unknown", null, 0.8, "urfi", "urf_marriage",
+            InfoTopic: "privacy");
+        _script["العقد العرفي بياخد قد ايه"] = new("office_info", "urf_marriage", "unknown", null, 0.8, "urfi", "urf_marriage",
             InfoTopic: "service_detail");
         _script["لا انا بسئل بس هل في خصوصية ولا لا"] = new("service_by_name", "urf_marriage", "unknown", null, 0.6, "urfi", "urf_marriage");
     }
 
     [Fact]
-    public async Task The_test_chat_a_question_about_the_Urfi_contract_reaches_the_office_and_the_ages_are_never_asked_the_same_way_twice()
+    public async Task The_test_chat_privacy_is_answered_yes_and_the_ages_are_never_asked_the_same_way_twice()
     {
         ApproveNoLoopTexts();
         await ToTheOffer();
 
         var asked = await Say("لو هتجوز عرفي هل في خصوصية ولا لا");
-        Assert.Equal([TextKeys.ServiceDetail, TextKeys.UrfAskAges], Keys(asked)); // the office answers it; the path starts
-        Assert.Contains(PendingTask.ServiceQuestion, TaskKinds(asked));
+        Assert.Equal([TextKeys.OfficePrivacy, TextKeys.UrfAskAges], Keys(asked)); // Hazem answers it; the path starts
+        Assert.DoesNotContain(PendingTask.ServiceQuestion, TaskKinds(asked));
 
         Assert.Equal([TextKeys.UrfAgesAgain], Keys(await Say("لا انا بسئل بس هل في خصوصية ولا لا"))); // not «سن الزوج كام» again
 
@@ -51,13 +55,13 @@ public sealed partial class BookingFlowTests
     }
 
     [Fact]
-    public async Task A_question_about_the_service_while_the_ages_wait_reaches_the_office_and_the_ages_come_back_in_other_words()
+    public async Task A_question_about_a_detail_while_the_ages_wait_reaches_the_office_and_the_ages_come_back_in_other_words()
     {
         ApproveNoLoopTexts();
         await ToTheOffer();
         Assert.Equal([TextKeys.UrfAskAges], Keys(await Say("عايز أعمل جواز عرفي")));
 
-        var d = await Say("لو هتجوز عرفي هل في خصوصية ولا لا");
+        var d = await Say("العقد العرفي بياخد قد ايه");
         Assert.Equal([TextKeys.ServiceDetail, TextKeys.UrfAgesAgain], Keys(d));
         Assert.Contains(PendingTask.ServiceQuestion, TaskKinds(d));
         Assert.Equal(UrfStep.Ages, TheCase.Step);
@@ -98,7 +102,17 @@ public sealed partial class BookingFlowTests
         _texts[TextKeys.ServiceDetail] = _texts[TextKeys.ServiceDetail] with { Active = false };
         await ToTheOffer();
 
-        var d = await Say("لو هتجوز عرفي هل في خصوصية ولا لا");
+        var d = await Say("العقد العرفي بياخد قد ايه");
         Assert.Equal([TextKeys.ServiceCheck, TextKeys.UrfAskAges], Keys(d));
+        Assert.Contains(PendingTask.ServiceQuestion, TaskKinds(d));
+    }
+
+    [Fact]
+    public async Task Privacy_while_the_ages_wait_is_answered_and_the_ages_come_back_in_other_words()
+    {
+        ApproveNoLoopTexts();
+        await ToTheOffer();
+        await Say("عايز أعمل جواز عرفي");
+        Assert.Equal([TextKeys.OfficePrivacy, TextKeys.UrfAgesAgain], Keys(await Say("لو هتجوز عرفي هل في خصوصية ولا لا")));
     }
 }

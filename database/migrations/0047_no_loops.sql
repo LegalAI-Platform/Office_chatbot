@@ -1,11 +1,13 @@
 -- 0047_no_loops: DECISIONS v1.46. The owner (2026-11-01), after the test chats «انا تعبان» → «مش واضحلي المطلوب» and
 -- «لو هتجوز عرفي هل في خصوصية» → «سن الزوج كام…» twice: «انت شايف ان ده حل عملي ولا احنا كده بنحل الكيس دي بس؟», and
--- on the general fixes: «طب نفذها». A question about how a service goes reaches the office (service_detail, task
+-- on the general fixes: «طب نفذها»; on the privacy question: «هو كان بيسال يعني العرفي في خصوصيه يعني المكتب مش بيفشي
+-- اسرار العملاء» (Hazem answers it himself: office_privacy). Any other question about how a service goes reaches the office (service_detail, task
 -- service_question); a Urfi question asked last time comes back with «علشان نكمّل…» (urf_step_again), then the office;
 -- «مش واضح» is softer (unclear v2).
 
 -- migrate:up
 INSERT INTO hazem.approved_texts (key, version, text, max_chars, active, source, updated_by) VALUES
+  ('office_privacy', 1, 'أكيد يا فندم 🔒 كل كلام حضرتك مع المكتب سري تمامًا، والمكتب عمره ما بيفشي أسرار عملائه.', 300, true, 'DECISIONS v1.46', 'owner approval 2026-11-01 (v1.46)'),
   ('service_detail', 1, 'سؤال مهم 👌 هوصّله للمكتب، ويردوا على حضرتك هنا.', 300, true, 'DECISIONS v1.46', 'owner approval 2026-11-01 (v1.46)'),
   ('urf_step_again', 1, 'علشان نكمّل طلب حضرتك، محتاج إجابة السؤال ده 👇', 300, true, 'DECISIONS v1.46', 'owner approval 2026-11-01 (v1.46)')
 ON CONFLICT (key, version) DO NOTHING;

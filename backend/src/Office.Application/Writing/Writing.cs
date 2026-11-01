@@ -335,6 +335,7 @@ public static class Conversational
         [TextKeys.OfficeFeePolicy] = "tell him how the fees of a case are set",
         [TextKeys.ServiceCheck] = "tell him the office will answer him here on whether it does this",
         [TextKeys.ServiceDetail] = "tell him his question reached the office and they will answer it here (never the answer yourself)",
+        [TextKeys.OfficePrivacy] = "reassure him that everything he tells the office stays private: the office never discloses its clients' secrets",
         [TextKeys.AskCallApp] = "ask where the lawyer should call him: WhatsApp or FaceTime (two buttons follow your sentence)",
         [TextKeys.BookingChooseSlot] = "ask him to pick the time that suits him from the list (the list follows your sentence)",
         [TextKeys.AskNameBooking] = "ask his name to register the booking (a word of comfort first if he is worried)",

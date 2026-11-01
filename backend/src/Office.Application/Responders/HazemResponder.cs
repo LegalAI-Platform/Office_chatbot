@@ -1604,8 +1604,11 @@ public sealed class HazemResponder(
                 case Intent.PriceQuestion:
                     AnswerPrice(turnClass.Service);
                     break;
+                case Intent.OfficeInfo when turnClass.Topic == InfoTopic.Privacy:
+                    AnswerAboutService(TextKeys.OfficePrivacy, null, turnClass.Service); // Hazem answers it himself
+                    break;
                 case Intent.OfficeInfo when turnClass.Topic == InfoTopic.ServiceDetail:
-                    AnswerServiceDetail(turnClass.Service);
+                    AnswerAboutService(TextKeys.ServiceDetail, PendingTask.ServiceQuestion, turnClass.Service);
                     break;
                 case Intent.OfficeInfo when turnClass is { Topic: InfoTopic.ServiceCheck, Service: { } asked }:
                     // v1.41 (TASK 17, part B): «بتعملوا عقود؟» asks about one of the office's own services: that service's
@@ -1691,13 +1694,19 @@ public sealed class HazemResponder(
         }
 
         /// <summary>
-        /// v1.46: «لو هتجوز عرفي هل في خصوصية؟» asks about the service, not for it. The office answers the question (a task
-        /// with his words), and the service's path goes on: the Urfi question waiting comes back, or the service named starts.
+        /// v1.46: a question about a service, not a wish for it. «لو هتجوز عرفي هل في خصوصية؟» is answered by Hazem (the
+        /// office keeps its clients' secrets); any other detail («بياخد قد ايه؟») reaches the office (a task with his words).
+        /// Then the service's path goes on: the Urfi question waiting comes back, or the service named starts.
         /// </summary>
-        private void AnswerServiceDetail(Service? service)
+        private void AnswerAboutService(string key, string? task, Service? service)
         {
-            plan.Say(TextKeys.ServiceDetail, TextKeys.ServiceCheck);
-            plan.Task(PendingTask.ServiceQuestion);
+            // «هسأل المكتب» in place of a text not approved only with its task: never a promise nobody keeps
+            plan.Say(key, task is null ? null : TextKeys.ServiceCheck);
+            if (task is not null)
+            {
+                plan.Task(task);
+            }
+
             if (urfOn && Urf is { State: UrfCase.Collecting })
             {
                 AfterUrf(UrfNext.Ask);

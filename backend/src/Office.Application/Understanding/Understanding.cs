@@ -93,6 +93,12 @@ public enum InfoTopic
     /// for it: the office answers it, and the service's own path goes on.
     /// </summary>
     ServiceDetail,
+
+    /// <summary>
+    /// v1.46 (the owner: «المكتب مش بيفشي اسرار العملاء»): whether what he tells the office stays private, about any service
+    /// or none. Hazem answers it himself: yes.
+    /// </summary>
+    Privacy,
 }
 
 /// <summary>B-25: the topic of the request (for the office only, never told to the client).</summary>

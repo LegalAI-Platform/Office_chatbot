@@ -150,7 +150,7 @@ off_topic.
    "عايز اعمل عقد عرفي" → urf_marriage; "عرفي" or "عقد عرفي" alone → urf_unclear.
    **A price question is still price_question** (with its urf_* service): «الجواز العرفي بكام»، «بكام الطلاق العرفي».
    **(v15) A question about HOW it goes is not the wish** (rule 16): «لو هتجوز عرفي هل في خصوصية؟»، «الجواز العرفي حد
-   هيعرف بيه؟»، «العقد العرفي بياخد قد ايه؟» → office_info, service_detail, with its urf_* service.
+   هيعرف بيه؟» → office_info, privacy; «العقد العرفي بياخد قد ايه؟» → office_info, service_detail; both with its urf_* service.
 2. **A new case for the lawyer is a service, not an existing matter.** "عايز الأستاذ يمسك
    قضيتي"، "يترافع عني"، "عايز أرفع قضية" → service_by_name, case_representation.
    existing_matter only when the office already works on it for this client.
@@ -205,13 +205,15 @@ off_topic.
    «عندكم حد يكتب عقد إيجار؟»، «بتراجعوا عقود؟»، «بتعملوا إنذارات؟»، «بتعملوا عقد عرفي؟» → service_by_name with that
    service (contract_drafting, document_review, formal_notice, urf_marriage…). service_check is ONLY for a thing that is
    not in the service table (a licence, a commercial register, a power of attorney).
-16. **(v15) A question about how one of the office's services goes is service_detail, not the service.** The client asks
-   about the service instead of asking for it: is it private or secret, who will know, how long it takes, which papers
-   are needed, whether it is valid or official, whether he must come himself («هل في خصوصية؟»، «محدش هيعرف؟»، «بياخد قد
-   ايه؟»، «محتاج ورق ايه؟»، «لازم احضر بنفسي؟»). → office_info, info_topic service_detail, and the service it is about in
-   `service` (null when none is named or clear from the context). Its price is still price_question (rule 9), and what
+16. **(v15) A question about how one of the office's services goes is not the service.** The client asks about the
+   service instead of asking for it. Whether what he tells the office stays private or secret, whether anyone will know,
+   whether the office keeps his secrets («هل في خصوصية؟»، «محدش هيعرف؟»، «الكلام ده هيفضل سر؟»، «مش هتقولوا لحد؟») →
+   office_info, info_topic privacy (also with no service). Any other detail: how long it takes, which papers are needed,
+   whether it is valid or official, whether he must come himself («بياخد قد ايه؟»، «محتاج ورق ايه؟»، «لازم احضر بنفسي؟») →
+   office_info, info_topic service_detail. Put the service it is about in `service` (null when none is named or clear from
+   the context). Its price is still price_question (rule 9), and what
    the LAW says about it is legal_question (rule 10). Asked right after Hazem's question of a service's path (the
-   context), it is still service_detail: he asked something before he answers.
+   context), it is still privacy or service_detail: he asked something before he answers.
 
 ## service
 
@@ -303,7 +305,8 @@ and urfi (urf_marriage, urf_divorce, urf_proof); otherwise null. If two topics, 
 | assistant | who or what the assistant is: his name, a bot or not (اسمك ايه، انت مين، انت بوت؟) |
 | lawyer | who the office's lawyer is, his experience (مين المستشار سعد، مين الأستاذ سعد، المحامي صاحب المكتب، خبرته) |
 | service_check | whether the office does ONE specific procedure or document, not a court case (ترخيص، سجل تجاري، توكيل) |
-| service_detail | how one of the office's services goes: privacy, how long, which papers, coming in person (rule 16) |
+| service_detail | how one of the office's services goes: how long, which papers, coming in person (rule 16) |
+| privacy | whether what he tells the office stays private, whether the office keeps his secrets (rule 16) |
 
 ## courtesy
 
