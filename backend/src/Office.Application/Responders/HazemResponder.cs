@@ -1265,8 +1265,7 @@ public sealed class HazemResponder(
                     return true;
                 case Intent.Urgent when situation.Kind == SituationKind.UrgentWaiting:
                     AskedStatus = true; // waiting for the call: when it comes is what he needs, even twice
-                    SaySituation();
-                    plan.Task(PendingTask.UrgentRequest); // he paid and writes it is urgent: the office sees it at once
+                    SaySituation(); // v1.40: no second task: the one made with his receipt is the office's (one bell, one e-mail)
                     return true;
                 case Intent.MyStatus:
                     AskedStatus = true;
@@ -1950,7 +1949,7 @@ public sealed class HazemResponder(
                     || outcome.Status == ReceiptStatus.Exists && a.State == AppointmentInfo.Confirmed
                                                               && await desk.PaymentAsync(a.Id, ct) is not { State: PaymentInfo.Verified })
                 {
-                    SayUrgentPaid(a, b);
+                    SayUrgentPaid(a, b, await LaterAsync(desk, a, ct));
                     return;
                 }
 
@@ -2150,10 +2149,10 @@ public sealed class HazemResponder(
             switch (outcome?.Status)
             {
                 case BookStatus.Held or BookStatus.Exists when a is { State: AppointmentInfo.PendingPayment }:
-                    SayUrgentPay(a, b);
+                    SayUrgentPay(a, b, await LaterAsync(desk, a, ct));
                     break;
                 case BookStatus.BookedPaid or BookStatus.Exists when a is { State: AppointmentInfo.Confirmed } && ServiceOf(a).IsUrgent:
-                    SayUrgentPaid(a, b); // a receipt he already sent pays for it (B-05)
+                    SayUrgentPaid(a, b, await LaterAsync(desk, a, ct)); // a receipt he already sent pays for it (B-05)
                     break;
                 case BookStatus.HasHold when a is { HoldUntil: { } until }:
                     plan.Say(TextKeys.BookingHoldOne, Fill: new Dictionary<string, string>(Describe(a))
@@ -2173,11 +2172,12 @@ public sealed class HazemResponder(
 
         /// <summary>
         /// v1.33 (B-09): urgent_pay with the amount and where to pay (as the hold, P1: without the office's details it is not
-        /// sent and the office gets a task); before it urgent_night when the first free moment is not today.
+        /// sent and the office gets a task); before it urgent_night when the lawyer is not working now (<paramref name="later"/>),
+        /// so he knows before he pays.
         /// </summary>
-        private void SayUrgentPay(AppointmentInfo a, BookingSettings b)
+        private void SayUrgentPay(AppointmentInfo a, BookingSettings b, bool later)
         {
-            if (BookingDesk.Today(a.Start) != BookingDesk.Today(plan.Now))
+            if (later && a.Start > plan.Now.AddMinutes(b.Urgent.CallWithinMinutes))
             {
                 plan.Say(TextKeys.UrgentNight, Fill: new Dictionary<string, string> { ["opens"] = UrgentTexts.Opens(a.Start) });
             }
@@ -2198,24 +2198,33 @@ public sealed class HazemResponder(
 
         /// <summary>
         /// v1.33 (B-09): the receipt came and the call has its time: within urgent.call_within_minutes → urgent_now; later today
-        /// (the lawyer is in a call) → urgent_after; not today → B-08's booking_paid.
+        /// (the lawyer is in a call) → urgent_after; the lawyer not working now (<paramref name="later"/>) → v1.42's urgent_later
+        /// («هيكلم حضرتك [اليوم] الساعة [الساعة]»: no confirmation to wait for, the lawyer checks the transfer himself), B-08's
+        /// booking_paid while that text is not approved.
         /// </summary>
-        private void SayUrgentPaid(AppointmentInfo a, BookingSettings b)
+        private void SayUrgentPaid(AppointmentInfo a, BookingSettings b, bool later)
         {
             plan.Task(PendingTask.UrgentRequest); // v1.38: the office's urgent task once he has paid, not when he pressed the row
             if (a.Start <= plan.Now.AddMinutes(b.Urgent.CallWithinMinutes))
             {
                 plan.Say(TextKeys.UrgentNow);
             }
-            else if (BookingDesk.Today(a.Start) == BookingDesk.Today(plan.Now))
+            else if (!later)
             {
                 plan.Say(TextKeys.UrgentAfter, Fill: new Dictionary<string, string> { ["time"] = BookingWords.Time(a.Start) });
             }
             else
             {
-                plan.Say(TextKeys.BookingPaid, Fill: Describe(a));
+                plan.Say(TextKeys.UrgentLater, TextKeys.BookingPaid, Describe(a));
             }
         }
+
+        /// <summary>
+        /// v1.40 (B-09): the call is not «later today, the lawyer is in a call»: it is another day, or the panel's hours are closed
+        /// now (01:30 at night with the call at 10:00 is the same date, and the lawyer is asleep, not in a call).
+        /// </summary>
+        private async Task<bool> LaterAsync(BookingDesk desk, AppointmentInfo a, CancellationToken ct) =>
+            BookingDesk.Today(a.Start) != BookingDesk.Today(plan.Now) || !await desk.OpenNowAsync(plan.Now, ct);
 
         /// <summary>The client's booking with «change» and «cancel»; none → the office, as before TASK 08.</summary>
         private async Task ShowExistingAsync(BookingDesk desk, Guid? id, CancellationToken ct)
