@@ -262,6 +262,7 @@ public sealed class HazemResponder(
             AddFileOutcome? documents = null;
             AddFileOutcome? urfDocuments = null;
             var askImage = false;
+            ServiceKind? papersFor = null;
             if (choice is null && urfButton is null && !urfAges && (bookingOn || servicesOn) && flow.MayOrder && services is not null
                 && FileIn(turn) is { } m)
             {
@@ -284,12 +285,15 @@ public sealed class HazemResponder(
                     case FileTarget.AskImage:
                         askImage = true; // P7: a PDF or Word is no receipt
                         break;
+                    case FileTarget.None when servicesOn && PapersAskedFor(situation) is { } asked:
+                        papersFor = asked; // v1.43: his papers right after a written service's text start its order
+                        break;
                 }
             }
 
             // v1.30 (B-01.3): a row of the services list, read without the AI: the service's own flow (or «احكي مشكلتي»).
             var servicePress = choice is null && urfButton is null && !urfAges && receipt is null && !askImage && documents is null
-                               && urfDocuments is null && flow.MayOrder ? ServiceRow.In(turn) : null;
+                               && urfDocuments is null && papersFor is null && flow.MayOrder ? ServiceRow.In(turn) : null;
             if (servicePress is { } row)
             {
                 if (row.IsTell)
@@ -339,6 +343,10 @@ public sealed class HazemResponder(
             else if (documents is { Status: not AddFileStatus.None })
             {
                 flow.RespondToDocuments(documents);
+            }
+            else if (papersFor is { } started)
+            {
+                flow.RespondToPapers(started);
             }
             else
             {
@@ -457,6 +465,13 @@ public sealed class HazemResponder(
         };
         return AiContext.Build(message, lines.LastOrDefault(l => !l.FromClient)?.Text, lines.LastOrDefault(l => l.FromClient)?.Text, open);
     }
+
+    /// <summary>v1.43: the written service whose text (asking for the papers) the client got last, if any.</summary>
+    private static ServiceKind? PapersAskedFor(ClientSituation situation) =>
+        situation.RepliedLast(TextKeys.DocumentReviewRequest) ? ServiceKind.DocumentReview
+        : situation.RepliedLast(TextKeys.ContractDraftingRequest) ? ServiceKind.ContractDrafting
+        : situation.RepliedLast(TextKeys.FormalNoticeRequest) ? ServiceKind.FormalNotice
+        : null;
 
     /// <summary>B-13: an ad (Meta referral), a wa.me link code, or direct. First contact only.</summary>
     private static void RecordSource(Person person, Turn turn, HazemSettings settings, DateTimeOffset now)
@@ -1254,6 +1269,13 @@ public sealed class HazemResponder(
                 return false;
             }
 
+            // v1.43: an order still waiting for his papers is nothing the office works on yet: it is told only when he asks
+            // («طلبي وصل لفين؟»), never instead of the answer to anything else he says.
+            if (situation is { Kind: SituationKind.Order, Facts.Order.State: "collecting" } && c.Intent != Intent.MyStatus)
+            {
+                return false;
+            }
+
             switch (c.Intent)
             {
                 case Intent.DescribeMatter:
@@ -1595,18 +1617,13 @@ public sealed class HazemResponder(
                     Urgent();
                     break;
                 case Service.DocumentReview:
-                    plan.Say(TextKeys.DocumentReviewRequest); // B-16 step 1
-                    plan.Task(PendingTask.ServiceRequest);
-                    Check(Intake.MoveTo(IntakeState.InServiceFlow));
-                    OpenOrder(service);
+                    AskService(TextKeys.DocumentReviewRequest, service.Value, ServiceRow.Review); // B-16 step 1
                     break;
                 case Service.ContractDrafting:
-                    InService(TextKeys.ContractDraftingRequest);
-                    OpenOrder(service);
+                    AskService(TextKeys.ContractDraftingRequest, service.Value, ServiceRow.Drafting);
                     break;
                 case Service.FormalNotice:
-                    InService(TextKeys.FormalNoticeRequest);
-                    OpenOrder(service);
+                    AskService(TextKeys.FormalNoticeRequest, service.Value, ServiceRow.Notice);
                     break;
                 case Service.UrfMarriage or Service.UrfDivorce when urfOn && MayBook:
                     StartUrf(service == Service.UrfMarriage ? UrfCase.Marriage : UrfCase.Divorce); // TASK 11: B-11's questions
@@ -2409,13 +2426,45 @@ public sealed class HazemResponder(
             Check(Intake.MoveTo(IntakeState.InServiceFlow));
         }
 
-        /// <summary>TASK 10 (B-16.1): the written service gets an order waiting for its documents (when its texts are approved).</summary>
-        private void OpenOrder(Service? service)
+        /// <summary>
+        /// TASK 10 (B-16.1), v1.43: a written service's text. Words about it («بتعملوا عقود؟»، «بكام؟») are a question, not an
+        /// order: its text with «✅ ابدأ الطلب» under it, and nothing opens. The order (waiting for its documents) and the office's
+        /// task open only when the client starts it: that button or the services list's row (the same id), or his papers
+        /// (<see cref="RespondToPapers"/>). Without the written services: the text and the office's task, as before.
+        /// </summary>
+        private void AskService(string key, Service service, string row)
         {
-            if (servicesOn && MayOrder && ServiceKind.Requested(service) is { } kind)
+            Check(Intake.MoveTo(IntakeState.InServiceFlow));
+            if (!servicesOn || !MayOrder || ServiceKind.Requested(service) is not { } kind)
             {
-                ServiceToOpen = kind;
+                plan.Say(key, TextKeys.ConsultationOffer);
+                plan.Task(PendingTask.ServiceRequest);
+                return;
             }
+
+            if (ServiceRow.In(turn) is { IsMenu: false, IsTell: false })
+            {
+                plan.Say(key, TextKeys.ConsultationOffer); // he pressed it: started
+                plan.Task(PendingTask.ServiceRequest);
+                ServiceToOpen = kind;
+                return;
+            }
+
+            plan.Ask(key, new ReplyChoices(InteractivePayload.Buttons, [new ReplyChoice(ServiceRow.Id(row), TextKeys.BtnStartOrder)]),
+                fallback: TextKeys.ConsultationOffer);
+        }
+
+        /// <summary>
+        /// v1.43: papers (an image or a document) right after Hazem told a written service and asked for them, with nothing
+        /// else waiting for a file: they start that order, as «راجعلي العقد ده» with the contract does (B-16.1 + B-16.2).
+        /// </summary>
+        public void RespondToPapers(ServiceKind kind)
+        {
+            ServiceToOpen = kind;
+            FilesToOrder = true;
+            plan.Say(TextKeys.ServiceFilesReceived);
+            plan.Task(PendingTask.ServicePricing);
+            Check(Intake.MoveTo(IntakeState.InServiceFlow));
         }
 
         /// <summary>
