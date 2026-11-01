@@ -20,7 +20,7 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
 {
     public const string HttpClientName = "openai";
     /// <summary>The prompt in use: Ai/prompts/{PromptVersion}.md. Older versions stay in the folder as history.</summary>
-    public const string PromptVersion = "classify-v15";
+    public const string PromptVersion = "classify-v16";
     public const string StubEnabledKey = "ai.stub_enabled";
     public const string StubBaseUrlKey = "ai.stub_base_url";
 
@@ -129,7 +129,11 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
                 StringOrNull(o["info_topic"]),
                 StringOrNull(o["scope"]),
                 StringOrNull(o["courtesy"]),
-                StringOrNull(o["name_gender"])), null);
+                StringOrNull(o["name_gender"]),
+                // v1.47 (B-32): the choice his words pick, and a day or time he asked for
+                o["picked"] is JsonValue p && p.GetValueKind() == JsonValueKind.Number && p.TryGetValue<int>(out var picked) ? picked : null,
+                StringOrNull(o["asked_time"]),
+                o["time_exact"] is JsonValue e && e.GetValueKind() is JsonValueKind.True or JsonValueKind.False ? e.GetValue<bool>() : null), null);
         }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException)
         {
@@ -185,7 +189,7 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
             ["type"] = "object",
             ["additionalProperties"] = false,
             ["required"] = new JsonArray("analysis", "subject", "scope", "intent", "service", "consultation_mode", "full_name", "confidence",
-                "matter_type", "matter_subtype", "sender_role", "info_topic", "courtesy", "name_gender"),
+                "matter_type", "matter_subtype", "sender_role", "info_topic", "courtesy", "name_gender", "picked", "asked_time", "time_exact"),
             // v1.24: subject and scope come first, so the model names what the turn is about before it picks an
             // intent. The subject is a few words for that only: it is never read, kept or logged.
             ["properties"] = new JsonObject
@@ -207,6 +211,10 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
                 // v1.39 (TASK 16): the gender of the name he typed, for «يا أستاذ» / «يا أستاذة» (unknown: «حضرتك»)
                 ["name_gender"] = new JsonObject { ["type"] = "string", ["enum"] = Codes<NameGender>(false) },
                 ["confidence"] = new JsonObject { ["type"] = "number" },
+                // v1.47 (B-32): the waiting choice his words pick (1…n, null for none), and a day or time he asked for
+                ["picked"] = new JsonObject { ["type"] = new JsonArray("integer", "null") },
+                ["asked_time"] = new JsonObject { ["type"] = new JsonArray("string", "null") },
+                ["time_exact"] = new JsonObject { ["type"] = "boolean" },
             },
         };
     }

@@ -164,7 +164,11 @@ public enum ConsultationMode
     Unknown,
 }
 
-/// <summary>What the model answered, before any check (strings, as they came).</summary>
+/// <summary>
+/// What the model answered, before any check (strings, as they came). v1.47 (B-32): with choices waiting (the context lists
+/// them, numbered from 1), <c>Picked</c> is the one his words pick; <c>AskedTime</c> a day or time he asked for
+/// («2026-11-02T10:15», Cairo), <c>TimeExact</c> whether he said the time itself. The code checks both.
+/// </summary>
 public sealed record RawClassification(
     string? Intent,
     string? Service,
@@ -177,7 +181,10 @@ public sealed record RawClassification(
     string? InfoTopic = null,
     string? Scope = null,
     string? Courtesy = null,
-    string? NameGender = null);
+    string? NameGender = null,
+    int? Picked = null,
+    string? AskedTime = null,
+    bool? TimeExact = null);
 
 /// <summary>One call to the classifier: the answer, or why there is none, plus what it cost.</summary>
 public sealed record ClassifierOutcome(
@@ -326,9 +333,12 @@ public static class AiContext
     public const string Head = "«سياق للفهم بس، مش رسالة العميل»";
     public const string Now = "«رسالة العميل دلوقتي»";
 
-    public static string Build(string message, string? hazemLast, string? clientBefore, string? open)
+    /// <param name="choices">v1.47 (B-32): the buttons or rows waiting under Hazem's last message, numbered from 1.</param>
+    /// <param name="today">v1.47: today's day, date and time in Cairo, for a day or a time he asks for.</param>
+    public static string Build(string message, string? hazemLast, string? clientBefore, string? open,
+        IReadOnlyList<string>? choices = null, string? today = null)
     {
-        if (hazemLast is null && clientBefore is null && open is null)
+        if (hazemLast is null && clientBefore is null && open is null && choices is not { Count: > 0 })
         {
             return message;
         }
@@ -347,6 +357,15 @@ public static class AiContext
         if (open is not null)
         {
             sb.Append("عنده مع المكتب: ").Append(open).Append('\n');
+        }
+
+        if (choices is { Count: > 0 })
+        {
+            sb.Append("الاختيارات اللي قدامه تحت آخر رسالة: ").Append(string.Join(" ", choices)).Append('\n');
+            if (today is not null)
+            {
+                sb.Append("النهارده: ").Append(today).Append('\n');
+            }
         }
 
         return sb.Append(Now).Append('\n').Append(message).ToString();
