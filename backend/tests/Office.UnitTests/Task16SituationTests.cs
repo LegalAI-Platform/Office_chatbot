@@ -146,14 +146,14 @@ public sealed partial class BookingFlowTests
     }
 
     [Fact]
-    public async Task V139_a_paid_urgent_client_is_told_the_lawyer_calls_within_minutes_and_his_urgent_words_reach_the_office()
+    public async Task V139_a_paid_urgent_client_is_told_the_lawyer_calls_within_minutes_and_his_urgent_words_make_no_second_task()
     {
         await InSituation("urgent");
         Assert.Equal("أكيد 👋 عاجل مدفوع، المستشار هيكلم حضرتك خلال دقايق.", (await Say("السلام عليكم")).Actions[^1].Text);
         var urgent = await Say("مستعجل جدا");
         Assert.Contains(TextKeys.SituationUrgent, Keys(urgent));
         Assert.DoesNotContain(TextKeys.UrgentPrice, Keys(urgent)); // never a second paid call
-        Assert.Contains(PendingTask.UrgentRequest, TaskKinds(urgent)); // he paid: the office sees it at once
+        Assert.DoesNotContain(PendingTask.UrgentRequest, TaskKinds(urgent)); // v1.40: the task of his receipt is the one (one bell, one e-mail)
     }
 
     [Fact]

@@ -246,6 +246,7 @@ public static class TextKeys
     public const string UrgentNight = "urgent_night";     // before urgent_pay: the first free time is not today
     public const string UrgentNow = "urgent_now";         // the receipt, the lawyer free: within 10 minutes
     public const string UrgentAfter = "urgent_after";     // the receipt, the lawyer busy: about {{time}}
+    public const string UrgentLater = "urgent_later";     // v1.42: the receipt, the lawyer not working now: {{day}} at {{time}}
     public const string UrgentSeen = "urgent_seen";       // «التحويل تمام، هكلمه» pressed
     public const string UrgentWaiting = "urgent_waiting"; // the alert not answered: the manager's template went too
     public const string UrgentAlert = "urgent_alert";

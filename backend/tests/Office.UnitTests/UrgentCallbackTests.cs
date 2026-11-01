@@ -110,6 +110,7 @@ public sealed partial class BookingFlowTests
             [TextKeys.UrgentNight] = "من الساعة {{opens}} الصبح",
             [TextKeys.UrgentNow] = "خلال 10 دقايق",
             [TextKeys.UrgentAfter] = "حوالي الساعة {{time}}",
+            [TextKeys.UrgentLater] = "هيكلم حضرتك {{day}} الساعة {{time}}", // v1.42
             [TextKeys.UrgentSeen] = "شاف",
             [TextKeys.UrgentWaiting] = "بنوصّل",
             [TextKeys.UrgentAlert] = "🚨 {{name}} {{phone}} {{time}}",
@@ -246,15 +247,46 @@ public sealed partial class BookingFlowTests
     }
 
     [Fact]
-    public async Task The_call_not_today_gets_the_booking_s_own_receipt_text()
+    public async Task The_call_not_today_gets_its_own_receipt_text_with_the_day()
     {
         UrgentOn();
         _now = AvailabilityTests.At(19, 23, 55);
         await UrgentRow();
         _now = AvailabilityTests.At(19, 23, 57);
         var d = await Receipt();
-        Assert.Equal([TextKeys.BookingPaid], Keys(d));
+        Assert.Equal([TextKeys.UrgentLater], Keys(d)); // v1.42: never «هبعتلك التأكيد» for an urgent call
         Assert.Equal(AvailabilityTests.At(20, 10), TheCall.Start);
+    }
+
+    [Fact]
+    public async Task V142_at_half_past_one_at_night_he_hears_the_morning_before_paying_and_never_that_the_lawyer_is_in_a_call()
+    {
+        // Abu El-Leil (2026-11-01): 01:30 and the call at 10:00 are the same date; the lawyer is asleep, not in a call.
+        UrgentOn();
+        _now = AvailabilityTests.At(20, 1, 30);
+        var d = await UrgentRow();
+        Assert.Equal([TextKeys.UrgentNight, TextKeys.UrgentPay], Keys(d)); // the morning, before he pays
+        Assert.Equal("من الساعة 10 الصبح", d.Actions[0].Text);
+        Assert.Equal(AvailabilityTests.At(20, 10), TheCall.Start);
+
+        _now = AvailabilityTests.At(20, 1, 31);
+        var paid = await Receipt();
+        Assert.Equal([TextKeys.UrgentLater], Keys(paid)); // not urgent_after («المستشار في مكالمة دلوقتي»)
+        Assert.Equal("هيكلم حضرتك النهارده الساعة 10:00 ص", Assert.Single(paid.Actions).Text);
+        Assert.Contains(PendingTask.UrgentRequest, TaskKinds(paid));
+    }
+
+    [Fact]
+    public async Task V142_his_urgent_words_after_paying_make_no_second_task()
+    {
+        UrgentOn();
+        _now = AvailabilityTests.At(20, 1, 30);
+        await UrgentRow();
+        _now = AvailabilityTests.At(20, 1, 31);
+        await Receipt(); // the one urgent task, with the receipt
+        _now = AvailabilityTests.At(20, 1, 33);
+        _script["خليه يكلمني ضروري ناو"] = new("urgent", null, "unknown", null, 0.95);
+        Assert.DoesNotContain(PendingTask.UrgentRequest, TaskKinds(await Say("خليه يكلمني ضروري ناو"))); // one bell, one e-mail
     }
 
     [Fact]

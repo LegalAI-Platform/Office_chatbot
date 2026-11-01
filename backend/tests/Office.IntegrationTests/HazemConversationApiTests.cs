@@ -266,7 +266,8 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
                         + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.33.md"), Ct) // B-09's urgent call-back of 1.33
                         + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.35.md"), Ct) // the two texts reworded in 1.35
                         + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.37.md"), Ct) // the number asked of a username client (1.37)
-                        + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.39.md"), Ct); // B-28: the situation replies and the wordings (1.39)
+                        + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.39.md"), Ct) // B-28: the situation replies and the wordings (1.39)
+                        + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.42.md"), Ct); // B-09: urgent_later (1.42)
         decisions = decisions.Replace("\r\n", "\n", StringComparison.Ordinal); // a Windows checkout (core.autocrlf) has CRLF; the texts have \n
         await using var c = new NpgsqlConnection(db.ApiConnectionString);
         await c.OpenAsync(Ct);
@@ -300,7 +301,7 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
             Assert.True(decisions.Contains(text, StringComparison.Ordinal), $"{r.GetString(0)} is not word for word in DECISIONS");
         }
 
-        Assert.Equal(111, count); // the 11 of v1.39 (B-28) + 3 of v1.37 (ask_phone, ask_phone_again, phone_needed_for_call) + 8 (TASK 04) + B-04 question + the two B-25 texts (TASK 05a) + B-08 and B-22 (TASK 08) + B-11 (TASK 11) + B-18 (TASK 12) + B-11.1 (v1.20) + 9 greetings B-01.6 (v1.21) + 5 of v1.22 + 8 of v1.25 + 3 of v1.28 + ask_name_again of v1.29 (welcome_ask_name's v2 replaced its v1) + the 22 of the services list (v1.30: 13 texts and 9 price lines) + 11 of v1.31 (welcome_back and the 10 of the rating) + 2 of v1.32 (welcome, welcome_choose and ask_name_booking added, welcome_ask_name switched off; services_menu's v2 replaced its v1, and every «المستشار» text replaced its own «الأستاذ» version one for one) + the 10 of v1.33 (B-09: 6 texts, the alert and its 3 buttons); v1.35: ask_name_again and urgent_waiting reworded, one for one
+        Assert.Equal(112, count); // urgent_later of v1.42 + the 11 of v1.39 (B-28) + 3 of v1.37 (ask_phone, ask_phone_again, phone_needed_for_call) + 8 (TASK 04) + B-04 question + the two B-25 texts (TASK 05a) + B-08 and B-22 (TASK 08) + B-11 (TASK 11) + B-18 (TASK 12) + B-11.1 (v1.20) + 9 greetings B-01.6 (v1.21) + 5 of v1.22 + 8 of v1.25 + 3 of v1.28 + ask_name_again of v1.29 (welcome_ask_name's v2 replaced its v1) + the 22 of the services list (v1.30: 13 texts and 9 price lines) + 11 of v1.31 (welcome_back and the 10 of the rating) + 2 of v1.32 (welcome, welcome_choose and ask_name_booking added, welcome_ask_name switched off; services_menu's v2 replaced its v1, and every «المستشار» text replaced its own «الأستاذ» version one for one) + the 10 of v1.33 (B-09: 6 texts, the alert and its 3 buttons); v1.35: ask_name_again and urgent_waiting reworded, one for one
     }
 
     [Fact]

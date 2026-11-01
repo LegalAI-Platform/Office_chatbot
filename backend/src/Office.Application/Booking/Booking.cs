@@ -505,6 +505,13 @@ public sealed class BookingDesk(IBookingStore store, IBusyCalendar calendar)
 
     public Task<PaymentInfo?> PaymentAsync(Guid appointmentId, CancellationToken ct) => store.PaymentAsync(appointmentId, ct);
 
+    /// <summary>v1.40 (B-09): the panel's hours are open now (closed: the night or a day off, the lawyer is not working).</summary>
+    public async Task<bool> OpenNowAsync(DateTimeOffset now, CancellationToken ct)
+    {
+        var today = Today(now);
+        return Availability.IsOpen(await store.LoadScheduleAsync(today, today, ct), now, Zone);
+    }
+
     public Task<int?> RequestRefundAsync(Guid appointmentId, string reason, CancellationToken ct) => store.RequestRefundAsync(appointmentId, reason, ct);
 
     public Task<AppointmentInfo?> UpcomingForAsync(Guid personId, DateTimeOffset now, CancellationToken ct) =>

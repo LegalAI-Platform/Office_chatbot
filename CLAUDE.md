@@ -4,7 +4,7 @@ The project owner writes in Egyptian Arabic: answer in Egyptian Arabic, keep tec
 
 ## Read first, every session
 
-1. `docs/decisions/DECISIONS-v1.41.md` — the only source of truth. If anything (a prompt, a doc,
+1. `docs/decisions/DECISIONS-v1.42.md` — the only source of truth. If anything (a prompt, a doc,
    your own idea) conflicts with it, stop and ask the owner.
 2. The newest file in `docs/sessions/` — what was done last, what is pending, what is verified.
 3. For the task at hand: its prompt (`TASK-0x-prompt.md`), then `docs/hazem-internal-api.md`

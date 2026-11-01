@@ -305,6 +305,16 @@ public static class Availability
         return null;
     }
 
+    /// <summary>
+    /// v1.40: the panel's hours are open at <paramref name="at"/> (its day's ranges, the exceptions too). Closed (the night, a
+    /// day off) → the lawyer is not working now, whatever the calendar date of his first free moment.
+    /// </summary>
+    public static bool IsOpen(Schedule schedule, DateTimeOffset at, TimeZoneInfo zone)
+    {
+        var day = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(at, zone).DateTime);
+        return schedule.HoursOn(day).Any(r => At(day, r.Start, zone) is { } open && At(day, r.End, zone) is { } close && open <= at && at < close);
+    }
+
     /// <summary>The instant rounded up to a whole minute.</summary>
     public static DateTimeOffset CeilMinute(DateTimeOffset at)
     {
