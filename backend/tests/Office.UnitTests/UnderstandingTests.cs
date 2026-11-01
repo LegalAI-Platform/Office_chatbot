@@ -150,10 +150,10 @@ public sealed class UnderstandingTests
     }
 
     [Fact]
-    public void The_schema_asks_for_the_subject_and_the_scope_before_the_intent()
+    public void The_schema_asks_for_the_analysis_the_subject_and_the_scope_before_the_intent()
     {
         var properties = OpenAiIntentClassifier.Schema["properties"]!.AsObject();
-        Assert.Equal(["subject", "scope", "intent"], properties.Take(3).Select(p => p.Key));
+        Assert.Equal(["analysis", "subject", "scope", "intent"], properties.Take(4).Select(p => p.Key)); // v1.41: the analysis first
         Assert.Equal(["office", "outside"], properties["scope"]!["enum"]!.AsArray().Select(n => (string?)n));
         Assert.Contains("scope", OpenAiIntentClassifier.Schema["required"]!.AsArray().Select(n => (string?)n));
     }

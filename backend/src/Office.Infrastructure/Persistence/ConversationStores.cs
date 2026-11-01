@@ -111,6 +111,18 @@ public sealed class ConversationStore(HazemDbContext db) : IConversationStore
                 ON CONFLICT (idempotency_key) DO NOTHING
                 """, ct);
         }
+
+        if (e.Written is { } w)
+        {
+            // v1.41 (TASK 17, migration 0042): the written reply (or why the approved text went instead).
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO hazem.generated_replies (idempotency_key, turn_id, purpose, text, guard, model, prompt_version, latency_ms,
+                                                     input_tokens, output_tokens)
+                VALUES ({w.IdempotencyKey}, {turnId}, {w.Purpose}, {w.Text}, {w.Guard}, {w.Model}, {w.PromptVersion}, {w.LatencyMs},
+                        {w.InputTokens}, {w.OutputTokens})
+                ON CONFLICT (idempotency_key) DO NOTHING
+                """, ct);
+        }
     }
 
     private static Task SaveConversation(HazemDbContext db, Conversation conversation, CancellationToken ct) =>

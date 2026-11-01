@@ -76,6 +76,7 @@ try
     {
         "send-test" => await SendTest(),
         "classify-eval" => await ClassifyEval(),
+        "write-eval" => await WriteEval(),
         "import-lists" => await ImportLists(),
         "tasks-overdue" => await TasksOverdue(),
         "unmute" => await Unmute(),
@@ -236,6 +237,93 @@ async Task<JsonNode> ForgetNumber()
     };
 }
 
+// v1.41 (TASK 17): the writer on docs/ai/write-eval.jsonl (one conversation per line: id, purpose (a text key), approved (the
+// approved text, filled), call, history [["c"|"h", text]…], redteam). Each sample: the written reply and the code's check. The
+// red-team replies that passed the check are printed in full for a person to read: the check cannot judge its own blind spots.
+async Task<JsonNode> WriteEval()
+{
+    var options = sp.GetRequiredService<IOptions<HazemOptions>>().Value;
+    var anthropic = Option("--provider") == AnthropicIntentClassifier.Provider;
+    if (string.IsNullOrWhiteSpace(anthropic ? options.AnthropicApiKey : options.OpenAiApiKey))
+    {
+        return new JsonObject { ["ok"] = false, ["error"] = "write-eval needs a real key (the classifier's)" };
+    }
+
+    var db = await sp.GetRequiredService<ISettingsReader>().GetAsync(ct);
+    var values = new Dictionary<string, string>(db.Values);
+    if (Option("--model") is { Length: > 0 } model)
+    {
+        values[Office.Application.Writing.Conversational.ModelKey] = model;
+    }
+
+    var settings = new HazemSettings(values);
+    Office.Application.Writing.IReplyWriter writer = anthropic ? sp.GetRequiredService<AnthropicReplyWriter>() : sp.GetRequiredService<OpenAiReplyWriter>();
+    using var input = Option("--file") is { Length: > 0 } file ? new StreamReader(file) : new StreamReader(Console.OpenStandardInput());
+    var samples = new JsonArray();
+    var problems = new SortedDictionary<string, int>(StringComparer.Ordinal);
+    int total = 0, passed = 0, red = 0, redPassed = 0;
+    long latency = 0, inputTokens = 0, outputTokens = 0;
+    string? usedModel = null;
+    while (await input.ReadLineAsync(ct) is { } line)
+    {
+        line = line.Trim().TrimStart('﻿');
+        if (line.Length == 0)
+        {
+            continue;
+        }
+
+        var s = JsonNode.Parse(line)!;
+        var history = s["history"]!.AsArray().Select(h => new Office.Application.Writing.ChatLine((string)h![0]! == "c",
+            AiInput.Redact((string)h[1]!))).ToList();
+        var purposeKey = (string)s["purpose"]!;
+        var request = new Office.Application.Writing.WriteRequest(
+            Office.Application.Writing.Conversational.Purposes.TryGetValue(purposeKey, out var p) ? p : purposeKey,
+            (string)s["approved"]!, ((string?)s["call"] ?? "").Trim(), history);
+        var outcome = await writer.WriteAsync(request, settings, ct);
+        usedModel = outcome.Model;
+        var previous = history.LastOrDefault(h => !h.FromClient)?.Text;
+        var problem = outcome.Reply is null ? outcome.FailureReason ?? "error" : Office.Application.Writing.ReplyGuard.Problem(outcome.Reply, request, previous);
+        var isRed = (bool?)s["redteam"] == true;
+        total++;
+        red += isRed ? 1 : 0;
+        latency += outcome.LatencyMs;
+        inputTokens += outcome.InputTokens ?? 0;
+        outputTokens += outcome.OutputTokens ?? 0;
+        if (problem is null)
+        {
+            passed++;
+            redPassed += isRed ? 1 : 0;
+        }
+        else
+        {
+            problems[problem] = problems.GetValueOrDefault(problem) + 1;
+        }
+
+        samples.Add(new JsonObject
+        {
+            ["id"] = s["id"]?.DeepClone(), ["redteam"] = isRed, ["client"] = history.LastOrDefault(h => h.FromClient)?.Text,
+            ["reply"] = outcome.Reply, ["check"] = problem ?? "passed", ["ms"] = outcome.LatencyMs,
+        });
+    }
+
+    var normal = total - red;
+    return new JsonObject
+    {
+        ["ok"] = total > 0,
+        ["model"] = usedModel,
+        ["prompt_version"] = WriterPrompt.PromptVersion,
+        ["samples"] = total,
+        ["normal_passed"] = normal == 0 ? null : Math.Round((double)(passed - redPassed) / normal, 3),
+        ["redteam_samples"] = red,
+        ["redteam_passed_the_check"] = redPassed, // each one is read by a person (the samples below)
+        ["refused_by_the_check"] = JsonSerializer.SerializeToNode(problems),
+        ["avg_latency_ms"] = total == 0 ? 0 : latency / total,
+        ["input_tokens"] = inputTokens,
+        ["output_tokens"] = outputTokens,
+        ["samples_out"] = samples,
+    };
+}
+
 async Task<JsonNode> ClassifyEval()
 {
     var options = sp.GetRequiredService<IOptions<HazemOptions>>().Value;
@@ -288,7 +376,11 @@ async Task<JsonNode> ClassifyEval()
 
         var sample = JsonNode.Parse(line)!;
         var expected = (string)sample["intent"]!;
-        var outcome = await classifier.ClassifyAsync(AiInput.Redact((string)sample["text"]!), settings, ct);
+        // v1.41 (part B): a sample may carry its context (hazem, before, open), built as the API builds it
+        var message = AiInput.Redact((string)sample["text"]!);
+        var context = sample["context"];
+        var outcome = await classifier.ClassifyAsync(context is null ? message
+            : AiContext.Build(message, (string?)context["hazem"], (string?)context["before"], (string?)context["open"]), settings, ct);
         var c = Classification.From(outcome, settings);
         var got = c.IsFallback ? $"other ({c.FallbackReason})" : Classification.Code(c.Intent);
         if (c.FallbackReason is { } reason)

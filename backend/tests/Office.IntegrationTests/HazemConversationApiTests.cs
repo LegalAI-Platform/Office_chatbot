@@ -26,7 +26,7 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
     public async ValueTask InitializeAsync()
     {
         await db.ExecAsync("""
-            TRUNCATE hazem.turns, hazem.send_results, hazem.turn_replies, hazem.classifications, hazem.panel_alerts, hazem.panel_alert_reads, hazem.staff_tasks, hazem.list_entries;
+            TRUNCATE hazem.turns, hazem.generated_replies, hazem.send_results, hazem.turn_replies, hazem.classifications, hazem.panel_alerts, hazem.panel_alert_reads, hazem.staff_tasks, hazem.list_entries;
             TRUNCATE hazem.panel_audit; DELETE FROM hazem.panel_users; -- they point at hazem.staff
             DELETE FROM hazem.staff;
             DELETE FROM hazem.intakes; DELETE FROM hazem.conversations; DELETE FROM hazem.persons;
@@ -146,7 +146,8 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
             }));
         var (auth, seen) = Assert.Single(_factory.OpenAi.Requests);
         Assert.Equal("Bearer " + ApiFactory.OpenAiKey, auth);
-        Assert.Equal("عايز أحجز رقمي [رقم]\nالعقد", seen);
+        // v1.41: the message comes after its context; the leaks below are checked on all the AI saw
+        Assert.Equal("عايز أحجز رقمي [رقم]\nالعقد", Office.Application.Understanding.AiContext.MessageOf(seen));
         foreach (var leak in new[] { "0101", "KEY-SECRET", "FILENAME-SECRET", "office-sensitive", "application/pdf", "wa/2026" })
         {
             Assert.DoesNotContain(leak, seen);

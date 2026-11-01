@@ -304,6 +304,51 @@ public sealed record Classification(
 }
 
 /// <summary>
+/// v1.41 (TASK 17, part B, classify-v14): what a person reading the message would know, put before it: Hazem's last message,
+/// the client's message before this one, and what he has open with the office. Text only, masked (T-09); the classifier
+/// classifies the message after <see cref="Now"/>, the context only helps it understand. The fakes read the message back with
+/// <see cref="MessageOf"/>.
+/// </summary>
+public static class AiContext
+{
+    public const string Head = "«سياق للفهم بس، مش رسالة العميل»";
+    public const string Now = "«رسالة العميل دلوقتي»";
+
+    public static string Build(string message, string? hazemLast, string? clientBefore, string? open)
+    {
+        if (hazemLast is null && clientBefore is null && open is null)
+        {
+            return message;
+        }
+
+        var sb = new StringBuilder(Head).Append('\n');
+        if (hazemLast is not null)
+        {
+            sb.Append("آخر رسالة من حازم: ").Append(AiInput.Redact(hazemLast).Replace('\n', ' ')).Append('\n');
+        }
+
+        if (clientBefore is not null)
+        {
+            sb.Append("رسالة العميل اللي قبلها: ").Append(AiInput.Redact(clientBefore).Replace('\n', ' ')).Append('\n');
+        }
+
+        if (open is not null)
+        {
+            sb.Append("عنده مع المكتب: ").Append(open).Append('\n');
+        }
+
+        return sb.Append(Now).Append('\n').Append(message).ToString();
+    }
+
+    /// <summary>The client's message of a text built by <see cref="Build"/> (the text itself otherwise).</summary>
+    public static string MessageOf(string text)
+    {
+        var at = text.IndexOf(Now + "\n", StringComparison.Ordinal);
+        return at < 0 ? text : text[(at + Now.Length + 1)..];
+    }
+}
+
+/// <summary>
 /// The one place that builds what the AI sees (T-09): typed text, captions, voice transcripts
 /// and the titles of buttons the client pressed. Never a media object, bucket, key, file name,
 /// mime type, sha256 or location. Phone numbers, national IDs and e-mails are replaced first.

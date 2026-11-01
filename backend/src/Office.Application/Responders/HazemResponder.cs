@@ -7,6 +7,7 @@ using Office.Application.Texts;
 using Office.Application.Turns;
 using Office.Application.Understanding;
 using Office.Application.Urf;
+using Office.Application.Writing;
 using Office.Domain.Clients;
 using Office.Domain.Common;
 using Office.Domain.Tasks;
@@ -21,6 +22,8 @@ namespace Office.Application.Responders;
 /// true and its texts are approved; otherwise the consultation offer as before.
 /// v1.31: a returning client's new request (B-01.7, <paramref name="history"/>) and the service rating's answers (B-26,
 /// <paramref name="ratings"/>).
+/// v1.41 (TASK 17): the everyday replies in the writer's words (<paramref name="writer"/>, seeing <paramref name="chat"/>), when
+/// hazem.conversational is on; every sentence checked by code (<see cref="ReplyGuard"/>).
 /// </summary>
 public sealed class HazemResponder(
     IConversationStore conversations,
@@ -33,7 +36,9 @@ public sealed class HazemResponder(
     UrfDesk? urf = null,
     IIntakeHistory? history = null,
     IRatingStore? ratings = null,
-    IUrgentCalls? urgentCalls = null) : ITurnResponder
+    IUrgentCalls? urgentCalls = null,
+    IReplyWriter? writer = null,
+    IConversationHistory? chat = null) : ITurnResponder
 {
     /// <summary>
     /// TASK 10 (v1.14): the written services run (an order from the request to the delivery) only when every
@@ -351,8 +356,10 @@ public sealed class HazemResponder(
                     if (aiText is not null)
                     {
                         // 0032: the AI down → an insult or a plain thanks is still read by code (Backstop)
+                        // v1.41 (TASK 17, part B): the AI reads the message with what a person would know before it
+                        var understood = chat is null || firstContact ? aiText : await WithContextAsync(turn, aiText, situation, ct);
                         classification = Backstop.Apply(
-                            Classification.From(await classifier.ClassifyAsync(aiText, settings, ct), settings), aiText);
+                            Classification.From(await classifier.ClassifyAsync(understood, settings, ct), settings), aiText);
                     }
 
                     var office = classification is { Intent: Intent.OfficeInfo } asked
@@ -406,8 +413,19 @@ public sealed class HazemResponder(
 
         var composed = ReplyComposer.Compose(turn.TurnId, turn.Messages[^1].Wamid, plan.Steps, texts);
 
+        // v1.41 (TASK 17): the everyday reply in the writer's words, checked by code; off, down or doubtful → as approved.
+        WrittenReply? written = null;
+        if (writer is not null && chat is not null && settings.Flag(Conversational.SwitchKey) && composed.Actions.Count > 0)
+        {
+            (composed, written) = await Conversational.RewriteAsync(composed, writer, chat, turn, Salutation.Call(state.Person), settings, ct);
+        }
+
         // Keys and reasons only (never a text): the API logs them with the turn.
         var notes = composed.Skipped.Select(x => $"text {x.Key} not sent: {x.Reason}").ToList();
+        if (written is { } w)
+        {
+            notes.Add($"written {w.Purpose}: {w.Guard}");
+        }
         if (classification is { IsFallback: true })
         {
             notes.Add($"classification fell back to other: {classification.FallbackReason}");
@@ -418,8 +436,26 @@ public sealed class HazemResponder(
         }
 
         var effects = new TurnEffects(state, plan.Tasks,
-            classification is null ? null : ClassificationRecord.From(turn.TurnId, classification), composed.Records);
+            classification is null ? null : ClassificationRecord.From(turn.TurnId, classification), composed.Records, written);
         return new TurnDecision(ResponderName, composed.Actions, effects, notes);
+    }
+
+    /// <summary>
+    /// v1.41 (TASK 17, part B): the message as the classifier reads it: Hazem's last message, the client's message before
+    /// this one, and what he has open, before it (AiContext). Nothing before it on a first contact.
+    /// </summary>
+    private async Task<string> WithContextAsync(Turn turn, string message, ClientSituation situation, CancellationToken ct)
+    {
+        var lines = await chat!.RecentAsync(turn.WaId, 2, ct);
+        var open = situation.Kind switch
+        {
+            SituationKind.UrgentWaiting => "استشارة عاجلة مدفوعة مستنية مكالمة المستشار",
+            SituationKind.HeldUnpaid => "ميعاد ممسوك مستني صورة التحويل",
+            SituationKind.Confirmed => "ميعاد متأكد لسه جاي",
+            SituationKind.Order => "طلب خدمة مكتوبة شغال",
+            _ => "مفيش حاجة مفتوحة",
+        };
+        return AiContext.Build(message, lines.LastOrDefault(l => !l.FromClient)?.Text, lines.LastOrDefault(l => l.FromClient)?.Text, open);
     }
 
     /// <summary>B-13: an ad (Meta referral), a wa.me link code, or direct. First contact only.</summary>
@@ -1464,6 +1500,11 @@ public sealed class HazemResponder(
                 case Intent.PriceQuestion:
                     AnswerPrice(turnClass.Service);
                     break;
+                case Intent.OfficeInfo when turnClass is { Topic: InfoTopic.ServiceCheck, Service: { } asked }:
+                    // v1.41 (TASK 17, part B): «بتعملوا عقود؟» asks about one of the office's own services: that service's
+                    // answer, never «هسأل المكتب» (kept for what the office does not list)
+                    AnswerService(asked);
+                    break;
                 case Intent.OfficeInfo:
                     AnswerOffice(turnClass.Topic);
                     break;
@@ -1514,6 +1555,9 @@ public sealed class HazemResponder(
                     break;
                 case Intent.ThanksOrClosing:
                     plan.Say(TextKeys.Thanks);
+                    break;
+                case Intent.Other when turnClass is { IsFallback: false, Service: { } meant } && !(urfOn && Urf is { State: UrfCase.Collecting }):
+                    AnswerService(meant); // v1.41 (part B): no box fitted, but the AI understood which of the office's services he means
                     break;
                 case var _ when urfOn && Urf is { State: UrfCase.Collecting }:
                     AfterUrf(UrfNext.Ask); // B-11: the question still waiting, again (words without its answer)

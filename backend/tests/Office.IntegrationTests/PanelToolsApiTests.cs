@@ -26,7 +26,7 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
         await db.ExecAsync("""
             TRUNCATE hazem.panel_audit; DELETE FROM hazem.panel_users;
             TRUNCATE hazem.panel_alerts, hazem.panel_alert_reads, hazem.ops_runs; DELETE FROM app.workflow_errors; DELETE FROM app.wa_turns WHERE wa_id LIKE '2010000009%';
-            TRUNCATE hazem.turns, hazem.send_results, hazem.turn_replies, hazem.classifications, hazem.panel_alerts, hazem.panel_alert_reads, hazem.staff_tasks, hazem.list_entries;
+            TRUNCATE hazem.turns, hazem.generated_replies, hazem.send_results, hazem.turn_replies, hazem.classifications, hazem.panel_alerts, hazem.panel_alert_reads, hazem.staff_tasks, hazem.list_entries;
             DELETE FROM hazem.staff; DELETE FROM hazem.intakes; DELETE FROM hazem.conversations; DELETE FROM hazem.persons;
             UPDATE hazem.settings SET value = to_char((now() - interval '1 hour') AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
              WHERE key = 'alerts.since';
