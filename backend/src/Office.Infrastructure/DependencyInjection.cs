@@ -71,6 +71,12 @@ public static class DependencyInjection
         services.AddSingleton<AnthropicIntentClassifier>();
         services.AddTransient<IIntentClassifier>(sp => new RoutingIntentClassifier(
             sp.GetRequiredService<OpenAiIntentClassifier>(), sp.GetRequiredService<AnthropicIntentClassifier>()));
+        // v1.41 (TASK 17): the writer of the everyday replies, the same providers and keys, and the conversation it sees.
+        services.AddSingleton<AnthropicReplyWriter>();
+        services.AddTransient<OpenAiReplyWriter>();
+        services.AddTransient<Application.Writing.IReplyWriter>(sp => new RoutingReplyWriter(
+            sp.GetRequiredService<OpenAiReplyWriter>(), sp.GetRequiredService<AnthropicReplyWriter>()));
+        services.AddScoped<Application.Writing.IConversationHistory, ConversationHistory>();
 
         services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<IConversationStore, ConversationStore>();

@@ -293,7 +293,7 @@ public sealed partial class BookingFlowTests
     private HazemResponder Hazem => new(new Store(_rows), new Scripted(_script, () => _aiDown), new Texts(_texts), _lists, new Clock(_now),
         new BookingDesk(_booking, _calendar), new Office.Application.Services.ServiceDesk(_booking),
         new Office.Application.Urf.UrfDesk(new MemoryUrf(_booking, () => _now)), history: new MemorySituation(_booking, _lastReplies),
-        urgentCalls: _acks);
+        urgentCalls: _acks, writer: _writer, chat: _writer);
 
     /// <summary>v1.39: the texts of each client's last answered turn, as hazem.turn_replies.</summary>
     private readonly Dictionary<string, List<string>> _lastReplies = [];
@@ -1605,7 +1605,7 @@ public sealed partial class BookingFlowTests
         public Task<ClassifierOutcome> ClassifyAsync(string text, HazemSettings settings, CancellationToken ct) =>
             Task.FromResult(down?.Invoke() == true
                 ? new ClassifierOutcome(null, ClassifierOutcome.Error, "fake", "v", 1)
-                : new ClassifierOutcome(script.TryGetValue(text, out var r) ? r : new("other", null, "unknown", null, 0.9), null, "fake", "v", 1));
+                : new ClassifierOutcome(script.TryGetValue(Office.Application.Understanding.AiContext.MessageOf(text), out var r) ? r : new("other", null, "unknown", null, 0.9), null, "fake", "v", 1));
     }
 
     private sealed class FakeCalendar : IBusyCalendar

@@ -97,6 +97,12 @@ app.MapPost("/v1/chat/completions", async (HttpRequest request) =>
 {
     var body = await JsonNode.ParseAsync(request.Body);
     var text = (string?)body?["messages"]?[1]?["content"] ?? "";
+    // v1.41 (TASK 17, part B): the client's message comes after the context block (AiContext.Now)
+    const string now = "«رسالة العميل دلوقتي»\n";
+    if (text.IndexOf(now, StringComparison.Ordinal) is var cut and >= 0)
+    {
+        text = text[(cut + now.Length)..];
+    }
     log.Enqueue(Received.From(request, "classification", null) with
     {
         Model = (string?)body?["model"],

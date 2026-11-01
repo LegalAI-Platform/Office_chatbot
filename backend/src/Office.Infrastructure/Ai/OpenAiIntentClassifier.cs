@@ -20,7 +20,7 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
 {
     public const string HttpClientName = "openai";
     /// <summary>The prompt in use: Ai/prompts/{PromptVersion}.md. Older versions stay in the folder as history.</summary>
-    public const string PromptVersion = "classify-v13";
+    public const string PromptVersion = "classify-v14";
     public const string StubEnabledKey = "ai.stub_enabled";
     public const string StubBaseUrlKey = "ai.stub_base_url";
 
@@ -184,12 +184,14 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
         {
             ["type"] = "object",
             ["additionalProperties"] = false,
-            ["required"] = new JsonArray("subject", "scope", "intent", "service", "consultation_mode", "full_name", "confidence",
+            ["required"] = new JsonArray("analysis", "subject", "scope", "intent", "service", "consultation_mode", "full_name", "confidence",
                 "matter_type", "matter_subtype", "sender_role", "info_topic", "courtesy", "name_gender"),
             // v1.24: subject and scope come first, so the model names what the turn is about before it picks an
             // intent. The subject is a few words for that only: it is never read, kept or logged.
             ["properties"] = new JsonObject
             {
+                // v1.41 (TASK 17, part B): a short analysis first (what he wants, which service answers it); never read or kept
+                ["analysis"] = new JsonObject { ["type"] = "string" },
                 ["subject"] = new JsonObject { ["type"] = "string" },
                 ["scope"] = new JsonObject { ["type"] = "string", ["enum"] = Codes<Scope>(false) },
                 ["intent"] = new JsonObject { ["type"] = "string", ["enum"] = Codes<Intent>(false) },

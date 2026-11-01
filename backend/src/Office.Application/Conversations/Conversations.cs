@@ -121,4 +121,5 @@ public sealed record TurnEffects(
     ClientState State,
     IReadOnlyList<PendingTask> Tasks,
     ClassificationRecord? Classification,
-    IReadOnlyList<ReplyRecord> Replies);
+    IReadOnlyList<ReplyRecord> Replies,
+    Writing.WrittenReply? Written = null); // v1.41 (TASK 17): the everyday reply in the writer's words, or why not

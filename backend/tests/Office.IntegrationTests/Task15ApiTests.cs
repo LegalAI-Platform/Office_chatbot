@@ -22,7 +22,7 @@ public sealed class Task15ApiTests(TestDatabase db) : IAsyncLifetime
 
     private const string Clean = """
         TRUNCATE hazem.panel_audit; DELETE FROM hazem.panel_users;
-        TRUNCATE hazem.turns, hazem.send_results, hazem.turn_replies, hazem.classifications, hazem.panel_alerts, hazem.panel_alert_reads, hazem.staff_tasks;
+        TRUNCATE hazem.turns, hazem.generated_replies, hazem.send_results, hazem.turn_replies, hazem.classifications, hazem.panel_alerts, hazem.panel_alert_reads, hazem.staff_tasks;
         DELETE FROM hazem.intakes; DELETE FROM hazem.conversations; DELETE FROM hazem.persons;
         """;
 

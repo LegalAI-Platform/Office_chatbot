@@ -42,9 +42,9 @@ open gets his situation first, and the code never sends a paid offer to a client
 
 - OpenAI Chat Completions, **Structured Outputs** (`response_format: json_schema`, `strict: true`,
   `additionalProperties: false`, every field required, enums = the lists above), `temperature: 0`.
-- Prompt: `backend/src/Office.Infrastructure/Ai/prompts/classify-v13.md` (v1..v12 kept as history), embedded in the build.
-  Its version (`classify-v13`) is saved with every classification. **Change the prompt = a new
-  file (`classify-v14.md` next) and a new `PromptVersion`**, then run `classify-eval` again.
+- Prompt: `backend/src/Office.Infrastructure/Ai/prompts/classify-v14.md` (v1..v13 kept as history), embedded in the build.
+  Its version (`classify-v14`) is saved with every classification. **Change the prompt = a new
+  file (`classify-v15.md` next) and a new `PromptVersion`**, then run `classify-eval` again.
 - Model: `OPENAI_MODEL`. Empty = `gpt-4.1-mini`, **a starting point only**. The final model is
   chosen by the owner after `classify-eval` (T-08).
 - Key: `HAZEM_OPENAI_API_KEY` in `.env` — the .NET key, separate from n8n's voice key. It may be
@@ -331,3 +331,34 @@ answer «احكيلي الموضوع» fits it), 192 «ازاي احجز؟ عن�
 offer). The hold-out's two new misses are the new intents taking messages that fit them: 1056 «انا زعلان عشان محدش رد
 عليا امبارح» → `my_status` (his situation, or the welcome) and 1059 «عندي موضوع حساس شوية» → `tell_problem`; their labels
 stay as written (never tune on the hold-out set). 1023 and 1035 are v11's own misses.
+
+### v1.41: the conversation before the message, and an analysis first (`classify-v14`, Claude Opus 5.5, 2026-11-01)
+
+The classifier now reads, before the client's message, Hazem's last message, the client's message before it and what he has
+open (`AiContext`; masked, text only), and writes a short `analysis` (never kept) before the intent. A question about one of
+the office's own services («بتعملو عقود عمل؟») is that service; `service_check` is only for what the office does not list.
+The code answers an `office_info/service_check` or an `other` that carries an office service as that service.
+`docs/ai/eval-context.jsonl` is new (4001–4016): «بتعملوا عقود؟» and its kind, a case follow-up, «ابو الليل مين» after a
+named reply, «فاكرني؟» with a paid call, «اه» after a two-button question. Set sample 138 «بتعملو اعلانات؟» moved to
+`office_info` (the office answers it, harmless); 4010 «اه» after «تحب تشوف خدمات المكتب، ولا تكلم حد؟» came back
+`show_services`, which is what a person would understand (its label `other` was written without the context).
+
+| Prompt | Set | Accuracy (no timeouts) | | |
+|---|---|---|---|---|
+| **`classify-v14`** (in use) | set 265 (2 timeouts) | **98.5%** (v13 99.2%) | services 100% | name_gender 100% |
+| **`classify-v14`** | hold-out 88 | **96.6%** (v13 95.5%) | | |
+| **`classify-v14`** | scope 64 | **98.4%** (scope 100%) | | |
+| **`classify-v14`** | context 16 | **93.8%** (16/16 in meaning, see 4010) | services 100% | |
+
+## The writer (v1.41, TASK 17, B-29)
+
+The everyday replies can be said by a second AI call in its own words (`write-v1`, `Ai/prompts/write-v1.md`), seeing the
+last 10 messages, using only the facts of the approved text; `ReplyGuard` checks every sentence (numbers, legal words,
+promises, money, links, Arabic, length, a repeat) and the approved text goes otherwise. `hazem.conversational` switches it
+(off by default); `ai.writer_model` picks the model. `write-eval` measures it on `docs/ai/write-eval.jsonl` (60
+conversations and 30 red-team tries, written from scratch); the red-team replies that pass the check are read by a person.
+
+| Model | Normal (60) passed the check | Red team (30) passed the check | Read by a person | Average time |
+|---|---|---|---|---|
+| `claude-opus-5-5` | 100% | 30 | none gives a price, a law, a promise, a link, or claims to be a person | 2.4 s |
+| **`claude-haiku-5-5`** (proposed) | 100% | 29 (1 «خصم» refused by the check) | the same | **1.3 s** |

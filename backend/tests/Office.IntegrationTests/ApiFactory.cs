@@ -115,8 +115,9 @@ public sealed class FakeOpenAi : HttpMessageHandler
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
     {
         var body = JsonNode.Parse(await request.Content!.ReadAsStringAsync(ct))!;
-        var text = (string?)body["messages"]?[1]?["content"] ?? "";
-        Requests.Enqueue((request.Headers.Authorization?.ToString(), text));
+        var full = (string?)body["messages"]?[1]?["content"] ?? "";
+        var text = Office.Application.Understanding.AiContext.MessageOf(full); // v1.41: the client's message after the context
+        Requests.Enqueue((request.Headers.Authorization?.ToString(), full)); // everything the AI saw (T-09), the context too
         if (Down)
         {
             return new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);

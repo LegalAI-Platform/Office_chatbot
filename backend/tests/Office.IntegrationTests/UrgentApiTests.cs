@@ -36,7 +36,7 @@ public sealed class UrgentApiTests(TestDatabase db) : IAsyncLifetime
         UPDATE hazem.settings SET value = '' WHERE key IN ('booking.calendar_id', 'office.instapay', 'office.wallet_number', 'office.wallet_provider',
           'office.lawyer_whatsapp', 'office.manager_whatsapp');
         TRUNCATE hazem.panel_audit; DELETE FROM hazem.panel_users;
-        TRUNCATE hazem.turns, hazem.send_results, hazem.turn_replies, hazem.classifications, hazem.panel_alerts, hazem.panel_alert_reads, hazem.staff_tasks, hazem.list_entries;
+        TRUNCATE hazem.turns, hazem.generated_replies, hazem.send_results, hazem.turn_replies, hazem.classifications, hazem.panel_alerts, hazem.panel_alert_reads, hazem.staff_tasks, hazem.list_entries;
         DELETE FROM hazem.staff; DELETE FROM hazem.intakes; DELETE FROM hazem.conversations; DELETE FROM hazem.persons;
         """;
 
@@ -421,6 +421,39 @@ public sealed class UrgentApiTests(TestDatabase db) : IAsyncLifetime
             """);
         report = await scope.ServiceProvider.GetRequiredService<Office.Infrastructure.Panel.PanelTools>().ReportAsync(year, month, Ct);
         Assert.Contains("offer_after_payment", report.Review.Select(r => r.Reason));
+    }
+
+    [Fact]
+    public async Task V141_the_writer_sees_the_conversation_and_a_bad_answer_sends_the_approved_text_and_is_recorded()
+    {
+        await Paid();
+        await db.SetAsync("hazem.conversational", "true");
+        try
+        {
+            // The tests' fake OpenAI answers a classification, never {"reply"}: the approved text goes, and the table says why.
+            var d = await Turn(new JsonObject { ["type"] = "text", ["text"] = "انت فاكرني؟" });
+            Assert.StartsWith("أكيد يا أستاذ محمد 👋", (string)d[^1]!["text"]!);
+            Assert.Equal("situation_urgent|invalid_output|", await db.ScalarAsync<string>(
+                "SELECT purpose || '|' || guard || '|' || coalesce(text, '') FROM hazem.generated_replies ORDER BY created_at DESC LIMIT 1"));
+
+            // What the writer would see: his words and Hazem's answers, oldest first, numbers masked.
+            using (var scope = _factory.Services.CreateScope())
+            {
+                var lines = await scope.ServiceProvider.GetRequiredService<Office.Application.Writing.IConversationHistory>().RecentAsync(Client, 10, Ct);
+                Assert.Equal("السلام عليكم", lines[0].Text);
+                Assert.True(lines[0].FromClient);
+                Assert.Contains(lines, l => !l.FromClient && l.Text.StartsWith("أكيد يا أستاذ محمد", StringComparison.Ordinal));
+                Assert.DoesNotContain(lines, l => l.Text.Contains("01000000000", StringComparison.Ordinal)); // the wallet number masked
+            }
+
+            // «انسى الرقم» takes the written replies with the turns.
+            await db.ScalarAsync<string>($"SELECT hazem.forget_wa_id('{Client}')::text");
+            Assert.Equal(0L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.generated_replies"));
+        }
+        finally
+        {
+            await db.SetAsync("hazem.conversational", "false");
+        }
     }
 
     [Fact]

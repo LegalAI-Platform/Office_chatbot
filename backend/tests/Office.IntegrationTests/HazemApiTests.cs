@@ -22,7 +22,7 @@ public sealed class HazemApiTests(TestDatabase db) : IAsyncLifetime
 
     public async ValueTask InitializeAsync()
     {
-        await db.ExecAsync("TRUNCATE hazem.turns, hazem.send_results");
+        await db.ExecAsync("TRUNCATE hazem.turns, hazem.generated_replies, hazem.send_results");
         await db.SetEchoAsync(false, "");
         await db.SetAsync("responder", "echo"); // these are the TASK 02/03 echo tests (TASK 04: responder setting)
         _factory = new ApiFactory(db);

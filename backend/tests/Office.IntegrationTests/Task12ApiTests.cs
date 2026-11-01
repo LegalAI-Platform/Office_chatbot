@@ -38,7 +38,7 @@ public sealed class Task12ApiTests(TestDatabase db) : IAsyncLifetime
         -- 1.32: the «المستشار» version of a B-18 text (reminder_details_phone…) is 'DECISIONS v1.32 B-27'
         UPDATE hazem.approved_texts SET active = true WHERE source IN ('proposal TASK 08', 'proposal TASK 09', 'proposal TASK 12', 'DECISIONS v1.16 B-18', 'DECISIONS v1.25 B-18', 'DECISIONS v1.32 B-27') AND version = (SELECT max(m.version) FROM hazem.approved_texts m WHERE m.key = approved_texts.key);
         TRUNCATE hazem.panel_audit; DELETE FROM hazem.panel_users;
-        TRUNCATE hazem.turns, hazem.send_results, hazem.turn_replies, hazem.classifications, hazem.panel_alerts, hazem.panel_alert_reads, hazem.staff_tasks, hazem.list_entries;
+        TRUNCATE hazem.turns, hazem.generated_replies, hazem.send_results, hazem.turn_replies, hazem.classifications, hazem.panel_alerts, hazem.panel_alert_reads, hazem.staff_tasks, hazem.list_entries;
         DELETE FROM hazem.staff; DELETE FROM hazem.intakes; DELETE FROM hazem.conversations; DELETE FROM hazem.persons;
         """;
 
