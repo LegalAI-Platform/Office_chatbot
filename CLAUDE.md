@@ -4,7 +4,7 @@ The project owner writes in Egyptian Arabic: answer in Egyptian Arabic, keep tec
 
 ## Read first, every session
 
-1. `docs/decisions/DECISIONS-v1.45.md` — the only source of truth. If anything (a prompt, a doc,
+1. `docs/decisions/DECISIONS-v1.46.md` — the only source of truth. If anything (a prompt, a doc,
    your own idea) conflicts with it, stop and ask the owner.
 2. The newest file in `docs/sessions/` — what was done last, what is pending, what is verified.
 3. For the task at hand: its prompt (`TASK-0x-prompt.md`), then `docs/hazem-internal-api.md`
@@ -68,7 +68,7 @@ unless the owner asks.
 | `backend-test` | .NET unit + integration tests (throwaway database from the real migrations) |
 | `hazem-e2e` | full loop n8n → .NET → n8n with stubs and dry run (no Meta, no OpenAI), and the panel |
 | `web-test` | the panel: type-check, Vitest, build (prints the bundle size, no limit) (Node container) |
-| `quality-eval` | TASK 18: 203 conversations through the real Hazem + the judge (real AI, costs ~$15–20; before every deploy, the score must not drop and nothing forbidden) |
+| `quality-eval` | TASK 18: 205 conversations through the real Hazem + the judge (real AI, costs ~$15–20; before every deploy, the score must not drop and nothing forbidden) |
 
 After tests, `whatsapp.dry_run` must be `false`, base URLs back to Meta/OpenAI defaults, and no
 test credential left in n8n — the healthcheck fails otherwise.

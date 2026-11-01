@@ -1043,6 +1043,19 @@ public sealed class HazemResponder(
             var c = Urf!;
             switch (next)
             {
+                // v1.46 (the forbidden rule 2 for the Urfi questions): the question he got last time is never sent the same
+                // way again. The second time it comes with «علشان نكمّل…» (the ages: «اكتبلي السن بالأرقام…»); the third
+                // time the office takes it, as two unclear answers do.
+                case UrfNext.Ask when AskedUrfAgain(c.Step):
+                    HandToOffice(TextKeys.UnclearAgain, PendingTask.UrfHelp);
+                    break;
+                case UrfNext.Ask when c.Step == UrfStep.Ages && situation.RepliedLast(TextKeys.UrfAskAges):
+                    plan.Say(TextKeys.UrfAgesAgain);
+                    break;
+                case UrfNext.Ask when UrfQuestion(c.Step) is { } asked && situation.RepliedLast(asked):
+                    plan.Say(TextKeys.UrfStepAgain);
+                    AskUrf(c.Step);
+                    break;
                 case UrfNext.Ask:
                     AskUrf(c.Step);
                     break;
@@ -1074,6 +1087,23 @@ public sealed class HazemResponder(
                     break;
             }
         }
+
+        /// <summary>v1.46: the step's question was already asked again last time (the ages' «بالأرقام», or «علشان نكمّل…»).</summary>
+        private bool AskedUrfAgain(string? step) => step == UrfStep.Ages
+            ? situation.RepliedLast(TextKeys.UrfAgesAgain)
+            : situation.RepliedLast(TextKeys.UrfStepAgain) && UrfQuestion(step) is { } asked && situation.RepliedLast(asked);
+
+        private static string? UrfQuestion(string? step) => step switch
+        {
+            UrfStep.Ages => TextKeys.UrfAskAges,
+            UrfStep.WifePast => TextKeys.UrfAskWifePast,
+            UrfStep.Guardian => TextKeys.UrfAskGuardian,
+            UrfStep.Witnesses => TextKeys.UrfAskWitnesses,
+            UrfStep.HasCopy => TextKeys.UrfAskCopy,
+            UrfStep.Agreed => TextKeys.UrfAskAgreed,
+            UrfStep.Children => TextKeys.UrfAskChildren,
+            _ => null,
+        };
 
         /// <summary>B-11: one question per message; the closed ones as buttons (or a list for the guardian).</summary>
         private void AskUrf(string? step)
@@ -1535,6 +1565,12 @@ public sealed class HazemResponder(
                     // appointment; no second offer (its buttons would replace the Urfi times).
                     plan.Say(TextKeys.UrfQuestionLater);
                     break;
+                case Intent.LegalQuestion when urfOn && Urf is { State: UrfCase.Collecting }:
+                    // v1.46: a question in the middle of the Urfi questions: the lawyer explains it at the appointment, and
+                    // the question waiting comes back (never the consultation offer over the Urfi path)
+                    plan.Say(TextKeys.UrfQuestionLater);
+                    AfterUrf(UrfNext.Ask);
+                    break;
                 case Intent.LegalQuestion:
                     plan.Say(TextKeys.LegalQuestion); // B-20, then the offer
                     Offer();
@@ -1567,6 +1603,12 @@ public sealed class HazemResponder(
                     break;
                 case Intent.PriceQuestion:
                     AnswerPrice(turnClass.Service);
+                    break;
+                case Intent.OfficeInfo when turnClass.Topic == InfoTopic.Privacy:
+                    AnswerAboutService(TextKeys.OfficePrivacy, null, turnClass.Service); // Hazem answers it himself
+                    break;
+                case Intent.OfficeInfo when turnClass.Topic == InfoTopic.ServiceDetail:
+                    AnswerAboutService(TextKeys.ServiceDetail, PendingTask.ServiceQuestion, turnClass.Service);
                     break;
                 case Intent.OfficeInfo when turnClass is { Topic: InfoTopic.ServiceCheck, Service: { } asked }:
                     // v1.41 (TASK 17, part B): «بتعملوا عقود؟» asks about one of the office's own services: that service's
@@ -1649,6 +1691,30 @@ public sealed class HazemResponder(
         {
             var said = InTurn(situation, TextKeys.Greeting, TextKeys.Greeting2, TextKeys.Greeting3);
             plan.Say(said, said == TextKeys.Greeting ? TextKeys.ConsultationOffer : TextKeys.Greeting, CallFill());
+        }
+
+        /// <summary>
+        /// v1.46: a question about a service, not a wish for it. «لو هتجوز عرفي هل في خصوصية؟» is answered by Hazem (the
+        /// office keeps its clients' secrets); any other detail («بياخد قد ايه؟») reaches the office (a task with his words).
+        /// Then the service's path goes on: the Urfi question waiting comes back, or the service named starts.
+        /// </summary>
+        private void AnswerAboutService(string key, string? task, Service? service)
+        {
+            // «هسأل المكتب» in place of a text not approved only with its task: never a promise nobody keeps
+            plan.Say(key, task is null ? null : TextKeys.ServiceCheck);
+            if (task is not null)
+            {
+                plan.Task(task);
+            }
+
+            if (urfOn && Urf is { State: UrfCase.Collecting })
+            {
+                AfterUrf(UrfNext.Ask);
+            }
+            else if (service is { } named)
+            {
+                AnswerService(named);
+            }
         }
 
         private void AnswerService(Service? service)
