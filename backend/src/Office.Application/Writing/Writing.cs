@@ -142,6 +142,8 @@ public static partial class ReplyGuard
     private static readonly string[] Promises =
     [
         "مضمون", "ضمان", "أكيد هتكسب", "اكيد هتكسب", "هتكسب", "هنكسب", "100%", "١٠٠٪", "خلال ساعة", "خلال ساعه", "حالًا", "حالا",
+        // v1.48: telling the office is the code's act, never a promise of the writer's («هوصّله للمكتب» with no task behind it)
+        "هوصّله", "هوصله", "هبلّغ", "هبلغ", "هيردوا", "هيرد عليك", "هيرد على حضرتك",
         "فورًا", "فورا", "دلوقتي حالا", "مجانًا", "مجانا", "ببلاش", "خصم", "عرض خاص", "بالظبط", "بالضبط",
     ];
 
@@ -340,7 +342,9 @@ public static class Conversational
         [TextKeys.BookingStepAgain] = "ask him kindly to pick from the choices below, or to write the day and time that suit him (the choices follow your sentence)",
         [TextKeys.BookingChooseSlot] = "ask him to pick the time that suits him from the list (the list follows your sentence)",
         [TextKeys.AskNameBooking] = "ask his name to register the booking (a word of comfort first if he is worried)",
-        [TextKeys.HumanRequest] = "tell him you are letting the office know he wants to talk to someone, and they will answer him here",
+        // v1.48: the office already has his request (the handoff is done): a statement, never a question back to him
+        [TextKeys.HumanRequest] = "tell him it is done: the office has his request to talk to someone, and someone will answer him here (a statement, never a question)",
+        [TextKeys.NoPersonalNumber] = "say kindly the lawyer's personal number is not given out; he can book a consultation with the lawyer himself, or talk to someone from the office (two buttons follow your sentence)",
         // v1.45 (the owner: «اه»): the price he asked and the legal refusal join the next step in one message; their prices are
         // kept to the letter and the refusal always says the lawyer answers it in the consultation (Locked, MustSay)
         [TextKeys.LegalQuestion] = "say kindly that the lawyer himself answers this in the consultation (never any legal information)",
@@ -468,6 +472,12 @@ public static class Conversational
             && !(outcome.Reply!.Contains("المستشار", StringComparison.Ordinal) && outcome.Reply.Contains("استشار", StringComparison.Ordinal)))
         {
             problem = "refusal_dropped";
+        }
+
+        // v1.48: the handoff is done when this goes out; a question back («تمام كده؟») would let him think it is not
+        if (problem is null && mainKey == TextKeys.HumanRequest && (outcome.Reply!.Contains('؟') || outcome.Reply.Contains('?')))
+        {
+            problem = "asked_back";
         }
 
         if (problem is null && mainKey == TextKeys.SituationReview

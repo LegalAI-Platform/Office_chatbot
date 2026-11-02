@@ -464,6 +464,14 @@ public sealed class HazemResponder(
 
             state = flow.State;
         }
+        else if (state.Conversation.State == ConversationState.HumanHandoff && state.Conversation.LastStaffMessageAt is null
+                 && history is not null && texts.TryGetValue(TextKeys.HandoffWaiting, out var waitingText) && waitingText.Active
+                 && !(await history.SituationAsync(state.Person.Id, turn.WaId, now, ct)).LastReplyKeys.Contains(TextKeys.HandoffWaiting))
+        {
+            // v1.48 (B-12): he asked for someone and nobody from the office has answered yet (04:00 at night): his first message
+            // after it hears that it arrived, once; Hazem is silent again after it, and always once a staff member writes.
+            plan.Say(TextKeys.HandoffWaiting);
+        }
 
         var composed = ReplyComposer.Compose(turn.TurnId, turn.Messages[^1].Wamid, plan.Steps, texts);
 
@@ -1678,6 +1686,15 @@ public sealed class HazemResponder(
                 case Intent.ExistingMatter:
                     HandToOffice(TextKeys.ExistingMatter, PendingTask.ExistingClientMessage);
                     break;
+                case Intent.HumanRequest when AsksPersonalNumber() && MayOrder:
+                    // v1.48 (B-12): «ممكن رقم الأستاذ الشخصي» is no request for a person: the number is not given; the services
+                    // or someone from the office, as he picks (the button hands him over, as «عايز أكلم حد» does)
+                    plan.Ask(TextKeys.NoPersonalNumber, new ReplyChoices(InteractivePayload.Buttons,
+                    [
+                        new ReplyChoice(ServiceRow.Id(ServiceRow.Menu), TextKeys.BtnServicesList),
+                        new ReplyChoice(ServiceRow.Id(ServiceRow.Human), TextKeys.BtnTalkToOffice),
+                    ]), fallback: TextKeys.ConsultationOffer); // never «بلّغت المكتب» here: nobody was told
+                    break;
                 case Intent.HumanRequest:
                     HandToOffice(TextKeys.HumanRequest, PendingTask.HumanRequested);
                     if (handoffEnabled)
@@ -2098,6 +2115,11 @@ public sealed class HazemResponder(
         private static readonly string[] KindWords =
             ["تليفون", "تلفون", "تيلفون", "فون", "مكالم", "فيديو", "واتس", "فيس تايم", "فيستايم", "مكتب", "مقابل", "اجي", "أجي", "آجي",
              "اقابل", "أقابل", "حضوري", "phone", "call", "video", "office", "visit"];
+
+        /// <summary>v1.48: his words ask for a phone number («رقم الأستاذ»، «رقمه الشخصي»): not a request for a person.</summary>
+        private bool AsksPersonalNumber() =>
+            AiInput.Build(turn)?.Replace(AiInput.PhoneMask, "", StringComparison.Ordinal) is { } words && (words.Contains("رقم", StringComparison.Ordinal)
+            || words.Contains("نمرة", StringComparison.Ordinal) || words.Contains("نمره", StringComparison.Ordinal)); // his own number, masked, is not it
 
         private bool WordsNameKind() =>
             AiInput.Build(turn) is { } words && KindWords.Any(w => words.Contains(w, StringComparison.OrdinalIgnoreCase));

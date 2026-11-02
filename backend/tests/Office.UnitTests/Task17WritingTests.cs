@@ -14,7 +14,7 @@ namespace Office.UnitTests;
 /// </summary>
 public sealed class ReplyGuardTests
 {
-    private static WriteRequest R(string approved) => new("purpose", approved, "", []);
+    internal static WriteRequest R(string approved) => new("purpose", approved, "", []);
 
     [Theory]
     [InlineData("فاهم إن الموضوع مقلقك. المستشار هيكلم حضرتك حوالي الساعة 10:00 ص.", null)]
@@ -212,6 +212,48 @@ public sealed partial class BookingFlowTests
         Assert.Equal(WrittenReply.Passed, d.Effects!.Written!.Guard);
         Assert.Single(d.Actions, a => a.Text == _writer.Reply);
         Assert.DoesNotContain(d.Actions, a => a.Text == _texts[TextKeys.LegalQuestion].Text); // never sent again beside it
+    }
+
+    private void HandoffOn()
+    {
+        _settings[HazemResponder.HandoffEnabledKey] = "true";
+        _texts[TextKeys.HumanRequest] = new ApprovedText(TextKeys.HumanRequest, 2, "تمام، بلّغت المكتب إن حضرتك عايز تكلم حد، وحد من المكتب هيرد على حضرتك هنا.", 300, true);
+        _texts[TextKeys.HandoffWaiting] = new ApprovedText(TextKeys.HandoffWaiting, 1, "رسالة حضرتك وصلت ✅ وحد من المكتب هيرد على حضرتك هنا في أقرب وقت.", 300, true);
+        _texts[TextKeys.NoPersonalNumber] = new ApprovedText(TextKeys.NoPersonalNumber, 1, "معلش، أرقام المستشار الشخصية مش بنديها.", 300, true);
+        _script["عايز اكلم حد من المكتب"] = new("human_request", null, "unknown", null, 0.9);
+        _script["ممكن رقم الاستاذ الشخصي"] = new("human_request", null, "unknown", null, 0.9);
+        _script["هل مبلغ الاستشاره بيتخصم من الاتعاب"] = new("office_info", null, "unknown", null, 0.9, InfoTopic: "fee_policy");
+    }
+
+    [Fact]
+    public async Task V148_after_the_handoff_his_first_message_hears_it_arrived_once_then_hazem_is_silent()
+    {
+        await InSituation("new");
+        HandoffOn();
+        Assert.Equal([TextKeys.HumanRequest], Keys(await Say("عايز اكلم حد من المكتب")));
+        Assert.Equal([TextKeys.HandoffWaiting], Keys(await Say("هل مبلغ الاستشاره بيتخصم من الاتعاب")));
+        Assert.Empty((await Say("هل مبلغ الاستشاره بيتخصم من الاتعاب")).Actions); // once: silent again until the office answers
+    }
+
+    [Fact]
+    public async Task V148_the_lawyer_s_personal_number_is_not_given_and_is_no_handoff()
+    {
+        await InSituation("new");
+        HandoffOn();
+        var d = await Say("ممكن رقم الاستاذ الشخصي");
+        Assert.Equal([TextKeys.NoPersonalNumber], Keys(d));
+        Assert.Empty(d.Effects!.Tasks); // nobody was told: no task, no handoff
+        Assert.Equal([ServiceRow.Id(ServiceRow.Menu), ServiceRow.Id(ServiceRow.Human)], d.Actions[^1].Interactive!.Choices.Select(c => c.Id));
+        Assert.NotEmpty((await Say("هل مبلغ الاستشاره بيتخصم من الاتعاب")).Actions); // Hazem still answers
+    }
+
+    [Fact]
+    public void V148_the_handoff_reply_never_asks_back_and_the_writer_never_promises_to_tell_the_office()
+    {
+        var offer = ReplyGuardTests.R("المستشار يقدر يشوف الموضوع مع حضرتك في استشارة.");
+        Assert.Equal("promise", ReplyGuard.Problem("سؤالك مهم، هوصّله للمكتب. تحب تحجز؟", offer, null));
+        Assert.Null(ReplyGuard.Problem("تمام، بلّغت المكتب، وحد من المكتب هيرد على حضرتك هنا.",
+            ReplyGuardTests.R("تمام، بلّغت المكتب إن حضرتك عايز تكلم حد، وحد من المكتب هيرد على حضرتك هنا."), null));
     }
 
     /// <summary>The writer and the conversation it sees, in memory.</summary>
