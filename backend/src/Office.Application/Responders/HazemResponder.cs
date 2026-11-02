@@ -2116,10 +2116,24 @@ public sealed class HazemResponder(
             ["تليفون", "تلفون", "تيلفون", "فون", "مكالم", "فيديو", "واتس", "فيس تايم", "فيستايم", "مكتب", "مقابل", "اجي", "أجي", "آجي",
              "اقابل", "أقابل", "حضوري", "phone", "call", "video", "office", "visit"];
 
-        /// <summary>v1.48: his words ask for a phone number («رقم الأستاذ»، «رقمه الشخصي»): not a request for a person.</summary>
-        private bool AsksPersonalNumber() =>
-            AiInput.Build(turn)?.Replace(AiInput.PhoneMask, "", StringComparison.Ordinal) is { } words && (words.Contains("رقم", StringComparison.Ordinal)
-            || words.Contains("نمرة", StringComparison.Ordinal) || words.Contains("نمره", StringComparison.Ordinal)); // his own number, masked, is not it
+        /// <summary>
+        /// v1.48: his words ask for the lawyer's own number («رقم الأستاذ»، «رقمه الشخصي»): not a request for a person. The office's
+        /// number («رقم المكتب») is one: it goes to the office as before. His own number, masked by AiInput, never counts.
+        /// </summary>
+        private bool AsksPersonalNumber()
+        {
+            if (AiInput.Build(turn)?.Replace(AiInput.PhoneMask, "", StringComparison.Ordinal) is not { } words
+                || !(words.Contains("رقم", StringComparison.Ordinal) || words.Contains("نمر", StringComparison.Ordinal)))
+            {
+                return false;
+            }
+
+            return !words.Contains("المكتب", StringComparison.Ordinal)
+                   && LawyerWords.Any(w => words.Contains(w, StringComparison.Ordinal));
+        }
+
+        private static readonly string[] LawyerWords =
+            ["الاستاذ", "الأستاذ", "استاذ", "أستاذ", "المستشار", "مستشار", "سعد", "المحامي", "الشخصي", "رقمه", "بتاعه", "موبايله", "تليفونه"];
 
         private bool WordsNameKind() =>
             AiInput.Build(turn) is { } words && KindWords.Any(w => words.Contains(w, StringComparison.OrdinalIgnoreCase));

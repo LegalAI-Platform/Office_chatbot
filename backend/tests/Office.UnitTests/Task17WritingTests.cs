@@ -248,6 +248,17 @@ public sealed partial class BookingFlowTests
     }
 
     [Fact]
+    public async Task V148_the_office_s_number_is_a_request_for_the_office_as_before()
+    {
+        await InSituation("new");
+        HandoffOn();
+        _script["ممكن رقم المكتب اتصل بيكم"] = new("human_request", null, "unknown", null, 0.9);
+        var d = await Say("ممكن رقم المكتب اتصل بيكم");
+        Assert.Equal([TextKeys.HumanRequest], Keys(d));
+        Assert.Equal(PendingTask.HumanRequested, Assert.Single(d.Effects!.Tasks).Kind);
+    }
+
+    [Fact]
     public void V148_the_handoff_reply_never_asks_back_and_the_writer_never_promises_to_tell_the_office()
     {
         var offer = ReplyGuardTests.R("المستشار يقدر يشوف الموضوع مع حضرتك في استشارة.");
