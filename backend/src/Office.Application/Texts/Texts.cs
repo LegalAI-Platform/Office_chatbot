@@ -105,6 +105,8 @@ public static class TextKeys
     public const string GreetGoodNight = "greet_good_night";
     public const string GreetGoodbye = "greet_goodbye";
     public const string HumanRequest = "human_request";
+    public const string HandoffWaiting = "handoff_waiting";       // v1.48: once, while the office has not answered yet
+    public const string NoPersonalNumber = "no_personal_number";  // v1.48: the lawyer's personal number asked
     public const string ExistingMatter = "existing_matter";
     public const string RescheduleOrCancel = "reschedule_or_cancel";
     public const string ContractDraftingRequest = "contract_drafting_request";

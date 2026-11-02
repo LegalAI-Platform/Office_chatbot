@@ -14,7 +14,7 @@ namespace Office.UnitTests;
 /// </summary>
 public sealed class ReplyGuardTests
 {
-    private static WriteRequest R(string approved) => new("purpose", approved, "", []);
+    internal static WriteRequest R(string approved) => new("purpose", approved, "", []);
 
     [Theory]
     [InlineData("فاهم إن الموضوع مقلقك. المستشار هيكلم حضرتك حوالي الساعة 10:00 ص.", null)]
@@ -214,6 +214,76 @@ public sealed partial class BookingFlowTests
         Assert.DoesNotContain(d.Actions, a => a.Text == _texts[TextKeys.LegalQuestion].Text); // never sent again beside it
     }
 
+    private void HandoffOn()
+    {
+        _settings[HazemResponder.HandoffEnabledKey] = "true";
+        _texts[TextKeys.HumanRequest] = new ApprovedText(TextKeys.HumanRequest, 2, "تمام، بلّغت المكتب إن حضرتك عايز تكلم حد، وحد من المكتب هيرد على حضرتك هنا.", 300, true);
+        _texts[TextKeys.HandoffWaiting] = new ApprovedText(TextKeys.HandoffWaiting, 1, "رسالة حضرتك وصلت ✅ وحد من المكتب هيرد على حضرتك هنا في أقرب وقت.", 300, true);
+        _texts[TextKeys.NoPersonalNumber] = new ApprovedText(TextKeys.NoPersonalNumber, 1, "معلش، أرقام المستشار الشخصية مش بنديها.", 300, true);
+        _script["عايز اكلم حد من المكتب"] = new("human_request", null, "unknown", null, 0.9);
+        _script["ممكن رقم الاستاذ الشخصي"] = new("human_request", null, "unknown", null, 0.9);
+        _script["هل مبلغ الاستشاره بيتخصم من الاتعاب"] = new("office_info", null, "unknown", null, 0.9, InfoTopic: "fee_policy");
+    }
+
+    [Fact]
+    public async Task V148_after_the_handoff_his_first_message_hears_it_arrived_once_then_hazem_is_silent()
+    {
+        await InSituation("new");
+        HandoffOn();
+        Assert.Equal([TextKeys.HumanRequest], Keys(await Say("عايز اكلم حد من المكتب")));
+        Assert.Equal([TextKeys.HandoffWaiting], Keys(await Say("هل مبلغ الاستشاره بيتخصم من الاتعاب")));
+        Assert.Empty((await Say("هل مبلغ الاستشاره بيتخصم من الاتعاب")).Actions); // once: silent again until the office answers
+    }
+
+    [Fact]
+    public async Task V148_the_lawyer_s_personal_number_is_not_given_and_is_no_handoff()
+    {
+        await InSituation("new");
+        HandoffOn();
+        var d = await Say("ممكن رقم الاستاذ الشخصي");
+        Assert.Equal([TextKeys.NoPersonalNumber], Keys(d));
+        Assert.Empty(d.Effects!.Tasks); // nobody was told: no task, no handoff
+        Assert.Equal([ServiceRow.Id(ServiceRow.Menu), ServiceRow.Id(ServiceRow.Human)], d.Actions[^1].Interactive!.Choices.Select(c => c.Id));
+        Assert.NotEmpty((await Say("هل مبلغ الاستشاره بيتخصم من الاتعاب")).Actions); // Hazem still answers
+    }
+
+    [Theory]
+    [InlineData(true, "أيوه، الاستشارة دايمًا مع المستشار سعد فتحي سعد نفسه.", false)] // answered from the facts: no task
+    [InlineData(false, "سؤال مهم، هوصّله للمكتب، ويردوا على حضرتك هنا.", true)]       // not in them: the office answers it
+    [InlineData(true, "أيوه، مع المستشار نفسه، وهوصّله للمكتب كمان.", true)]          // both at once: refused, as v1.46
+    public async Task V148_a_service_question_the_office_facts_answer_needs_no_task(bool fromFacts, string reply, bool task)
+    {
+        await InSituation("new");
+        ConversationalOn();
+        _texts[TextKeys.ServiceDetail] = new ApprovedText(TextKeys.ServiceDetail, 1, "سؤال مهم 👌 هوصّله للمكتب، ويردوا على حضرتك هنا.", 300, true);
+        _texts[TextKeys.OfficeFacts] = new ApprovedText(TextKeys.OfficeFacts, 1, "الاستشارة دايمًا مع المستشار سعد فتحي سعد نفسه.", 600, true);
+        _script["هقابل المستشار سعد نفسه؟"] = new("office_info", null, "unknown", null, 0.9, InfoTopic: "service_detail");
+        _writer.Reply = reply;
+        _writer.FromFacts = fromFacts;
+        var d = await Say("هقابل المستشار سعد نفسه؟");
+        Assert.Equal(task, d.Effects!.Tasks.Any(t => t.Kind == PendingTask.ServiceQuestion));
+    }
+
+    [Fact]
+    public async Task V148_the_office_s_number_is_a_request_for_the_office_as_before()
+    {
+        await InSituation("new");
+        HandoffOn();
+        _script["ممكن رقم المكتب اتصل بيكم"] = new("human_request", null, "unknown", null, 0.9);
+        var d = await Say("ممكن رقم المكتب اتصل بيكم");
+        Assert.Equal([TextKeys.HumanRequest], Keys(d));
+        Assert.Equal(PendingTask.HumanRequested, Assert.Single(d.Effects!.Tasks).Kind);
+    }
+
+    [Fact]
+    public void V148_the_handoff_reply_never_asks_back_and_the_writer_never_promises_to_tell_the_office()
+    {
+        var offer = ReplyGuardTests.R("المستشار يقدر يشوف الموضوع مع حضرتك في استشارة.");
+        Assert.Equal("promise", ReplyGuard.Problem("سؤالك مهم، هوصّله للمكتب. تحب تحجز؟", offer, null));
+        Assert.Null(ReplyGuard.Problem("تمام، بلّغت المكتب، وحد من المكتب هيرد على حضرتك هنا.",
+            ReplyGuardTests.R("تمام، بلّغت المكتب إن حضرتك عايز تكلم حد، وحد من المكتب هيرد على حضرتك هنا."), null));
+    }
+
     /// <summary>The writer and the conversation it sees, in memory.</summary>
     private sealed class FakeWriter : IReplyWriter, IConversationHistory
     {
@@ -223,11 +293,13 @@ public sealed partial class BookingFlowTests
 
         public WriteRequest? Last { get; private set; }
 
+        public bool FromFacts { get; set; }
+
         public Task<WriterOutcome> WriteAsync(WriteRequest request, HazemSettings settings, CancellationToken ct)
         {
             Calls++;
             Last = request;
-            return Task.FromResult(new WriterOutcome(Reply, Reply is null ? WriterOutcome.Error : null, "fake", "write-v1", 5));
+            return Task.FromResult(new WriterOutcome(Reply, Reply is null ? WriterOutcome.Error : null, "fake", "write-v1", 5) { FromFacts = FromFacts });
         }
 
         public Task<IReadOnlyList<ChatLine>> RecentAsync(string waId, int turns, CancellationToken ct) =>
