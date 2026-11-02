@@ -94,6 +94,9 @@ public sealed record WriterOutcome(
     int? InputTokens = null,
     int? OutputTokens = null)
 {
+    /// <summary>v1.48: the writer answered his question from «حقايق المكتب» (it says so in its output).</summary>
+    public bool FromFacts { get; init; }
+
     public const string NoKey = "no_key";
     public const string Timeout = "timeout";
     public const string Error = "error";
@@ -119,6 +122,9 @@ public interface IConversationHistory
 public sealed record WrittenReply(string IdempotencyKey, string Purpose, string? Text, string Guard, string Model, string PromptVersion,
     int LatencyMs, int? InputTokens, int? OutputTokens)
 {
+    /// <summary>v1.48: the sentence that went answered his question from the office facts (no task for the office then).</summary>
+    public bool FromFacts { get; init; }
+
     public const string Passed = "passed";
 }
 
@@ -336,7 +342,8 @@ public static class Conversational
         [TextKeys.OfficeRefund] = "tell him the refund rule",
         [TextKeys.OfficeFeePolicy] = "tell him how the fees of a case are set",
         [TextKeys.ServiceCheck] = "tell him the office will answer him here on whether it does this",
-        [TextKeys.ServiceDetail] = "tell him his question reached the office and they will answer it here (never the answer yourself)",
+        // v1.48: the office facts answer many of these («هقابل المستشار نفسه؟»): from them, and from_facts true; otherwise as v1.46
+        [TextKeys.ServiceDetail] = "if the OFFICE FACTS answer his question, answer it from them only (from_facts true, and say nothing about the office answering); otherwise tell him his question reached the office and they will answer it here (from_facts false, never the answer yourself)",
         [TextKeys.OfficePrivacy] = "reassure him that everything he tells the office stays private: the office never discloses its clients' secrets",
         [TextKeys.AskCallApp] = "ask where the lawyer should call him: WhatsApp or FaceTime (two buttons follow your sentence)",
         [TextKeys.BookingStepAgain] = "ask him kindly to pick from the choices below, or to write the day and time that suit him (the choices follow your sentence)",
@@ -359,6 +366,9 @@ public static class Conversational
 
     /// <summary>v1.45: texts that only follow another one in the same message (never the message's main purpose).</summary>
     private static readonly HashSet<string> AddOns = [TextKeys.SituationAskTopic];
+
+    /// <summary>v1.48: words that send his question to the office (not said with an answer from the facts).</summary>
+    private static readonly string[] OfficeWords = ["هوصّله", "هوصله", "ويردوا", "هيردوا", "هسأل المكتب", "هبلّغ", "هبلغ"];
 
     /// <summary>v1.45: texts whose numbers (the price he asked) must all be in the written message.</summary>
     private static readonly HashSet<string> Locked =
@@ -480,6 +490,13 @@ public static class Conversational
             problem = "asked_back";
         }
 
+        // v1.48: answered from the facts, it never also says it goes to the office (no task will be made for it)
+        if (problem is null && outcome.FromFacts && keys.Contains(TextKeys.ServiceDetail)
+            && OfficeWords.Any(w => outcome.Reply!.Contains(w, StringComparison.Ordinal)))
+        {
+            problem = "facts_and_office";
+        }
+
         if (problem is null && mainKey == TextKeys.SituationReview
             && (outcome.Reply!.Contains("متأكد", StringComparison.Ordinal) || outcome.Reply.Contains("اتأكد", StringComparison.Ordinal)))
         {
@@ -487,7 +504,10 @@ public static class Conversational
         }
         var first = run[0];
         var written = new WrittenReply(first.IdempotencyKey, mainKey, problem is null ? outcome.Reply!.Trim() : null, problem ?? WrittenReply.Passed,
-            outcome.Model, outcome.PromptVersion, outcome.LatencyMs, outcome.InputTokens, outcome.OutputTokens);
+            outcome.Model, outcome.PromptVersion, outcome.LatencyMs, outcome.InputTokens, outcome.OutputTokens)
+        {
+            FromFacts = problem is null && outcome.FromFacts && keys.Contains(TextKeys.ServiceDetail),
+        };
         if (problem is not null)
         {
             return new Rewritten(composed, written);

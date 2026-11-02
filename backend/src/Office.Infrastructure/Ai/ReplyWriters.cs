@@ -18,7 +18,7 @@ namespace Office.Infrastructure.Ai;
 /// </summary>
 public static class WriterPrompt
 {
-    public const string PromptVersion = "write-v2"; // v1.45 (TASK 18): the office facts, his question first, the client's gender
+    public const string PromptVersion = "write-v3"; // v1.48: from_facts (v1.45 write-v2: the office facts, his question first, the gender)
 
     /// <summary>The whole call within this time (a written reply is never worth a late answer: the approved text goes).</summary>
     public static readonly TimeSpan Budget = TimeSpan.FromSeconds(6);
@@ -37,8 +37,9 @@ public static class WriterPrompt
     {
         ["type"] = "object",
         ["additionalProperties"] = false,
-        ["required"] = new JsonArray("reply"),
-        ["properties"] = new JsonObject { ["reply"] = new JsonObject { ["type"] = "string" } },
+        ["required"] = new JsonArray("reply", "from_facts"),
+        // v1.48: from_facts, true when his question was answered from «حقايق المكتب» (the office then needs no task for it)
+        ["properties"] = new JsonObject { ["reply"] = new JsonObject { ["type"] = "string" }, ["from_facts"] = new JsonObject { ["type"] = "boolean" } },
     };
 
     /// <summary>The user message: everything the writer may know for this one reply.</summary>
@@ -62,6 +63,20 @@ public static class WriterPrompt
         }
 
         return sb.ToString();
+    }
+
+    /// <summary>v1.48: whether the writer says it answered his question from the office facts (false when unsure or absent).</summary>
+    public static bool FromFacts(string? content)
+    {
+        try
+        {
+            return content is not null && JsonNode.Parse(content) is JsonObject o && o["from_facts"] is JsonValue v
+                   && v.GetValueKind() == JsonValueKind.True;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     /// <summary>The reply from the schema's object; null when the content is anything else.</summary>
@@ -133,8 +148,9 @@ public sealed class AnthropicReplyWriter(IOptions<HazemOptions> options, TimePro
                 return Done(null, WriterOutcome.InvalidOutput, input, (int)usage.OutputTokens);
             }
 
-            var reply = WriterPrompt.Parse(response.Content.Select(b => b.Value).OfType<TextBlock>().LastOrDefault()?.Text);
-            return Done(reply, reply is null ? WriterOutcome.InvalidOutput : null, input, (int)usage.OutputTokens);
+            var content = response.Content.Select(b => b.Value).OfType<TextBlock>().LastOrDefault()?.Text;
+            var reply = WriterPrompt.Parse(content);
+            return Done(reply, reply is null ? WriterOutcome.InvalidOutput : null, input, (int)usage.OutputTokens) with { FromFacts = WriterPrompt.FromFacts(content) };
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
@@ -190,9 +206,10 @@ public sealed class OpenAiReplyWriter(IHttpClientFactory http, IOptions<HazemOpt
             }
 
             var body = await response.Content.ReadFromJsonAsync<JsonNode>(budget.Token);
-            var reply = WriterPrompt.Parse(body?["choices"]?[0]?["message"]?["content"]?.GetValue<string>());
+            var content = body?["choices"]?[0]?["message"]?["content"]?.GetValue<string>();
+            var reply = WriterPrompt.Parse(content);
             return Done(reply, reply is null ? WriterOutcome.InvalidOutput : null, (int?)body?["usage"]?["prompt_tokens"],
-                (int?)body?["usage"]?["completion_tokens"]);
+                (int?)body?["usage"]?["completion_tokens"]) with { FromFacts = WriterPrompt.FromFacts(content) };
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {

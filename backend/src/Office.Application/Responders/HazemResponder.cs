@@ -487,6 +487,11 @@ public sealed class HazemResponder(
                 .Where(t => t is not null));
             (composed, written) = await Conversational.RewriteAsync(composed, writer, chat, turn, Salutation.Call(state.Person), settings, ct,
                 facts, state.Person.NameGender);
+            if (written is { Guard: WrittenReply.Passed, FromFacts: true }) // set only when the message held service_detail
+            {
+                // v1.48: his question was answered from «حقايق المكتب»: the office has nothing to answer, so no task for it
+                plan.Tasks.RemoveAll(t => t.Kind == PendingTask.ServiceQuestion);
+            }
         }
 
         // Keys and reasons only (never a text): the API logs them with the turn.

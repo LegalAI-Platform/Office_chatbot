@@ -14,18 +14,19 @@ The owner's test on ***89 (2026-11-02, 03:55–04:07, the test server):
 |---|---|
 | Writer | `human_request`'s purpose is a statement; a written handoff reply with a question mark is refused (`asked_back`). «هوصّله / هوصله / هبلّغ / هبلغ / هيردوا / هيرد عليك» are promises the writer may not make unless the approved text says them |
 | `HazemResponder` | in `human_handoff`, before any staff message, the client's first message gets `handoff_waiting` once; then silence again (until the office answers or B-12's 12 hours) |
-| `HazemResponder` | `human_request` whose words ask for a number («رقم»، «نمرة»; his own masked number does not count) → `no_personal_number` with «خدمات المكتب» / «أكلم حد من المكتب»: no handoff, no task (the second button hands him over) |
+| `HazemResponder` | `human_request` whose words ask for a number (the lawyer's own: «رقم» with «الأستاذ / المستشار / الشخصي…», never «المكتب»; his own masked number does not count) → `no_personal_number` with «خدمات المكتب» / «أكلم حد من المكتب»: no handoff, no task (the second button hands him over) |
 | Migration `0049_handoff_waiting` | `handoff_waiting`, `no_personal_number`, `human_request` v2 («تمام، بلّغت المكتب… وحد من المكتب هيرد على حضرتك هنا.») |
+| Writer `write-v3` | `from_facts`: a `service_detail` question «حقايق المكتب» answer («هقابل المستشار سعد نفسه؟») is answered from them and its `service_question` task is dropped; the answer and «هوصّله للمكتب» together are refused. The owner: «اعمل كده ونفذه» |
 | DECISIONS | v1.48 (on top of Mohamed Emad's v1.47) |
 
 ## Results
 | Check | Result |
 |---|---|
-| Unit tests | 622/622 (new: the waiting reply once, the personal number, the guard) |
-| `backend-test` (integration) | see the PR's CI (Docker Desktop was not running on this machine at first) |
-| `quality-eval` | to run before the deploy (B-30) |
+| `backend-test` | 836 passed (1 skipped) |
+| `quality-eval` (quick) | 15 conversations 90.4%, then 12 on the facts 90%, nothing forbidden; «مع سعد نفسه؟» 40–80% → 100% |
 
 ## Not done / needs
 - The texts are the ones the owner approved in chat on 2026-11-02 («نفذ»).
+- A woman's long message about Saad himself still got the v1.46 text once (the written reply was refused); worth a look in the next full run.
 - The conversation on ***89 is still in `human_handoff` on the server: a staff member resolves it in Chatwoot, or B-12's
   12 hours hand it back.

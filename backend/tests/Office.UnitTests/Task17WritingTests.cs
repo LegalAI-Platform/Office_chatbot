@@ -247,6 +247,23 @@ public sealed partial class BookingFlowTests
         Assert.NotEmpty((await Say("هل مبلغ الاستشاره بيتخصم من الاتعاب")).Actions); // Hazem still answers
     }
 
+    [Theory]
+    [InlineData(true, "أيوه، الاستشارة دايمًا مع المستشار سعد فتحي سعد نفسه.", false)] // answered from the facts: no task
+    [InlineData(false, "سؤال مهم، هوصّله للمكتب، ويردوا على حضرتك هنا.", true)]       // not in them: the office answers it
+    [InlineData(true, "أيوه، مع المستشار نفسه، وهوصّله للمكتب كمان.", true)]          // both at once: refused, as v1.46
+    public async Task V148_a_service_question_the_office_facts_answer_needs_no_task(bool fromFacts, string reply, bool task)
+    {
+        await InSituation("new");
+        ConversationalOn();
+        _texts[TextKeys.ServiceDetail] = new ApprovedText(TextKeys.ServiceDetail, 1, "سؤال مهم 👌 هوصّله للمكتب، ويردوا على حضرتك هنا.", 300, true);
+        _texts[TextKeys.OfficeFacts] = new ApprovedText(TextKeys.OfficeFacts, 1, "الاستشارة دايمًا مع المستشار سعد فتحي سعد نفسه.", 600, true);
+        _script["هقابل المستشار سعد نفسه؟"] = new("office_info", null, "unknown", null, 0.9, InfoTopic: "service_detail");
+        _writer.Reply = reply;
+        _writer.FromFacts = fromFacts;
+        var d = await Say("هقابل المستشار سعد نفسه؟");
+        Assert.Equal(task, d.Effects!.Tasks.Any(t => t.Kind == PendingTask.ServiceQuestion));
+    }
+
     [Fact]
     public async Task V148_the_office_s_number_is_a_request_for_the_office_as_before()
     {
@@ -276,11 +293,13 @@ public sealed partial class BookingFlowTests
 
         public WriteRequest? Last { get; private set; }
 
+        public bool FromFacts { get; set; }
+
         public Task<WriterOutcome> WriteAsync(WriteRequest request, HazemSettings settings, CancellationToken ct)
         {
             Calls++;
             Last = request;
-            return Task.FromResult(new WriterOutcome(Reply, Reply is null ? WriterOutcome.Error : null, "fake", "write-v1", 5));
+            return Task.FromResult(new WriterOutcome(Reply, Reply is null ? WriterOutcome.Error : null, "fake", "write-v1", 5) { FromFacts = FromFacts });
         }
 
         public Task<IReadOnlyList<ChatLine>> RecentAsync(string waId, int turns, CancellationToken ct) =>
