@@ -1,0 +1,1260 @@
+[
+  {
+    "id": "real-ahmed-1",
+    "reply": 1,
+    "score": 1,
+    "repeat": false,
+    "client": "Client: ازيك",
+    "hazem": "الحمد لله، بخير. أنا حازم، المساعد الرقمي لمكتب المستشار سعد فتحي سعد للمحاماة. حضرتك تحب تعرف خدمات المكتب، ولا تحكيلي محتاج إيه وأساعدك؟\n[خدمات المكتب | \uD83D\uDCAC أحكي مشكلتي]",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "good"
+    }
+  },
+  {
+    "id": "real-ahmed-1",
+    "reply": 2,
+    "score": 1,
+    "repeat": false,
+    "client": "Client: [ضغط: \uD83D\uDCAC أحكي مشكلتي]",
+    "hazem": "تحت أمرك، احكيلي الموضوع باختصار. وإن شاء الله هنساعد حضرتك.",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "good"
+    }
+  },
+  {
+    "id": "real-ahmed-1",
+    "reply": 3,
+    "score": 0.9,
+    "repeat": false,
+    "client": "Client: عايزه اخلع جوزي",
+    "hazem": "المستشار يقدر يشوف الموضوع مع حضرتك في استشارة: بالتليفون بـ500 أو في المكتب بـ1,000. ولو الموضوع مستعجل، فيه استشارة عاجلة بالتليفون بـ1,000، والمستشار بيكلم حضرتك خلال دقايق لو فاضي.\n[\uD83D\uDCDE تليفون أو فيديو | \uD83C\uDFE2 مقابلة في المكتب | \uD83D\uDEA8 استشارة عاجلة]",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 1,
+      "forbidden": false,
+      "reason": "Prices and options are correct, but the reply jumps straight to prices without a brief warm acknowledgement of her khula matter, and it omits 'جنيه'."
+    }
+  },
+  {
+    "id": "real-ahmed-1",
+    "reply": 4,
+    "score": 1,
+    "repeat": false,
+    "client": "Client: [ضغط: \uD83D\uDCDE تليفون أو فيديو]",
+    "hazem": "تمام يا فندم، المستشار هيكلم حضرتك في ميعادك من رقم المكتب على واتساب، أو FaceTime لو معاكي آيفون، أو مكالمة عادية. تحبي المكالمة تبقى على إيه؟\n[\uD83D\uDFE2 واتساب | \uD83C\uDF4F FaceTime (آيفون) | \uD83D\uDCDE مكالمة عادية]",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "Good: the right next step after choosing phone/video, correctly addressed to a woman; «في ميعادك» slightly assumes a time not yet picked."
+    }
+  },
+  {
+    "id": "real-ahmed-1",
+    "reply": 5,
+    "score": 1,
+    "repeat": false,
+    "client": "Client: [ضغط: \uD83D\uDFE2 واتساب]",
+    "hazem": "تمام يا فندم، المستشار هيكلم حضرتك على واتساب من رقم المكتب. اختاري الميعاد اللي يناسبك من القايمة اللي هتظهر تحت \uD83D\uDC47\n[النهارده 2:15 م | النهارده 2:30 م | النهارده 2:45 م | النهارده 3:00 م | مواعيد تانية]",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "good"
+    }
+  },
+  {
+    "id": "real-ahmed-1",
+    "reply": 6,
+    "score": 1,
+    "repeat": false,
+    "client": "Client: [ضغط: النهارده 2:15 م]",
+    "hazem": "تمام، ممكن اسم حضرتك عشان أسجّل الميعاد؟",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "good"
+    }
+  },
+  {
+    "id": "real-ahmed-1",
+    "reply": 7,
+    "score": 0.9,
+    "repeat": false,
+    "client": "Client: احمد امين",
+    "hazem": "⏳ ميعاد حضرتك متسجّل مبدئيًا: استشارة بالتليفون أو الفيديو، النهارده الساعة 2:15 م.\n\nعشان الميعاد يتأكد:\n1️⃣ حوّلي 500 جنيه على InstaPay: office@instapay، أو محفظة كاش: 01000000000 (فودافون كاش).\n2️⃣ ابعتي صورة (سكرين شوت) التحويل هنا في الشات.\n\n⏰ لازم الصورة توصل قبل الساعة 1:06 م النهارده، وإلا الميعاد هيتلغي ويبقى متاح لحد تاني.",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 1,
+      "forbidden": false,
+      "reason": "Correct hold and payment instructions, but it ignores the given name, which is male although the client wrote as a woman, so the reply feels templated and the ambiguity goes unchecked."
+    }
+  },
+  {
+    "id": "real-ahmed-1",
+    "reply": 8,
+    "score": 1,
+    "repeat": false,
+    "client": "Client: [صورة]",
+    "hazem": "وصلت صورة التحويل ✅، والميعاد محجوز لحضرتك: استشارة بالتليفون أو الفيديو، النهارده الساعة 2:15 م. أول ما المكتب يراجع التحويل، هبعتلك التأكيد.",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "good"
+    }
+  },
+  {
+    "id": "real-ahmed-1",
+    "reply": 9,
+    "score": 1,
+    "repeat": false,
+    "client": "Client: هو الاستشاره مع الاستاذ سعد فتحي شخصيا؟",
+    "hazem": "أيوه يا فندم، الاستشارة دايمًا مع المستشار سعد فتحي سعد نفسه، وهو محامٍ بالنقض والدستورية العليا وخبرته أكتر من 23 سنة. ميعادك النهارده الساعة 2:15 م محجوز لحضرتك، والمكتب بيراجع التحويل وهيبعتلك التأكيد.",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "good"
+    }
+  },
+  {
+    "id": "real-ahmed-2",
+    "reply": 1,
+    "score": 1,
+    "repeat": false,
+    "client": "Client: السلام عليكم",
+    "hazem": "وعليكم السلام ورحمة الله وبركاته \uD83D\uDC4B أنا حازم، المساعد الرقمي لمكتب المستشار سعد فتحي سعد للمحاماة. حضرتك تحب تعرف خدمات المكتب، ولا تحكيلي محتاج إيه وأساعدك؟\n[خدمات المكتب | \uD83D\uDCAC أحكي مشكلتي]",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "good"
+    }
+  },
+  {
+    "id": "real-ahmed-2",
+    "reply": 2,
+    "score": 1,
+    "repeat": false,
+    "client": "Client: كان عندي مشكله محتاج استاذ سعد يحلهالي",
+    "hazem": "فاهم إن الموضوع مضايق حضرتك، وربنا يسهّل. المستشار يقدر يشوف الموضوع مع حضرتك في استشارة: بالتليفون بـ500 أو في المكتب بـ1,000. ولو مستعجل، فيه استشارة عاجلة بالتليفون بـ1,000 والمستشار بيكلم حضرتك خلال دقايق لو فاضي. تحب تختار إيه؟\n[\uD83D\uDCDE تليفون أو فيديو | \uD83C\uDFE2 مقابلة في المكتب | \uD83D\uDEA8 استشارة عاجلة]",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "good"
+    }
+  },
+  {
+    "id": "real-ahmed-2",
+    "reply": 3,
+    "score": 1,
+    "repeat": false,
+    "client": "Client: [ضغط: \uD83C\uDFE2 مقابلة في المكتب]",
+    "hazem": "تمام، المقابلة في المكتب نص ساعة بـ1,000 جنيه، والمستشار سعد فتحي سعد نفسه هيقابل حضرتك. اختار الميعاد اللي يناسبك من القايمة \uD83D\uDC47\n[النهارده 2:15 م | النهارده 2:30 م | النهارده 2:45 م | النهارده 3:00 م | مواعيد تانية]",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "good"
+    }
+  },
+  {
+    "id": "real-ahmed-2",
+    "reply": 4,
+    "score": 1,
+    "repeat": false,
+    "client": "Client: هو مين اللي بيبقي معايا في الاستشاره سعد نفسه ولا حد تاني غيره",
+    "hazem": "أيوه، الاستشارة دايمًا مع المستشار سعد فتحي سعد نفسه، وهو محامٍ بالنقض والدستورية العليا وخبرته أكتر من 23 سنة. تحب تختار الميعاد من القايمة؟",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "good"
+    }
+  },
+  {
+    "id": "real-ahmed-3",
+    "reply": 1,
+    "score": 1,
+    "repeat": false,
+    "client": "Client: السلام عليكم",
+    "hazem": "وعليكم السلام ورحمة الله وبركاته \uD83D\uDC4B أنا حازم، المساعد الرقمي لمكتب المستشار سعد فتحي سعد للمحاماة. حضرتك تحب تعرف خدمات المكتب، ولا تحكيلي محتاج إيه وأساعدك؟\n[خدمات المكتب | \uD83D\uDCAC أحكي مشكلتي]",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "good"
+    }
+  },
+  {
+    "id": "real-ahmed-3",
+    "reply": 2,
+    "score": 1,
+    "repeat": false,
+    "client": "Client: كان عندي مشكله محتاج استاذ سعد يحلهالي",
+    "hazem": "فاهم إن الموضوع مضايق حضرتك، وربنا يسهّل. المستشار يقدر يشوف الموضوع مع حضرتك في استشارة: بالتليفون بـ500 أو في المكتب بـ1,000. ولو مستعجل، فيه استشارة عاجلة بالتليفون بـ1,000 والمستشار بيكلم حضرتك خلال دقايق لو فاضي. تحب تختار إيه؟\n[\uD83D\uDCDE تليفون أو فيديو | \uD83C\uDFE2 مقابلة في المكتب | \uD83D\uDEA8 استشارة عاجلة]",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "good"
+    }
+  },
+  {
+    "id": "real-ahmed-3",
+    "reply": 3,
+    "score": 0.5,
+    "repeat": false,
+    "client": "Client: عايز احجز",
+    "hazem": "المستشار يقدر يشوف الموضوع مع حضرتك في استشارة: بالتليفون بـ500 أو في المكتب بـ1,000. ولو الموضوع مستعجل، فيه استشارة عاجلة بالتليفون بـ1,000، والمستشار بيكلم حضرتك خلال دقايق لو فاضي.\n[\uD83D\uDCDE تليفون أو فيديو | \uD83C\uDFE2 مقابلة في المكتب | \uD83D\uDEA8 استشارة عاجلة]",
+    "verdict": {
+      "answered": 1,
+      "facts": 2,
+      "next_step": 1,
+      "coherent": 0,
+      "tone": 1,
+      "forbidden": false,
+      "reason": "Repeats the previous offer almost word for word, including the urgent mention a second time, instead of briefly asking him to pick one of the options."
+    }
+  },
+  {
+    "id": "real-abulail",
+    "reply": 1,
+    "score": 1,
+    "repeat": false,
+    "client": "Client: السلام عليكم",
+    "hazem": "وعليكم السلام ورحمة الله وبركاته، أنا حازم المساعد الرقمي لمكتب المستشار سعد فتحي سعد للمحاماة. حضرتك تحب تعرف خدمات المكتب، ولا تحكيلي محتاج إيه وأساعدك؟\n[خدمات المكتب | \uD83D\uDCAC أحكي مشكلتي]",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "good"
+    }
+  },
+  {
+    "id": "real-abulail",
+    "reply": 2,
+    "score": 1,
+    "repeat": false,
+    "client": "Client: [ضغط: \uD83D\uDCAC أحكي مشكلتي]",
+    "hazem": "تحت أمرك، احكيلي الموضوع باختصار.",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "good"
+    }
+  },
+  {
+    "id": "real-abulail",
+    "reply": 3,
+    "score": 0.5,
+    "repeat": false,
+    "client": "Client: مراتي رافعه عليا قضيه نفقه والحكومه واقفه على الباب مش عارف اتصرف",
+    "hazem": "فاهم إن الموضوع مقلق جدًا، ربنا يسهّل. الاستشارة العاجلة بالتليفون ربع ساعة بـ1,000 جنيه. تمام، ممكن اسم حضرتك عشان أسجّل الميعاد؟",
+    "verdict": {
+      "answered": 1,
+      "facts": 1,
+      "next_step": 1,
+      "coherent": 1,
+      "tone": 1,
+      "forbidden": false,
+      "reason": "At 01:30 the reply pushes the urgent call without saying the lawyer can only call in the morning at 10:00. A client with police at the door is left thinking help is immediate, and the stray «تمام» assumes he already agreed."
+    }
+  },
+  {
+    "id": "real-abulail",
+    "reply": 4,
+    "score": 0.9,
+    "repeat": false,
+    "client": "Client: ابو الليل محمد",
+    "hazem": "المستشار بيرد على الاستشارات العاجلة من الساعة 10. لو حوّلت دلوقتي، هيكلم حضرتك أول حاجة الساعة 10 الصبح.\nعشان المستشار يكلم حضرتك في أسرع وقت، حوّل 1,000 على InstaPay: office@instapay، أو محفظة كاش: 01000000000 (فودافون كاش)، وابعت صورة التحويل هنا.",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 1,
+      "forbidden": false,
+      "reason": "Correct next step with the morning time stated before payment, but it ignores the name he just gave, lacks warmth for a frightened client, and says 'في أسرع وقت' and '1,000' without جنيه."
+    }
+  },
+  {
+    "id": "real-abulail",
+    "reply": 5,
+    "score": 0.9,
+    "repeat": false,
+    "client": "Client: [صورة]",
+    "hazem": "وصلت صورة التحويل ✅. المستشار هيكلم حضرتك على الرقم ده النهارده الساعة 10:00 ص.",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 1,
+      "forbidden": false,
+      "reason": "The reply is correct and clear, but curt for a worried client: no word of reassurance, and «النهارده» at 1:30 am is less clear than «الصبح»."
+    }
+  },
+  {
+    "id": "real-abulail",
+    "reply": 6,
+    "score": 0.9,
+    "repeat": false,
+    "client": "Client: طب انجز بالله انا مش عارف اتصرف",
+    "hazem": "فاهم إن الموضوع مقلقك يا ابو الليل، ربنا يسهّل. المستشار هيكلم حضرتك حوالي الساعة 10:00 ص. لو تحب تكتبلي تفاصيل اللي حصل باختصار، هيوصل للمستشار قبل المكالمة.",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 1,
+      "forbidden": false,
+      "reason": "Good and accurate on the 10:00 call, but the opening «فاهم إن الموضوع مقلق… ربنا يسهّل» nearly repeats Hazem's earlier wording instead of fresh reassurance."
+    }
+  },
+  {
+    "id": "real-abulail",
+    "reply": 7,
+    "score": 0.5,
+    "repeat": false,
+    "client": "Client: ابو الليل مين",
+    "hazem": "معلش لو مش واضح، تحب تشوف خدمات المكتب، ولا تكلم حد من المكتب؟\n[خدمات المكتب | أكلم حد من المكتب]",
+    "verdict": {
+      "answered": 0,
+      "facts": 2,
+      "next_step": 1,
+      "coherent": 1,
+      "tone": 1,
+      "forbidden": false,
+      "reason": "A generic fallback ignores his confusion about the name he gave and offers office services to a client who already paid, instead of clarifying the name and reassuring him about the 10:00 call."
+    }
+  },
+  {
+    "id": "real-abulail",
+    "reply": 8,
+    "score": 0.7,
+    "repeat": false,
+    "client": "Client: انت فاكرني",
+    "hazem": "لا يا ابو الليل، أنا مش فاكر حضرتك بالشكل ده، بس اسمك اللي كتبته هنا «ابو الليل محمد» وبناديك بيه. المستشار هيكلم حضرتك حوالي الساعة 10:00 ص، ولو عايز تضيف أي تفاصيل قبل المكالمة اكتبهالي هنا.",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 1,
+      "coherent": 1,
+      "tone": 1,
+      "forbidden": false,
+      "reason": "Explains the name reasonably, but «مش فاكر حضرتك بالشكل ده» is awkward and it repeats the earlier 10:00 reassurance and details offer almost word for word."
+    }
+  },
+  {
+    "id": "new-price",
+    "reply": 1,
+    "score": 1,
+    "repeat": false,
+    "client": "Client: الاستشاره بكام",
+    "hazem": "الاستشارة بالتليفون أو الفيديو ربع ساعة بـ500 جنيه، والمقابلة في المكتب نص ساعة بـ1,000 جنيه. ولو الموضوع مستعجل، فيه استشارة عاجلة بالتليفون بـ1,000 جنيه والمستشار بيكلم حضرتك خلال دقايق لو فاضي. تحب تحجز أنهي واحدة؟\n[\uD83D\uDCDE تليفون أو فيديو | \uD83C\uDFE2 مقابلة في المكتب | \uD83D\uDEA8 استشارة عاجلة]",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "good"
+    }
+  },
+  {
+    "id": "new-price-case",
+    "reply": 1,
+    "score": 0.9,
+    "repeat": false,
+    "client": "Client: قضية الخلع بتتكلف كام",
+    "hazem": "الأتعاب بيحددها المستشار بعد ما يسمع الموضوع، ومحدش يقدر يقولك رقم قبل كده. تقدر تحجز استشارة مع المستشار نفسه، بالتليفون بـ500 أو في المكتب بـ1,000. ولو الموضوع مستعجل، فيه استشارة عاجلة بالتليفون بـ1,000 والمستشار بيكلم حضرتك خلال دقايق لو فاضي.\n[\uD83D\uDCDE تليفون أو فيديو | \uD83C\uDFE2 مقابلة في المكتب | \uD83D\uDEA8 استشارة عاجلة]",
+    "verdict": {
+      "answered": 1,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "The reply rightly gives no case fee and offers a consultation, but omits that the consultation amount counts towards the fees if the case is agreed within 30 days."
+    }
+  },
+  {
+    "id": "new-saad-himself",
+    "reply": 1,
+    "score": 1,
+    "repeat": false,
+    "client": "Client: الاستشارة بتبقى مع المستشار سعد نفسه ولا مع حد تاني؟",
+    "hazem": "أيوه، الاستشارة دايمًا مع المستشار سعد فتحي سعد نفسه. تحب تكون بالتليفون بـ500 ولا في المكتب بـ1,000؟ ولو مستعجل، فيه استشارة عاجلة بالتليفون بـ1,000 والمستشار بيكلم حضرتك خلال دقايق لو فاضي.\n[\uD83D\uDCDE تليفون أو فيديو | \uD83C\uDFE2 مقابلة في المكتب | \uD83D\uDEA8 استشارة عاجلة]",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "good"
+    }
+  },
+  {
+    "id": "new-legal-1",
+    "reply": 1,
+    "score": 1,
+    "repeat": false,
+    "client": "Client: لو مراتي خلعتني هتاخد الشقة؟",
+    "hazem": "ده سؤال المستشار هو اللي هيجاوب عليه حضرتك في الاستشارة، ومش هقدر أقولك فيه رأي. الاستشارة بتبقى مع المستشار سعد فتحي سعد نفسه: بالتليفون بـ500 أو في المكتب بـ1,000. ولو الموضوع مستعجل، فيه استشارة عاجلة بالتليفون بـ1,000 والمستشار بيكلم حضرتك خلال دقايق لو فاضي. تحب تحجز أنهي واحدة؟\n[\uD83D\uDCDE تليفون أو فيديو | \uD83C\uDFE2 مقابلة في المكتب | \uD83D\uDEA8 استشارة عاجلة]",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "good"
+    }
+  },
+  {
+    "id": "new-story",
+    "reply": 1,
+    "score": 1,
+    "repeat": false,
+    "client": "Client: اخواتي واكلين ورثي في البيت ومش راضيين يقسموا",
+    "hazem": "فاهم إن الموضوع مضايقك وصعب عليك. المستشار يقدر يشوف الموضوع مع حضرتك في استشارة: بالتليفون بـ500 أو في المكتب بـ1,000. ولو مستعجل، فيه استشارة عاجلة بالتليفون بـ1,000 والمستشار بيكلم حضرتك خلال دقايق لو فاضي. تحب تحجز أنهي واحدة؟\n[\uD83D\uDCDE تليفون أو فيديو | \uD83C\uDFE2 مقابلة في المكتب | \uD83D\uDEA8 استشارة عاجلة]",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "good"
+    }
+  },
+  {
+    "id": "new-story-woman",
+    "reply": 1,
+    "score": 0.8,
+    "repeat": false,
+    "client": "Client: عايزه اخلع جوزي ومش عارفه ابدأ منين",
+    "hazem": "المستشار يقدر يشوف الموضوع مع حضرتك في استشارة: بالتليفون بـ500 أو في المكتب بـ1,000. ولو الموضوع مستعجل، فيه استشارة عاجلة بالتليفون بـ1,000، والمستشار بيكلم حضرتك خلال دقايق لو فاضي.\n[\uD83D\uDCDE تليفون أو فيديو | \uD83C\uDFE2 مقابلة في المكتب | \uD83D\uDEA8 استشارة عاجلة]",
+    "verdict": {
+      "answered": 1,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 1,
+      "forbidden": false,
+      "reason": "The reply gives a generic consultation offer without the khula case framing (the lawyer listens first and then sets the fees, with the consultation counting towards them within 30 days) and without a warm acknowledgment of her situation."
+    }
+  },
+  {
+    "id": "new-two-q",
+    "reply": 1,
+    "score": 0.9,
+    "repeat": false,
+    "client": "Client: الاستشاره بكام والمكتب فين؟",
+    "hazem": "الاستشارة بالتليفون أو الفيديو ربع ساعة بـ500 جنيه، والمقابلة في المكتب نص ساعة بـ1,000 جنيه. ولو الموضوع مستعجل، فيه استشارة عاجلة بالتليفون بـ1,000 والمستشار بيكلم حضرتك خلال دقايق لو فاضي. تحب تحجز أنهي واحدة؟\n[\uD83D\uDCDE تليفون أو فيديو | \uD83C\uDFE2 مقابلة في المكتب | \uD83D\uDEA8 استشارة عاجلة]",
+    "verdict": {
+      "answered": 1,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "Answers the price but ignores the second question about the office's address, which is in the facts (15 شارع التحرير، الدقي)."
+    }
+  },
+  {
+    "id": "new-address",
+    "reply": 1,
+    "score": 0.9,
+    "repeat": false,
+    "client": "Client: المكتب فين",
+    "hazem": "\uD83D\uDCCD عنوان المكتب: 15 شارع التحرير، الدقي، الجيزة (الدور التالت).\nالخريطة: https://maps.example.test/office\nالمستشار يقدر يشوف الموضوع مع حضرتك في استشارة: بالتليفون بـ500 أو في المكتب بـ1,000. ولو الموضوع مستعجل، فيه استشارة عاجلة بالتليفون بـ1,000، والمستشار بيكلم حضرتك خلال دقايق لو فاضي.\n[\uD83D\uDCDE تليفون أو فيديو | \uD83C\uDFE2 مقابلة في المكتب | \uD83D\uDEA8 استشارة عاجلة]",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 1,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "The address is correct, but the full consultation offer with prices and the urgent option is stacked onto a simple location question, making the reply heavier than needed."
+    }
+  },
+  {
+    "id": "book-phone",
+    "reply": 1,
+    "score": 0.9,
+    "repeat": false,
+    "client": "Client: عايز احجز استشارة",
+    "hazem": "أهلاً بحضرتك \uD83D\uDC4B المستشار سعد فتحي سعد نفسه هيشوف الموضوع في استشارة: بالتليفون بـ500 أو في المكتب بـ1,000. ولو الموضوع مستعجل، فيه استشارة عاجلة بالتليفون بـ1,000 والمستشار بيكلم حضرتك خلال دقايق لو فاضي. تحب تكون عادي ولا مستعجل؟\n[\uD83D\uDCDE تليفون أو فيديو | \uD83C\uDFE2 مقابلة في المكتب | \uD83D\uDEA8 استشارة عاجلة]",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 1,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "Prices and the urgent mention are correct, but the closing question (normal or urgent?) does not match the three buttons, which also ask him to choose phone or office."
+    }
+  },
+  {
+    "id": "book-phone",
+    "reply": 2,
+    "score": 1,
+    "repeat": false,
+    "client": "Client: [ضغط: \uD83D\uDCDE تليفون أو فيديو]",
+    "hazem": "تمام يا فندم، استشارة التليفون أو الفيديو مدتها ربع ساعة بـ500 جنيه. المستشار هيكلم حضرتك في ميعادك على واتساب، أو FaceTime لو معاك آيفون، أو مكالمة تليفون عادية من رقم المكتب. تحب المكالمة تبقى على إيه؟\n[\uD83D\uDFE2 واتساب | \uD83C\uDF4F FaceTime (آيفون) | \uD83D\uDCDE مكالمة عادية]",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "good"
+    }
+  },
+  {
+    "id": "book-phone",
+    "reply": 3,
+    "score": 1,
+    "repeat": false,
+    "client": "Client: [ضغط: \uD83D\uDFE2 واتساب]",
+    "hazem": "تمام يا فندم، المكالمة على واتساب. اختار الميعاد اللي يناسب حضرتك من القايمة اللي تحت \uD83D\uDC47\n[النهارده 2:15 م | النهارده 2:30 م | النهارده 2:45 م | النهارده 3:00 م | مواعيد تانية]",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "good"
+    }
+  },
+  {
+    "id": "book-phone",
+    "reply": 4,
+    "score": 1,
+    "repeat": false,
+    "client": "Client: [ضغط: النهارده 2:15 م]",
+    "hazem": "تمام، ممكن اسم حضرتك عشان أسجّل الميعاد؟",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "good"
+    }
+  },
+  {
+    "id": "book-phone",
+    "reply": 5,
+    "score": 0.9,
+    "repeat": false,
+    "client": "Client: محمد عبد الرحمن",
+    "hazem": "⏳ ميعاد حضرتك متسجّل مبدئيًا: استشارة بالتليفون أو الفيديو، النهارده الساعة 2:15 م.\n\nعشان الميعاد يتأكد:\n1️⃣ حوّل 500 جنيه على InstaPay: office@instapay، أو محفظة كاش: 01000000000 (فودافون كاش).\n2️⃣ ابعت صورة (سكرين شوت) التحويل هنا في الشات.\n\n⏰ لازم الصورة توصل قبل الساعة 1:04 م النهارده، وإلا الميعاد هيتلغي ويبقى متاح لحد تاني.",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 1,
+      "forbidden": false,
+      "reason": "Correct hold and payment steps, but it does not acknowledge the client by the name he just gave, and the cancellation line sounds a bit stern."
+    }
+  },
+  {
+    "id": "book-phone-paid",
+    "reply": 1,
+    "score": 1,
+    "repeat": false,
+    "client": "Client: عايز احجز استشارة",
+    "hazem": "تمام، الاستشارة دايمًا مع المستشار سعد فتحي سعد نفسه. تحب تكون بالتليفون بـ500 جنيه، ولا في المكتب بـ1,000 جنيه؟ ولو الموضوع مستعجل، فيه استشارة عاجلة بالتليفون بـ1,000 جنيه، والمستشار بيكلم حضرتك خلال دقايق لو فاضي.\n[\uD83D\uDCDE تليفون أو فيديو | \uD83C\uDFE2 مقابلة في المكتب | \uD83D\uDEA8 استشارة عاجلة]",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "good"
+    }
+  },
+  {
+    "id": "book-phone-paid",
+    "reply": 2,
+    "score": 1,
+    "repeat": false,
+    "client": "Client: [ضغط: \uD83D\uDCDE تليفون أو فيديو]",
+    "hazem": "تمام يا فندم، الاستشارة بالتليفون أو الفيديو مدتها ربع ساعة بـ500 جنيه. المستشار هيكلم حضرتك في ميعادك على واتساب، أو FaceTime لو معاك آيفون، أو مكالمة تليفون عادية من رقم المكتب. تحب المكالمة تبقى على إيه؟\n[\uD83D\uDFE2 واتساب | \uD83C\uDF4F FaceTime (آيفون) | \uD83D\uDCDE مكالمة عادية]",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "good"
+    }
+  },
+  {
+    "id": "book-phone-paid",
+    "reply": 3,
+    "score": 1,
+    "repeat": false,
+    "client": "Client: [ضغط: \uD83D\uDFE2 واتساب]",
+    "hazem": "تمام، المستشار هيكلم حضرتك على واتساب من رقم المكتب في الميعاد اللي هتختاره. اختار الميعاد اللي يناسبك من القايمة \uD83D\uDC47\n[النهارده 2:15 م | النهارده 2:30 م | النهارده 2:45 م | النهارده 3:00 م | مواعيد تانية]",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "good"
+    }
+  },
+  {
+    "id": "book-phone-paid",
+    "reply": 4,
+    "score": 0.9,
+    "repeat": false,
+    "client": "Client: [ضغط: النهارده 2:15 م]",
+    "hazem": "تمام، ممكن اسم حضرتك عشان أسجّل الميعاد؟",
+    "verdict": {
+      "answered": 1,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "Asking for the name is a reasonable next step, but the reply never confirms the chosen 2:15 slot."
+    }
+  },
+  {
+    "id": "book-phone-paid",
+    "reply": 5,
+    "score": 1,
+    "repeat": false,
+    "client": "Client: منى سعيد",
+    "hazem": "⏳ ميعاد حضرتك متسجّل مبدئيًا: استشارة بالتليفون أو الفيديو، النهارده الساعة 2:15 م.\n\nعشان الميعاد يتأكد:\n1️⃣ حوّلي 500 جنيه على InstaPay: office@instapay، أو محفظة كاش: 01000000000 (فودافون كاش).\n2️⃣ ابعتي صورة (سكرين شوت) التحويل هنا في الشات.\n\n⏰ لازم الصورة توصل قبل الساعة 1:04 م النهارده، وإلا الميعاد هيتلغي ويبقى متاح لحد تاني.",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "good"
+    }
+  },
+  {
+    "id": "book-phone-paid",
+    "reply": 6,
+    "score": 1,
+    "repeat": false,
+    "client": "Client: [صورة]",
+    "hazem": "وصلت صورة التحويل ✅، والميعاد محجوز لحضرتك: استشارة بالتليفون أو الفيديو، النهارده الساعة 2:15 م. أول ما المكتب يراجع التحويل، هبعتلك التأكيد.",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "good"
+    }
+  },
+  {
+    "id": "book-office",
+    "reply": 1,
+    "score": 1,
+    "repeat": false,
+    "client": "Client: عايز اقابل المستشار في المكتب",
+    "hazem": "أهلاً بحضرتك. المقابلة في المكتب بتكون نص ساعة بـ1,000 جنيه، والمستشار سعد فتحي سعد نفسه هو اللي هيقابل حضرتك. اختار الميعاد اللي يناسبك من القايمة \uD83D\uDC47\n[النهارده 2:00 م | النهارده 2:15 م | النهارده 2:30 م | النهارده 2:45 م | مواعيد تانية]",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "good"
+    }
+  },
+  {
+    "id": "book-mid-price",
+    "reply": 1,
+    "score": 0.7,
+    "repeat": false,
+    "client": "Client: عايز احجز",
+    "hazem": "تمام، حضرتك تقدر تختار ميعاد من المواعيد الفاضية، والميعاد بيتحجز بعد ما تبعت صورة التحويل. الاستشارة بالتليفون بـ500 أو في المكتب بـ1,000، ولو مستعجل فيه استشارة عاجلة بالتليفون بـ1,000 والمستشار بيكلم حضرتك خلال دقايق لو فاضي. تحب تكون بأنهي نوع؟\n[\uD83D\uDCDE تليفون أو فيديو | \uD83C\uDFE2 مقابلة في المكتب | \uD83D\uDEA8 استشارة عاجلة]",
+    "verdict": {
+      "answered": 2,
+      "facts": 1,
+      "next_step": 2,
+      "coherent": 1,
+      "tone": 1,
+      "forbidden": false,
+      "reason": "It says to pick a time before any are shown, then asks for the consultation type, and wrongly implies sending the transfer photo books the time when it is held and then confirmed after review; it is also a bit long."
+    }
+  },
+  {
+    "id": "book-mid-price",
+    "reply": 2,
+    "score": 1,
+    "repeat": false,
+    "client": "Client: [ضغط: \uD83D\uDCDE تليفون أو فيديو]",
+    "hazem": "تمام، المستشار هيكلم حضرتك في ميعادك على واتساب، أو FaceTime لو معاك آيفون، أو مكالمة تليفون عادية من رقم المكتب. تحب المكالمة تبقى على إيه؟\n[\uD83D\uDFE2 واتساب | \uD83C\uDF4F FaceTime (آيفون) | \uD83D\uDCDE مكالمة عادية]",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "good"
+    }
+  },
+  {
+    "id": "book-mid-price",
+    "reply": 3,
+    "score": 1,
+    "repeat": false,
+    "client": "Client: [ضغط: \uD83D\uDFE2 واتساب]",
+    "hazem": "تمام، اختار حضرتك الميعاد اللي يناسبك من القايمة \uD83D\uDC47\n[النهارده 2:15 م | النهارده 2:30 م | النهارده 2:45 م | النهارده 3:00 م | مواعيد تانية]",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "good"
+    }
+  },
+  {
+    "id": "book-mid-price",
+    "reply": 4,
+    "score": 0.3,
+    "repeat": false,
+    "client": "Client: هي بكام؟",
+    "hazem": "المستشار يقدر يشوف الموضوع مع حضرتك في استشارة: بالتليفون بـ500 أو في المكتب بـ1,000. ولو الموضوع مستعجل، فيه استشارة عاجلة بالتليفون بـ1,000، والمستشار بيكلم حضرتك خلال دقايق لو فاضي.\n[\uD83D\uDCDE تليفون أو فيديو | \uD83C\uDFE2 مقابلة في المكتب | \uD83D\uDEA8 استشارة عاجلة]",
+    "verdict": {
+      "answered": 1,
+      "facts": 1,
+      "next_step": 0,
+      "coherent": 0,
+      "tone": 1,
+      "forbidden": false,
+      "reason": "Instead of answering 500 for his chosen phone consultation and returning to the times, it repeats the full type offer (including the urgent one already offered today) and its buttons, undoing his choice of phone and WhatsApp."
+    }
+  },
+  {
+    "id": "book-mid-saad",
+    "reply": 1,
+    "score": 1,
+    "repeat": false,
+    "client": "Client: عايز احجز",
+    "hazem": "تمام، المستشار سعد فتحي سعد نفسه هيكون مع حضرتك. الاستشارة بالتليفون بـ500 لمدة ربع ساعة، أو في المكتب بـ1,000 لمدة نص ساعة، ولو مستعجل فيه استشارة عاجلة بالتليفون بـ1,000. تحب تكون إزاي؟\n[\uD83D\uDCDE تليفون أو فيديو | \uD83C\uDFE2 مقابلة في المكتب | \uD83D\uDEA8 استشارة عاجلة]",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "Good; minor nit that the urgent option omits the policy's timing phrase («خلال دقايق لو فاضي») and the prices lack a currency unit."
+    }
+  },
+  {
+    "id": "book-mid-saad",
+    "reply": 2,
+    "score": 1,
+    "repeat": false,
+    "client": "Client: [ضغط: \uD83D\uDCDE تليفون أو فيديو]",
+    "hazem": "تمام يا فندم. المستشار هيكلم حضرتك في ميعادك على واتساب، أو FaceTime لو معاك آيفون، أو مكالمة تليفون عادية من رقم المكتب. تحب المكالمة تبقى على إيه؟\n[\uD83D\uDFE2 واتساب | \uD83C\uDF4F FaceTime (آيفون) | \uD83D\uDCDE مكالمة عادية]",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "good"
+    }
+  },
+  {
+    "id": "book-mid-saad",
+    "reply": 3,
+    "score": 1,
+    "repeat": false,
+    "client": "Client: [ضغط: \uD83D\uDFE2 واتساب]",
+    "hazem": "تمام، واتساب. اختار الميعاد اللي يناسب حضرتك من القايمة \uD83D\uDC47\n[النهارده 2:15 م | النهارده 2:30 م | النهارده 2:45 م | النهارده 3:00 م | مواعيد تانية]",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "good"
+    }
+  },
+  {
+    "id": "book-mid-saad",
+    "reply": 4,
+    "score": 0.2,
+    "repeat": false,
+    "client": "Client: هيكلمني المستشار سعد بنفسه؟",
+    "hazem": "سؤال مهم \uD83D\uDC4C هوصّله للمكتب، ويردوا على حضرتك هنا.\nالمستشار يقدر يشوف الموضوع مع حضرتك في استشارة: بالتليفون بـ500 أو في المكتب بـ1,000. ولو الموضوع مستعجل، فيه استشارة عاجلة بالتليفون بـ1,000، والمستشار بيكلم حضرتك خلال دقايق لو فاضي.\n[\uD83D\uDCDE تليفون أو فيديو | \uD83C\uDFE2 مقابلة في المكتب | \uD83D\uDEA8 استشارة عاجلة]",
+    "verdict": {
+      "answered": 0,
+      "facts": 1,
+      "next_step": 0,
+      "coherent": 0,
+      "tone": 1,
+      "forbidden": false,
+      "reason": "Fails to answer the simple fact that Saad himself calls (an office fact), defers it to the office instead, and restarts the consultation offer with a repeated urgent pitch instead of returning to the time list he was choosing from."
+    }
+  },
+  {
+    "id": "urgent-day",
+    "reply": 1,
+    "score": 0.8,
+    "repeat": false,
+    "client": "Client: الحقوني ابني اتقبض عليه دلوقتي",
+    "hazem": "ربنا يطمّنك ويسهّل الأمور، فاهم إن الموضوع مقلق جدًا. الاستشارة العاجلة بالتليفون ربع ساعة بـ1,000 جنيه. تمام، ممكن اسم حضرتك عشان أسجّل الميعاد؟",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 1,
+      "coherent": 1,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "The urgent price is right, but «تمام» assumes the client has already agreed, and asking for his name to «register the appointment» skips telling him the lawyer would call within minutes if free."
+    }
+  },
+  {
+    "id": "urgent-day",
+    "reply": 2,
+    "score": 0.9,
+    "repeat": false,
+    "client": "Client: خالد حسن",
+    "hazem": "عشان المستشار يكلم حضرتك في أسرع وقت، حوّل 1,000 على InstaPay: office@instapay، أو محفظة كاش: 01000000000 (فودافون كاش)، وابعت صورة التحويل هنا.",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 1,
+      "forbidden": false,
+      "reason": "Correct next step with clear payment details, but it ignores the name he just gave (no «تمام يا أستاذ خالد») and feels a bit abrupt for a distressed parent."
+    }
+  },
+  {
+    "id": "urgent-night",
+    "reply": 1,
+    "score": 0.6,
+    "repeat": false,
+    "client": "Client: الحقوني البوليس عند البيت",
+    "hazem": "فاهم إن الموضوع مقلق جدًا، ربنا يطمّنك ويسهّل. الاستشارة العاجلة بالتليفون ربع ساعة بـ1,000 جنيه. تمام، ممكن اسم حضرتك عشان أسجّل الميعاد؟",
+    "verdict": {
+      "answered": 1,
+      "facts": 1,
+      "next_step": 1,
+      "coherent": 1,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "At night it quotes the urgent price and jumps to asking his name with a stray «تمام» as if he had agreed, without telling him the lawyer can only call in the morning at 10."
+    }
+  },
+  {
+    "id": "urgent-night",
+    "reply": 2,
+    "score": 0.9,
+    "repeat": false,
+    "client": "Client: عمرو عادل",
+    "hazem": "المستشار بيرد على الاستشارات العاجلة من الساعة 10. لو حوّلت دلوقتي، هيكلم حضرتك أول حاجة الساعة 10 الصبح.\nعشان المستشار يكلم حضرتك في أسرع وقت، حوّل 1,000 على InstaPay: office@instapay، أو محفظة كاش: 01000000000 (فودافون كاش)، وابعت صورة التحويل هنا.",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 1,
+      "forbidden": false,
+      "reason": "Correctly tells him the 10 AM callback before payment, but it ignores the name he just gave and reads a bit dry and robotic for a frightened client."
+    }
+  },
+  {
+    "id": "urgent-night-paid",
+    "reply": 1,
+    "score": 0.5,
+    "repeat": false,
+    "client": "Client: الحقوني البوليس عند البيت",
+    "hazem": "فاهم إن الموضوع مقلق جدًا، ربنا يطمّنا عليك. الاستشارة العاجلة بالتليفون ربع ساعة بـ1,000 جنيه. تمام، ممكن اسم حضرتك عشان أسجّل الميعاد؟",
+    "verdict": {
+      "answered": 1,
+      "facts": 1,
+      "next_step": 1,
+      "coherent": 1,
+      "tone": 1,
+      "forbidden": false,
+      "reason": "At night it offers the urgent call without saying the lawyer will only call in the morning at his first free time, and «تمام» followed by a request for his name wrongly assumes the client already agreed to book."
+    }
+  },
+  {
+    "id": "urgent-night-paid",
+    "reply": 2,
+    "score": 0.9,
+    "repeat": false,
+    "client": "Client: عمرو عادل",
+    "hazem": "المستشار بيرد على الاستشارات العاجلة من الساعة 10. لو حوّلت دلوقتي، هيكلم حضرتك أول حاجة الساعة 10 الصبح.\nعشان المستشار يكلم حضرتك في أسرع وقت، حوّل 1,000 على InstaPay: office@instapay، أو محفظة كاش: 01000000000 (فودافون كاش)، وابعت صورة التحويل هنا.",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 1,
+      "forbidden": false,
+      "reason": "The steps are right (the 10 AM call time is given before payment, then where to pay), but the reply ignores the name and is dry for a client in distress, with an odd 'as soon as possible' when the time is fixed."
+    }
+  },
+  {
+    "id": "urgent-night-paid",
+    "reply": 3,
+    "score": 0.9,
+    "repeat": false,
+    "client": "Client: [صورة]",
+    "hazem": "وصلت صورة التحويل ✅. المستشار هيكلم حضرتك على الرقم ده النهارده الساعة 10:00 ص.",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 1,
+      "forbidden": false,
+      "reason": "Correct morning time and no 'in a call now', but the reply is curt and offers no reassurance to a client with police at his door."
+    }
+  },
+  {
+    "id": "svc-case",
+    "reply": 1,
+    "score": 0.9,
+    "repeat": false,
+    "client": "Client: عايز ارفع قضية على صاحب العمل",
+    "hazem": "فاهم إن الموضوع مهم لحضرتك. المستشار سعد هيسمع موضوعك بنفسه في استشارة الأول ويقولك الخطوات والأتعاب بعدها. متاح استشارة بالتليفون بـ500 أو مقابلة في المكتب بـ1,000، ولو اتفقت مع المكتب على القضية خلال 30 يوم المبلغ بيتخصم من الأتعاب. تحب أنهي واحدة؟\n[\uD83D\uDCDE تليفون أو فيديو | \uD83C\uDFE2 مقابلة في المكتب | \uD83D\uDEA8 استشارة عاجلة]",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 1,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "The urgent-consultation button appears without the required one-line mention in the text of its price and timing (e.g. «خلال دقايق لو فاضي»); otherwise this is a correct, warm case offer."
+    }
+  },
+  {
+    "id": "x-price-office",
+    "reply": 1,
+    "score": 0.8,
+    "repeat": false,
+    "client": "Client: المقابلة في المكتب بكام",
+    "hazem": "المستشار يقدر يشوف الموضوع مع حضرتك في استشارة: بالتليفون بـ500 أو في المكتب بـ1,000. ولو الموضوع مستعجل، فيه استشارة عاجلة بالتليفون بـ1,000، والمستشار بيكلم حضرتك خلال دقايق لو فاضي.\n[\uD83D\uDCDE تليفون أو فيديو | \uD83C\uDFE2 مقابلة في المكتب | \uD83D\uDEA8 استشارة عاجلة]",
+    "verdict": {
+      "answered": 1,
+      "facts": 2,
+      "next_step": 1,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "He asked only about the office meeting, but its 1,000 price sits inside the generic phone/office/urgent offer. The half-hour duration is missing, and there is no direct invitation to book the office meeting."
+    }
+  },
+  {
+    "id": "x-app-facetime",
+    "reply": 1,
+    "score": 0.8,
+    "repeat": false,
+    "client": "Client: ينفع فيس تايم؟ معايا ايفون",
+    "hazem": "أيوه، المستشار بيكلم حضرتك على FaceTime لو معاك آيفون، والاستشارة بتبقى مع المستشار سعد فتحي سعد نفسه، مدتها ربع ساعة بـ500 جنيه. تحب تكون بالتليفون ولا في المكتب بـ1,000؟\n[\uD83D\uDCDE تليفون أو فيديو | \uD83C\uDFE2 مقابلة في المكتب | \uD83D\uDEA8 استشارة عاجلة]",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 1,
+      "coherent": 1,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "The reply confirms FaceTime correctly, but then asks phone or office, even though the client has already signalled he wants a FaceTime call. It also leaves out the WhatsApp option."
+    }
+  },
+  {
+    "id": "x-story-labor",
+    "reply": 1,
+    "score": 0.9,
+    "repeat": false,
+    "client": "Client: الشركه رفدتني ومش راضيين يدوني مستحقاتي",
+    "hazem": "فاهم إن الموضوع مقلق لحضرتك، وربنا يسهّل. المستشار يقدر يشوف الموضوع مع حضرتك في استشارة: بالتليفون بـ500 أو في المكتب بـ1,000. ولو مستعجل، فيه استشارة عاجلة بالتليفون بـ1,000، والمستشار بيكلم حضرتك خلال دقايق لو فاضي. تحب نحجز أنهي واحدة؟\n[\uD83D\uDCDE تليفون أو فيديو | \uD83C\uDFE2 مقابلة في المكتب | \uD83D\uDEA8 استشارة عاجلة]",
+    "verdict": {
+      "answered": 1,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "Empathetic and correct consultation offer, but it misses the case-offer framing: the lawyer sets the case fees after listening, and the consultation counts toward them within 30 days."
+    }
+  },
+  {
+    "id": "x-story-violence",
+    "reply": 1,
+    "score": 0.7,
+    "repeat": false,
+    "client": "Client: جوزي بيضربني ومش عارفه اعمل ايه",
+    "hazem": "المستشار يقدر يشوف الموضوع مع حضرتك في استشارة: بالتليفون بـ500 أو في المكتب بـ1,000. ولو الموضوع مستعجل، فيه استشارة عاجلة بالتليفون بـ1,000، والمستشار بيكلم حضرتك خلال دقايق لو فاضي.\n[\uD83D\uDCDE تليفون أو فيديو | \uD83C\uDFE2 مقابلة في المكتب | \uD83D\uDEA8 استشارة عاجلة]",
+    "verdict": {
+      "answered": 1,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 0,
+      "forbidden": false,
+      "reason": "The reply goes straight to prices with no word of sympathy or reassurance to a woman who says her husband beats her, so it reads cold and transactional."
+    }
+  },
+  {
+    "id": "x-book-woman",
+    "reply": 1,
+    "score": 1,
+    "repeat": false,
+    "client": "Client: عايزه احجز استشاره",
+    "hazem": "أهلاً بحضرتك. الاستشارة بتبقى مع المستشار سعد فتحي سعد نفسه: بالتليفون بـ500 جنيه، أو في المكتب بـ1,000 جنيه. ولو الموضوع مستعجل، فيه استشارة عاجلة بالتليفون بـ1,000 جنيه، والمستشار بيكلمك خلال دقايق لو فاضي. تحبي تكون أنهي واحدة؟\n[\uD83D\uDCDE تليفون أو فيديو | \uD83C\uDFE2 مقابلة في المكتب | \uD83D\uDEA8 استشارة عاجلة]",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "good"
+    }
+  },
+  {
+    "id": "x-book-woman",
+    "reply": 2,
+    "score": 1,
+    "repeat": false,
+    "client": "Client: [ضغط: \uD83D\uDCDE تليفون أو فيديو]",
+    "hazem": "تمام يا فندم. المستشار هيكلم حضرتك في ميعادك على واتساب، أو FaceTime لو معاكي آيفون، أو مكالمة تليفون عادية من رقم المكتب. تحبي المكالمة تبقى على إيه؟\n[\uD83D\uDFE2 واتساب | \uD83C\uDF4F FaceTime (آيفون) | \uD83D\uDCDE مكالمة عادية]",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "good"
+    }
+  },
+  {
+    "id": "x-book-woman",
+    "reply": 3,
+    "score": 1,
+    "repeat": false,
+    "client": "Client: [ضغط: \uD83D\uDFE2 واتساب]",
+    "hazem": "تمام يا فندم، الاستشارة على واتساب. اختاري الميعاد اللي يناسبك من القايمة اللي تحت \uD83D\uDC47\n[النهارده 3:15 م | النهارده 3:30 م | النهارده 3:45 م | النهارده 4:00 م | مواعيد تانية]",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "good"
+    }
+  },
+  {
+    "id": "x-book-woman",
+    "reply": 4,
+    "score": 0.7,
+    "repeat": false,
+    "client": "Client: [ضغط: النهارده 3:15 م]",
+    "hazem": "تمام يا فندم، الميعاد ده فاضي ومنقدر نحجزه لحضرتك. ممكن اسم حضرتك عشان أسجّل الميعاد؟",
+    "verdict": {
+      "answered": 1,
+      "facts": 2,
+      "next_step": 1,
+      "coherent": 2,
+      "tone": 1,
+      "forbidden": false,
+      "reason": "Asking for her name is a plausible step, but the reply neither holds the 3:15 slot nor mentions the price, the payment deadline or the transfer, and «منقدر» is not natural Egyptian Arabic."
+    }
+  },
+  {
+    "id": "x-book-woman",
+    "reply": 5,
+    "score": 0.9,
+    "repeat": false,
+    "client": "Client: منى عبد الله",
+    "hazem": "⏳ ميعاد حضرتك متسجّل مبدئيًا: استشارة بالتليفون أو الفيديو، النهارده الساعة 3:15 م.\n\nعشان الميعاد يتأكد:\n1️⃣ حوّلي 500 جنيه على InstaPay: office@instapay، أو محفظة كاش: 01000000000 (فودافون كاش).\n2️⃣ ابعتي صورة (سكرين شوت) التحويل هنا في الشات.\n\n⏰ لازم الصورة توصل قبل الساعة 2:04 م النهارده، وإلا الميعاد هيتلغي ويبقى متاح لحد تاني.",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 1,
+      "forbidden": false,
+      "reason": "Correct hold, price, deadline and feminine forms, but it ignores the name she just gave (no 'تمام يا أستاذة منى'), and it says 'phone or video' instead of the WhatsApp call she chose, which reads slightly templated."
+    }
+  },
+  {
+    "id": "x-book-phone-direct",
+    "reply": 1,
+    "score": 1,
+    "repeat": false,
+    "client": "Client: عايز احجز استشاره بالتليفون",
+    "hazem": "تمام يا فندم، الاستشارة بالتليفون مدتها ربع ساعة بـ500 جنيه، والمستشار سعد فتحي سعد نفسه هيكلم حضرتك في ميعادك على واتساب، أو FaceTime لو معاك آيفون، أو مكالمة تليفون عادية من رقم المكتب. تحب المكالمة تبقى على إيه؟\n[\uD83D\uDFE2 واتساب | \uD83C\uDF4F FaceTime (آيفون) | \uD83D\uDCDE مكالمة عادية]",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 2,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "good"
+    }
+  },
+  {
+    "id": "x-urgent-cheaper",
+    "reply": 1,
+    "score": 0.9,
+    "repeat": false,
+    "client": "Client: محتاج استشاره عاجله",
+    "hazem": "تمام، الاستشارة العاجلة بالتليفون مدتها ربع ساعة بـ1,000 جنيه. ممكن اسم حضرتك عشان أسجّل الميعاد؟",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 1,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "The price and duration are correct, but the reply doesn't say when the lawyer will call, and asking for a name to 'book the appointment' doesn't fit an urgent consultation, whose next step is where to pay."
+    }
+  },
+  {
+    "id": "x-urgent-cheaper",
+    "reply": 2,
+    "score": 0.2,
+    "repeat": false,
+    "client": "Client: في حاجه ارخص؟",
+    "hazem": "الاستشارة العاجلة بالتليفون ربع ساعة بـ1,000 جنيه.\n[✅ ابدأ الطلب]",
+    "verdict": {
+      "answered": 0,
+      "facts": 2,
+      "next_step": 0,
+      "coherent": 0,
+      "tone": 0,
+      "forbidden": false,
+      "reason": "The client asked for something cheaper, but the reply repeats the urgent price instead of offering the normal 500 EGP phone/video consultation."
+    }
+  },
+  {
+    "id": "x-location-other-city",
+    "reply": 1,
+    "score": 0.9,
+    "repeat": false,
+    "client": "Client: انا في اسكندريه لازم اجي القاهره؟",
+    "hazem": "حضرتك مش لازم تيجي القاهرة، الاستشارة بالتليفون أو الفيديو وتقدر تتعمل من أي مكان. تحب تكون استشارة تليفون بـ500 ولا عاجلة بـ1,000؟\n[\uD83D\uDCDE تليفون أو فيديو | \uD83C\uDFE2 مقابلة في المكتب | \uD83D\uDEA8 استشارة عاجلة]",
+    "verdict": {
+      "answered": 2,
+      "facts": 2,
+      "next_step": 1,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "The question offers only phone (500) or urgent (1,000), yet a third office-meeting button appears, and the urgent option omits the policy's «خلال دقايق لو فاضي» timing."
+    }
+  },
+  {
+    "id": "x-abroad",
+    "reply": 1,
+    "score": 0.8,
+    "repeat": false,
+    "client": "Client: انا مسافر في السعوديه ينفع استشاره؟",
+    "hazem": "أيوه ينفع حضرتك تعمل استشارة وانت مسافر، وهي تكون بالتليفون أو الفيديو بـ500 جنيه مدتها ربع ساعة، والمستشار هيكلمك في ميعادك. ولو الموضوع مستعجل فيه استشارة عاجلة بالتليفون بـ1,000 جنيه، والمستشار بيكلم حضرتك خلال دقايق لو فاضي. تحب تحجز أنهي واحدة؟\n[\uD83D\uDCDE تليفون أو فيديو | \uD83C\uDFE2 مقابلة في المكتب | \uD83D\uDEA8 استشارة عاجلة]",
+    "verdict": {
+      "answered": 2,
+      "facts": 1,
+      "next_step": 1,
+      "coherent": 2,
+      "tone": 2,
+      "forbidden": false,
+      "reason": "Good answer, but it offers an office-meeting button to a client abroad and says 'by phone' without making clear the call is over WhatsApp, since normal calls aren't offered to non-Egyptian numbers."
+    }
+  }
+]

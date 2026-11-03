@@ -114,6 +114,13 @@ public sealed class RatingStore(HazemDbContext db) : IRatingStore, IIntakeHistor
         var waiting = last is not null && last.CreatedAt > n.AddHours(-24)
             ? (JsonSerializer.Deserialize<List<OutboundAction>>(last.Actions, HazemJson.Options) ?? []).LastOrDefault()?.Interactive?.Choices
             : null;
-        return new SituationFacts(a, o, keys, waiting);
+        // v1.49: the urgent call's line in the offer is said once a day
+        var since = n.AddHours(-24);
+        var urgentOffered = await db.Database.SqlQuery<int>($"""
+            SELECT count(*)::int AS "Value" FROM hazem.turn_replies r JOIN hazem.turns t ON t.turn_id = r.turn_id
+             WHERE t.wa_id = {waId} AND t.created_at > {since}
+               AND r.text_key IN ('consultation_offer_urgent_day', 'consultation_offer_urgent_night')
+            """).SingleAsync(ct) > 0;
+        return new SituationFacts(a, o, keys, waiting) { UrgentOffered = urgentOffered };
     }
 }

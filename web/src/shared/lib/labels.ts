@@ -81,6 +81,7 @@ export const CALL_APPS: Record<string, string> = {
   whatsapp: "واتساب",
   facetime: "FaceTime",
   meet: "Google Meet",
+  phone: "مكالمة عادية", // v1.49: a normal phone call from the office's number
 };
 
 export const APPOINTMENT_STATES: Record<string, string> = {

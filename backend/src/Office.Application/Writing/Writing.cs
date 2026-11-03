@@ -164,7 +164,8 @@ public static partial class ReplyGuard
         }
 
         var text = reply.Trim();
-        if (text.Length > MaxChars)
+        // v1.49: a long approved text (the offer with the urgent line) leaves room for the answer to his question
+        if (text.Length > Math.Max(MaxChars, request.Approved.Length + 120))
         {
             return "too_long";
         }
@@ -337,6 +338,9 @@ public static class Conversational
         // v1.45 (TASK 18 §3.3): the answers to his questions and the offer, so a question gets its answer, in one message
         [TextKeys.AboutLawyer] = "answer what he asked about the lawyer, from the text and the office facts (who he is; every consultation is with him himself)",
         [TextKeys.ConsultationOffer] = "offer a consultation with the lawyer, by phone or video or at the office, with the prices given",
+        // v1.49: with the urgent call's line (said once a day): its price and when the lawyer calls are kept to the letter (Locked)
+        [TextKeys.ConsultationOfferUrgentDay] = "offer a consultation with the lawyer, by phone or video or at the office, with the prices given; then say that if it is urgent there is an urgent phone consultation, its price, and that the lawyer calls within minutes if he is free",
+        [TextKeys.ConsultationOfferUrgentNight] = "offer a consultation with the lawyer, by phone or video or at the office, with the prices given; then say that if it is urgent there is an urgent phone consultation, its price, and that the lawyer calls when the working hours start at the time given",
         [TextKeys.CaseOffer] = "tell him the lawyer first hears his matter in a consultation and then sets the fees, and offer the consultation with the prices given",
         [TextKeys.OfficeHowToBook] = "tell him how booking goes",
         [TextKeys.OfficeRefund] = "tell him the refund rule",
@@ -346,6 +350,7 @@ public static class Conversational
         [TextKeys.ServiceDetail] = "if the OFFICE FACTS answer his question, answer it from them only (from_facts true, and say nothing about the office answering); otherwise tell him his question reached the office and they will answer it here (from_facts false, never the answer yourself)",
         [TextKeys.OfficePrivacy] = "reassure him that everything he tells the office stays private: the office never discloses its clients' secrets",
         [TextKeys.AskCallApp] = "ask where the lawyer should call him: WhatsApp or FaceTime (two buttons follow your sentence)",
+        [TextKeys.AskCallAppPhone] = "ask where the lawyer should call him at his appointment: WhatsApp, FaceTime, or a normal phone call from the office's number (three buttons follow your sentence)",
         [TextKeys.BookingStepAgain] = "ask him kindly to pick from the choices below, or to write the day and time that suit him (the choices follow your sentence)",
         [TextKeys.BookingChooseSlot] = "ask him to pick the time that suits him from the list (the list follows your sentence)",
         [TextKeys.AskNameBooking] = "ask his name to register the booking (a word of comfort first if he is worried)",
@@ -374,7 +379,7 @@ public static class Conversational
     private static readonly HashSet<string> Locked =
     [
         TextKeys.UrgentPrice, TextKeys.PriceDocumentReview, TextKeys.PriceContractDrafting, TextKeys.PriceFormalNotice, TextKeys.PriceUrf,
-        TextKeys.WrittenOpinion,
+        TextKeys.WrittenOpinion, TextKeys.ConsultationOfferUrgentDay, TextKeys.ConsultationOfferUrgentNight,
     ];
 
     /// <summary>v1.45 (TASK 18 §3.2): the texts of «حقايق المكتب», in the order the writer reads them.</summary>
