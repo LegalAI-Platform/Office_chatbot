@@ -1882,7 +1882,7 @@ public sealed class HazemResponder(
 
             (string Key, string[] Needs)? answer = topic switch
             {
-                InfoTopic.Address => (TextKeys.OfficeAddress, ["address", "map"]),
+                InfoTopic.Address => (TextKeys.OfficeAddress, ["address"]), // v1.51: the map is an extra (its line goes without it)
                 InfoTopic.Hours => (TextKeys.OfficeHours, ["hours"]),
                 InfoTopic.HowToBook => (TextKeys.OfficeHowToBook, []),
                 InfoTopic.HowToPay => (TextKeys.OfficeHowToPay, ["instapay", "wallet"]),

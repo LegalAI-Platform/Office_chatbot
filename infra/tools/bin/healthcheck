@@ -338,6 +338,13 @@ if [[ "$(psql_super office -c "SELECT value FROM hazem.settings WHERE key = 'urg
   warn "the urgent alert goes as a normal message inside the 24 hours (TEST ONLY, v1.34): switch it off in «أدوات التجربة» before production"
 fi
 
+# v1.51: a missing office detail no longer stops a text (only its sentence goes), so say which ones the clients miss.
+for detail in office.address office.map_url office.phone; do
+  if [[ -z "$(psql_super office -c "SELECT btrim(value) FROM hazem.settings WHERE key = '$detail'")" ]]; then
+    warn "$detail is empty in «بيانات المكتب»: the clients' messages go without it (the address, the map or the phone line)"
+  fi
+done
+
 echo "== The prices and the office's questions (TASK 06, DECISIONS v1.17 B-20 / B-23)"
 check "the price list has its 10 lines, each a whole number from 1 to 1,000,000 (price.*)" \
   sql_equals office "SELECT count(*) FROM hazem.settings WHERE key IN ('price.phone_video', 'price.office', 'price.urgent', 'price.review_min',

@@ -324,9 +324,49 @@ public static partial class TextRenderer
     /// </summary>
     public static (string? Text, string? Reason) Render(ApprovedText text, IReadOnlyDictionary<string, string>? fill)
     {
-        var rendered = Slot().Replace(text.Text, m =>
+        var rendered = Slot().Replace(WithoutMissingExtras(text.Text, fill), m =>
             fill is not null && fill.TryGetValue(m.Groups[1].Value, out var v) ? v : m.Value);
         return HasOpenSlot(rendered) ? (null, MissingValue) : (rendered, null);
+    }
+
+    /// <summary>
+    /// v1.51: an extra detail of the office not written in the panel yet (its phone, the map link) drops only its own
+    /// sentence («لو احتجت حاجة كلمنا على …»، «، وده اللوكيشن …»), never the whole text: the confirmation of a booking was
+    /// never sent for a missing office phone. Every other slot still stops the text (DECISIONS part 5).
+    /// </summary>
+    public static readonly IReadOnlySet<string> OptionalSlots = new HashSet<string>(StringComparer.Ordinal) { "office_phone", "map" };
+
+    private static readonly char[] SentenceEnds = ['.', '!', '؟', '?', '\n'];
+
+    private static string WithoutMissingExtras(string text, IReadOnlyDictionary<string, string>? fill)
+    {
+        foreach (var slot in OptionalSlots)
+        {
+            if (fill is not null && fill.TryGetValue(slot, out var v) && v.Trim().Length > 0)
+            {
+                continue;
+            }
+
+            for (var at = text.IndexOf("{{" + slot + "}}", StringComparison.Ordinal); at >= 0;
+                 at = text.IndexOf("{{" + slot + "}}", StringComparison.Ordinal))
+            {
+                var start = text.LastIndexOfAny([.. SentenceEnds, '،'], Math.Max(at - 1, 0)) + 1;
+                var end = text.IndexOfAny(SentenceEnds, at);
+                if (start > 0 && text[start - 1] == '،')
+                {
+                    // «…، وده اللوكيشن {{map}}.» / «…، واللوكيشن: {{map}}»: the clause goes, the sentence's own end stays
+                    start--;
+                    text = text[..start].TrimEnd() + (end < 0 ? "" : text[end..]);
+                }
+                else
+                {
+                    // a sentence of its own: it goes with its end
+                    text = (text[..start] + (end < 0 ? "" : text[(end + 1)..])).Trim();
+                }
+            }
+        }
+
+        return text;
     }
 
     /// <summary>{{anything}} or [anything]: a value nobody filled (healthcheck and tests use it too).</summary>
