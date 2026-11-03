@@ -62,7 +62,7 @@ public sealed class AnthropicIntentClassifier(IOptions<HazemOptions> options, Ti
         var o = options.Value;
         var started = clock.GetTimestamp();
         ClassifierOutcome Done(RawClassification? answer, string? failure, int? input = null, int? output = null) =>
-            new(answer, failure, o.AnthropicModel, OpenAiIntentClassifier.PromptVersion, (int)clock.GetElapsedTime(started).TotalMilliseconds,
+            new(answer, failure, o.AnthropicModel, OpenAiIntentClassifier.VersionFor(settings), (int)clock.GetElapsedTime(started).TotalMilliseconds,
                 input, output);
 
         if (string.IsNullOrWhiteSpace(o.AnthropicApiKey))
@@ -78,7 +78,7 @@ public sealed class AnthropicIntentClassifier(IOptions<HazemOptions> options, Ti
             {
                 Model = o.AnthropicModel,
                 MaxTokens = MaxTokens,
-                System = new List<TextBlockParam> { new() { Text = OpenAiIntentClassifier.PromptText, CacheControl = new CacheControlEphemeral() } },
+                System = new List<TextBlockParam> { new() { Text = OpenAiIntentClassifier.PromptFor(settings), CacheControl = new CacheControlEphemeral() } },
                 Messages = [new() { Role = Role.User, Content = text }],
                 OutputConfig = new OutputConfig { Effort = Effort.Low, Format = new JsonOutputFormat { Schema = Schema } },
             }, budget.Token);

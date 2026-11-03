@@ -86,6 +86,20 @@ describe("أدوات التجربة", () => {
     expect(await screen.findByText("تنبيه العاجل هيوصل رسالة عادية جوه الـ 24 ساعة ✅")).toBeTruthy();
   });
 
+  it("v1.52: the new understanding is switched on after asking, and off is Hazem as before", async () => {
+    const calls = serve({
+      "GET /auth/me": { body: lawyer }, "GET /testing/numbers": { body: numbers },
+      "GET /testing/understanding": { body: { on: false } }, "PUT /testing/understanding": { body: { on: true } },
+    });
+    renderAt("/testing");
+    expect(await screen.findByText("الفهم الجديد (المرحلة 1)")).toBeTruthy();
+    const section = screen.getByRole("region", { name: "الفهم الجديد (المرحلة 1)" });
+    fireEvent.click(within(section).getByRole("button", { name: "شغّله" }));
+    expect(await confirmYes()).toContain("تقدر تقفله في أي وقت");
+    await vi.waitFor(() => expect(calls.filter((c) => c.method === "PUT").map((c) => [c.path, c.body])).toEqual([["/testing/understanding", { on: true }]]));
+    expect(await screen.findByText("الفهم الجديد شغّال ✅")).toBeTruthy();
+  });
+
   it("says the tools are off outside the test environment", async () => {
     serve({ "GET /auth/me": { body: lawyer }, "GET /testing/numbers": { status: 404, body: { error: "not_found" } } });
     renderAt("/testing");

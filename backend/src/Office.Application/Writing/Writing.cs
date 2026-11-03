@@ -348,7 +348,10 @@ public static class Conversational
         [TextKeys.ServiceCheck] = "tell him the office will answer him here on whether it does this",
         // v1.48: the office facts answer many of these («هقابل المستشار نفسه؟»): from them, and from_facts true; otherwise as v1.46
         [TextKeys.ServiceDetail] = "if the OFFICE FACTS answer his question, answer it from them only (from_facts true, and say nothing about the office answering); otherwise tell him his question reached the office and they will answer it here (from_facts false, never the answer yourself)",
-        [TextKeys.OfficePrivacy] = "reassure him that everything he tells the office stays private: the office never discloses its clients' secrets",
+        [TextKeys.OfficePrivacy] = "reassure him that everything he tells the office stays private: the office never discloses its clients' secrets (nothing else: no prices, no question)",
+        // v1.52 (phase 1)
+        [TextKeys.NoPressure] = "tell him kindly there is no pressure and he can write here any time he likes (nothing else: no offer, no question)",
+        [TextKeys.PriceObjection] = "show him you understand the price matters; the value from the text only (the lawyer himself; the fee counts towards a case's fees) and the cheaper way it names; never a discount; the door open, no pushing",
         [TextKeys.AskCallApp] = "ask where the lawyer should call him: WhatsApp or FaceTime (two buttons follow your sentence)",
         [TextKeys.AskCallAppPhone] = "ask where the lawyer should call him at his appointment: WhatsApp, FaceTime, or a normal phone call from the office's number (three buttons follow your sentence)",
         [TextKeys.BookingStepAgain] = "ask him kindly to pick from the choices below, or to write the day and time that suit him (the choices follow your sentence)",

@@ -53,6 +53,23 @@ public sealed class PanelTesting(HazemDbContext db, ISettingsReader settings, Go
             new Dictionary<string, string?> { ["on"] = value }, ct);
     }
 
+    /// <summary>v1.52 (phase 1): does Hazem read the whole chat and the client's stance (understanding v2)?</summary>
+    public async Task<bool> UnderstandingAsync(CancellationToken ct) =>
+        (await settings.GetAsync(ct)).Flag(Application.Understanding.UnderstandingV2.SwitchKey);
+
+    /// <summary>v1.52: the switch, recorded in the audit (who, on or off). Off is Hazem exactly as before.</summary>
+    public async Task SetUnderstandingAsync(Guid by, string username, bool on, CancellationToken ct)
+    {
+        var value = on ? "true" : "false";
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO hazem.settings (key, value, description, updated_by)
+            VALUES ({Application.Understanding.UnderstandingV2.SwitchKey}, {value}, 'v1.52 (phase 1): understanding v2', {"panel:" + username})
+            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_by = EXCLUDED.updated_by
+            """, ct);
+        await PanelAudit.WriteAsync(db, clock, by, "testing.understanding", "hazem", null,
+            new Dictionary<string, string?> { ["on"] = value }, ct);
+    }
+
     /// <summary>Null when the key is not one of the test numbers.</summary>
     public async Task<ForgetResult?> ForgetAsync(Guid by, string key, CancellationToken ct)
     {
