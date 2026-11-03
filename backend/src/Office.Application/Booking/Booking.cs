@@ -51,22 +51,24 @@ public static class CallApp
     public const string WhatsApp = "whatsapp";
     public const string FaceTime = "facetime";
     public const string Meet = "meet";
+    public const string Phone = "phone"; // v1.49: a normal phone call from the office's number
 
     /// <summary>The code in a button id («bk:v:ft»).</summary>
-    public static string Short(string app) => app switch { FaceTime => "ft", Meet => "gm", _ => "wa" };
+    public static string Short(string app) => app switch { FaceTime => "ft", Meet => "gm", Phone => "ph", _ => "wa" };
 
-    public static string? ByShort(string? s) => s switch { "wa" => WhatsApp, "ft" => FaceTime, "gm" => Meet, _ => null };
+    public static string? ByShort(string? s) => s switch { "wa" => WhatsApp, "ft" => FaceTime, "gm" => Meet, "ph" => Phone, _ => null };
 
     /// <summary>The words after «هيكلم حضرتك على» (like a service's name); null for Meet without its link (the text waits).</summary>
     public static string? Words(string? app, OfficeInfo office) => app switch
     {
         FaceTime => "FaceTime على نفس الرقم ده",
+        Phone => "مكالمة تليفون عادية من رقم المكتب على نفس الرقم ده",
         Meet => office.MeetLink.Trim().Length > 0 ? $"لينك Google Meet ده: {office.MeetLink.Trim()}" : null,
         _ => "واتساب على نفس الرقم ده",
     };
 
     /// <summary>The panel's and the calendar's name.</summary>
-    public static string Name(string? app) => app switch { FaceTime => "FaceTime", Meet => "Google Meet", _ => "واتساب" };
+    public static string Name(string? app) => app switch { FaceTime => "FaceTime", Meet => "Google Meet", Phone => "مكالمة عادية", _ => "واتساب" };
 }
 
 /// <summary>The booking.* and office.* settings, read in every turn (the panel's changes count at once).</summary>
@@ -510,6 +512,33 @@ public sealed class BookingDesk(IBookingStore store, IBusyCalendar calendar)
     {
         var today = Today(now);
         return Availability.IsOpen(await store.LoadScheduleAsync(today, today, ct), now, Zone);
+    }
+
+    /// <summary>
+    /// v1.49: whether the panel's hours are open now and, when they are not, the next moment they open (within a week), for
+    /// the offer's urgent line («خلال دقايق» by day, «أول ما مواعيد العمل تبدأ الساعة …» by night).
+    /// </summary>
+    public async Task<(bool Open, DateTimeOffset? Opens)> HoursNowAsync(DateTimeOffset now, CancellationToken ct)
+    {
+        var today = Today(now);
+        var schedule = await store.LoadScheduleAsync(today, today.AddDays(7), ct);
+        if (Availability.IsOpen(schedule, now, Zone))
+        {
+            return (true, null);
+        }
+
+        for (var day = today; day <= today.AddDays(7); day = day.AddDays(1))
+        {
+            foreach (var r in schedule.HoursOn(day).OrderBy(r => r.Start))
+            {
+                if (Availability.At(day, r.Start, Zone) is { } open && open > now)
+                {
+                    return (false, open);
+                }
+            }
+        }
+
+        return (false, null);
     }
 
     public Task<int?> RequestRefundAsync(Guid appointmentId, string reason, CancellationToken ct) => store.RequestRefundAsync(appointmentId, reason, ct);

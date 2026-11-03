@@ -89,9 +89,15 @@ public sealed class HazemResponder(
     ];
 
     /// <summary>v1.39 (the forbidden rule 2): the answers to a general message, never the same twice in a row.</summary>
+    /// <summary>v1.49: the consultation offer in its wordings (with the urgent line by day or by night) and the case offer.</summary>
+    private static readonly string[] OfferKeys =
+        [TextKeys.ConsultationOffer, TextKeys.CaseOffer, TextKeys.ConsultationOfferUrgentDay, TextKeys.ConsultationOfferUrgentNight];
+
+    private static bool IsOffer(string key) => OfferKeys.Contains(key);
+
     private static readonly HashSet<string> RepeatWatched =
     [
-        TextKeys.Greeting, TextKeys.Greeting2, TextKeys.Greeting3, TextKeys.Unclear, TextKeys.ConsultationOffer, TextKeys.CaseOffer,
+        TextKeys.Greeting, TextKeys.Greeting2, TextKeys.Greeting3, TextKeys.Unclear, TextKeys.ConsultationOffer, TextKeys.CaseOffer, TextKeys.ConsultationOfferUrgentDay, TextKeys.ConsultationOfferUrgentNight,
         TextKeys.LegalQuestion, TextKeys.ServicesMenu, TextKeys.Welcome, TextKeys.WelcomeChoose, TextKeys.AboutHazem, TextKeys.OffTopic,
         TextKeys.ServicesTell, TextKeys.OfficePracticeAreas, TextKeys.OfficePrices,
         TextKeys.SituationUrgent, TextKeys.SituationHeld, TextKeys.SituationConfirmed, TextKeys.SituationOrder,
@@ -109,7 +115,7 @@ public sealed class HazemResponder(
         var said = plan.Steps.Where(s => !s.Key.StartsWith("greet_", StringComparison.Ordinal)).ToList();
         // v1.45 (TASK 18): «عايز احجز» after the offer wants its two buttons again (the writer says them differently), not the
         // services-or-a-person question
-        if (wantsToBook && said.Any(s => s.Key is TextKeys.ConsultationOffer or TextKeys.CaseOffer))
+        if (wantsToBook && said.Any(s => IsOffer(s.Key)))
         {
             return;
         }
@@ -205,6 +211,15 @@ public sealed class HazemResponder(
         var bookingOn = booking is not null && bookingSettings.Enabled && BookingTextKeys.All(k => texts.TryGetValue(k, out var t) && t.Active);
         // v1.33 (B-09): the urgent call-back with the booking on and every one of its texts approved; otherwise urgent as in 1.32.
         var urgentOn = bookingOn && UrgentTexts.Keys.All(k => texts.TryGetValue(k, out var t) && t.Active);
+        if (urgentOn && texts.TryGetValue(TextKeys.ConsultationOfferUrgentDay, out var urgentLine) && urgentLine.Active)
+        {
+            plan.HoursNow = await booking!.HoursNowAsync(now, ct); // v1.49: the offer says when the urgent call comes
+            plan.UrgentNightOn = texts.TryGetValue(TextKeys.ConsultationOfferUrgentNight, out var night) && night.Active;
+        }
+
+        bool Active(string key) => texts.TryGetValue(key, out var t) && t.Active;
+        plan.PhoneCallOn = Active(TextKeys.AskCallAppPhone) && Active(TextKeys.BtnAppPhone) && Active(TextKeys.BtnAppsList);
+        plan.UrgentButtonOn = Active(TextKeys.BtnBookUrgent);
         // TASK 12 (B-18): the reminders run whenever their texts are approved, the booking from WhatsApp on or off.
         var remindersOn = booking is not null && ReminderTexts.Keys.All(k => texts.TryGetValue(k, out var t) && t.Active);
         var servicesOn = services is not null && ServiceTextKeys.All(k => texts.TryGetValue(k, out var t) && t.Active);
@@ -997,8 +1012,8 @@ public sealed class HazemResponder(
         /// An office question then gets its answer alone: a new offer would replace the step he is on, or repeat itself.
         /// </summary>
         private bool OfferWouldStack =>
-            situation.RepliedLast(TextKeys.AskCallApp) || situation.RepliedLast(TextKeys.BookingChooseSlot)
-            || situation.RepliedLast(TextKeys.ConsultationOffer) || situation.RepliedLast(TextKeys.CaseOffer);
+            situation.RepliedLast(TextKeys.AskCallApp) || situation.RepliedLast(TextKeys.AskCallAppPhone) || situation.RepliedLast(TextKeys.BookingChooseSlot)
+            || OfferKeys.Any(situation.RepliedLast);
 
         /// <summary>v1.32: the welcome's «خدمات المكتب» button.</summary>
         public void ShowServices() => ServicesMenu();
@@ -2000,12 +2015,12 @@ public sealed class HazemResponder(
         {
             var waiting = situation.Facts.Waiting?.Select(c => BookingChoice.Parse(c.Id)).FirstOrDefault(p => p is { Kind: 's' or 'n' or 'v' });
             if (waiting is null || booking is null || work is not null
-                || !plan.Steps.Any(s => s.Key is TextKeys.ConsultationOffer or TextKeys.CaseOffer))
+                || !plan.Steps.Any(s => IsOffer(s.Key)))
             {
                 return;
             }
 
-            plan.Steps.RemoveAll(s => s.Key is TextKeys.ConsultationOffer or TextKeys.CaseOffer);
+            plan.Steps.RemoveAll(s => IsOffer(s.Key));
             if (situation.RepliedLast(TextKeys.BookingStepAgain))
             {
                 HandToOffice(TextKeys.UnclearAgain, PendingTask.UnclearMessage);
@@ -2039,11 +2054,19 @@ public sealed class HazemResponder(
                 : TextKeys.ConsultationOffer;
             if (MayBook && known is null)
             {
-                plan.Ask(offer, new ReplyChoices(InteractivePayload.Buttons,
+                List<ReplyChoice> choices =
                 [
                     new ReplyChoice(BookingChoice.Mode(BookingService.PhoneVideo), TextKeys.BtnBookPhoneVideo),
                     new ReplyChoice(BookingChoice.Mode(BookingService.Office), TextKeys.BtnBookOffice),
-                ]), fallback: TextKeys.ConsultationOffer);
+                ];
+                // v1.49 (the owner): the urgent call is a third button wherever it is on, and its line is said once a day
+                if (urgentOn && servicesOn && MayOrder && plan.UrgentButtonOn)
+                {
+                    choices.Add(new ReplyChoice(ServiceRow.Id(ServiceRow.Urgent), TextKeys.BtnBookUrgent));
+                }
+
+                var (key, fill) = offer == TextKeys.ConsultationOffer ? UrgentLine() : (offer, null);
+                plan.Ask(key, new ReplyChoices(InteractivePayload.Buttons, choices), Fill: fill, fallback: TextKeys.ConsultationOffer);
             }
             else
             {
@@ -2101,6 +2124,30 @@ public sealed class HazemResponder(
             plan.Ask(TextKeys.ServicesMenu, new ReplyChoices(InteractivePayload.List, rows, TextKeys.BtnServicesList),
                 fallback: TextKeys.ConsultationOffer);
             Check(Intake.MoveTo(IntakeState.OfferSent));
+        }
+
+        /// <summary>
+        /// v1.49 (the owner): the consultation offer with the urgent call's line, once a day: «خلال دقايق لو فاضي» while the
+        /// panel's hours are open, «أول ما مواعيد العمل تبدأ الساعة …» before a morning opening; the plain offer otherwise.
+        /// </summary>
+        private (string Key, Dictionary<string, string>? Fill) UrgentLine()
+        {
+            if (!urgentOn || situation.Facts.UrgentOffered || plan.HoursNow is not { } hours)
+            {
+                return (TextKeys.ConsultationOffer, null);
+            }
+
+            if (hours.Open)
+            {
+                return (TextKeys.ConsultationOfferUrgentDay, null);
+            }
+
+            if (plan.UrgentNightOn && hours.Opens is { } opens && TimeZoneInfo.ConvertTime(opens, BookingDesk.Zone) is { Hour: < 12 } local)
+            {
+                return (TextKeys.ConsultationOfferUrgentNight, new Dictionary<string, string> { ["opens"] = $"{local.Hour}:{local.Minute:00}" });
+            }
+
+            return (TextKeys.ConsultationOffer, null); // a day off, or opening after noon: no «الصبح» to promise
         }
 
         /// <summary>
@@ -2327,12 +2374,23 @@ public sealed class HazemResponder(
                 new(BookingChoice.Call(CallApp.WhatsApp), TextKeys.BtnAppWhatsApp),
                 new(BookingChoice.Call(CallApp.FaceTime), TextKeys.BtnAppFaceTime),
             ];
+            // v1.49 (the owner): a normal phone call from the office's number, for an Egyptian number (an international call is
+            // the office's cost) or a hidden one (his number is asked at the booking, as for WhatsApp)
+            var phone = plan.PhoneCallOn && (!turn.WaId.All(char.IsAsciiDigit) || turn.WaId.StartsWith("20", StringComparison.Ordinal));
+            if (phone)
+            {
+                apps.Add(new(BookingChoice.Call(CallApp.Phone), TextKeys.BtnAppPhone));
+            }
+
             if (b.Office.MeetLink.Trim().Length > 0)
             {
                 apps.Add(new(BookingChoice.Call(CallApp.Meet), TextKeys.BtnAppMeet));
             }
 
-            plan.Ask(TextKeys.AskCallApp, new ReplyChoices(InteractivePayload.Buttons, apps));
+            // WhatsApp's buttons are three at most: four apps go as a list
+            plan.Ask(phone ? TextKeys.AskCallAppPhone : TextKeys.AskCallApp,
+                apps.Count <= 3 ? new ReplyChoices(InteractivePayload.Buttons, apps) : new ReplyChoices(InteractivePayload.List, apps, TextKeys.BtnAppsList),
+                fallback: TextKeys.AskCallApp);
         }
 
         /// <summary>
@@ -2876,6 +2934,16 @@ public sealed class HazemResponder(
         public List<ReplyStep> Steps { get; } = [];
 
         public List<PendingTask> Tasks { get; } = [];
+
+        /// <summary>v1.49: the panel's hours now (open, or the next opening), for the offer's urgent line; null without the urgent call.</summary>
+        public (bool Open, DateTimeOffset? Opens)? HoursNow { get; set; }
+
+        /// <summary>v1.49: the texts the new choices need are approved (a fallback or a missing title drops every button).</summary>
+        public bool PhoneCallOn { get; set; }
+
+        public bool UrgentButtonOn { get; set; }
+
+        public bool UrgentNightOn { get; set; }
 
         public void Say(string key, string? fallback = null, IReadOnlyDictionary<string, string>? Fill = null) =>
             Steps.Add(new ReplyStep(key, fallback, Fill));

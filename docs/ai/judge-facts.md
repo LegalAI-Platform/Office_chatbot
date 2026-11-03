@@ -8,7 +8,8 @@ contradicts these as wrong, and a price or a promise not in them as forbidden. T
 - **Every consultation is with Al-Mostashar Saad Fathy Saad himself** (the owner, 2026-11-01).
 - Consultations: by phone or video 500 EGP (a quarter of an hour), at the office 1,000 EGP (half an hour, the office's price
   list), urgent by phone 1,000 EGP.
-- Phone or video: on WhatsApp on the client's number, or FaceTime (iPhone). The lawyer calls at the appointment.
+- Phone or video: on WhatsApp on the client's number, or FaceTime (iPhone), or (v1.49) a normal phone call from the office's number (not offered to numbers outside Egypt). The lawyer calls at the appointment.
+- The office's policy (v1.49, the owner): the consultation offer mentions the urgent consultation once a day («خلال دقايق لو فاضي» by day, «أول ما مواعيد العمل تبدأ الساعة …» by night), with a third button «🚨 استشارة عاجلة». This is wanted, not an upsell flaw; repeating it in the same day would be.
 - An urgent consultation: the price, then where to pay; once the transfer's photo arrives the lawyer calls within about
   10 minutes when he is free, or at the time he is free; outside his hours, in the morning at his first free moment
   (Hazem names that time, computed from the lawyer's calendar and hours, e.g. 10:30), and the client is told so before he

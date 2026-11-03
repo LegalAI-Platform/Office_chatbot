@@ -11,7 +11,7 @@ export interface Appointment {
   /** TASK 12 (B-18): «هحضر ✅» for this time, and the reminders of this time. */
   attending: boolean; reminders: Reminder[];
   /** 1.25 (B-23): where the lawyer calls (a phone or video consultation). */
-  call_app: "whatsapp" | "facetime" | "meet" | null;
+  call_app: "whatsapp" | "facetime" | "meet" | "phone" | null;
 }
 export interface Reminder {
   kind: "day_before" | "two_hours"; state: "scheduled" | "sending" | "sent" | "failed" | "skipped" | "cancelled";

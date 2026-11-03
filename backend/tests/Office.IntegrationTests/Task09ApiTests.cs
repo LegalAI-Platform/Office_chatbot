@@ -248,7 +248,7 @@ public sealed class Task09ApiTests(TestDatabase db) : IAsyncLifetime
         await Say("السلام عليكم");
         await Say("محمد أحمد علي حسن");
         var apps = (await Press("bk:m:pv")).Single()!["interactive"]!["choices"]!.AsArray();
-        Assert.Equal(["bk:v:wa", "bk:v:ft"], apps.Select(c => (string?)c!["id"])); // no Meet without its link
+        Assert.Equal(["bk:v:wa", "bk:v:ft", "bk:v:ph"], apps.Select(c => (string?)c!["id"])); // no Meet without its link; v1.49: the normal call (an Egyptian number)
         await Press("bk:v:ft");
         await Press(Tomorrow12 + ":ft");
         var id = await db.ScalarAsync<Guid>("SELECT id FROM hazem.appointments WHERE state = 'pending_payment' AND call_app = 'facetime'");
@@ -287,7 +287,7 @@ public sealed class Task09ApiTests(TestDatabase db) : IAsyncLifetime
             """);
         await Say("السلام عليكم");
         await Say("محمد أحمد علي حسن");
-        Assert.Equal("bk:v:gm", (string?)(await Press("bk:m:pv")).Single()!["interactive"]!["choices"]![2]!["id"]); // Meet, with its link
+        Assert.Equal("bk:v:gm", (string?)(await Press("bk:m:pv")).Single()!["interactive"]!["choices"]![3]!["id"]); // Meet, with its link (v1.49: the fourth, as a list)
         await Press("bk:s:of:" + new DateTimeOffset(2026, 11, 20, 12, 0, 0, TimeSpan.FromHours(2)).ToUnixTimeSeconds());
         var id = await db.ScalarAsync<Guid>("SELECT id FROM hazem.appointments WHERE state = 'pending_payment' AND call_app IS NULL");
         await Receipt();

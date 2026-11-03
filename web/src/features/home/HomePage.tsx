@@ -17,7 +17,7 @@ const URGENT = new Set(["urgent_request", "safety_alert"]);
 /** The fields of /booking/appointments this page shows (the booking feature has the whole type; features stay apart). */
 interface Appointment {
   id: string; service: string; start: string; state: string; name: string | null; payment: string | null;
-  call_app: "whatsapp" | "facetime" | "meet" | null;
+  call_app: "whatsapp" | "facetime" | "meet" | "phone" | null;
 }
 const who = (t: DashboardTask) => t.client_name ?? "رقم من غير اسم";
 // every card of the page asks again each minute, like the tasks and the bell, so a booking made on WhatsApp shows up
@@ -322,6 +322,7 @@ function kindOf(a: Appointment): { icon: IconName; text: string } {
   if (a.service === "consultation_office" || a.service.startsWith("urf_")) return { icon: "office", text: label(BOOKING_SERVICES, a.service) };
   if (a.service === "consultation_urgent") return { icon: "phone", text: "استشارة عاجلة" };
   if (a.call_app === "meet" || a.call_app === "facetime") return { icon: "video", text: "استشارة فيديو" };
+  if (a.call_app === "phone") return { icon: "phone", text: "مكالمة عادية" }; // v1.49
   return { icon: "phone", text: "استشارة هاتفية" };
 }
 

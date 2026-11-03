@@ -38,6 +38,9 @@ public sealed record OpenOrder(string Kind, string State);
 public sealed record SituationFacts(OpenAppointment? Appointment, OpenOrder? Order, IReadOnlyList<string> LastReplyKeys,
     IReadOnlyList<InteractiveChoice>? Waiting = null)
 {
+    /// <summary>v1.49: the offer with the urgent call's line went to him in the last 24 hours (it is said once).</summary>
+    public bool UrgentOffered { get; init; }
+
     public static SituationFacts Empty { get; } = new(null, null, []);
 }
 

@@ -132,6 +132,13 @@ public static class TextKeys
     // Proposed in TASK 08 (inactive until approved). Titles of buttons and list rows too.
     public const string BtnBookPhoneVideo = "btn_book_phone_video";
     public const string BtnBookOffice = "btn_book_office";
+    // v1.49: the offer with the urgent call's line (once a day), its third button, and the normal phone call
+    public const string ConsultationOfferUrgentDay = "consultation_offer_urgent_day";
+    public const string ConsultationOfferUrgentNight = "consultation_offer_urgent_night";
+    public const string BtnBookUrgent = "btn_book_urgent";
+    public const string BtnAppPhone = "btn_app_phone";
+    public const string AskCallAppPhone = "ask_call_app_phone"; // v1.49: the question with the normal phone call
+    public const string BtnAppsList = "btn_apps_list";          // v1.49: four apps (Meet too) go as a list
     public const string BookingChooseSlot = "booking_choose_slot";
     public const string BtnSlotsList = "btn_slots_list";
     public const string BtnMoreSlots = "btn_more_slots";
