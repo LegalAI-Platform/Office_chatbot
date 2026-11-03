@@ -186,14 +186,15 @@ public static class UrfRules
     }
 
     /// <summary>B-11.1: the typed ages. Under 18 on either side closes the case without a price or a time.</summary>
-    public static (UrfCase Case, UrfNext Next) Ages(UrfCase c, string? text)
+    /// <param name="words">v1.52 (phase 1): numbers in words («الاتنين تلاتين») are read too.</param>
+    public static (UrfCase Case, UrfNext Next) Ages(UrfCase c, string? text, bool words = false)
     {
         if (c.State != UrfCase.Collecting || c.Step != UrfStep.Ages)
         {
             return (c, UrfNext.Ask);
         }
 
-        if (UrfAges.Parse(text) is not { } ages)
+        if (UrfAges.Parse(words && text is not null ? NumberWords.ToDigits(text) : text) is not { } ages)
         {
             var tried = c with { AgeTries = c.AgeTries + 1 };
             return (tried, tried.AgeTries >= 2 ? UrfNext.Help : UrfNext.AskAgesAgain);

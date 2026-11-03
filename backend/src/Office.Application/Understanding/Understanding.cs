@@ -184,7 +184,48 @@ public sealed record RawClassification(
     string? NameGender = null,
     int? Picked = null,
     string? AskedTime = null,
-    bool? TimeExact = null);
+    bool? TimeExact = null,
+    string? Stance = null,
+    IReadOnlyList<string>? AlsoAsked = null);
+
+/// <summary>
+/// v1.52 (phase 1, the owner: «اي الحل الصح المفروض»): where the client stands in this message, read with the whole chat.
+/// Only read while understanding v2 is on (<see cref="UnderstandingV2"/>).
+/// </summary>
+public enum Stance
+{
+    /// <summary>Nothing particular: answered as usual.</summary>
+    None,
+
+    /// <summary>«انا بسأل بس»، «لسه بفكر»: no pushing the service's next question.</summary>
+    JustAsking,
+
+    /// <summary>«مش عايز»، «خلاص مش هحجز»، «لا شكرًا».</summary>
+    Declines,
+
+    /// <summary>«غالي قوي»، «ليه أدفع كل ده».</summary>
+    PriceObjection,
+
+    /// <summary>«خش يا امين»: words for someone next to him, not for Hazem.</summary>
+    NotForHazem,
+}
+
+/// <summary>v1.52 (phase 1): the switch of understanding v2 (hazem.understanding_v2, off by default: Hazem exactly as before).</summary>
+public static class UnderstandingV2
+{
+    public const string SwitchKey = "hazem.understanding_v2";
+
+    /// <summary>The turns of the chat the classifier reads with the switch on (2 without it).</summary>
+    public const int HistoryTurns = 8;
+
+    public static Stance StanceOf(RawClassification? ai) =>
+        Enum.GetValues<Stance>().Where(v => Classification.Code(v) == ai?.Stance).DefaultIfEmpty(Stance.None).First();
+
+    /// <summary>The office's other questions in the message (up to 3, the main one's topic aside).</summary>
+    public static IReadOnlyList<InfoTopic> AlsoAsked(RawClassification? ai, InfoTopic? main) =>
+        (ai?.AlsoAsked ?? []).Select(code => Enum.GetValues<InfoTopic>().Where(t => Classification.Code(t) == code).Cast<InfoTopic?>().FirstOrDefault())
+            .OfType<InfoTopic>().Where(t => t != main).Distinct().Take(3).ToList();
+}
 
 /// <summary>One call to the classifier: the answer, or why there is none, plus what it cost.</summary>
 public sealed record ClassifierOutcome(
@@ -336,7 +377,7 @@ public static class AiContext
     /// <param name="choices">v1.47 (B-32): the buttons or rows waiting under Hazem's last message, numbered from 1.</param>
     /// <param name="today">v1.47: today's day, date and time in Cairo, for a day or a time he asks for.</param>
     public static string Build(string message, string? hazemLast, string? clientBefore, string? open,
-        IReadOnlyList<string>? choices = null, string? today = null)
+        IReadOnlyList<string>? choices = null, string? today = null, IReadOnlyList<string>? earlier = null)
     {
         if (hazemLast is null && clientBefore is null && open is null && choices is not { Count: > 0 })
         {
@@ -344,6 +385,16 @@ public static class AiContext
         }
 
         var sb = new StringBuilder(Head).Append('\n');
+        if (earlier is { Count: > 0 })
+        {
+            // v1.52 (phase 1): the chat before, oldest first, so what he wants now is read with all of it
+            sb.Append("المحادثة قبل كده:\n");
+            foreach (var line in earlier)
+            {
+                sb.Append("- ").Append(AiInput.Redact(line).Replace('\n', ' ')).Append('\n');
+            }
+        }
+
         if (hazemLast is not null)
         {
             sb.Append("آخر رسالة من حازم: ").Append(AiInput.Redact(hazemLast).Replace('\n', ' ')).Append('\n');

@@ -264,8 +264,10 @@ public sealed class HazemResponder(
             var situation = SituationTextKeys.All(k => texts.TryGetValue(k, out var st) && st.Active)
                 ? ClientSituation.From(facts)
                 : new ClientSituation(SituationKind.None, facts);
+            // v1.52 (phase 1): understanding v2 (the whole chat, his stance, the other questions); off is Hazem exactly as before
+            var understanding = settings.Flag(UnderstandingV2.SwitchKey);
             var flow = new Flow(turn, state, list, null, plan, settings.Flag(HandoffEnabledKey), bookingOn ? bookingSettings : null, servicesOn,
-                urfOn, urfOpen, ageRefusal: ageRefusal, urgentOn: urgentOn, situation: situation);
+                urfOn, urfOpen, ageRefusal: ageRefusal, urgentOn: urgentOn, situation: situation, understanding: understanding);
             var freeText = false;
             // v1.47 (B-32): words typed while Hazem's buttons or list rows wait. The AI reads them with the choices in its context;
             // a choice they pick (or a day or a time asked on a list of times) is answered as its press, by the code, like
@@ -275,7 +277,7 @@ public sealed class HazemResponder(
                 && turn.Messages.All(m => m.Interactive is null && m.Button is null) && FileIn(turn) is null
                 && AiInput.Build(turn) is { } typedWords && !Courtesy.Read(typedWords).EndsTheChat)
             {
-                var understood = await WithContextAsync(turn, typedWords, situation, ct);
+                var understood = await WithContextAsync(turn, typedWords, situation, settings, ct);
                 typedReading = Backstop.Apply(Classification.From(await classifier.ClassifyAsync(understood, settings, ct), settings), typedWords);
                 var raw = typedReading.Call?.Answer;
                 var typedPress = TypedChoice.Picked(waiting, raw);
@@ -292,7 +294,7 @@ public sealed class HazemResponder(
                     classification = typedReading; // kept in the log: what the AI read
                     typedReading = null;
                     flow = new Flow(turn, state, list, null, plan, settings.Flag(HandoffEnabledKey), bookingOn ? bookingSettings : null,
-                        servicesOn, urfOn, urfOpen, ageRefusal: ageRefusal, urgentOn: urgentOn, situation: situation);
+                        servicesOn, urfOn, urfOpen, ageRefusal: ageRefusal, urgentOn: urgentOn, situation: situation, understanding: understanding);
                 }
             }
 
@@ -307,7 +309,7 @@ public sealed class HazemResponder(
             var urfButton = choice is null ? UrfAnswerIn(turn) : null;
             var urfAnswer = urfButton is not null && urfCase is { State: UrfCase.Collecting } && flow.MayBook ? urfButton : null;
             var urfAges = choice is null && urfButton is null && urfCase is { State: UrfCase.Collecting, Step: UrfStep.Ages } && flow.MayBook
-                          && FileIn(turn) is null && AiInput.Build(turn) is { } typed && typed.Any(char.IsDigit);
+                          && FileIn(turn) is null && AiInput.Build(turn) is { } typed && (typed.Any(char.IsDigit) || understanding && NumberWords.Any(typed));
             // TASK 09 / 10 (B-05, B-16, T-09): a file from the client never reaches the AI, nor any word sent with it:
             // a receipt (an image) for what waits for one, the documents of a service order, or «send an image».
             ReceiptOutcome? receipt = null;
@@ -359,7 +361,7 @@ public sealed class HazemResponder(
                 else
                 {
                     flow = new Flow(turn, state, list, row.AsClassification, plan, settings.Flag(HandoffEnabledKey),
-                        bookingOn ? bookingSettings : null, servicesOn, urfOn, urfOpen, null, ageRefusal, returning, urgentOn, situation);
+                        bookingOn ? bookingSettings : null, servicesOn, urfOn, urfOpen, null, ageRefusal, returning, urgentOn, situation, understanding);
                     flow.Respond(firstContact);
                 }
             }
@@ -421,16 +423,17 @@ public sealed class HazemResponder(
                     {
                         // 0032: the AI down → an insult or a plain thanks is still read by code (Backstop)
                         // v1.41 (TASK 17, part B): the AI reads the message with what a person would know before it
-                        var understood = chat is null || firstContact ? aiText : await WithContextAsync(turn, aiText, situation, ct);
+                        var understood = chat is null || firstContact ? aiText : await WithContextAsync(turn, aiText, situation, settings, ct);
                         classification = Backstop.Apply(
                             Classification.From(await classifier.ClassifyAsync(understood, settings, ct), settings), aiText);
                     }
 
-                    var office = classification is { Intent: Intent.OfficeInfo } asked
-                        ? await OfficeDetailsAsync(settings, asked.Topic == InfoTopic.Hours, now, ct)
+                    IReadOnlyList<InfoTopic> also = understanding ? UnderstandingV2.AlsoAsked(classification?.Call?.Answer, classification?.Topic) : [];
+                    var office = classification is { Intent: Intent.OfficeInfo } || also.Count > 0
+                        ? await OfficeDetailsAsync(settings, classification?.Topic == InfoTopic.Hours || also.Contains(InfoTopic.Hours), now, ct)
                         : null;
                     flow = new Flow(turn, state, list, classification, plan, settings.Flag(HandoffEnabledKey), bookingOn ? bookingSettings : null,
-                        servicesOn, urfOn, urfOpen, office, ageRefusal, returning, urgentOn, situation);
+                        servicesOn, urfOn, urfOpen, office, ageRefusal, returning, urgentOn, situation, understanding);
                     freeText = aiText is not null;
                     // v1.32: the list did not know the greeting («صباحين الخير»): the kind the AI read, answered the same way
                     if (greet is null && classification is { IsFallback: false, Courtesy: not CourtesyKind.None } read
@@ -533,9 +536,10 @@ public sealed class HazemResponder(
     /// v1.41 (TASK 17, part B): the message as the classifier reads it: Hazem's last message, the client's message before
     /// this one, and what he has open, before it (AiContext). Nothing before it on a first contact.
     /// </summary>
-    private async Task<string> WithContextAsync(Turn turn, string message, ClientSituation situation, CancellationToken ct)
+    private async Task<string> WithContextAsync(Turn turn, string message, ClientSituation situation, HazemSettings settings, CancellationToken ct)
     {
-        var lines = await chat!.RecentAsync(turn.WaId, 2, ct);
+        var understanding = settings.Flag(UnderstandingV2.SwitchKey);
+        var lines = await chat!.RecentAsync(turn.WaId, understanding ? UnderstandingV2.HistoryTurns : 2, ct);
         var open = situation.Kind switch
         {
             SituationKind.UrgentWaiting => "استشارة عاجلة مدفوعة مستنية مكالمة المستشار",
@@ -549,8 +553,12 @@ public sealed class HazemResponder(
         var local = TimeZoneInfo.ConvertTime(clock.GetUtcNow(), OfficeHours.Cairo);
         var today = waiting is null ? null
             : $"{BookingWords.DayName(local.DayOfWeek)} {local.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture)}";
+        // v1.52: the turns before the last two, oldest first, for what he wants now
+        var earlier = understanding && lines.Count > 2
+            ? lines.Take(lines.Count - 2).Select(l => (l.FromClient ? "العميل: " : "حازم: ") + l.Text).ToList()
+            : null;
         return AiContext.Build(message, lines.LastOrDefault(l => !l.FromClient)?.Text, lines.LastOrDefault(l => l.FromClient)?.Text, open,
-            waiting, today);
+            waiting, today, earlier);
     }
 
     /// <summary>v1.47 (B-32): the exact time he typed is free to book (moving an appointment always goes through its list).</summary>
@@ -741,10 +749,13 @@ public sealed class HazemResponder(
     private sealed class Flow(Turn turn, ClientState state, ListMatch list, Classification? c, Plan plan, bool handoffEnabled,
         BookingSettings? booking, bool servicesOn, bool urfOn = false, IReadOnlyList<UrfCase>? urfOpen = null,
         IReadOnlyDictionary<string, string>? office = null, AgeRefusal? ageRefusal = null, bool returning = false, bool urgentOn = false,
-        ClientSituation? situation = null)
+        ClientSituation? situation = null, bool understanding = false)
     {
         /// <summary>v1.39 (TASK 16): what the client has with the office before this turn.</summary>
         private readonly ClientSituation situation = situation ?? ClientSituation.None;
+
+        /// <summary>v1.52 (phase 1): he only asks, does not want it, or finds it too dear: nothing is pushed at him this turn.</summary>
+        private bool paused;
 
         /// <summary>v1.39: the client asked for his situation («فاكرني؟»، or «مستعجل» while his paid call waits): no forbidden rule 2 on it.</summary>
         public bool AskedStatus { get; private set; }
@@ -1073,7 +1084,7 @@ public sealed class HazemResponder(
                 WordsToOffice();
             }
 
-            var (next, how) = answer is not null ? UrfRules.Answer(Urf!, answer) : UrfRules.Ages(Urf!, AiInput.Build(turn));
+            var (next, how) = answer is not null ? UrfRules.Answer(Urf!, answer) : UrfRules.Ages(Urf!, AiInput.Build(turn), understanding);
             Urf = next;
             UrfChanged = true;
             AfterUrf(how);
@@ -1638,7 +1649,19 @@ public sealed class HazemResponder(
                 return;
             }
 
+            if (AnswerStance(turnClass))
+            {
+                AnswerAlso(turnClass);
+                return;
+            }
+
             Intake.CountUnclear(turnClass.Intent == Intent.Other);
+            AnswerIntent(turnClass);
+            AnswerAlso(turnClass);
+        }
+
+        private void AnswerIntent(Classification turnClass)
+        {
             switch (turnClass.Intent)
             {
                 case Intent.ConsultationRequest:
@@ -1650,11 +1673,16 @@ public sealed class HazemResponder(
                     // appointment; no second offer (its buttons would replace the Urfi times).
                     plan.Say(TextKeys.UrfQuestionLater);
                     break;
-                case Intent.LegalQuestion when urfOn && Urf is { State: UrfCase.Collecting }:
+                case Intent.LegalQuestion when urfOn && Urf is { State: UrfCase.Collecting } && UrfInChat:
                     // v1.46: a question in the middle of the Urfi questions: the lawyer explains it at the appointment, and
-                    // the question waiting comes back (never the consultation offer over the Urfi path)
+                    // the question waiting comes back (never the consultation offer over the Urfi path); v1.52: not when he
+                    // said he only asks
                     plan.Say(TextKeys.UrfQuestionLater);
-                    AfterUrf(UrfNext.Ask);
+                    if (!paused)
+                    {
+                        AfterUrf(UrfNext.Ask);
+                    }
+
                     break;
                 case Intent.LegalQuestion:
                     plan.Say(TextKeys.LegalQuestion); // B-20, then the offer
@@ -1763,8 +1791,8 @@ public sealed class HazemResponder(
                 case Intent.Other when turnClass is { IsFallback: false, Service: { } meant } && !(urfOn && Urf is { State: UrfCase.Collecting }):
                     AnswerService(meant); // v1.41 (part B): no box fitted, but the AI understood which of the office's services he means
                     break;
-                case var _ when urfOn && Urf is { State: UrfCase.Collecting }:
-                    AfterUrf(UrfNext.Ask); // B-11: the question still waiting, again (words without its answer)
+                case var _ when urfOn && Urf is { State: UrfCase.Collecting } && UrfInChat:
+                    AfterUrf(UrfNext.Ask); // B-11: the question still waiting, again (words without its answer); v1.52: while it is the topic
                     break;
                 default:
                     if (Intake.UnclearInARow <= 1)
@@ -1799,6 +1827,11 @@ public sealed class HazemResponder(
             if (task is not null)
             {
                 plan.Task(task);
+            }
+
+            if (paused)
+            {
+                return; // v1.52: he only asks: nothing pushed after the answer
             }
 
             if (urfOn && Urf is { State: UrfCase.Collecting })
@@ -1880,19 +1913,7 @@ public sealed class HazemResponder(
                 return;
             }
 
-            (string Key, string[] Needs)? answer = topic switch
-            {
-                InfoTopic.Address => (TextKeys.OfficeAddress, ["address"]), // v1.51: the map is an extra (its line goes without it)
-                InfoTopic.Hours => (TextKeys.OfficeHours, ["hours"]),
-                InfoTopic.HowToBook => (TextKeys.OfficeHowToBook, []),
-                InfoTopic.HowToPay => (TextKeys.OfficeHowToPay, ["instapay", "wallet"]),
-                InfoTopic.Refund => (TextKeys.OfficeRefund, []),
-                InfoTopic.Prices => (TextKeys.OfficePrices, []),
-                InfoTopic.FeePolicy => (TextKeys.OfficeFeePolicy, []),
-                InfoTopic.PracticeAreas => (TextKeys.OfficePracticeAreas, []),
-                InfoTopic.Lawyer => (TextKeys.AboutLawyer, []), // v1.22: the owner's words, shortened (B-21)
-                _ => null, // mode: the offer itself says both ways and their prices
-            };
+            var answer = OfficeText(topic);
             var answered = false;
             if (answer is var (key, needs))
             {
@@ -1919,6 +1940,95 @@ public sealed class HazemResponder(
                 plan.Task(PendingTask.ExistingClientMessage, list.ExistingClient?.StaffId);
             }
         }
+
+        /// <summary>The approved answer to a question about the office, and the details of «بيانات المكتب» it needs.</summary>
+        private static (string Key, string[] Needs)? OfficeText(InfoTopic? topic) => topic switch
+        {
+            InfoTopic.Address => (TextKeys.OfficeAddress, ["address"]), // v1.51: the map is an extra (its line goes without it)
+            InfoTopic.Hours => (TextKeys.OfficeHours, ["hours"]),
+            InfoTopic.HowToBook => (TextKeys.OfficeHowToBook, []),
+            InfoTopic.HowToPay => (TextKeys.OfficeHowToPay, ["instapay", "wallet"]),
+            InfoTopic.Refund => (TextKeys.OfficeRefund, []),
+            InfoTopic.Prices => (TextKeys.OfficePrices, []),
+            InfoTopic.FeePolicy => (TextKeys.OfficeFeePolicy, []),
+            InfoTopic.PracticeAreas => (TextKeys.OfficePracticeAreas, []),
+            InfoTopic.Lawyer => (TextKeys.AboutLawyer, []), // v1.22: the owner's words, shortened (B-21)
+            InfoTopic.Privacy => (TextKeys.OfficePrivacy, []), // v1.46
+            _ => null, // mode: the offer itself says both ways and their prices
+        };
+
+        /// <summary>
+        /// v1.52 (phase 1): the office's other questions in the same message («العنوان ايه، ومين الأستاذ سعد، وهو اللي هيديني
+        /// الاستشارة؟»), each with its own approved answer after the main one; one the panel has no detail for is left out.
+        /// </summary>
+        private void AnswerAlso(Classification turnClass)
+        {
+            if (!understanding)
+            {
+                return;
+            }
+
+            foreach (var topic in UnderstandingV2.AlsoAsked(turnClass.Call?.Answer, turnClass.Topic))
+            {
+                if (OfficeText(topic) is var (key, needs) && plan.Steps.All(st => st.Key != key)
+                    && needs.All(n => office?.GetValueOrDefault(n) is { Length: > 0 }))
+                {
+                    plan.Say(key, Fill: office);
+                }
+            }
+        }
+
+        /// <summary>
+        /// v1.52 (phase 1): where he stands, read with the whole chat. «بسأل بس» / «مش عايز» / «غالي» / words for someone next to
+        /// him are answered as such, never with the service's next question or the offer again; a real question, an urgent
+        /// matter or a person asked for goes on as usual (with nothing pushed after it). True when the turn was answered here.
+        /// </summary>
+        private bool AnswerStance(Classification turnClass)
+        {
+            var stance = understanding ? UnderstandingV2.StanceOf(turnClass.Call?.Answer) : Stance.None;
+            paused = stance != Stance.None;
+            if (!paused || turnClass.Intent is Intent.Urgent or Intent.HumanRequest or Intent.ExistingMatter or Intent.RescheduleOrCancel
+                    or Intent.MyStatus or Intent.Abusive)
+            {
+                return false;
+            }
+
+            switch (stance)
+            {
+                case Stance.PriceObjection:
+                    // the owner (2026-11-04): understanding, the value from the facts, the cheaper way, no discount, no task;
+                    // the second time only «تحت أمرك»
+                    plan.Say(situation.RepliedLast(TextKeys.PriceObjection) ? TextKeys.NoPressure : TextKeys.PriceObjection, TextKeys.NoPressure);
+                    return true;
+                case Stance.NotForHazem when turnClass.Intent is Intent.Other or Intent.Greeting:
+                case Stance.JustAsking or Stance.Declines when turnClass.Intent is not (Intent.OfficeInfo or Intent.LegalQuestion
+                    or Intent.PriceQuestion):
+                    if (!situation.RepliedLast(TextKeys.NoPressure))
+                    {
+                        plan.Say(TextKeys.NoPressure);
+                    }
+
+                    return true;
+                default:
+                    return false; // his question is answered below, with nothing pushed after it
+            }
+        }
+
+        /// <summary>v1.52: the Urfi questions are the chat's topic now (one of them was Hazem's last answer).</summary>
+        private bool UrfInChat => !understanding || situation.Facts.LastReplyKeys.Any(k => UrfStepOf(k) is not null
+            || k is TextKeys.UrfStepAgain or TextKeys.UrfAgesAgain);
+
+        private static string? UrfStepOf(string key) => key switch
+        {
+            TextKeys.UrfAskAges => UrfStep.Ages,
+            TextKeys.UrfAskWifePast => UrfStep.WifePast,
+            TextKeys.UrfAskGuardian => UrfStep.Guardian,
+            TextKeys.UrfAskWitnesses => UrfStep.Witnesses,
+            TextKeys.UrfAskCopy => UrfStep.HasCopy,
+            TextKeys.UrfAskAgreed => UrfStep.Agreed,
+            TextKeys.UrfAskChildren => UrfStep.Children,
+            _ => null,
+        };
 
         private void AnswerPrice(Service? service)
         {
@@ -2013,6 +2123,11 @@ public sealed class HazemResponder(
         /// </summary>
         public void KeepTheStep()
         {
+            if (paused)
+            {
+                return; // v1.52: no step pushed back at him
+            }
+
             var waiting = situation.Facts.Waiting?.Select(c => BookingChoice.Parse(c.Id)).FirstOrDefault(p => p is { Kind: 's' or 'n' or 'v' });
             if (waiting is null || booking is null || work is not null
                 || !plan.Steps.Any(s => IsOffer(s.Key)))
@@ -2033,6 +2148,11 @@ public sealed class HazemResponder(
 
         private void Offer(bool askTopic = true)
         {
+            if (paused)
+            {
+                return; // v1.52: he only asks, or does not want it: his question answered, no offer pushed after it
+            }
+
             if (UrfWaitsForTime)
             {
                 return; // v1.22: the Urfi times are waiting for a pick; a consultation offer would replace them

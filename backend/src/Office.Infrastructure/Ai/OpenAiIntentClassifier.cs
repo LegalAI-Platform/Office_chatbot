@@ -21,6 +21,9 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
     public const string HttpClientName = "openai";
     /// <summary>The prompt in use: Ai/prompts/{PromptVersion}.md. Older versions stay in the folder as history.</summary>
     public const string PromptVersion = "classify-v16";
+
+    /// <summary>v1.52 (phase 1): the prompt while understanding v2 is on (the whole chat, the stance, the other questions).</summary>
+    public const string PromptVersionV2 = "classify-v17";
     public const string StubEnabledKey = "ai.stub_enabled";
     public const string StubBaseUrlKey = "ai.stub_base_url";
 
@@ -32,13 +35,22 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
     /// <summary>Total time for the call and its one retry (tests shorten it).</summary>
     public TimeSpan Budget { get; init; } = DefaultBudget;
 
-    private static readonly Lazy<string> Prompt = new(() =>
+    private static readonly Lazy<string> Prompt = new(() => Load(PromptVersion));
+    private static readonly Lazy<string> PromptV2 = new(() => Load(PromptVersionV2));
+
+    private static string Load(string version)
     {
-        using var s = typeof(OpenAiIntentClassifier).Assembly.GetManifestResourceStream($"Office.Infrastructure.Ai.prompts.{PromptVersion}.md")
-            ?? throw new InvalidOperationException($"embedded prompt {PromptVersion}.md is missing");
+        using var s = typeof(OpenAiIntentClassifier).Assembly.GetManifestResourceStream($"Office.Infrastructure.Ai.prompts.{version}.md")
+            ?? throw new InvalidOperationException($"embedded prompt {version}.md is missing");
         using var r = new StreamReader(s);
         return r.ReadToEnd();
-    });
+    }
+
+    /// <summary>v1.52: the prompt version the switch picks (off: exactly as before).</summary>
+    public static string VersionFor(HazemSettings settings) => settings.Flag(UnderstandingV2.SwitchKey) ? PromptVersionV2 : PromptVersion;
+
+    /// <summary>v1.52: the prompt text the switch picks.</summary>
+    public static string PromptFor(HazemSettings settings) => settings.Flag(UnderstandingV2.SwitchKey) ? PromptV2.Value : Prompt.Value;
 
     public static JsonObject Schema { get; } = BuildSchema();
 
@@ -51,7 +63,7 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
         var (baseUrl, key) = UseStub(settings) ? (settings.Get(StubBaseUrlKey), StubKey) : (o.OpenAiBaseUrl, o.OpenAiApiKey);
         var started = clock.GetTimestamp();
         ClassifierOutcome Done(RawClassification? answer, string? failure, int? input = null, int? output = null) =>
-            new(answer, failure, o.OpenAiModel, PromptVersion, (int)clock.GetElapsedTime(started).TotalMilliseconds, input, output);
+            new(answer, failure, o.OpenAiModel, VersionFor(settings), (int)clock.GetElapsedTime(started).TotalMilliseconds, input, output);
 
         if (string.IsNullOrWhiteSpace(key))
         {
@@ -66,7 +78,7 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
             {
                 using var request = new HttpRequestMessage(HttpMethod.Post, baseUrl.TrimEnd('/') + "/chat/completions")
                 {
-                    Content = JsonContent.Create(Body(o.OpenAiModel, text)),
+                    Content = JsonContent.Create(Body(o.OpenAiModel, PromptFor(settings), text)),
                 };
                 request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
                 using var response = await http.SendAsync(request, budget.Token);
@@ -133,7 +145,10 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
                 // v1.47 (B-32): the choice his words pick, and a day or time he asked for
                 o["picked"] is JsonValue p && p.GetValueKind() == JsonValueKind.Number && p.TryGetValue<int>(out var picked) ? picked : null,
                 StringOrNull(o["asked_time"]),
-                o["time_exact"] is JsonValue e && e.GetValueKind() is JsonValueKind.True or JsonValueKind.False ? e.GetValue<bool>() : null), null);
+                o["time_exact"] is JsonValue e && e.GetValueKind() is JsonValueKind.True or JsonValueKind.False ? e.GetValue<bool>() : null,
+                // v1.52 (phase 1): where he stands, and the office's other questions in the same message
+                StringOrNull(o["stance"]),
+                o["also_asked"] is JsonArray also ? also.Select(StringOrNull).OfType<string>().ToList() : null), null);
         }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException)
         {
@@ -151,12 +166,12 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
     private static string? StringOrNull(JsonNode? n) =>
         n is JsonValue v && v.GetValueKind() == JsonValueKind.String ? v.GetValue<string>() : null;
 
-    private static JsonObject Body(string model, string text) => new()
+    private static JsonObject Body(string model, string prompt, string text) => new()
     {
         ["model"] = model,
         ["temperature"] = 0,
         ["messages"] = new JsonArray(
-            new JsonObject { ["role"] = "system", ["content"] = Prompt.Value },
+            new JsonObject { ["role"] = "system", ["content"] = prompt },
             new JsonObject { ["role"] = "user", ["content"] = text }),
         ["response_format"] = new JsonObject
         {
@@ -189,7 +204,8 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
             ["type"] = "object",
             ["additionalProperties"] = false,
             ["required"] = new JsonArray("analysis", "subject", "scope", "intent", "service", "consultation_mode", "full_name", "confidence",
-                "matter_type", "matter_subtype", "sender_role", "info_topic", "courtesy", "name_gender", "picked", "asked_time", "time_exact"),
+                "matter_type", "matter_subtype", "sender_role", "info_topic", "courtesy", "name_gender", "picked", "asked_time", "time_exact",
+                "stance", "also_asked"),
             // v1.24: subject and scope come first, so the model names what the turn is about before it picks an
             // intent. The subject is a few words for that only: it is never read, kept or logged.
             ["properties"] = new JsonObject
@@ -215,6 +231,9 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
                 ["picked"] = new JsonObject { ["type"] = new JsonArray("integer", "null") },
                 ["asked_time"] = new JsonObject { ["type"] = new JsonArray("string", "null") },
                 ["time_exact"] = new JsonObject { ["type"] = "boolean" },
+                // v1.52 (phase 1): where he stands (just asking, not wanting it, the price too high…) and up to 3 other office questions
+                ["stance"] = new JsonObject { ["type"] = "string", ["enum"] = Codes<Stance>(false) },
+                ["also_asked"] = new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "string", ["enum"] = Codes<InfoTopic>(false) } },
             },
         };
     }

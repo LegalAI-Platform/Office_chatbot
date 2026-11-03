@@ -39,6 +39,21 @@ public static class PanelTestingEndpoints
             return Results.Ok(new { on });
         });
 
+        // v1.52 (phase 1): Hazem reads the whole chat and the client's stance; off is Hazem exactly as before.
+        testing.MapGet("/understanding", async (PanelTesting t, CancellationToken ct) => Results.Ok(new { on = await t.UnderstandingAsync(ct) }));
+
+        testing.MapPut("/understanding", async (UrgentWindowRequest? body, HttpContext ctx, PanelTesting t, CancellationToken ct) =>
+        {
+            if (body?.On is not { } on)
+            {
+                return Results.BadRequest(new { error = "invalid" });
+            }
+
+            var me = ctx.CurrentUser();
+            await t.SetUnderstandingAsync(me.Id, me.Username, on, ct);
+            return Results.Ok(new { on });
+        });
+
         testing.MapGet("/numbers", async (PanelTesting t, CancellationToken ct) =>
             Results.Ok(new { numbers = (await t.NumbersAsync(ct)).Select(n => new { key = n.Key, masked = n.Masked }) }));
 

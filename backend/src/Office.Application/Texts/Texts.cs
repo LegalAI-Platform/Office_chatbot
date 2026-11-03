@@ -86,6 +86,8 @@ public static class TextKeys
     public const string AboutLawyer = "about_lawyer";
     public const string ServiceCheck = "service_check";
     public const string ServiceDetail = "service_detail";   // v1.46: a question about how a service goes: the office answers
+    public const string NoPressure = "no_pressure";           // v1.52: «بسأل بس» / «مش عايز»: the door open, nothing pushed
+    public const string PriceObjection = "price_objection";   // v1.52: «غالي»: the value, the cheaper way, no discount
     public const string OfficePrivacy = "office_privacy";   // v1.46: «في خصوصية؟»: yes, the office keeps its clients' secrets
 
     // v1.45 (TASK 18 §3.2): «حقايق المكتب», never sent: the writer answers a question from them (their prices the panel's).

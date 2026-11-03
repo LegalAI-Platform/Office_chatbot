@@ -14,7 +14,60 @@ const testing = {
   forget: (key: string) => api<Forgot>("POST", "/testing/forget", { key }),
   urgentWindow: () => api<{ on: boolean }>("GET", "/testing/urgent-window"),
   setUrgentWindow: (on: boolean) => api<{ on: boolean }>("PUT", "/testing/urgent-window", { on }),
+  understanding: () => api<{ on: boolean }>("GET", "/testing/understanding"),
+  setUnderstanding: (on: boolean) => api<{ on: boolean }>("PUT", "/testing/understanding", { on }),
 };
+
+/**
+ * v1.52 (phase 1): Hazem reads the whole chat and the client's stance («بسأل بس»، «غالي»، أكتر من سؤال، السن بالحروف).
+ * Off is Hazem exactly as before, so the owner can go back in a second.
+ */
+function Understanding() {
+  const qc = useQueryClient();
+  const state = useQuery({ queryKey: ["testing", "understanding"], queryFn: testing.understanding, retry: false });
+  const set = useMutation({
+    mutationFn: testing.setUnderstanding,
+    onSuccess: (r) => {
+      void qc.invalidateQueries({ queryKey: ["testing", "understanding"] });
+      toast(r.on ? "الفهم الجديد شغّال ✅" : "حازم رجع زي الأول ✅");
+    },
+  });
+  if (state.isError && !(state.error instanceof ApiError && state.error.status === 404)) {
+    return <ErrorState message={errorMessage(state.error)} onRetry={() => void state.refetch()} />;
+  }
+  if (!state.data) return null;
+  const on = state.data.on;
+
+  const flip = async () => {
+    const ok = await confirmAction({
+      title: on ? "ترجّع حازم زي الأول؟" : "تشغّل الفهم الجديد؟",
+      body: on
+        ? "حازم هيرجع يفهم الرسالة زي الأول بالظبط."
+        : "حازم هيقرا المحادثة كلها، ويفهم لو العميل بيسأل بس أو مش عايز يكمّل أو شايف السعر غالي، ويجاوب على كل الأسئلة اللي في الرسالة، ويفهم السن بالحروف. تقدر تقفله في أي وقت.",
+      yes: on ? "أيوه، رجّعه" : "أيوه، شغّله",
+    });
+    if (ok) set.mutate(!on);
+  };
+
+  return (
+    <section aria-labelledby="testing-understanding" className="liquid relative isolate grid gap-3 overflow-hidden rounded-[22px] p-4 sm:p-5">
+      <h2 id="testing-understanding" className="flex items-center gap-2 text-[16px] font-bold">
+        <Icon name="alert-circle" className="size-4 text-gold-ink" />
+        الفهم الجديد (المرحلة 1)
+      </h2>
+      <p className="text-[13px] text-ink-soft">
+        حازم بيقرا المحادثة كلها ويفهم موقف العميل. لو حصلت أي مشكلة، اقفله وحازم يرجع زي الأول في ثانية.
+      </p>
+      <div className="flex flex-wrap items-center gap-3 border-t border-line/60 pt-3">
+        <span className={`rounded-full px-3 py-1 text-[13px] font-bold ${on ? "bg-green-bg text-green-ink" : "bg-grey-bg text-ink-soft"}`}>{on ? "شغّال" : "مقفول"}</span>
+        <Button variant={on ? "secondary" : "primary"} busy={set.isPending} onClick={() => void flip()}>
+          {on ? "اقفله" : "شغّله"}
+        </Button>
+      </div>
+      {set.isError ? <p className="text-sm text-bad" role="alert">{errorMessage(set.error)}</p> : null}
+    </section>
+  );
+}
 
 /**
  * v1.34 (B-09.6): until Meta approves urgent_alert, the lawyer's (and the manager's) alert can go as a normal message when
@@ -178,6 +231,7 @@ export function TestingPage() {
           {forget.isError ? <p className="text-sm text-bad" role="alert">{errorMessage(forget.error)}</p> : null}
         </section>
       )}
+      {off ? null : <Understanding />}
       {off ? null : <UrgentWindow />}
     </div>
   );
