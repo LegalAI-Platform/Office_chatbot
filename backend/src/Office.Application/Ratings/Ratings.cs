@@ -70,6 +70,18 @@ public static class RatingRules
         finishedAt + (OrderServices.Contains(service) ? s.AfterDelivery : s.AfterAppointment);
 
     /// <summary>
+    /// v1.50 (TASK 19): after «خلص (تلقائي)» the rating waits for the next 10:00 (Cairo), and at least B-26's 2 hours, so the
+    /// office has a morning to correct a mark that was wrong (he did not come, the time was moved by phone).
+    /// </summary>
+    public static DateTimeOffset DueAfterAuto(DateTimeOffset markedAt, RatingSettings s)
+    {
+        var earliest = markedAt + s.AfterAppointment;
+        var local = TimeZoneInfo.ConvertTime(earliest, Booking.BookingDesk.Zone);
+        var ten = new DateTimeOffset(local.Date.AddHours(10), local.Offset);
+        return (ten >= local ? ten : ten.AddDays(1)).ToUniversalTime();
+    }
+
+    /// <summary>
     /// Why the rating that came due is not sent (null: it goes). <paramref name="lastAsked"/>: the last rating this person
     /// was sent (any service). In this order: off, muted, recent, late.
     /// </summary>

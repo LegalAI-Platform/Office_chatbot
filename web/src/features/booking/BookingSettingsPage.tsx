@@ -251,6 +251,11 @@ function SettingsForm() {
               <Field label="مدة ميعاد العرفي في المكتب (دقيقة)" type="number" min={15} max={480} value={v.urf_minutes} onChange={num("urf_minutes")} />
             </div>
           </Sheet>
+          <Sheet icon="check-circle" title="«خلص» لوحده">
+            <div className="grid gap-3 md:grid-cols-2">
+              <Field label="بعد الميعاد بـ (ساعة)، لو محدش علّمه والتحويل اتراجع؛ 0 = مقفول" type="number" min={0} max={72} value={v.auto_complete_hours ?? 3} onChange={num("auto_complete_hours")} />
+            </div>
+          </Sheet>
         </div>
       </div>
       {save.isError ? <p className="text-sm text-bad" role="alert">{errorMessage(save.error)}</p> : null}

@@ -36,6 +36,7 @@ public sealed class BookingNotices(HazemDbContext db, BookingStore store, Bookin
             SELECT hazem.booking_due({HoldRules.ReminderBeforeMinutes}, {HoldRules.RemindedHold})::text AS "Value"
             """).SingleAsync(ct);
         await AlertUnreviewedAsync(ct);
+        await AutoCompleteAsync(ct);
 
         var due = await (from a in db.Appointments.AsNoTracking()
                          join p in db.Persons.AsNoTracking() on a.PersonId equals p.Id
@@ -194,6 +195,33 @@ public sealed class BookingNotices(HazemDbContext db, BookingStore store, Bookin
         foreach (var x in late)
         {
             await store.AddTaskAsync(x.PersonId, $"booking:{x.Id:N}:review", PendingTask.PaymentReviewDue, now, ct);
+        }
+    }
+
+    /// <summary>
+    /// v1.50 (TASK 19): a confirmed appointment whose end is booking.auto_complete_hours ago and that nobody marked becomes
+    /// «خلص (تلقائي)» when its transfer was verified (the SQL function, atomic); one still under review gives the office the
+    /// task appointment_unmarked instead, once. A move shifts the same row, so the hours count from the new time.
+    /// </summary>
+    private async Task AutoCompleteAsync(CancellationToken ct)
+    {
+        var now = clock.GetUtcNow().ToUniversalTime();
+        var settings = await settingsReader.GetAsync(ct);
+        var hours = int.TryParse(settings.Get(BookingSettings.AutoCompleteHoursKey), out var h) && h >= 0 ? h : BookingSettings.DefaultAutoCompleteHours;
+        if (hours == 0)
+        {
+            return;
+        }
+
+        await db.Database.SqlQuery<Guid>($"""SELECT hazem.auto_complete_appointments({now}, {hours}) AS "Value" """).ToListAsync(ct);
+        var passed = now.AddHours(-hours);
+        var unreviewed = await (from a in db.Appointments.AsNoTracking()
+                                join pay in db.Payments.AsNoTracking() on (Guid?)a.Id equals pay.AppointmentId
+                                where a.State == AppointmentInfo.Confirmed && a.EndsAt <= passed && pay.State != PaymentInfo.Verified
+                                select new { a.Id, a.PersonId }).Take(Batch).ToListAsync(ct);
+        foreach (var x in unreviewed)
+        {
+            await store.AddTaskAsync(x.PersonId, $"booking:{x.Id:N}:unmarked", PendingTask.AppointmentUnmarked, now, ct);
         }
     }
 

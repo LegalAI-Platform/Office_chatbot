@@ -481,6 +481,7 @@ public sealed class AppointmentRow
     public DateTimeOffset? AttendanceFor { get; set; }  // for this time (a moved appointment is not confirmed again)
     public string? CallApp { get; set; }                // 1.25 (B-23): whatsapp, facetime or meet (a call only)
     public DateTimeOffset? CompletedAt { get; set; }    // 1.31 (B-26): when the office marked it completed
+    public string? CompletedBy { get; set; }             // v1.50: staff (the panel) or auto (TASK 19)
     public DateTimeOffset? UrgentAlertedAt { get; set; }   // 1.33 (B-09): the template urgent_alert went to the lawyer (or could not)
     public Guid? UrgentAlertReceipt { get; set; }          // the receipt that alert was for (a new receipt alerts again)
     public DateTimeOffset? UrgentAckedAt { get; set; }     // «التحويل تمام، هكلمه» pressed

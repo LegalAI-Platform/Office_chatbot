@@ -86,6 +86,11 @@ public sealed record BookingSettings(bool Enabled, BookingRules Rules, string Ca
 
     public const int DefaultReviewAlertMinutes = 60;
 
+    /// <summary>v1.50 (TASK 19): hours after an appointment ends before nobody's mark becomes «خلص (تلقائي)»; 0 = off.</summary>
+    public const string AutoCompleteHoursKey = "booking.auto_complete_hours";
+
+    public const int DefaultAutoCompleteHours = 3;
+
     /// <summary>B-11 (1.15): the Urfi appointment in the office, 15 minutes to 8 hours.</summary>
     public static bool UrfMinutesValid(int minutes) => minutes is >= 15 and <= 480;
 

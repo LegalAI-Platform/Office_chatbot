@@ -31,13 +31,16 @@ public sealed record WeekDayView(int Weekday, IReadOnlyList<RangeView> Ranges);
 
 public sealed record BookingSettingsView(bool Enabled, int BufferMinutes, int MinNoticeHours, int HorizonDays, int? MaxPerDay, int SlotStepMinutes,
     int OfferCount, string CalendarId, bool CalendarKey, bool TextsApproved, int HoldMinutes = 120, int HoldShortMinutes = 60,
-    int HoldShortWithinHours = 6, int HoldGapMinutes = 15, int UrfMinutes = 60);
+    int HoldShortWithinHours = 6, int HoldGapMinutes = 15, int UrfMinutes = 60,
+    int? AutoCompleteHours = null); // v1.50 (TASK 19): 0 = off; absent from a save = unchanged
 
 public sealed record ExceptionView(Guid Id, DateOnly Day, string Kind, int? Start, int? End, string? Reason, string? By, DateTimeOffset At);
 
 public sealed record AppointmentView(Guid Id, string Service, DateTimeOffset Start, DateTimeOffset End, string State, string? Name, string WaId,
     string? MatterType, int Reschedules, string Calendar, DateTimeOffset? HoldUntil = null, string? Payment = null,
-    bool Attending = false, IReadOnlyList<ReminderView>? Reminders = null, string? CallApp = null);
+    bool Attending = false, IReadOnlyList<ReminderView>? Reminders = null, string? CallApp = null,
+    // v1.50 (TASK 19): who marked it «خلص» (staff / auto), and whether an automatic mark may still become «ماحضرش»
+    string? CompletedBy = null, bool Correctable = false);
 
 /// <summary>TASK 12 (B-18): one reminder of the appointment's current time, as «المواعيد» shows it.</summary>
 public sealed record ReminderView(string Kind, string State, DateTimeOffset? DueAt, DateTimeOffset? SentAt, string? Channel, string? SkipReason,
@@ -198,7 +201,8 @@ public sealed class PanelBooking(
         return new BookingSettingsView(b.Enabled, b.Rules.BufferMinutes, b.Rules.MinNoticeHours, b.Rules.HorizonDays, b.Rules.MaxPerDay,
             b.Rules.SlotStepMinutes, b.Rules.OfferCount, b.CalendarId, google.HasKey,
             HazemResponder.BookingTextKeys.All(k => active.ContainsKey(k)), b.Hold.Minutes, b.Hold.ShortMinutes, b.Hold.ShortWithinHours,
-            b.Hold.GapMinutes, b.UrfMinutes);
+            b.Hold.GapMinutes, b.UrfMinutes,
+            int.TryParse(s.Get(BookingSettings.AutoCompleteHoursKey), out var auto) && auto >= 0 ? auto : BookingSettings.DefaultAutoCompleteHours);
     }
 
     public async Task<string?> SaveSettingsAsync(Guid by, string username, BookingSettingsView body, CancellationToken ct)
@@ -209,6 +213,11 @@ public sealed class PanelBooking(
         if ((rules.Problem() ?? hold.Problem() ?? (BookingSettings.UrfMinutesValid(body.UrfMinutes) ? null : "urf_minutes")) is { } p)
         {
             return p;
+        }
+
+        if (body.AutoCompleteHours is < 0 or > 72)
+        {
+            return "auto_complete_hours";
         }
 
         if (calendarId.Length > 200 || calendarId.Any(char.IsWhiteSpace))
@@ -232,6 +241,11 @@ public sealed class PanelBooking(
             [BookingSettings.HoldGapKey] = hold.GapMinutes.ToString(CultureInfo.InvariantCulture),
             [BookingSettings.UrfMinutesKey] = body.UrfMinutes.ToString(CultureInfo.InvariantCulture),
         };
+        if (body.AutoCompleteHours is { } hours)
+        {
+            values[BookingSettings.AutoCompleteHoursKey] = hours.ToString(CultureInfo.InvariantCulture);
+        }
+
         await SetAsync(by, username, "settings", "booking.settings", values, ct);
         return null;
     }
@@ -420,7 +434,9 @@ public sealed class PanelBooking(
                           where a.StartsAt >= f && a.StartsAt < t
                           orderby a.StartsAt
                           select new AppointmentView(a.Id, a.Service, a.StartsAt, a.EndsAt, a.State, p.OfficeName, p.WaId, a.MatterType, a.Reschedules,
-                              a.CalendarState, a.HoldUntil, pay == null ? null : pay.State, a.AttendanceFor == a.StartsAt, null, a.CallApp)).Take(500).ToListAsync(ct);
+                              a.CalendarState, a.HoldUntil, pay == null ? null : pay.State, a.AttendanceFor == a.StartsAt, null, a.CallApp,
+                              a.CompletedBy, a.State == AppointmentInfo.Completed && a.CompletedBy == "auto"
+                                             && !db.ServiceRatings.Any(r => r.AppointmentId == a.Id && (r.State == "sending" || r.State == "sent")))).Take(500).ToListAsync(ct);
 
         // TASK 12: the reminders of each appointment's current time (a moved appointment's old ones are cancelled).
         var ids = list.Select(a => a.Id).ToList();
@@ -452,8 +468,27 @@ public sealed class PanelBooking(
 
         // v1.31 (B-26): the time it was marked completed starts the rating's 2 hours.
         DateTimeOffset? completedAt = state == AppointmentInfo.Completed ? clock.GetUtcNow().ToUniversalTime() : null;
+        var marked = state == AppointmentInfo.Completed ? "staff" : null;
         var changed = await db.Database.ExecuteSqlInterpolatedAsync(
-            $"UPDATE hazem.appointments SET state = {state}, completed_at = {completedAt} WHERE id = {id} AND state = 'confirmed'", ct);
+            $"UPDATE hazem.appointments SET state = {state}, completed_at = {completedAt}, completed_by = {marked} WHERE id = {id} AND state = 'confirmed'", ct);
+        if (changed == 0 && state == AppointmentInfo.NoShow)
+        {
+            // v1.50 (TASK 19): «خلص (تلقائي)» was wrong (he did not come): «ماحضرش» until its rating went out; the rating waiting
+            // for its time goes with it
+            changed = await db.Database.ExecuteSqlInterpolatedAsync($"""
+                UPDATE hazem.appointments a SET state = 'no_show', completed_at = NULL, completed_by = NULL
+                 WHERE a.id = {id} AND a.state = 'completed' AND a.completed_by = 'auto'
+                   AND NOT EXISTS (SELECT 1 FROM hazem.service_ratings r WHERE r.appointment_id = a.id AND r.state IN ('sending', 'sent'))
+                """, ct);
+            if (changed > 0)
+            {
+                await db.Database.ExecuteSqlInterpolatedAsync(
+                    $"DELETE FROM hazem.service_ratings WHERE appointment_id = {id} AND state IN ('scheduled', 'failed', 'skipped')", ct);
+                await PanelAudit.WriteAsync(db, clock, by, "appointment.auto_corrected", "appointment", id, new Dictionary<string, string?>(), ct);
+                return null;
+            }
+        }
+
         if (changed == 0)
         {
             return await db.Appointments.AnyAsync(a => a.Id == id, ct) ? "not_confirmed" : ErrNotFound;

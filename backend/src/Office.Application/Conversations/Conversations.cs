@@ -70,6 +70,7 @@ public sealed record PendingTask(string Kind, DateTimeOffset DueAt, Guid? StaffI
     public const string OfficeInfoMissing = "office_info_missing"; // TASK 06: an office question whose answer is not written in the panel yet
     public const string ServiceQuestion = "service_question"; // v1.22: does the office do one specific thing? the office answers
     public const string ReminderFailed = "reminder_failed";   // TASK 12: a reminder could not be sent, the office reminds by phone
+    public const string AppointmentUnmarked = "appointment_unmarked"; // v1.50: passed, nobody marked it, its transfer not reviewed
     public const string PaymentReviewDue = "payment_review_due"; // 1.25 (B-08): the appointment is soon and its transfer is not reviewed
     public const string RatingLow = "rating_low";             // 1.31 (B-26): «يحتاج للتحسين», the managers call the client
     public const string UrgentCallFailed = "urgent_call_failed"; // 1.33 (B-09): the lawyer's alert could not go (no number, a refused send)
