@@ -126,4 +126,28 @@ public sealed class PanelTestingApiTests(TestDatabase db) : IAsyncLifetime
             await db.SetAsync("urgent.alert_in_window", "false");
         }
     }
+
+    /// <summary>v1.52 (phase 1): the switch of understanding v2, with its audit row (the first try on the server failed on it).</summary>
+    [Fact]
+    public async Task V152_the_lawyer_switches_understanding_v2_and_it_is_audited()
+    {
+        try
+        {
+            var lawyer = await SignIn("lawyer");
+            Assert.False((bool)(await lawyer.GetFromJsonAsync<JsonNode>("/api/panel/testing/understanding", Ct))!["on"]!); // off by default
+            Assert.Equal(HttpStatusCode.BadRequest, (await lawyer.PutAsJsonAsync("/api/panel/testing/understanding", new { }, Ct)).StatusCode);
+            Assert.Equal(HttpStatusCode.OK, (await lawyer.PutAsJsonAsync("/api/panel/testing/understanding", new { on = true }, Ct)).StatusCode);
+            Assert.Equal("true", await db.ScalarAsync<string>("SELECT value FROM hazem.settings WHERE key = 'hazem.understanding_v2'"));
+            Assert.Equal("true", await db.ScalarAsync<string>(
+                "SELECT detail ->> 'on' FROM hazem.panel_audit WHERE action = 'testing.understanding' ORDER BY at DESC LIMIT 1"));
+            Assert.True((bool)(await lawyer.GetFromJsonAsync<JsonNode>("/api/panel/testing/understanding", Ct))!["on"]!);
+
+            var staff = await SignIn("yasmin");
+            Assert.Equal(HttpStatusCode.Forbidden, (await staff.PutAsJsonAsync("/api/panel/testing/understanding", new { on = false }, Ct)).StatusCode);
+        }
+        finally
+        {
+            await db.SetAsync("hazem.understanding_v2", "false");
+        }
+    }
 }

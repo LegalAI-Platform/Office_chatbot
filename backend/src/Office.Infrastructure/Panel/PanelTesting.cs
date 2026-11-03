@@ -66,7 +66,7 @@ public sealed class PanelTesting(HazemDbContext db, ISettingsReader settings, Go
             VALUES ({Application.Understanding.UnderstandingV2.SwitchKey}, {value}, 'v1.52 (phase 1): understanding v2', {"panel:" + username})
             ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_by = EXCLUDED.updated_by
             """, ct);
-        await PanelAudit.WriteAsync(db, clock, by, "testing.understanding", "hazem", null,
+        await PanelAudit.WriteAsync(db, clock, by, "testing.understanding", "conversation", null, // a target type panel_audit allows
             new Dictionary<string, string?> { ["on"] = value }, ct);
     }
 
