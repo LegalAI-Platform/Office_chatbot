@@ -12,6 +12,8 @@ export interface Appointment {
   attending: boolean; reminders: Reminder[];
   /** 1.25 (B-23): where the lawyer calls (a phone or video consultation). */
   call_app: "whatsapp" | "facetime" | "meet" | "phone" | null;
+  /** v1.50 (TASK 19): who marked it «خلص», and whether an automatic mark may still become «ماحضرش». */
+  completed_by?: "staff" | "auto" | null; correctable?: boolean;
 }
 export interface Reminder {
   kind: "day_before" | "two_hours"; state: "scheduled" | "sending" | "sent" | "failed" | "skipped" | "cancelled";
@@ -21,6 +23,8 @@ export interface Settings {
   enabled: boolean; buffer_minutes: number; min_notice_hours: number; horizon_days: number; max_per_day: number | null; slot_step_minutes: number; offer_count: number;
   calendar_id: string; calendar_key: boolean; texts_approved: boolean;
   hold_minutes: number; hold_short_minutes: number; hold_short_within_hours: number; hold_gap_minutes: number; urf_minutes: number;
+  /** v1.50 (TASK 19): hours after an appointment ends before nobody's mark becomes «خلص (تلقائي)»; 0 = off. */
+  auto_complete_hours?: number | null;
 }
 export interface Office {
   instapay: string; wallet_number: string; wallet_provider: string; address: string; map_url: string;

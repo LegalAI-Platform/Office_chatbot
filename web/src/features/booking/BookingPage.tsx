@@ -404,10 +404,21 @@ function BookingCard({ a, now }: { a: Appointment; now: Date }) {
       <span className="flex flex-wrap items-center gap-2">
         {a.state === "confirmed" && a.attending ? <Chip tone="green">أكّد حضوره ✅</Chip> : null}
         <Chip tone={STATE_TONE[a.state] ?? "grey"}>
-          {label(APPOINTMENT_STATES, a.state)}{a.state === "pending_payment" && a.hold_until ? ` لحد ${cairoTime(new Date(a.hold_until))}` : ""}
+          {label(APPOINTMENT_STATES, a.state)}{a.state === "completed" && a.completed_by === "auto" ? " (تلقائي)" : ""}{a.state === "pending_payment" && a.hold_until ? ` لحد ${cairoTime(new Date(a.hold_until))}` : ""}
         </Chip>
       </span>
       {a.state === "completed" && can(me, "services.price") ? <Opinion id={a.id} /> : null}
+      {a.correctable ? (
+        // v1.50 (TASK 19): «خلص (تلقائي)» was wrong: «ماحضرش» until the rating went out
+        <span className="flex w-full flex-wrap justify-end gap-1">
+          <Button variant="ghost" className={`${ACT} !border-orange/30 !bg-orange-bg !text-orange-ink hover:!bg-orange/15`} busy={mark.isPending} disabled={acting}
+            onClick={async () => {
+              if (await confirmAction({ title: "العميل ماحضرش؟", body: "الميعاد اتعلّم «خلص» لوحده. هيتغيّر لـ «ماحضرش»، وطلب التقييم مش هيتبعت.", yes: "أيوه، ماحضرش" })) mark.mutate("no_show");
+            }}>
+            <Icon name="alert-circle" className="size-4" />ماحضرش
+          </Button>
+        </span>
+      ) : null}
       {isLive(a) ? (
         <span className="flex w-full flex-wrap justify-end gap-1">
           {a.state === "confirmed" && started ? (

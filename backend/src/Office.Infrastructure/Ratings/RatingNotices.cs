@@ -56,12 +56,13 @@ public sealed class RatingNotices(HazemDbContext db, ISettingsReader settingsRea
             .Where(a => a.State == "completed" && a.CompletedAt != null && a.CompletedAt >= since && services.Contains(a.Service)
                         && !db.ServiceRatings.Any(r => r.AppointmentId == a.Id))
             .OrderBy(a => a.CompletedAt)
-            .Select(a => new { a.Id, a.PersonId, a.Service, At = a.CompletedAt!.Value }).Take(100).ToListAsync(ct);
+            .Select(a => new { a.Id, a.PersonId, a.Service, At = a.CompletedAt!.Value, Auto = a.CompletedBy == "auto" }).Take(100).ToListAsync(ct);
         foreach (var a in done)
         {
             await db.Database.ExecuteSqlInterpolatedAsync($"""
                 INSERT INTO hazem.service_ratings (person_id, appointment_id, service, finished_at, due_at)
-                VALUES ({a.PersonId}, {a.Id}, {a.Service}, {a.At.ToUniversalTime()}, {RatingRules.Due(a.Service, a.At, s).ToUniversalTime()})
+                VALUES ({a.PersonId}, {a.Id}, {a.Service}, {a.At.ToUniversalTime()},
+                        {(a.Auto ? RatingRules.DueAfterAuto(a.At, s) : RatingRules.Due(a.Service, a.At, s)).ToUniversalTime()})
                 ON CONFLICT DO NOTHING
                 """, ct);
         }
