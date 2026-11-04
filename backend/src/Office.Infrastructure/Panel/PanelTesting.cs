@@ -70,6 +70,23 @@ public sealed class PanelTesting(HazemDbContext db, ISettingsReader settings, Go
             new Dictionary<string, string?> { ["on"] = value }, ct);
     }
 
+    /// <summary>v1.61: does the writer answer his question before the office's address and hours?</summary>
+    public async Task<bool> InfoWriterAsync(CancellationToken ct) =>
+        (await settings.GetAsync(ct)).Flag(Application.Writing.Conversational.InfoSwitchKey);
+
+    /// <summary>v1.61: the switch, recorded in the audit. Off is the approved text alone.</summary>
+    public async Task SetInfoWriterAsync(Guid by, string username, bool on, CancellationToken ct)
+    {
+        var value = on ? "true" : "false";
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO hazem.settings (key, value, description, updated_by)
+            VALUES ({Application.Writing.Conversational.InfoSwitchKey}, {value}, 'v1.61: a sentence before the address and hours', {"panel:" + username})
+            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_by = EXCLUDED.updated_by
+            """, ct);
+        await PanelAudit.WriteAsync(db, clock, by, "testing.info_writer", "conversation", null,
+            new Dictionary<string, string?> { ["on"] = value }, ct);
+    }
+
     /// <summary>Null when the key is not one of the test numbers.</summary>
     public async Task<ForgetResult?> ForgetAsync(Guid by, string key, CancellationToken ct)
     {

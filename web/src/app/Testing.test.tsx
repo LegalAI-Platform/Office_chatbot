@@ -100,6 +100,19 @@ describe("أدوات التجربة", () => {
     expect(await screen.findByText("الفهم الجديد شغّال ✅")).toBeTruthy();
   });
 
+  it("v1.61: the sentence before the address and hours is switched on after asking", async () => {
+    const calls = serve({
+      "GET /auth/me": { body: lawyer }, "GET /testing/numbers": { body: numbers },
+      "GET /testing/info-writer": { body: { on: false } }, "PUT /testing/info-writer": { body: { on: true } },
+    });
+    renderAt("/testing");
+    const section = await screen.findByRole("region", { name: "جملة الرد على أسئلة المكتب" });
+    fireEvent.click(within(section).getByRole("button", { name: "شغّلها" }));
+    expect(await confirmYes()).toContain("زي ما هي بالحرف");
+    await vi.waitFor(() => expect(calls.filter((c) => c.method === "PUT").map((c) => [c.path, c.body])).toEqual([["/testing/info-writer", { on: true }]]));
+    expect(await screen.findByText("جملة الرد على أسئلة المكتب شغّالة ✅")).toBeTruthy();
+  });
+
   it("says the tools are off outside the test environment", async () => {
     serve({ "GET /auth/me": { body: lawyer }, "GET /testing/numbers": { status: 404, body: { error: "not_found" } } });
     renderAt("/testing");

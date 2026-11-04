@@ -2,6 +2,7 @@ using Office.Application.Responders;
 using Office.Application.Texts;
 using Office.Application.Understanding;
 using Office.Application.Urf;
+using Office.Application.Writing;
 
 namespace Office.UnitTests;
 
@@ -75,6 +76,44 @@ public sealed partial class BookingFlowTests
         _settings[UnderstandingV2.SwitchKey] = "false"; // off: as before, the offer follows the answer
         Assert.Equal(TextKeys.OfficeAddress, Keys(await Say("اي الفروع بتاعتكم"))[0]);
         Assert.True(Keys(await Say("اي الفروع بتاعتكم")).Count >= 1);
+    }
+
+    [Fact]
+    public async Task A_sentence_for_his_question_comes_before_the_address_which_stays_to_the_letter()
+    {
+        FreeAnswerOn();
+        _settings[Office.Application.Writing.Conversational.InfoSwitchKey] = "true";
+        await ToTheOffer();
+        _script["ليكم فرع في اسكندريه"] = new("office_info", null, "unknown", null, 0.85, InfoTopic: "address");
+        _writer.Reply = "للمكتب مقر واحد بس، ومفيش فرع في إسكندرية 🙏";
+        var d = await Say("ليكم فرع في اسكندريه");
+        Assert.Equal([TextKeys.OfficeAddress], Keys(d));
+        Assert.Equal(_writer.Reply + "\n📍 عنوان المكتب: 1 شارع التحرير.", d.Actions[^1].Text);
+        Assert.Equal(WrittenReply.Passed, d.Effects!.Written!.Guard);
+    }
+
+    [Fact]
+    public async Task A_sentence_that_says_the_address_itself_never_goes_the_approved_text_does()
+    {
+        FreeAnswerOn();
+        _settings[Office.Application.Writing.Conversational.InfoSwitchKey] = "true";
+        await ToTheOffer();
+        _script["ليكم فرع في اسكندريه"] = new("office_info", null, "unknown", null, 0.85, InfoTopic: "address");
+        _writer.Reply = "عنوان المكتب 1 شارع التحرير وسط البلد";
+        var d = await Say("ليكم فرع في اسكندريه");
+        Assert.Equal("📍 عنوان المكتب: 1 شارع التحرير.", d.Actions[^1].Text);
+        Assert.Equal("tail_repeated", d.Effects!.Written!.Guard);
+    }
+
+    [Fact]
+    public async Task With_the_info_switch_off_the_address_goes_alone_as_before()
+    {
+        FreeAnswerOn();
+        await ToTheOffer();
+        _script["ليكم فرع في اسكندريه"] = new("office_info", null, "unknown", null, 0.85, InfoTopic: "address");
+        var d = await Say("ليكم فرع في اسكندريه");
+        Assert.Equal("📍 عنوان المكتب: 1 شارع التحرير.", d.Actions[^1].Text);
+        Assert.Null(d.Effects!.Written);
     }
 
     [Fact]

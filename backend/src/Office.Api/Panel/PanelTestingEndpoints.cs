@@ -54,6 +54,21 @@ public static class PanelTestingEndpoints
             return Results.Ok(new { on });
         });
 
+        // v1.61: a sentence that answers his question before the office's address and hours; off is the approved text alone.
+        testing.MapGet("/info-writer", async (PanelTesting t, CancellationToken ct) => Results.Ok(new { on = await t.InfoWriterAsync(ct) }));
+
+        testing.MapPut("/info-writer", async (UrgentWindowRequest? body, HttpContext ctx, PanelTesting t, CancellationToken ct) =>
+        {
+            if (body?.On is not { } on)
+            {
+                return Results.BadRequest(new { error = "invalid" });
+            }
+
+            var me = ctx.CurrentUser();
+            await t.SetInfoWriterAsync(me.Id, me.Username, on, ct);
+            return Results.Ok(new { on });
+        });
+
         testing.MapGet("/numbers", async (PanelTesting t, CancellationToken ct) =>
             Results.Ok(new { numbers = (await t.NumbersAsync(ct)).Select(n => new { key = n.Key, masked = n.Masked }) }));
 
