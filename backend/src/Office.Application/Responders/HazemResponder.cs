@@ -38,7 +38,8 @@ public sealed class HazemResponder(
     IRatingStore? ratings = null,
     IUrgentCalls? urgentCalls = null,
     IReplyWriter? writer = null,
-    IConversationHistory? chat = null) : ITurnResponder
+    IConversationHistory? chat = null,
+    IReplyReviewer? reviewer = null) : ITurnResponder
 {
     /// <summary>
     /// TASK 10 (v1.14): the written services run (an order from the request to the delivery) only when every
@@ -502,9 +503,13 @@ public sealed class HazemResponder(
             var facts = string.Join("\n", Conversational.FactKeys.Select(k => texts.TryGetValue(k, out var t) && t.Active ? prices.Fill(t.Text) : null)
                 .Where(t => t is not null)
                 .Append(settings.Get(OfficeInfo.AddressKey) is { Length: > 0 } address ? $"عنوان المكتب: {address}." : null)
+                // v1.53 (phase 3): «دليل التعامل», the owner's rules for each kind of moment, edited in «النصوص»
+                .Append(settings.Flag(UnderstandingV2.SwitchKey) && Playbook(texts) is { Length: > 0 } playbook
+                    ? "دليل التعامل:\n" + prices.Fill(playbook)
+                    : null)
                 .Where(t => t is not null));
             (composed, written) = await Conversational.RewriteAsync(composed, writer, chat, turn, Salutation.Call(state.Person), settings, ct,
-                facts, state.Person.NameGender);
+                facts, state.Person.NameGender, reviewer);
             if (written is { Guard: WrittenReply.Passed, FromFacts: true }) // set only when the message held service_detail
             {
                 // v1.48: his question was answered from «حقايق المكتب»: the office has nothing to answer, so no task for it
@@ -560,6 +565,11 @@ public sealed class HazemResponder(
         return AiContext.Build(message, lines.LastOrDefault(l => !l.FromClient)?.Text, lines.LastOrDefault(l => l.FromClient)?.Text, open,
             waiting, today, earlier);
     }
+
+    /// <summary>v1.53 (phase 3): «دليل التعامل», its approved parts in order (never sent).</summary>
+    private static string Playbook(IReadOnlyDictionary<string, ApprovedText> texts) => string.Join("\n",
+        new[] { TextKeys.OfficePlaybook, TextKeys.OfficePlaybookMore }.Select(k => texts.TryGetValue(k, out var t) && t.Active ? t.Text : null)
+            .Where(t => t is not null));
 
     /// <summary>v1.47 (B-32): the exact time he typed is free to book (moving an appointment always goes through its list).</summary>
     private static async Task<bool> FreeAtAsync(BookingDesk desk, BookingSettings b, HazemSettings settings, TimesAsked asked,
@@ -1655,7 +1665,9 @@ public sealed class HazemResponder(
                 return;
             }
 
-            Intake.CountUnclear(turnClass.Intent == Intent.Other);
+            // v1.53 (phase 2): with the switch on, words the AI read are answered (the free answer), so only a reading it could
+            // not make counts towards the office taking over
+            Intake.CountUnclear(turnClass.Intent == Intent.Other && (!understanding || turnClass.IsFallback));
             AnswerIntent(turnClass);
             AnswerAlso(turnClass);
         }
@@ -1793,6 +1805,11 @@ public sealed class HazemResponder(
                     break;
                 case var _ when urfOn && Urf is { State: UrfCase.Collecting } && UrfInChat:
                     AfterUrf(UrfNext.Ask); // B-11: the question still waiting, again (words without its answer); v1.52: while it is the topic
+                    break;
+                case Intent.Other when understanding && !turnClass.IsFallback:
+                    // v1.53 (phase 2): what no approved text answers is answered in the writer's words, from the facts and
+                    // «دليل التعامل», checked by the code; doubtful or the writer off → its approved words (as «unclear»)
+                    plan.Say(TextKeys.FreeAnswer, TextKeys.Unclear);
                     break;
                 default:
                     if (Intake.UnclearInARow <= 1)

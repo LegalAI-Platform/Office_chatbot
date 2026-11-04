@@ -37,7 +37,17 @@ public sealed record MonthReport(string Month, int Tasks, int Done, int DoneOnTi
 {
     /// <summary>v1.39 (TASK 16, 3.4): «محادثات محتاجة مراجعة», the month's turns flagged by the system.</summary>
     public IReadOnlyList<ReviewRow> Review { get; init; } = [];
+
+    /// <summary>v1.53 (B-34, layer 6): «ردود حازم الحرة», each free answer of the month, sent or refused and why.</summary>
+    public IReadOnlyList<FreeAnswerRow> FreeAnswers { get; init; } = [];
 }
+
+/// <summary>
+/// v1.53 (B-34, layer 6): one free answer: when, the client (as in <see cref="ReviewRow"/>), Hazem's words when they went,
+/// else null, and the guard: «passed», or why the approved words went instead (a listed word, a number not given, the
+/// reviewer's «review_promise»…). Hazem's words only, never the client's.
+/// </summary>
+public sealed record FreeAnswerRow(DateTimeOffset At, string? Client, string? Text, string Guard);
 
 /// <summary>
 /// v1.39 (TASK 16, 3.4): one conversation to review: when, the client (his name as the office sees it, else the last two
@@ -346,6 +356,7 @@ public sealed partial class PanelTools(HazemDbContext db, ListImporter importer,
                     .Select(r => new LowRatingRow(r.AnsweredAt!.Value, r.Service, r.NameRaw)).ToList()))
         {
             Review = await ReviewAsync(start, end, ct),
+            FreeAnswers = await FreeAnswersAsync(start, end, ct),
         };
     }
 
@@ -395,6 +406,26 @@ public sealed partial class PanelTools(HazemDbContext db, ListImporter importer,
         using var doc = System.Text.Json.JsonDocument.Parse(json);
         return doc.RootElement.EnumerateArray().Take(ReviewMax)
             .Select(e => new ReviewRow(e.GetProperty("at").GetDateTimeOffset(), e.GetProperty("client").GetString(), e.GetProperty("reason").GetString()!))
+            .ToList();
+    }
+
+    /// <summary>v1.53 (B-34, layer 6): the month's free answers, newest first, refused ones too (the office reviews them).</summary>
+    private async Task<IReadOnlyList<FreeAnswerRow>> FreeAnswersAsync(DateTimeOffset start, DateTimeOffset end, CancellationToken ct)
+    {
+        var json = await db.Database.SqlQueryRaw<string>($$"""
+            SELECT coalesce(json_agg(json_build_object('at', g.created_at, 'client', coalesce(pe.office_name, '…' || right(t.wa_id, 2)),
+                                                       'text', g.text, 'guard', g.guard) ORDER BY g.created_at DESC), '[]')::text AS "Value"
+              FROM (SELECT * FROM hazem.generated_replies
+                     WHERE purpose = 'free_answer' AND created_at >= {0} AND created_at < {1}
+                     ORDER BY created_at DESC LIMIT {{ReviewMax}}) g
+              JOIN hazem.turns t ON t.turn_id = g.turn_id
+              LEFT JOIN hazem.persons pe ON pe.wa_id = t.wa_id
+            """, start, end).SingleAsync(ct);
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        return doc.RootElement.EnumerateArray()
+            .Select(e => new FreeAnswerRow(e.GetProperty("at").GetDateTimeOffset(), e.GetProperty("client").GetString(),
+                e.GetProperty("text").ValueKind == System.Text.Json.JsonValueKind.Null ? null : e.GetProperty("text").GetString(),
+                e.GetProperty("guard").GetString()!))
             .ToList();
     }
 

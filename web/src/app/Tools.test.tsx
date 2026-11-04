@@ -92,7 +92,9 @@ describe("TASK 07c tools", () => {
         ratings: { sent: 3, answered: 2, average: 3.5, by_service: [{ key: "consultation_office", count: 1, average: 5 }, { key: "document_review", count: 1, average: 2 }],
           low: [{ at: "2026-10-12T09:00:00Z", service: "document_review", client_name: "منى سعيد" }] },
         review: [{ at: "2026-10-31T10:00:00Z", client: "ابو عماد", reason: "repeated" },
-          { at: "2026-10-30T10:00:00Z", client: null, reason: "offer_after_payment" }] } },
+          { at: "2026-10-30T10:00:00Z", client: null, reason: "offer_after_payment" }],
+        free_answers: [{ at: "2026-10-31T11:00:00Z", client: "ابو عماد", text: "متقلقش يا فندم 🙏 كل كلامك مع المكتب سري.", guard: "passed" },
+          { at: "2026-10-31T10:30:00Z", client: null, text: null, guard: "review_promise" }] } },
     });
     renderAt("/reports");
     expect(await screen.findByRole("heading", { name: "التقارير" })).toBeTruthy();
@@ -111,6 +113,11 @@ describe("TASK 07c tools", () => {
     expect(rows[0]!.textContent).toContain("رقم من غير اسم");
     expect(rows[1]!.textContent).toContain("ابو عماد");
     expect(rows[1]!.textContent).toContain("الرد اتكرر");
+    // v1.53 (B-34, layer 6): «ردود حازم الحرة», what went and what was refused and why
+    const free = screen.getByRole("region", { name: "ردود حازم الحرة" });
+    const said = within(free).getAllByRole("row").slice(1);
+    expect(said[0]!.textContent).toContain("متقلقش يا فندم");
+    expect(said[1]!.textContent).toContain("اترفض: وعد المكتب ما يقدرش يضمنه");
   });
 
   it("will not save a text longer than its limit", async () => {

@@ -86,6 +86,9 @@ public static class TextKeys
     public const string AboutLawyer = "about_lawyer";
     public const string ServiceCheck = "service_check";
     public const string ServiceDetail = "service_detail";   // v1.46: a question about how a service goes: the office answers
+    public const string FreeAnswer = "free_answer";           // v1.53 (phase 2): what no approved text answers, in the writer's words
+    public const string OfficePlaybook = "office_playbook";   // v1.53 (phase 3): «دليل التعامل», never sent: how Hazem handles each kind of moment
+    public const string OfficePlaybookMore = "office_playbook_more"; // its second part (600 characters a text)
     public const string NoPressure = "no_pressure";           // v1.52: «بسأل بس» / «مش عايز»: the door open, nothing pushed
     public const string PriceObjection = "price_objection";   // v1.52: «غالي»: the value, the cheaper way, no discount
     public const string OfficePrivacy = "office_privacy";   // v1.46: «في خصوصية؟»: yes, the office keeps its clients' secrets

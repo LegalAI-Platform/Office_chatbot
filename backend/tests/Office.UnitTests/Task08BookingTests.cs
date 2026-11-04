@@ -293,7 +293,7 @@ public sealed partial class BookingFlowTests
     private HazemResponder Hazem => new(new Store(_rows), new Scripted(_script, () => _aiDown), new Texts(_texts), _lists, new Clock(_now),
         new BookingDesk(_booking, _calendar), new Office.Application.Services.ServiceDesk(_booking),
         new Office.Application.Urf.UrfDesk(new MemoryUrf(_booking, () => _now)), history: new MemorySituation(_booking, _lastReplies, _lastChoices),
-        urgentCalls: _acks, writer: _writer, chat: _writer);
+        urgentCalls: _acks, writer: _writer, chat: _writer, reviewer: _reviewer);
 
     /// <summary>v1.39: the texts of each client's last answered turn, as hazem.turn_replies.</summary>
     private readonly Dictionary<string, List<string>> _lastReplies = [];

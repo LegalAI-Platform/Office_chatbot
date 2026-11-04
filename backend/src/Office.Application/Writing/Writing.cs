@@ -349,6 +349,8 @@ public static class Conversational
         // v1.48: the office facts answer many of these («هقابل المستشار نفسه؟»): from them, and from_facts true; otherwise as v1.46
         [TextKeys.ServiceDetail] = "if the OFFICE FACTS answer his question, answer it from them only (from_facts true, and say nothing about the office answering); otherwise tell him his question reached the office and they will answer it here (from_facts false, never the answer yourself)",
         [TextKeys.OfficePrivacy] = "reassure him that everything he tells the office stays private: the office never discloses its clients' secrets (nothing else: no prices, no question)",
+        // v1.53 (phase 2): anything no approved text answers, from the office facts and «دليل التعامل» only
+        [TextKeys.FreeAnswer] = "answer what he just wrote, in one short message, as the office's receptionist would, following «دليل التعامل»: from the office facts only; something the facts do not answer, say kindly the lawyer explains it in the consultation (never when, never any legal information); if he only chats, a short kind answer",
         // v1.52 (phase 1)
         [TextKeys.NoPressure] = "tell him kindly there is no pressure and he can write here any time he likes (nothing else: no offer, no question)",
         [TextKeys.PriceObjection] = "show him you understand the price matters; the value from the text only (the lawyer himself; the fee counts towards a case's fees) and the cheaper way it names; never a discount; the door open, no pushing",
@@ -402,7 +404,8 @@ public static class Conversational
     /// slow → the turn goes exactly as composed. Nothing to write → unchanged, no call.
     /// </summary>
     public static async Task<Rewritten> RewriteAsync(ReplyComposer.Composed composed, IReplyWriter writer, IConversationHistory history,
-        Turn turn, string call, HazemSettings settings, CancellationToken ct, string facts = "", string? nameGender = null)
+        Turn turn, string call, HazemSettings settings, CancellationToken ct, string facts = "", string? nameGender = null,
+        IReplyReviewer? reviewer = null)
     {
         var lines = (await history.RecentAsync(turn.WaId, HistoryTurns, ct)).ToList();
         if (AiInput.Build(turn) is { } now)
@@ -411,7 +414,7 @@ public static class Conversational
         }
 
         var client = ClientGender.Of(nameGender, lines);
-        var r = await WriteRunAsync(composed, writer, turn, call, settings, ct, facts, lines, client);
+        var r = await WriteRunAsync(composed, writer, turn, call, settings, ct, facts, lines, client, reviewer);
         if (client != ClientGender.Woman)
         {
             return r;
@@ -425,7 +428,7 @@ public static class Conversational
     }
 
     private static async Task<Rewritten> WriteRunAsync(ReplyComposer.Composed composed, IReplyWriter writer, Turn turn, string call,
-        HazemSettings settings, CancellationToken ct, string facts, List<ChatLine> lines, string client)
+        HazemSettings settings, CancellationToken ct, string facts, List<ChatLine> lines, string client, IReplyReviewer? reviewer = null)
     {
         var keyOf = composed.Records.GroupBy(r => r.IdempotencyKey).ToDictionary(g => g.Key, g => g.First().Key, StringComparer.Ordinal);
         int start = -1, end = -1;
@@ -510,6 +513,17 @@ public static class Conversational
         {
             problem = "said_confirmed"; // v1.45: the transfer is still under the office's review
         }
+        // v1.53 (B-34, layer 4): a free answer is also read for its meaning (a promise, the law, a fact not given, harm);
+        // no reviewer, or it cannot answer → the free answer never goes
+        if (problem is null && keys.Contains(TextKeys.FreeAnswer))
+        {
+            problem = reviewer is null
+                ? ReplyReview.Prefix + ReplyReview.Unavailable
+                : await reviewer.ProblemAsync(new ReviewRequest(outcome.Reply!.Trim(), facts, lines), settings, ct) is { } found
+                    ? ReplyReview.Prefix + found
+                    : null;
+        }
+
         var first = run[0];
         var written = new WrittenReply(first.IdempotencyKey, mainKey, problem is null ? outcome.Reply!.Trim() : null, problem ?? WrittenReply.Passed,
             outcome.Model, outcome.PromptVersion, outcome.LatencyMs, outcome.InputTokens, outcome.OutputTokens)

@@ -240,6 +240,18 @@ export interface MonthReport {
   ratings: RatingReport;
   /** v1.39 (TASK 16) «محادثات محتاجة مراجعة»: the month's conversations the system flagged. */
   review?: ReviewRow[];
+  /** v1.53 (B-34) «ردود حازم الحرة»: each free answer of the month, sent or refused and why. */
+  free_answers?: FreeAnswerRow[];
+}
+
+/** v1.53: one free answer (Hazem's words only, never the client's). */
+export interface FreeAnswerRow {
+  at: string;
+  client: string | null;
+  /** what went; null when the approved words went instead */
+  text: string | null;
+  /** «passed» or why it was refused */
+  guard: string;
 }
 
 /** v1.39: why a conversation is flagged (keys and reasons only, never the messages). */
