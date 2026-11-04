@@ -258,7 +258,7 @@ public sealed partial class BookingFlowTests
 
     /// <summary>v1.39: the situation as RatingStore.SituationAsync reads it, from the in-memory bookings and orders.</summary>
     private sealed class MemorySituation(MemoryBooking booking, Dictionary<string, List<string>> lastReplies,
-        Dictionary<string, IReadOnlyList<InteractiveChoice>?> lastChoices) : IIntakeHistory
+        Dictionary<string, IReadOnlyList<InteractiveChoice>?> lastChoices, Dictionary<string, List<List<string>>> recent) : IIntakeHistory
     {
         public Task<IntakeFacts> FactsAsync(Guid personId, string waId, Guid intakeId, CancellationToken ct) =>
             Task.FromResult(new IntakeFacts(null, [])); // never a returning client here
@@ -272,7 +272,10 @@ public sealed partial class BookingFlowTests
                 .Select(x => new OpenAppointment(x.Service, x.State, x.Start, x.HoldUntil)).FirstOrDefault();
             var o = booking.Orders.LastOrDefault(x => x.Person == personId && x.State is "collecting" or "awaiting_price" or "awaiting_payment" or "in_progress");
             return Task.FromResult(new SituationFacts(a, o is null ? null : new OpenOrder(o.Kind, o.State),
-                lastReplies.TryGetValue(waId, out var k) ? k : [], lastChoices.GetValueOrDefault(waId)));
+                lastReplies.TryGetValue(waId, out var k) ? k : [], lastChoices.GetValueOrDefault(waId))
+            {
+                RecentReplyKeys = recent.TryGetValue(waId, out var r) ? r.TakeLast(3).SelectMany(x => x).ToList() : null,
+            });
         }
     }
 }

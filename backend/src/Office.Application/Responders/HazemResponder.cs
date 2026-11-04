@@ -2015,12 +2015,12 @@ public sealed class HazemResponder(
                 case Stance.PriceObjection:
                     // the owner (2026-11-04): understanding, the value from the facts, the cheaper way, no discount, no task;
                     // the second time only «تحت أمرك»
-                    plan.Say(situation.RepliedLast(TextKeys.PriceObjection) ? TextKeys.NoPressure : TextKeys.PriceObjection, TextKeys.NoPressure);
+                    plan.Say(situation.RepliedRecently(TextKeys.PriceObjection) ? TextKeys.NoPressure : TextKeys.PriceObjection, TextKeys.NoPressure);
                     return true;
                 case Stance.NotForHazem when turnClass.Intent is Intent.Other or Intent.Greeting:
                 case Stance.JustAsking or Stance.Declines when turnClass.Intent is not (Intent.OfficeInfo or Intent.LegalQuestion
                     or Intent.PriceQuestion):
-                    if (!situation.RepliedLast(TextKeys.NoPressure))
+                    if (!situation.RepliedRecently(TextKeys.NoPressure))
                     {
                         plan.Say(TextKeys.NoPressure);
                     }
