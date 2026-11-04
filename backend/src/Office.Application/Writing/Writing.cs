@@ -502,13 +502,18 @@ public static class Conversational
             }
         }
 
+        // v1.60: the numbers a refused reply left out, named to the writer on the retry (not just «it dropped the price»)
+        string? detail = null;
+
         // every check a written reply goes through (null: it may go; else why not)
         async Task<string?> CheckAsync(WriteRequest asked, WriterOutcome o)
         {
+            detail = null;
             var problem = o.Reply is null ? o.FailureReason ?? WriterOutcome.Error : ReplyGuard.Problem(o.Reply, asked, previous);
-            if (problem is null && kept.Count > 0 && !kept.IsSubsetOf(ReplyGuard.Numbers(o.Reply!)))
+            if (problem is null && kept.Count > 0 && kept.Except(ReplyGuard.Numbers(o.Reply!)).ToList() is { Count: > 0 } lost)
             {
                 problem = "price_dropped";
+                detail = string.Join("، ", lost);
             }
 
             if (problem is null && keys.Contains(TextKeys.LegalQuestion)
@@ -559,7 +564,7 @@ public static class Conversational
         var retried = false;
         if (problem is not null && outcome.Reply is not null && understanding && ReplyRetry.Allows(problem))
         {
-            var again = request with { Feedback = ReplyRetry.Feedback(problem, outcome.Reply) };
+            var again = request with { Feedback = ReplyRetry.Feedback(problem, outcome.Reply, detail) };
             var second = await writer.WriteAsync(again, settings, ct);
             Note(second);
             if (second.Reply is not null)

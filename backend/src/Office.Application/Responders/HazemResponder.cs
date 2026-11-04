@@ -1121,20 +1121,56 @@ public sealed class HazemResponder(
             plan.Say(TextKeys.UrfUnclear);
         }
 
+        /// <summary>v1.60: the case with what the client said in this message (witnesses, her past, her guardian) kept in it.</summary>
+        private UrfCase WithUrfFacts(UrfCase u)
+        {
+            if (!understanding || answering?.Call?.Answer is not { } said)
+            {
+                return u;
+            }
+
+            var changed = UrfRules.ApplyFacts(u, said.UrfWifePast, said.UrfGuardian, said.UrfWitnesses);
+            UrfChanged |= changed != u;
+            return changed;
+        }
+
+        /// <summary>
+        /// v1.60: the client said something about the running Urfi case. It is kept; and when this message is only that (a
+        /// choice, nothing asked), the price and times or the next question go at once from the case as it is now. A question
+        /// or a stance keeps its own answer (the case is still changed).
+        /// </summary>
+        private bool UrfFactsSaid(Classification turnClass, UrfCase running)
+        {
+            var now = WithUrfFacts(running);
+            if (now == running)
+            {
+                return false;
+            }
+
+            Urf = now;
+            if (turnClass.Intent is not (Intent.ServiceByName or Intent.Other) || UnderstandingV2.StanceOf(turnClass.Call?.Answer) != Stance.None)
+            {
+                return false;
+            }
+
+            AfterUrf(now.State == UrfCase.Collecting ? UrfNext.Ask : UrfNext.Book);
+            return true;
+        }
+
         /// <summary>B-11: «عايز جواز / طلاق عرفي»: a new case, or the one already running picks up where it was.</summary>
         private void StartUrf(string kind)
         {
             Check(Intake.MoveTo(IntakeState.InServiceFlow));
             if (urfOpen?.FirstOrDefault(c => c.Kind == kind) is { } open) // one running case per kind (urf_cases_one_open)
             {
-                Urf = open;
-                AfterUrf(open.State == UrfCase.Collecting ? UrfNext.Ask : UrfNext.Book);
+                Urf = WithUrfFacts(open);
+                AfterUrf(Urf.State == UrfCase.Collecting ? UrfNext.Ask : UrfNext.Book);
                 return;
             }
 
-            Urf = UrfCase.Start(State.Person.Id, kind);
+            Urf = WithUrfFacts(UrfCase.Start(State.Person.Id, kind));
             UrfChanged = true;
-            AfterUrf(UrfNext.Ask);
+            AfterUrf(Urf.State == UrfCase.Collecting ? UrfNext.Ask : UrfNext.Book);
         }
 
         /// <summary>
@@ -1671,6 +1707,13 @@ public sealed class HazemResponder(
                 return;
             }
 
+            // v1.60: what he said about the Urfi case (the witnesses, her past, her guardian) is kept, and the questions it answers
+            // are not asked
+            if (Urf is { } running && UrfFactsSaid(turnClass, running))
+            {
+                return;
+            }
+
             if (AnswerStance(turnClass))
             {
                 AnswerAlso(turnClass);
@@ -1959,7 +2002,11 @@ public sealed class HazemResponder(
 
             // TASK 18 (3.3): his question answered is the whole reply while a booking step is on the screen or the offer was
             // just said; otherwise the offer follows the answer, as B-20 says.
-            if (!existingClient && !(answered && OfferWouldStack))
+            // v1.60 (the owner's chats: the consultation price after «اي الفروع بتاعتكم»): with understanding v2 on, a question that
+            // only asks about the office (where, when, what it does, who the lawyer is, privacy) is answered and nothing is sold
+            // after it; he asks the next thing, or the greeting's choices are still there
+            var onlyAsked = understanding && topic is InfoTopic.Address or InfoTopic.Hours or InfoTopic.PracticeAreas or InfoTopic.Lawyer or InfoTopic.Privacy;
+            if (!existingClient && !(answered && (OfferWouldStack || onlyAsked)))
             {
                 Offer(askTopic: false);
             }
