@@ -265,7 +265,7 @@ export interface RatingReport {
   sent: number;
   /** with a score (2 to 5); «ليس الآن» is no score */
   answered: number;
-  average: number | null;
+  average?: number | null; // the API leaves it out when there is none
   by_service: { key: string; count: number; average: number }[];
   low: { at: string; service: string; client_name: string | null }[];
 }

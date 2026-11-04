@@ -120,6 +120,17 @@ describe("TASK 07c tools", () => {
     expect(said[1]!.textContent).toContain("اترفض: وعد المكتب ما يقدرش يضمنه");
   });
 
+  it("shows a month with no rating yet (the API leaves the average out) without breaking", async () => {
+    serve({
+      "GET /auth/me": { body: lawyer },
+      "GET /reports": { body: { month: "2026-11", tasks: 0, done: 0, done_on_time: 0, late: 0, by_type: [], by_staff: [], new_clients: 0, by_source: [], by_matter: [], by_client_type: [], by_booking: [], received: 0, missing: 0, refunded: 0,
+        ratings: { sent: 0, answered: 0, by_service: [], low: [] } } },
+    });
+    renderAt("/reports");
+    const ratings = await screen.findByRole("region", { name: "تقييمات العملاء" });
+    expect(within(ratings).getByText("—")).toBeTruthy();
+  });
+
   it("will not save a text longer than its limit", async () => {
     const calls = serve({
       "GET /auth/me": { body: lawyer },

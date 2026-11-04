@@ -248,7 +248,7 @@ function Note({ children }: { children: ReactNode }) {
 const RATED_SERVICES: Record<string, string> = { ...BOOKING_SERVICES, ...SERVICE_KINDS };
 
 function Ratings({ ratings }: { ratings: RatingReport }) {
-  const score = (n: number | null) => (n === null ? "—" : n.toFixed(1));
+  const score = (n: number | null | undefined) => (n == null ? "—" : n.toFixed(1)); // the API leaves a null out
   const cairoDay = (at: string) => new Intl.DateTimeFormat("ar-EG-u-nu-latn", { timeZone: "Africa/Cairo", day: "numeric", month: "numeric" }).format(new Date(at));
   return (
     <section className="grid gap-3" aria-labelledby="ratings-title">
@@ -258,7 +258,7 @@ function Ratings({ ratings }: { ratings: RatingReport }) {
           <span aria-hidden className="absolute inset-y-3 start-0 w-1 rounded-e-full bg-gold" />
           <h3 className="text-[13px] font-semibold text-ink-soft">متوسط التقييم (من 5)</h3>
           <p className="tabular text-3xl font-bold">{score(ratings.average)}</p>
-          {ratings.average !== null ? <Bar share={ratings.average / 5} /> : null}
+          {ratings.average != null ? <Bar share={ratings.average / 5} /> : null}
         </div>
         <Number icon="mail" title="اتبعت" value={ratings.sent} />
         <Number icon="check-circle" tone="green" title="اتقيّمت" value={ratings.answered} note={ratings.sent === 0 ? undefined : `${Math.round((ratings.answered / ratings.sent) * 100)}%`} />
