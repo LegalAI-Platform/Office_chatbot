@@ -68,14 +68,33 @@ public sealed partial class BookingFlowTests
     }
 
     [Fact]
-    public async Task The_reviewer_reads_only_free_answers()
+    public async Task With_the_switch_off_the_reviewer_is_never_called()
     {
+        await InSituation("new");
+        ConversationalOn();
+        _writer.Reply = "أهلًا بحضرتك 👋 أقدر أساعدك في إيه النهارده؟";
+        await Say("السلام عليكم");
+        Assert.Null(_reviewer.Last);
+    }
+
+    [Fact]
+    public async Task With_the_switch_on_every_written_reply_is_reviewed_and_a_promise_in_a_comfort_reply_never_goes()
+    {
+        // the test server's first try: «ومحدش هيعرف حاجة» came out of a comfort reply that was no free answer
         await InSituation("new");
         ConversationalOn();
         UnderstandingOn();
         _writer.Reply = "أهلًا بحضرتك 👋 أقدر أساعدك في إيه النهارده؟";
-        await Say("السلام عليكم");
-        Assert.Null(_reviewer.Last);
+        var ok = await Say("السلام عليكم");
+        Assert.NotNull(_reviewer.Last); // reviewed, though it is no free answer
+        Assert.Equal(_writer.Reply, ok.Actions[^1].Text);
+        Assert.Contains("النص المعتمد", _reviewer.Last!.Facts); // the approved text it rewrites counts as given
+
+        _writer.Reply = "أهلًا بحضرتك 👋 وطمّن حضرتك إن محدش هيعرف حاجة.";
+        _reviewer.Problem = ReplyReview.Promise;
+        var d = await Say("السلام عليكم");
+        Assert.NotEqual(_writer.Reply, d.Actions[^1].Text); // the approved words went
+        Assert.Equal("review_promise", d.Effects!.Written!.Guard);
     }
 
     [Fact]

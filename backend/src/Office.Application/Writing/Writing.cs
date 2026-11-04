@@ -514,12 +514,15 @@ public static class Conversational
             problem = "said_confirmed"; // v1.45: the transfer is still under the office's review
         }
         // v1.53 (B-34, layer 4): a free answer is also read for its meaning (a promise, the law, a fact not given, harm);
-        // no reviewer, or it cannot answer → the free answer never goes
-        if (problem is null && keys.Contains(TextKeys.FreeAnswer))
+        // no reviewer, or it cannot answer → the free answer never goes. v1.54: with understanding v2 on, EVERY written
+        // reply is read (the first try on the test server let «ومحدش هيعرف حاجة» through a comfort reply that was no free
+        // answer); the approved text it rewrites counts as given, so its prices and steps are no «fact not given».
+        if (problem is null && (keys.Contains(TextKeys.FreeAnswer) || settings.Flag(UnderstandingV2.SwitchKey)))
         {
             problem = reviewer is null
                 ? ReplyReview.Prefix + ReplyReview.Unavailable
-                : await reviewer.ProblemAsync(new ReviewRequest(outcome.Reply!.Trim(), facts, lines), settings, ct) is { } found
+                : await reviewer.ProblemAsync(new ReviewRequest(outcome.Reply!.Trim(), facts + "\nالنص المعتمد (مسموح بكل اللي فيه):\n" + approved, lines),
+                    settings, ct) is { } found
                     ? ReplyReview.Prefix + found
                     : null;
         }

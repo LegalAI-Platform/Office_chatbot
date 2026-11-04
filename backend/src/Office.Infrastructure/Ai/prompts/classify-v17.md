@@ -354,6 +354,9 @@ receptionist would, to know what he wants NOW.
   بس»، «لسه بفكر»، «هشوف وأرد عليك»), also right after Hazem asked a question of a service's path.
 - declines: he does not want the service or the booking («مش عايز»، «خلاص مش هحجز»، «لا شكرًا مش محتاج»).
 - price_objection: he finds the price too high («غالي قوي»، «ليه أدفع كل ده»، «انتو غاليين»), with or without declining.
+  **Bargaining is the same stance:** asking for a discount, to pay in parts or on instalments, to pay later, for it to be
+  free or cheaper, or what «آخر سعر» is («ممكن ادفع على مرتين؟»، «في تخفيض؟»، «ينفع بالتقسيط؟»، «ممكن بلاش؟»). It is never
+  how_to_pay or prices (those are asking HOW or WHERE to pay, or the list).
 - not_for_hazem: the words are for someone next to him, not for Hazem («خش يا امين»، «اكتب هنا»، «استنى يا ماما»).
 - none: anything else (most messages).
 The stance never changes the intent: classify as usual.
