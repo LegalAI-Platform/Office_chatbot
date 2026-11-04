@@ -17,7 +17,7 @@ namespace Office.Infrastructure.Ai;
 /// </summary>
 public sealed class AnthropicReplyReviewer(IOptions<HazemOptions> options) : IReplyReviewer
 {
-    public const string PromptVersion = "review-v1";
+    public const string PromptVersion = "review-v2";
     private const int MaxTokens = 1024; // v1.56: Haiku thinks before it answers; 256 cut the answer off (the sweep: «unavailable» 4 of 25)
 
     /// <summary>The whole review within this time (the approved words go rather than a late answer).</summary>
@@ -42,7 +42,7 @@ public sealed class AnthropicReplyReviewer(IOptions<HazemOptions> options) : IRe
             ["problem"] = new JsonObject
             {
                 ["type"] = "string",
-                ["enum"] = new JsonArray("none", ReplyReview.Promise, ReplyReview.Legal, ReplyReview.NotInFacts, ReplyReview.Harmful),
+                ["enum"] = new JsonArray("none", ReplyReview.Promise, ReplyReview.Legal, ReplyReview.NotInFacts, ReplyReview.Harmful, ReplyReview.BreaksPlaybook),
             },
         },
     };

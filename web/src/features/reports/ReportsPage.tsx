@@ -312,6 +312,7 @@ const GUARD_REASONS: Record<string, string> = {
   review_legal: "كلام قانوني",
   review_not_in_facts: "معلومة مش في حقايق المكتب",
   review_harmful: "حاجة تضر المكتب",
+  review_breaks_playbook: "خالف قاعدة في دليل التعامل",
   review_unavailable: "المراجِع ما ردّش في وقته",
   review_unavailable_timeout: "المراجِع اتأخر",
   review_unavailable_error: "المراجِع وقع",

@@ -126,6 +126,36 @@ public sealed partial class BookingFlowTests
     }
 
     [Fact]
+    public async Task Every_active_part_of_the_playbook_reaches_the_writer_and_the_reviewer_in_order()
+    {
+        FreeAnswerOn();
+        _texts[TextKeys.OfficePlaybookMore] = new ApprovedText(TextKeys.OfficePlaybookMore, 1, "- الجزء التاني.", 600, true);
+        _texts[TextKeys.OfficePlaybookMore2] = new ApprovedText(TextKeys.OfficePlaybookMore2, 1, "- الجزء التالت: السرية بثقة.", 600, true);
+        await ToTheOffer();
+        _writer.Reply = "متقلقش يا فندم 🙏 كلامك مع المكتب سري.";
+        await Say("انا خايف مراتي تعرف");
+        var facts = _writer.Last!.Facts;
+        Assert.True(facts.IndexOf(Playbook, StringComparison.Ordinal) < facts.IndexOf("- الجزء التاني.", StringComparison.Ordinal));
+        Assert.True(facts.IndexOf("- الجزء التاني.", StringComparison.Ordinal) < facts.IndexOf("- الجزء التالت", StringComparison.Ordinal));
+        Assert.Contains("- الجزء التالت", _reviewer.Last!.Facts); // the reviewer checks the reply against the same rules
+    }
+
+    [Fact]
+    public async Task A_reply_that_breaks_a_rule_of_the_playbook_is_written_again_with_that_reason()
+    {
+        FreeAnswerOn();
+        await ToTheOffer();
+        var before = _writer.All.Count;
+        _writer.Then.Enqueue("بس مش أقدر أضمنلك إن حد مش هيعرف حاجة 🙏");
+        _writer.Then.Enqueue("أيوه، كلامك مع المكتب سري.");
+        _reviewer.Sequence.Enqueue(ReplyReview.BreaksPlaybook);
+        _reviewer.Sequence.Enqueue(null);
+        var d = await Say("انا خايف مراتي تعرف");
+        Assert.Equal("أيوه، كلامك مع المكتب سري.", d.Actions[^1].Text);
+        Assert.Contains("rule of «دليل التعامل»", _writer.All[before + 1].Feedback);
+    }
+
+    [Fact]
     public async Task With_the_switch_off_the_reviewer_is_never_called()
     {
         await InSituation("new");
@@ -198,6 +228,7 @@ public sealed class ReplyReviewVerdictTests
     [InlineData("""{"ok": true, "problem": "none"}""", null)]
     [InlineData("""{"ok": false, "problem": "promise"}""", "promise")]
     [InlineData("""{"ok": false, "problem": "legal"}""", "legal")]
+    [InlineData("""{"ok": false, "problem": "breaks_playbook"}""", "breaks_playbook")]
     [InlineData("""{"ok": true, "problem": "harmful"}""", "harmful")] // a problem named is a problem
     [InlineData("""{"ok": false, "problem": "other"}""", "unavailable_invalid")]
     [InlineData("not json", "unavailable_invalid")]

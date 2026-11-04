@@ -568,8 +568,8 @@ public sealed class HazemResponder(
 
     /// <summary>v1.53 (phase 3): «دليل التعامل», its approved parts in order (never sent).</summary>
     private static string Playbook(IReadOnlyDictionary<string, ApprovedText> texts) => string.Join("\n",
-        new[] { TextKeys.OfficePlaybook, TextKeys.OfficePlaybookMore }.Select(k => texts.TryGetValue(k, out var t) && t.Active ? t.Text : null)
-            .Where(t => t is not null));
+        texts.Where(kv => kv.Key.StartsWith(TextKeys.OfficePlaybook, StringComparison.Ordinal) && kv.Value.Active)
+            .OrderBy(kv => kv.Key, StringComparer.Ordinal).Select(kv => kv.Value.Text)); // office_playbook, …_more, …_more2
 
     /// <summary>v1.47 (B-32): the exact time he typed is free to book (moving an appointment always goes through its list).</summary>
     private static async Task<bool> FreeAtAsync(BookingDesk desk, BookingSettings b, HazemSettings settings, TimesAsked asked,
