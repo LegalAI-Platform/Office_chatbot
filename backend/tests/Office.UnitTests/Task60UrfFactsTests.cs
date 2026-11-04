@@ -127,7 +127,7 @@ public sealed partial class BookingFlowTests
         await Answer(UrfStep.Guardian, "father");
         var times = await Answer(UrfStep.Witnesses, "office");
         await Press(times.Actions.Single().Interactive!.Choices[0].Id);
-        _texts[TextKeys.UnclearAgain] = new ApprovedText(TextKeys.UnclearAgain, 1, "تمام، هبلّغ المكتب برسالة حضرتك.", 300, true);
+        _texts[TextKeys.ServiceCheck] = new ApprovedText(TextKeys.ServiceCheck, 1, "هسأل المكتب عن ده، ويردوا على حضرتك هنا.", 300, true);
         return times;
     }
 
@@ -137,7 +137,7 @@ public sealed partial class BookingFlowTests
         await UrfBookedAndPaying();
         _script["هجيب الشهود من عندي"] = new("reschedule_or_cancel", null, "unknown", null, 0.75, UrfWitnesses: "own");
         var d = await Say("هجيب الشهود من عندي");
-        Assert.Equal([TextKeys.UnclearAgain], Keys(d));
+        Assert.Equal([TextKeys.ServiceCheck], Keys(d));
         Assert.Contains(PendingTask.UrfHelp, TaskKinds(d));
         Assert.Equal("office", TheCase.Witnesses); // the price paid and the documents are the office's decision
     }
@@ -148,7 +148,7 @@ public sealed partial class BookingFlowTests
         await UrfBookedAndPaying();
         _script["هبعت المستندات لما اجي المكتب"] = new("other", null, "unknown", null, 0.7);
         var d = await Say("هبعت المستندات لما اجي المكتب");
-        Assert.Equal([TextKeys.UnclearAgain], Keys(d));
+        Assert.Equal([TextKeys.TopicReceived], Keys(d));
         Assert.Contains(PendingTask.ExistingClientMessage, TaskKinds(d));
     }
 

@@ -331,9 +331,11 @@ public static class Conversational
         [TextKeys.SituationAskTopic] = "invite him, if he likes, to write his matter briefly here so it reaches the lawyer before the appointment",
         [TextKeys.SituationOrder] = "tell him where his service request stands; he may ask about it here",
         [TextKeys.SituationTopic] = "tell him his matter arrived and the lawyer will see it",
-        [TextKeys.TopicReceived] = "tell him his matter arrived",
-        [TextKeys.TopicReceived2] = "tell him his matter arrived",
-        [TextKeys.TopicReceived3] = "tell him his matter arrived",
+        // v1.62 (the owner: «الرد كدا غلط والعميل مش هيفهم حاجه»): when he told the office something («مش هبعت المستندات دلوقتي»),
+        // the reply says in a few words what he said, so he knows it was understood; never a promise
+        [TextKeys.TopicReceived] = "tell him his message arrived and the office will see it; if he told something (for example that he will bring the documents on the day), say it back in a few words so he knows it was understood; never promise anything",
+        [TextKeys.TopicReceived2] = "tell him his message arrived and the office will see it; if he told something, say it back in a few words so he knows it was understood; never promise anything",
+        [TextKeys.TopicReceived3] = "tell him his message arrived and the office will see it; if he told something, say it back in a few words so he knows it was understood; never promise anything",
         // v1.46: «انا تعبان» gets a word of comfort before the question, never a cold «not clear»
         // v1.55: the comfort never promises («محدش هيعرف»، «مش هيحصل»): the only thing it may say is that what he tells the office
         // stays private with the office (the reviewer refused a comfort reply that promised nobody would know)
@@ -353,7 +355,8 @@ public static class Conversational
         [TextKeys.OfficeHowToBook] = "tell him how booking goes",
         [TextKeys.OfficeRefund] = "tell him the refund rule",
         [TextKeys.OfficeFeePolicy] = "tell him how the fees of a case are set",
-        [TextKeys.ServiceCheck] = "tell him the office will answer him here on whether it does this",
+        // v1.62: also a change he asks for in a booking he has paid for: said back, and the office answers him here (never «done»)
+        [TextKeys.ServiceCheck] = "tell him the office will answer him here on whether it does this; if he asked to change something in his booking (for example the witnesses), say back in a few words what he wants changed, and that the office will answer him here (never that it is changed, never a price)",
         // v1.48: the office facts answer many of these («هقابل المستشار نفسه؟»): from them, and from_facts true; otherwise as v1.46
         [TextKeys.ServiceDetail] = "if the OFFICE FACTS answer his question, answer it from them only (from_facts true, and say nothing about the office answering); otherwise tell him his question reached the office and they will answer it here (from_facts false, never the answer yourself)",
         [TextKeys.OfficePrivacy] = "reassure him that everything he tells the office stays private: the office never discloses its clients' secrets (nothing else: no prices, no question)",

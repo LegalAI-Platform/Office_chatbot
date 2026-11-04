@@ -1145,7 +1145,9 @@ public sealed class HazemResponder(
             if (understanding && answering?.Call?.Answer is { } said
                 && UrfRules.ChangesBooked(running, said.UrfWifePast, said.UrfGuardian, said.UrfWitnesses))
             {
-                HandToOffice(TextKeys.UnclearAgain, PendingTask.UrfHelp);
+                plan.Say(TextKeys.ServiceCheck); // said back in his words by the writer: what he wants changed, and the office answers
+                plan.Task(PendingTask.UrfHelp);
+                Check(Intake.MoveTo(IntakeState.HandedToStaff));
                 return true;
             }
 
@@ -1529,7 +1531,7 @@ public sealed class HazemResponder(
                 case Intent.Other when understanding && !c.IsFallback && situation.Kind is SituationKind.Confirmed or SituationKind.HeldUnpaid:
                     // v1.62 (the owner's chat: «مش هبعت المستندات، هبعتها لما أجي المكتب» was answered «ميعادك متأكد ✅»): words the AI
                     // read that are not a question about his situation are his words to the office: they are kept as a task
-                    plan.Say(TextKeys.UnclearAgain);
+                    plan.Say(TextKeys.TopicReceived, Fill: CallFill());
                     plan.Task(PendingTask.ExistingClientMessage, list.ExistingClient?.StaffId);
                     return true;
                 case Intent.Greeting or Intent.ConsultationRequest or Intent.Other:
