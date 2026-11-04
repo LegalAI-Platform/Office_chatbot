@@ -25,10 +25,13 @@ public static class ReplyReview
     public const string NotInFacts = "not_in_facts";
     public const string Harmful = "harmful";
 
+    /// <summary>v1.57: the reply breaks a rule of «دليل التعامل» (the owner's rules), whatever the topic.</summary>
+    public const string BreaksPlaybook = "breaks_playbook";
+
     /// <summary>The reviewer could not answer: the reply does not go. v1.56: always with its reason («unavailable_timeout»…).</summary>
     public const string Unavailable = "unavailable";
 
-    public static readonly string[] Problems = [Promise, Legal, NotInFacts, Harmful];
+    public static readonly string[] Problems = [Promise, Legal, NotInFacts, Harmful, BreaksPlaybook];
 }
 
 /// <summary>
@@ -55,6 +58,8 @@ public static class ReplyRetry
             "It contains legal information or a legal word. Never explain the law: say kindly that the lawyer answers it in the consultation.",
         "review_not_in_facts" or "number_not_given" =>
             "It states a fact, a number or a rule that is not in the APPROVED TEXT or the OFFICE FACTS. Use only those.",
+        "review_breaks_playbook" =>
+            "It breaks a rule of «دليل التعامل» (the owner's rules, in the OFFICE FACTS). Read the rules again and write it following every one of them.",
         "review_harmful" =>
             "It could harm the office or the client (another lawyer, pressure, judging him). Write it kindly without that.",
         "money" => "It speaks of money or paying beyond the approved text. Leave that out.",
