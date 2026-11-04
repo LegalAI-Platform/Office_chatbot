@@ -404,7 +404,8 @@ public static class Conversational
     /// slow → the turn goes exactly as composed. Nothing to write → unchanged, no call.
     /// </summary>
     public static async Task<Rewritten> RewriteAsync(ReplyComposer.Composed composed, IReplyWriter writer, IConversationHistory history,
-        Turn turn, string call, HazemSettings settings, CancellationToken ct, string facts = "", string? nameGender = null)
+        Turn turn, string call, HazemSettings settings, CancellationToken ct, string facts = "", string? nameGender = null,
+        IReplyReviewer? reviewer = null)
     {
         var lines = (await history.RecentAsync(turn.WaId, HistoryTurns, ct)).ToList();
         if (AiInput.Build(turn) is { } now)
@@ -413,7 +414,7 @@ public static class Conversational
         }
 
         var client = ClientGender.Of(nameGender, lines);
-        var r = await WriteRunAsync(composed, writer, turn, call, settings, ct, facts, lines, client);
+        var r = await WriteRunAsync(composed, writer, turn, call, settings, ct, facts, lines, client, reviewer);
         if (client != ClientGender.Woman)
         {
             return r;
@@ -427,7 +428,7 @@ public static class Conversational
     }
 
     private static async Task<Rewritten> WriteRunAsync(ReplyComposer.Composed composed, IReplyWriter writer, Turn turn, string call,
-        HazemSettings settings, CancellationToken ct, string facts, List<ChatLine> lines, string client)
+        HazemSettings settings, CancellationToken ct, string facts, List<ChatLine> lines, string client, IReplyReviewer? reviewer = null)
     {
         var keyOf = composed.Records.GroupBy(r => r.IdempotencyKey).ToDictionary(g => g.Key, g => g.First().Key, StringComparer.Ordinal);
         int start = -1, end = -1;
@@ -512,6 +513,17 @@ public static class Conversational
         {
             problem = "said_confirmed"; // v1.45: the transfer is still under the office's review
         }
+        // v1.53 (B-34, layer 4): a free answer is also read for its meaning (a promise, the law, a fact not given, harm);
+        // no reviewer, or it cannot answer → the free answer never goes
+        if (problem is null && keys.Contains(TextKeys.FreeAnswer))
+        {
+            problem = reviewer is null
+                ? ReplyReview.Prefix + ReplyReview.Unavailable
+                : await reviewer.ProblemAsync(new ReviewRequest(outcome.Reply!.Trim(), facts, lines), settings, ct) is { } found
+                    ? ReplyReview.Prefix + found
+                    : null;
+        }
+
         var first = run[0];
         var written = new WrittenReply(first.IdempotencyKey, mainKey, problem is null ? outcome.Reply!.Trim() : null, problem ?? WrittenReply.Passed,
             outcome.Model, outcome.PromptVersion, outcome.LatencyMs, outcome.InputTokens, outcome.OutputTokens)

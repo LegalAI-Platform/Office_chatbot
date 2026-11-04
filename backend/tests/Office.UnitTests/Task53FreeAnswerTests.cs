@@ -1,3 +1,4 @@
+using Office.Application.Responders;
 using Office.Application.Texts;
 using Office.Application.Understanding;
 using Office.Application.Writing;
@@ -12,6 +13,22 @@ namespace Office.UnitTests;
 public sealed partial class BookingFlowTests
 {
     private const string Playbook = "- السرية: كل كلام العميل مع المكتب سري.";
+
+    private readonly FakeReviewer _reviewer = new();
+
+    /// <summary>v1.53 (layer 4): the reviewer by meaning, as scripted (null: the reply may go).</summary>
+    private sealed class FakeReviewer : IReplyReviewer
+    {
+        public string? Problem { get; set; }
+
+        public ReviewRequest? Last { get; private set; }
+
+        public Task<string?> ProblemAsync(ReviewRequest request, HazemSettings settings, CancellationToken ct)
+        {
+            Last = request;
+            return Task.FromResult(Problem);
+        }
+    }
 
     private void FreeAnswerOn()
     {
@@ -34,6 +51,31 @@ public sealed partial class BookingFlowTests
         Assert.Equal(WrittenReply.Passed, d.Effects!.Written!.Guard);
         Assert.Contains(Playbook, _writer.Last!.Facts); // «دليل التعامل» is read by the writer, never sent
         Assert.DoesNotContain(d.Actions, a => a.Text?.Contains("دليل التعامل", StringComparison.Ordinal) == true);
+    }
+
+    [Fact]
+    public async Task A_promise_in_plain_words_is_caught_by_the_reviewer_and_the_approved_words_go()
+    {
+        FreeAnswerOn();
+        await ToTheOffer();
+        _writer.Reply = "متقلقش يا فندم، مراتك مش هتعرف أبدًا 🙏"; // no listed word: only its meaning is a promise
+        _reviewer.Problem = ReplyReview.Promise;
+        var d = await Say("انا خايف مراتي تعرف");
+        Assert.Equal("معلش، ممكن توضّحلي أكتر حضرتك محتاج إيه؟ وأنا معاك 🙏", d.Actions[^1].Text);
+        Assert.Equal("review_promise", d.Effects!.Written!.Guard);
+        Assert.Equal(_writer.Reply, _reviewer.Last!.Reply);
+        Assert.Contains(Playbook, _reviewer.Last.Facts);
+    }
+
+    [Fact]
+    public async Task The_reviewer_reads_only_free_answers()
+    {
+        await InSituation("new");
+        ConversationalOn();
+        UnderstandingOn();
+        _writer.Reply = "أهلًا بحضرتك 👋 أقدر أساعدك في إيه النهارده؟";
+        await Say("السلام عليكم");
+        Assert.Null(_reviewer.Last);
     }
 
     [Fact]
@@ -70,4 +112,19 @@ public sealed partial class BookingFlowTests
         Assert.DoesNotContain(TextKeys.FreeAnswer, Keys(d));
         Assert.DoesNotContain(Playbook, _writer.Last?.Facts ?? "");
     }
+}
+
+/// <summary>v1.53 (B-34, layer 4): the reviewer's answer read strictly: anything but the schema fails closed.</summary>
+public sealed class ReplyReviewVerdictTests
+{
+    [Theory]
+    [InlineData("""{"ok": true, "problem": "none"}""", null)]
+    [InlineData("""{"ok": false, "problem": "promise"}""", "promise")]
+    [InlineData("""{"ok": false, "problem": "legal"}""", "legal")]
+    [InlineData("""{"ok": true, "problem": "harmful"}""", "harmful")] // a problem named is a problem
+    [InlineData("""{"ok": false, "problem": "other"}""", "unavailable")]
+    [InlineData("not json", "unavailable")]
+    [InlineData(null, "unavailable")]
+    public void The_verdict_is_read_strictly(string? content, string? expected) =>
+        Assert.Equal(expected, Office.Infrastructure.Ai.AnthropicReplyReviewer.Verdict(content));
 }

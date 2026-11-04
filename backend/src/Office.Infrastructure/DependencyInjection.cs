@@ -77,6 +77,7 @@ public static class DependencyInjection
         services.AddTransient<Application.Writing.IReplyWriter>(sp => new RoutingReplyWriter(
             sp.GetRequiredService<OpenAiReplyWriter>(), sp.GetRequiredService<AnthropicReplyWriter>()));
         services.AddScoped<Application.Writing.IConversationHistory, ConversationHistory>();
+        services.AddSingleton<Application.Writing.IReplyReviewer, AnthropicReplyReviewer>(); // v1.53 (B-34): the free answer's meaning
 
         services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<IConversationStore, ConversationStore>();

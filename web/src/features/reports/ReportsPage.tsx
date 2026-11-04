@@ -1,7 +1,7 @@
 import { useId, useState, type ReactNode } from "react";
 import { queryOptions, useQuery, type QueryClient } from "@tanstack/react-query";
 import { api, errorMessage } from "../../shared/api/client";
-import type { MonthReport, RatingReport, ReportRow, ReviewRow } from "../../shared/api/types";
+import type { FreeAnswerRow, MonthReport, RatingReport, ReportRow, ReviewRow } from "../../shared/api/types";
 import { APPOINTMENT_STATES, BOOKING_SERVICES, label, SERVICE_KINDS, SOURCES, TASK_TYPES, CLIENT_TYPES, matterLabel } from "../../shared/lib/labels";
 import { Icon, type IconName } from "../../shared/ui/Icon";
 import { ErrorState, Loading } from "../../shared/ui/ui";
@@ -99,6 +99,7 @@ export function ReportsPage() {
 
           {r.ratings ? <Ratings ratings={r.ratings} /> : null}
           <Review rows={r.review ?? []} />
+          <FreeAnswers rows={r.free_answers ?? []} />
         </>
       ) : null}
     </div>
@@ -299,6 +300,61 @@ function Ratings({ ratings }: { ratings: RatingReport }) {
         </GlassCard>
       </div>
       <Note>التقييمات اللي اتبعتت الشهر ده. «ليس الآن» مش بيتحسب في المتوسط. سبب التقييم الضعيف في مهمته («كلام العميل»).</Note>
+    </section>
+  );
+}
+
+// ---------- v1.53 (B-34, layer 6): Hazem's free answers, to review ----------
+
+/** Why a free answer did not go (the approved words went instead). */
+const GUARD_REASONS: Record<string, string> = {
+  review_promise: "وعد المكتب ما يقدرش يضمنه",
+  review_legal: "كلام قانوني",
+  review_not_in_facts: "معلومة مش في حقايق المكتب",
+  review_harmful: "حاجة تضر المكتب",
+  review_unavailable: "المراجِع ما ردّش في وقته",
+  legal_word: "كلمة قانونية",
+  promise: "كلمة وعد",
+  money: "كلام عن الفلوس",
+  number_not_given: "رقم مش في الحقايق",
+  link: "لينك",
+  too_long: "طويل",
+  same_as_previous: "نفس الرد اللي فات",
+  timeout: "الكاتب اتأخر",
+  error: "الكاتب وقع",
+};
+
+/**
+ * «ردود حازم الحرة»: every reply Hazem wrote himself this month (no approved text answered the client), and the ones the
+ * checks refused. A reply the office does not like becomes a line of «دليل التعامل» (in «النصوص»).
+ */
+function FreeAnswers({ rows }: { rows: FreeAnswerRow[] }) {
+  const when = (at: string) =>
+    new Intl.DateTimeFormat("ar-EG-u-nu-latn", { timeZone: "Africa/Cairo", day: "numeric", month: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(at));
+  return (
+    <section className="grid gap-3" aria-labelledby="free-title">
+      <GroupHead id="free-title" icon="alert-circle" title="ردود حازم الحرة" />
+      <GlassCard icon="alert-circle" title="اللي حازم كتبه بنفسه">
+        {rows.length === 0 ? <Blank>مفيش ردود حرة الشهر ده.</Blank> : (
+          <div className="soft-scroll overflow-x-auto">
+            <table className="w-full min-w-[18rem] text-[13.5px]">
+              <thead><tr className="border-b border-line/70"><th className={TH}>إمتى</th><th className={TH}>العميل</th><th className={TH}>الرد</th></tr></thead>
+              <tbody className="divide-y divide-line/60">
+                {rows.map((x, i) => (
+                  <tr key={`${x.at}-${i}`} className="transition hover:bg-card/60">
+                    <td className="tabular px-2 py-2 align-top">{when(x.at)}</td>
+                    <td className="px-2 py-2 align-top font-semibold">{x.client ?? "رقم من غير اسم"}</td>
+                    <td className="px-2 py-2">
+                      {x.text ?? <span className="text-bad">اترفض: {GUARD_REASONS[x.guard] ?? x.guard} (اتبعت النص الثابت)</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </GlassCard>
+      <Note>لو رد مش عاجبك، زوّد سطر في «دليل التعامل» من «النصوص»، وحازم هيمشي عليه من الرسالة الجاية.</Note>
     </section>
   );
 }
