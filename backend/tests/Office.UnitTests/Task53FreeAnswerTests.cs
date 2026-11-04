@@ -21,12 +21,15 @@ public sealed partial class BookingFlowTests
     {
         public string? Problem { get; set; }
 
+        /// <summary>v1.56: the verdicts of the next reviews, in order (then <see cref="Problem"/>): a first try and its retry.</summary>
+        public Queue<string?> Sequence { get; } = new();
+
         public ReviewRequest? Last { get; private set; }
 
         public Task<string?> ProblemAsync(ReviewRequest request, HazemSettings settings, CancellationToken ct)
         {
             Last = request;
-            return Task.FromResult(Problem);
+            return Task.FromResult(Sequence.Count > 0 ? Sequence.Dequeue() : Problem);
         }
     }
 
@@ -65,6 +68,61 @@ public sealed partial class BookingFlowTests
         Assert.Equal("review_promise", d.Effects!.Written!.Guard);
         Assert.Equal(_writer.Reply, _reviewer.Last!.Reply);
         Assert.Contains(Playbook, _reviewer.Last.Facts);
+    }
+
+    [Fact]
+    public async Task A_refused_reply_is_written_once_more_with_the_reason_and_the_second_one_goes()
+    {
+        FreeAnswerOn();
+        await ToTheOffer();
+        var before = _writer.All.Count; // the turns before it were written too
+        _writer.Then.Enqueue("متقلقش يا فندم، مراتك مش هتعرف أبدًا 🙏");
+        _writer.Then.Enqueue("متقلقش يا فندم 🙏 كلامك مع المكتب سري عند المكتب بس.");
+        _reviewer.Sequence.Enqueue(ReplyReview.Promise); // the first is refused for its meaning
+        _reviewer.Sequence.Enqueue(null);                // the second may go
+        var d = await Say("انا خايف مراتي تعرف");
+        Assert.Equal("متقلقش يا فندم 🙏 كلامك مع المكتب سري عند المكتب بس.", d.Actions[^1].Text);
+        Assert.Equal(WrittenReply.Passed, d.Effects!.Written!.Guard);
+        Assert.EndsWith("+retry", d.Effects.Written.PromptVersion);
+        Assert.Equal(before + 2, _writer.All.Count);
+        Assert.Null(_writer.All[before].Feedback);
+        Assert.Contains("مراتك مش هتعرف أبدًا", _writer.All[before + 1].Feedback); // it is told what was refused…
+        Assert.Contains("promises", _writer.All[before + 1].Feedback);              // …and why
+    }
+
+    [Fact]
+    public async Task A_reply_refused_twice_sends_the_approved_words_and_says_it_was_retried()
+    {
+        FreeAnswerOn();
+        await ToTheOffer();
+        _writer.Reply = "متقلقش يا فندم، مراتك مش هتعرف أبدًا 🙏";
+        _reviewer.Problem = ReplyReview.Promise;
+        var before = _writer.Calls;
+        var d = await Say("انا خايف مراتي تعرف");
+        Assert.Equal("معلش، ممكن توضّحلي أكتر حضرتك محتاج إيه؟ وأنا معاك 🙏", d.Actions[^1].Text);
+        Assert.Equal("review_promise", d.Effects!.Written!.Guard);
+        Assert.EndsWith("+retry", d.Effects.Written.PromptVersion);
+        Assert.Equal(before + 2, _writer.Calls); // once more, never a third time
+    }
+
+    [Fact]
+    public async Task A_reviewer_that_could_not_answer_is_not_retried_and_with_the_switch_off_nothing_is_retried()
+    {
+        FreeAnswerOn();
+        await ToTheOffer();
+        _writer.Reply = "متقلقش يا فندم 🙏";
+        _reviewer.Problem = ReplyReview.Unavailable + "_timeout";
+        var first = _writer.Calls;
+        var d = await Say("انا خايف مراتي تعرف");
+        Assert.Equal("review_unavailable_timeout", d.Effects!.Written!.Guard);
+        Assert.Equal(first + 1, _writer.Calls); // infrastructure is no reason to write again
+
+        _settings[UnderstandingV2.SwitchKey] = "false";
+        _reviewer.Problem = null;
+        _writer.Reply = "متقلقش، القانون بيحميك والعقوبة حبس سنة."; // refused by the word check
+        var calls = _writer.Calls;
+        await Say("بجد خايف");
+        Assert.Equal(calls + 1, _writer.Calls); // one call: as before
     }
 
     [Fact]
@@ -141,9 +199,9 @@ public sealed class ReplyReviewVerdictTests
     [InlineData("""{"ok": false, "problem": "promise"}""", "promise")]
     [InlineData("""{"ok": false, "problem": "legal"}""", "legal")]
     [InlineData("""{"ok": true, "problem": "harmful"}""", "harmful")] // a problem named is a problem
-    [InlineData("""{"ok": false, "problem": "other"}""", "unavailable")]
-    [InlineData("not json", "unavailable")]
-    [InlineData(null, "unavailable")]
+    [InlineData("""{"ok": false, "problem": "other"}""", "unavailable_invalid")]
+    [InlineData("not json", "unavailable_invalid")]
+    [InlineData(null, "unavailable_invalid")]
     public void The_verdict_is_read_strictly(string? content, string? expected) =>
         Assert.Equal(expected, Office.Infrastructure.Ai.AnthropicReplyReviewer.Verdict(content));
 }

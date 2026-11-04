@@ -30,6 +30,9 @@ public sealed record WriteRequest(string Purpose, string Approved, string Call, 
 
     /// <summary>v1.45: the approved messages sent just before this one in the same turn (the price, the address): never repeated.</summary>
     public string Before { get; init; } = "";
+
+    /// <summary>v1.56: the writer's refused reply and why (ReplyRetry), when this is its second try; null on the first.</summary>
+    public string? Feedback { get; init; }
 }
 
 /// <summary>
@@ -480,58 +483,81 @@ public static class Conversational
             Facts = facts, Client = client,
             Before = string.Join("\n", composed.Actions.Take(start).Select(a => a.Text).Where(t => t is { Length: > 0 })),
         };
-        var outcome = await writer.WriteAsync(request, settings, ct);
-        var problem = outcome.Reply is null ? outcome.FailureReason ?? WriterOutcome.Error : ReplyGuard.Problem(outcome.Reply, request, previous);
         // v1.45 (the owner): a price the client asked goes out to the letter, and the legal refusal always says the lawyer
         // answers it in the consultation; otherwise the approved texts go as they are
         var keys = run.Select(a => keyOf[a.IdempotencyKey]).ToList();
         var kept = run.Where(a => Locked.Contains(keyOf[a.IdempotencyKey])).SelectMany(a => ReplyGuard.Numbers(a.Text ?? "")).ToHashSet(StringComparer.Ordinal);
-        if (problem is null && kept.Count > 0 && !kept.IsSubsetOf(ReplyGuard.Numbers(outcome.Reply!)))
+        var understanding = settings.Flag(UnderstandingV2.SwitchKey);
+
+        // every check a written reply goes through (null: it may go; else why not)
+        async Task<string?> CheckAsync(WriteRequest asked, WriterOutcome o)
         {
-            problem = "price_dropped";
+            var problem = o.Reply is null ? o.FailureReason ?? WriterOutcome.Error : ReplyGuard.Problem(o.Reply, asked, previous);
+            if (problem is null && kept.Count > 0 && !kept.IsSubsetOf(ReplyGuard.Numbers(o.Reply!)))
+            {
+                problem = "price_dropped";
+            }
+
+            if (problem is null && keys.Contains(TextKeys.LegalQuestion)
+                && !(o.Reply!.Contains("المستشار", StringComparison.Ordinal) && o.Reply.Contains("استشار", StringComparison.Ordinal)))
+            {
+                problem = "refusal_dropped";
+            }
+
+            // v1.48: the handoff is done when this goes out; a question back («تمام كده؟») would let him think it is not
+            if (problem is null && mainKey == TextKeys.HumanRequest && (o.Reply!.Contains('؟') || o.Reply.Contains('?')))
+            {
+                problem = "asked_back";
+            }
+
+            // v1.48: answered from the facts, it never also says it goes to the office (no task will be made for it)
+            if (problem is null && o.FromFacts && keys.Contains(TextKeys.ServiceDetail)
+                && OfficeWords.Any(w => o.Reply!.Contains(w, StringComparison.Ordinal)))
+            {
+                problem = "facts_and_office";
+            }
+
+            if (problem is null && mainKey == TextKeys.SituationReview
+                && (o.Reply!.Contains("متأكد", StringComparison.Ordinal) || o.Reply.Contains("اتأكد", StringComparison.Ordinal)))
+            {
+                problem = "said_confirmed"; // v1.45: the transfer is still under the office's review
+            }
+
+            // v1.53 (B-34, layer 4): a free answer is also read for its meaning (a promise, the law, a fact not given, harm);
+            // no reviewer, or it cannot answer → the reply never goes. v1.54: with understanding v2 on, EVERY written reply is
+            // read; the approved text it rewrites counts as given, so its prices and steps are no «fact not given».
+            if (problem is null && (keys.Contains(TextKeys.FreeAnswer) || understanding))
+            {
+                problem = reviewer is null
+                    ? ReplyReview.Prefix + ReplyReview.Unavailable + "_none"
+                    : await reviewer.ProblemAsync(new ReviewRequest(o.Reply!.Trim(), facts + "\nالنص المعتمد (مسموح بكل اللي فيه):\n" + approved, lines),
+                        settings, ct) is { } found
+                        ? ReplyReview.Prefix + found
+                        : null;
+            }
+
+            return problem;
         }
 
-        if (problem is null && keys.Contains(TextKeys.LegalQuestion)
-            && !(outcome.Reply!.Contains("المستشار", StringComparison.Ordinal) && outcome.Reply.Contains("استشار", StringComparison.Ordinal)))
+        var outcome = await writer.WriteAsync(request, settings, ct);
+        var problem = await CheckAsync(request, outcome);
+        // v1.56: refused for something the writer can change → once more with the reason fed back, then the approved words
+        var retried = false;
+        if (problem is not null && outcome.Reply is not null && understanding && ReplyRetry.Allows(problem))
         {
-            problem = "refusal_dropped";
-        }
-
-        // v1.48: the handoff is done when this goes out; a question back («تمام كده؟») would let him think it is not
-        if (problem is null && mainKey == TextKeys.HumanRequest && (outcome.Reply!.Contains('؟') || outcome.Reply.Contains('?')))
-        {
-            problem = "asked_back";
-        }
-
-        // v1.48: answered from the facts, it never also says it goes to the office (no task will be made for it)
-        if (problem is null && outcome.FromFacts && keys.Contains(TextKeys.ServiceDetail)
-            && OfficeWords.Any(w => outcome.Reply!.Contains(w, StringComparison.Ordinal)))
-        {
-            problem = "facts_and_office";
-        }
-
-        if (problem is null && mainKey == TextKeys.SituationReview
-            && (outcome.Reply!.Contains("متأكد", StringComparison.Ordinal) || outcome.Reply.Contains("اتأكد", StringComparison.Ordinal)))
-        {
-            problem = "said_confirmed"; // v1.45: the transfer is still under the office's review
-        }
-        // v1.53 (B-34, layer 4): a free answer is also read for its meaning (a promise, the law, a fact not given, harm);
-        // no reviewer, or it cannot answer → the free answer never goes. v1.54: with understanding v2 on, EVERY written
-        // reply is read (the first try on the test server let «ومحدش هيعرف حاجة» through a comfort reply that was no free
-        // answer); the approved text it rewrites counts as given, so its prices and steps are no «fact not given».
-        if (problem is null && (keys.Contains(TextKeys.FreeAnswer) || settings.Flag(UnderstandingV2.SwitchKey)))
-        {
-            problem = reviewer is null
-                ? ReplyReview.Prefix + ReplyReview.Unavailable
-                : await reviewer.ProblemAsync(new ReviewRequest(outcome.Reply!.Trim(), facts + "\nالنص المعتمد (مسموح بكل اللي فيه):\n" + approved, lines),
-                    settings, ct) is { } found
-                    ? ReplyReview.Prefix + found
-                    : null;
+            var again = request with { Feedback = ReplyRetry.Feedback(problem, outcome.Reply) };
+            var second = await writer.WriteAsync(again, settings, ct);
+            if (second.Reply is not null)
+            {
+                retried = true;
+                outcome = second with { LatencyMs = outcome.LatencyMs + second.LatencyMs };
+                problem = await CheckAsync(again, second);
+            }
         }
 
         var first = run[0];
         var written = new WrittenReply(first.IdempotencyKey, mainKey, problem is null ? outcome.Reply!.Trim() : null, problem ?? WrittenReply.Passed,
-            outcome.Model, outcome.PromptVersion, outcome.LatencyMs, outcome.InputTokens, outcome.OutputTokens)
+            outcome.Model, retried ? outcome.PromptVersion + "+retry" : outcome.PromptVersion, outcome.LatencyMs, outcome.InputTokens, outcome.OutputTokens)
         {
             FromFacts = problem is null && outcome.FromFacts && keys.Contains(TextKeys.ServiceDetail),
         };

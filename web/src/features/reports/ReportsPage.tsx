@@ -1,7 +1,7 @@
 import { useId, useState, type ReactNode } from "react";
 import { queryOptions, useQuery, type QueryClient } from "@tanstack/react-query";
 import { api, errorMessage } from "../../shared/api/client";
-import type { FreeAnswerRow, MonthReport, RatingReport, ReportRow, ReviewRow } from "../../shared/api/types";
+import type { FreeAnswerRow, MonthReport, RatingReport, ReportRow, ReviewRow, WrittenSummary } from "../../shared/api/types";
 import { APPOINTMENT_STATES, BOOKING_SERVICES, label, SERVICE_KINDS, SOURCES, TASK_TYPES, CLIENT_TYPES, matterLabel } from "../../shared/lib/labels";
 import { Icon, type IconName } from "../../shared/ui/Icon";
 import { ErrorState, Loading } from "../../shared/ui/ui";
@@ -99,7 +99,7 @@ export function ReportsPage() {
 
           {r.ratings ? <Ratings ratings={r.ratings} /> : null}
           <Review rows={r.review ?? []} />
-          <FreeAnswers rows={r.free_answers ?? []} />
+          <FreeAnswers rows={r.free_answers ?? []} written={r.written} />
         </>
       ) : null}
     </div>
@@ -313,7 +313,15 @@ const GUARD_REASONS: Record<string, string> = {
   review_not_in_facts: "معلومة مش في حقايق المكتب",
   review_harmful: "حاجة تضر المكتب",
   review_unavailable: "المراجِع ما ردّش في وقته",
+  review_unavailable_timeout: "المراجِع اتأخر",
+  review_unavailable_error: "المراجِع وقع",
+  review_unavailable_invalid: "المراجِع رد رد مش مفهوم",
+  review_unavailable_nokey: "المراجِع من غير مفتاح",
+  review_unavailable_none: "مفيش مراجِع",
   legal_word: "كلمة قانونية",
+  self_feminine: "كلمة بصيغة الست عن حازم",
+  repeats_before: "كرر اللي اتبعت قبله",
+  price_dropped: "شال السعر",
   promise: "كلمة وعد",
   money: "كلام عن الفلوس",
   number_not_given: "رقم مش في الحقايق",
@@ -328,12 +336,19 @@ const GUARD_REASONS: Record<string, string> = {
  * «ردود حازم الحرة»: every reply Hazem wrote himself this month (no approved text answered the client), and the ones the
  * checks refused. A reply the office does not like becomes a line of «دليل التعامل» (in «النصوص»).
  */
-function FreeAnswers({ rows }: { rows: FreeAnswerRow[] }) {
+function FreeAnswers({ rows, written }: { rows: FreeAnswerRow[]; written?: WrittenSummary }) {
   const when = (at: string) =>
     new Intl.DateTimeFormat("ar-EG-u-nu-latn", { timeZone: "Africa/Cairo", day: "numeric", month: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(at));
   return (
     <section className="grid gap-3" aria-labelledby="free-title">
       <GroupHead id="free-title" icon="alert-circle" title="ردود حازم الحرة" />
+      {written && written.total > 0 ? (
+        <p className="text-[13.5px]" data-testid="written-summary">
+          كتب حازم <strong>{written.total}</strong> رد الشهر ده، منهم <strong>{written.fallbacks}</strong> رجعوا للنص الثابت ({Math.round((written.fallbacks / written.total) * 100)}%)
+          {written.retried > 0 ? <>، و{written.retried} اتكتبوا مرة تانية بعد الرفض</> : null}.
+          {written.by_reason.length > 0 ? <> أكتر الأسباب: {written.by_reason.slice(0, 3).map((x) => `${GUARD_REASONS[x.key] ?? x.key} (${x.count})`).join("، ")}.</> : null}
+        </p>
+      ) : null}
       <GlassCard icon="alert-circle" title="اللي حازم كتبه بنفسه">
         {rows.length === 0 ? <Blank>مفيش ردود حرة الشهر ده.</Blank> : (
           <div className="soft-scroll overflow-x-auto">

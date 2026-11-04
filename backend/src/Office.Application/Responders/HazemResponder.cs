@@ -2017,15 +2017,18 @@ public sealed class HazemResponder(
                     // the second time only «تحت أمرك»
                     plan.Say(situation.RepliedRecently(TextKeys.PriceObjection) ? TextKeys.NoPressure : TextKeys.PriceObjection, TextKeys.NoPressure);
                     return true;
-                case Stance.NotForHazem when turnClass.Intent is Intent.Other or Intent.Greeting:
+                case Stance.NotForHazem when turnClass.Intent is Intent.Other or Intent.Greeting && !situation.RepliedRecently(TextKeys.NoPressure):
                 case Stance.JustAsking or Stance.Declines when turnClass.Intent is not (Intent.OfficeInfo or Intent.LegalQuestion
                     or Intent.PriceQuestion):
                     if (!situation.RepliedRecently(TextKeys.NoPressure))
                     {
                         plan.Say(TextKeys.NoPressure);
+                        return true;
                     }
 
-                    return true;
+                    // v1.56: «تحت أمرك» was said a moment ago; the message is answered as what it is (a thanks, a word of his),
+                    // never with silence (the sweep: «خلاص هفكر وارجعلك» got nothing). Nothing is pushed (paused).
+                    return false;
                 default:
                     return false; // his question is answered below, with nothing pushed after it
             }

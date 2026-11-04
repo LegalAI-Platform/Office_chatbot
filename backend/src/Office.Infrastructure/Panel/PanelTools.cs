@@ -40,14 +40,23 @@ public sealed record MonthReport(string Month, int Tasks, int Done, int DoneOnTi
 
     /// <summary>v1.53 (B-34, layer 6): «ردود حازم الحرة», each free answer of the month, sent or refused and why.</summary>
     public IReadOnlyList<FreeAnswerRow> FreeAnswers { get; init; } = [];
+
+    /// <summary>v1.56 (B-34): how many replies Hazem wrote this month, how many went back to the approved words, and why.</summary>
+    public WrittenSummary Written { get; init; } = new(0, 0, 0, []);
 }
+
+/// <summary>
+/// v1.56: the month's written replies (every purpose): <see cref="Total"/>, <see cref="Fallbacks"/> (a check refused it and the
+/// approved words went), <see cref="Retried"/> (written a second time after a refusal) and the reasons of the fallbacks.
+/// </summary>
+public sealed record WrittenSummary(int Total, int Fallbacks, int Retried, IReadOnlyList<ReportRow> ByReason);
 
 /// <summary>
 /// v1.53 (B-34, layer 6): one free answer: when, the client (as in <see cref="ReviewRow"/>), Hazem's words when they went,
 /// else null, and the guard: «passed», or why the approved words went instead (a listed word, a number not given, the
 /// reviewer's «review_promise»…). Hazem's words only, never the client's.
 /// </summary>
-public sealed record FreeAnswerRow(DateTimeOffset At, string? Client, string? Text, string Guard);
+public sealed record FreeAnswerRow(string Purpose, DateTimeOffset At, string? Client, string? Text, string Guard);
 
 /// <summary>
 /// v1.39 (TASK 16, 3.4): one conversation to review: when, the client (his name as the office sees it, else the last two
@@ -357,6 +366,7 @@ public sealed partial class PanelTools(HazemDbContext db, ListImporter importer,
         {
             Review = await ReviewAsync(start, end, ct),
             FreeAnswers = await FreeAnswersAsync(start, end, ct),
+            Written = await WrittenAsync(start, end, ct),
         };
     }
 
@@ -413,20 +423,41 @@ public sealed partial class PanelTools(HazemDbContext db, ListImporter importer,
     private async Task<IReadOnlyList<FreeAnswerRow>> FreeAnswersAsync(DateTimeOffset start, DateTimeOffset end, CancellationToken ct)
     {
         var json = await db.Database.SqlQueryRaw<string>($$"""
-            SELECT coalesce(json_agg(json_build_object('at', g.created_at, 'client', coalesce(pe.office_name, '…' || right(t.wa_id, 2)),
+            SELECT coalesce(json_agg(json_build_object('purpose', g.purpose, 'at', g.created_at,
+                                                       'client', coalesce(pe.office_name, '…' || right(t.wa_id, 2)),
                                                        'text', g.text, 'guard', g.guard) ORDER BY g.created_at DESC), '[]')::text AS "Value"
               FROM (SELECT * FROM hazem.generated_replies
-                     WHERE purpose = 'free_answer' AND created_at >= {0} AND created_at < {1}
+                     WHERE (purpose = 'free_answer' OR guard <> 'passed') AND created_at >= {0} AND created_at < {1}
                      ORDER BY created_at DESC LIMIT {{ReviewMax}}) g
               JOIN hazem.turns t ON t.turn_id = g.turn_id
               LEFT JOIN hazem.persons pe ON pe.wa_id = t.wa_id
             """, start, end).SingleAsync(ct);
         using var doc = System.Text.Json.JsonDocument.Parse(json);
         return doc.RootElement.EnumerateArray()
-            .Select(e => new FreeAnswerRow(e.GetProperty("at").GetDateTimeOffset(), e.GetProperty("client").GetString(),
+            .Select(e => new FreeAnswerRow(e.GetProperty("purpose").GetString()!, e.GetProperty("at").GetDateTimeOffset(), e.GetProperty("client").GetString(),
                 e.GetProperty("text").ValueKind == System.Text.Json.JsonValueKind.Null ? null : e.GetProperty("text").GetString(),
                 e.GetProperty("guard").GetString()!))
             .ToList();
+    }
+
+    /// <summary>v1.56: the month's written replies, how many fell back to the approved words, how many were written twice, and why.</summary>
+    private async Task<WrittenSummary> WrittenAsync(DateTimeOffset start, DateTimeOffset end, CancellationToken ct)
+    {
+        var json = await db.Database.SqlQueryRaw<string>("""
+            SELECT json_build_object(
+                     'total', count(*),
+                     'fallbacks', count(*) FILTER (WHERE guard <> 'passed'),
+                     'retried', count(*) FILTER (WHERE prompt_version LIKE '%+retry'),
+                     'reasons', coalesce((SELECT json_agg(json_build_object('key', r.guard, 'count', r.n) ORDER BY r.n DESC)
+                                            FROM (SELECT guard, count(*) AS n FROM hazem.generated_replies
+                                                   WHERE guard <> 'passed' AND created_at >= {0} AND created_at < {1}
+                                                   GROUP BY guard) r), '[]'::json))::text AS "Value"
+              FROM hazem.generated_replies WHERE created_at >= {0} AND created_at < {1}
+            """, start, end).SingleAsync(ct);
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        var root = doc.RootElement;
+        return new WrittenSummary(root.GetProperty("total").GetInt32(), root.GetProperty("fallbacks").GetInt32(), root.GetProperty("retried").GetInt32(),
+            root.GetProperty("reasons").EnumerateArray().Select(e => new ReportRow(e.GetProperty("key").GetString()!, e.GetProperty("count").GetInt32())).ToList());
     }
 
     private Task Audit(Guid by, string action, string targetType, Guid? targetId, Dictionary<string, string?> detail, CancellationToken ct) =>

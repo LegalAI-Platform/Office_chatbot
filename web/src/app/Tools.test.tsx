@@ -93,8 +93,9 @@ describe("TASK 07c tools", () => {
           low: [{ at: "2026-10-12T09:00:00Z", service: "document_review", client_name: "منى سعيد" }] },
         review: [{ at: "2026-10-31T10:00:00Z", client: "ابو عماد", reason: "repeated" },
           { at: "2026-10-30T10:00:00Z", client: null, reason: "offer_after_payment" }],
-        free_answers: [{ at: "2026-10-31T11:00:00Z", client: "ابو عماد", text: "متقلقش يا فندم 🙏 كل كلامك مع المكتب سري.", guard: "passed" },
-          { at: "2026-10-31T10:30:00Z", client: null, text: null, guard: "review_promise" }] } },
+        free_answers: [{ purpose: "free_answer", at: "2026-10-31T11:00:00Z", client: "ابو عماد", text: "متقلقش يا فندم 🙏 كل كلامك مع المكتب سري.", guard: "passed" },
+          { purpose: "services_tell", at: "2026-10-31T10:30:00Z", client: null, text: null, guard: "review_promise" }],
+        written: { total: 8, fallbacks: 2, retried: 1, by_reason: [{ key: "review_promise", count: 1 }, { key: "review_unavailable_timeout", count: 1 }] } } },
     });
     renderAt("/reports");
     expect(await screen.findByRole("heading", { name: "التقارير" })).toBeTruthy();
@@ -118,6 +119,10 @@ describe("TASK 07c tools", () => {
     const said = within(free).getAllByRole("row").slice(1);
     expect(said[0]!.textContent).toContain("متقلقش يا فندم");
     expect(said[1]!.textContent).toContain("اترفض: وعد المكتب ما يقدرش يضمنه");
+    const summary = within(free).getByTestId("written-summary").textContent ?? "";
+    expect(summary).toContain("كتب حازم 8 رد");
+    expect(summary).toContain("(25%)"); // 2 of 8 went back to the approved words
+    expect(summary).toContain("المراجِع اتأخر (1)");
   });
 
   it("shows a month with no rating yet (the API leaves the average out) without breaking", async () => {
