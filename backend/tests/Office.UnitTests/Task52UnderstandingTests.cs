@@ -2,6 +2,7 @@ using Office.Application.Booking;
 using Office.Application.Conversations;
 using Office.Application.Responders;
 using Office.Application.Texts;
+using Office.Application.Turns;
 using Office.Application.Understanding;
 using Office.Application.Urf;
 
@@ -102,6 +103,21 @@ public sealed partial class BookingFlowTests
         await Say("ازيك"); // another message in between: the last reply is no longer the objection's
         _script["لا غالي اوي هشوف حد ارخص"] = new("other", null, "unknown", null, 0.8, Stance: "price_objection");
         Assert.Equal([TextKeys.NoPressure], Keys(await Say("لا غالي اوي هشوف حد ارخص")));
+    }
+
+    [Fact]
+    public async Task A_declining_message_after_no_pressure_was_said_is_answered_never_with_silence()
+    {
+        // the sweep: after «تحت أمرك», «خلاص هفكر وارجعلك» got no reply at all
+        UnderstandingOn();
+        _texts[TextKeys.Thanks] = new ApprovedText(TextKeys.Thanks, 1, "T:thanks", 300, true);
+        await ToTheOffer();
+        _script["انا بسأل بس"] = new("other", null, "unknown", null, 0.8, Stance: "just_asking");
+        Assert.Equal([TextKeys.NoPressure], Keys(await Say("انا بسأل بس")));
+        _script["خلاص هفكر وارجعلك"] = new("thanks_or_closing", null, "unknown", null, 0.88, Stance: "declines");
+        var d = await Say("خلاص هفكر وارجعلك");
+        Assert.Equal([TextKeys.Thanks], Keys(d));
+        Assert.DoesNotContain(d.Actions, a => a.Type == ActionType.SendInteractive); // nothing pushed after it
     }
 
     [Fact]

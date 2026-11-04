@@ -242,10 +242,22 @@ export interface MonthReport {
   review?: ReviewRow[];
   /** v1.53 (B-34) «ردود حازم الحرة»: each free answer of the month, sent or refused and why. */
   free_answers?: FreeAnswerRow[];
+  /** v1.56: every reply Hazem wrote this month, how many fell back to the approved words, and why. */
+  written?: WrittenSummary;
+}
+
+export interface WrittenSummary {
+  total: number;
+  fallbacks: number;
+  /** written a second time after a refusal */
+  retried: number;
+  by_reason: ReportRow[];
 }
 
 /** v1.53: one free answer (Hazem's words only, never the client's). */
 export interface FreeAnswerRow {
+  /** the approved text it replaces («free_answer» when no text fitted) */
+  purpose: string;
   at: string;
   client: string | null;
   /** what went; null when the approved words went instead */

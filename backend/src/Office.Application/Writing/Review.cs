@@ -25,8 +25,51 @@ public static class ReplyReview
     public const string NotInFacts = "not_in_facts";
     public const string Harmful = "harmful";
 
-    /// <summary>The reviewer could not answer (no key, down, slow, invalid): the free answer does not go.</summary>
+    /// <summary>The reviewer could not answer: the reply does not go. v1.56: always with its reason («unavailable_timeout»…).</summary>
     public const string Unavailable = "unavailable";
 
     public static readonly string[] Problems = [Promise, Legal, NotInFacts, Harmful];
+}
+
+/// <summary>
+/// v1.56: a reply the checks refused is written ONCE more with the reason fed back to the writer («it promises something»,
+/// «it repeats what was sent»…), before the approved words go. Only what the writer can change: never a failed call or a
+/// reviewer that could not answer. The second reply goes through every check again; refused again → the approved words.
+/// </summary>
+public static class ReplyRetry
+{
+    public static bool Allows(string problem) =>
+        !problem.StartsWith(ReplyReview.Prefix + ReplyReview.Unavailable, StringComparison.Ordinal);
+
+    /// <summary>What the writer is told about its refused reply (in English, as its prompt is).</summary>
+    public static string Feedback(string problem, string reply) => $"""
+        {reply.Trim()}
+        WHY IT WAS REFUSED: {Why(problem)}
+        """;
+
+    private static string Why(string problem) => problem switch
+    {
+        "review_promise" or "promise" =>
+            "It promises or guarantees something the office cannot control (for example that nobody will know, a result, or a time). Say only what is true: the facts, that what he tells the office stays private with the office, and the next step.",
+        "review_legal" or "legal_word" =>
+            "It contains legal information or a legal word. Never explain the law: say kindly that the lawyer answers it in the consultation.",
+        "review_not_in_facts" or "number_not_given" =>
+            "It states a fact, a number or a rule that is not in the APPROVED TEXT or the OFFICE FACTS. Use only those.",
+        "review_harmful" =>
+            "It could harm the office or the client (another lawyer, pressure, judging him). Write it kindly without that.",
+        "money" => "It speaks of money or paying beyond the approved text. Leave that out.",
+        "self_feminine" => "You wrote «فاهمة»: you, Hazem, are a man («فاهم»).",
+        "typo" => "It has a spelling mistake: check every word.",
+        "repeats_before" =>
+            "It repeats what was already sent just before it in this turn, or points to it. Do not repeat it: go on with what is new.",
+        "same_as_previous" => "It is the same as your previous message. Say it differently and shorter.",
+        "too_long" => "It is too long: at most three short sentences.",
+        "link" or "not_arabic" => "No links, e-mails or foreign words: Arabic only.",
+        "price_dropped" => "It dropped the price the client asked about: say it exactly as in the approved text.",
+        "refusal_dropped" => "It must say that the lawyer himself answers this in the consultation.",
+        "asked_back" => "Do not end with a question: the handoff is done.",
+        "facts_and_office" => "Do not also say that the office will answer: you answered from the facts.",
+        "said_confirmed" => "The transfer is still under the office's review: never say it is confirmed.",
+        _ => "It was refused by a check: write it plainly, using only the APPROVED TEXT and the OFFICE FACTS.",
+    };
 }

@@ -56,6 +56,12 @@ public static class WriterPrompt
         }
 
         sb.Append("CALL HIM: ").Append(r.Call.Length > 0 ? r.Call : "(no name: say «حضرتك»)").Append('\n');
+        if (r.Feedback is { Length: > 0 })
+        {
+            sb.Append("YOUR PREVIOUS REPLY WAS REFUSED (never send it again; write the reply again, fixing exactly that and keeping the rest):\n")
+                .Append(r.Feedback).Append('\n');
+        }
+
         sb.Append("CONVERSATION (oldest first; the last line is his message you answer now):\n");
         foreach (var line in r.History)
         {

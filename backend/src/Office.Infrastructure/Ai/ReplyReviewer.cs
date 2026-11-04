@@ -18,7 +18,7 @@ namespace Office.Infrastructure.Ai;
 public sealed class AnthropicReplyReviewer(IOptions<HazemOptions> options) : IReplyReviewer
 {
     public const string PromptVersion = "review-v1";
-    private const int MaxTokens = 256;
+    private const int MaxTokens = 1024; // v1.56: Haiku thinks before it answers; 256 cut the answer off (the sweep: «unavailable» 4 of 25)
 
     /// <summary>The whole review within this time (the approved words go rather than a late answer).</summary>
     public static readonly TimeSpan Budget = TimeSpan.FromSeconds(5);
@@ -55,7 +55,7 @@ public sealed class AnthropicReplyReviewer(IOptions<HazemOptions> options) : IRe
         var o = options.Value;
         if (string.IsNullOrWhiteSpace(o.AnthropicApiKey))
         {
-            return ReplyReview.Unavailable;
+            return ReplyReview.Unavailable + "_nokey";
         }
 
         var model = settings.Get(Conversational.ModelKey) is { Length: > 0 } m && m.StartsWith("claude", StringComparison.Ordinal) ? m : o.AnthropicModel;
@@ -83,18 +83,18 @@ public sealed class AnthropicReplyReviewer(IOptions<HazemOptions> options) : IRe
             }, budget.Token);
             if (response.StopReason != "end_turn")
             {
-                return ReplyReview.Unavailable;
+                return ReplyReview.Unavailable + "_stop_" + (response.StopReason?.ToString() ?? "none");
             }
 
             return Verdict(response.Content.Select(b => b.Value).OfType<TextBlock>().LastOrDefault()?.Text);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
-            return ReplyReview.Unavailable;
+            return ReplyReview.Unavailable + "_timeout";
         }
         catch (Exception ex) when (ex is AnthropicApiException or HttpRequestException or JsonException or InvalidOperationException)
         {
-            return ReplyReview.Unavailable;
+            return ReplyReview.Unavailable + "_error";
         }
     }
 
@@ -105,7 +105,7 @@ public sealed class AnthropicReplyReviewer(IOptions<HazemOptions> options) : IRe
         {
             if (content is null || JsonNode.Parse(content) is not JsonObject o || o["ok"] is not JsonValue ok || ok.GetValueKind() is not (JsonValueKind.True or JsonValueKind.False))
             {
-                return ReplyReview.Unavailable;
+                return ReplyReview.Unavailable + "_invalid";
             }
 
             var problem = o["problem"] is JsonValue p && p.GetValueKind() == JsonValueKind.String ? p.GetValue<string>() : null;
@@ -114,11 +114,11 @@ public sealed class AnthropicReplyReviewer(IOptions<HazemOptions> options) : IRe
                 return null;
             }
 
-            return problem is not null && ReplyReview.Problems.Contains(problem) ? problem : ReplyReview.Unavailable;
+            return problem is not null && ReplyReview.Problems.Contains(problem) ? problem : ReplyReview.Unavailable + "_invalid";
         }
         catch (JsonException)
         {
-            return ReplyReview.Unavailable;
+            return ReplyReview.Unavailable + "_invalid";
         }
     }
 
