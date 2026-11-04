@@ -16,7 +16,60 @@ const testing = {
   setUrgentWindow: (on: boolean) => api<{ on: boolean }>("PUT", "/testing/urgent-window", { on }),
   understanding: () => api<{ on: boolean }>("GET", "/testing/understanding"),
   setUnderstanding: (on: boolean) => api<{ on: boolean }>("PUT", "/testing/understanding", { on }),
+  infoWriter: () => api<{ on: boolean }>("GET", "/testing/info-writer"),
+  setInfoWriter: (on: boolean) => api<{ on: boolean }>("PUT", "/testing/info-writer", { on }),
 };
+
+/**
+ * v1.61: when the client asks about the office's address or hours, Hazem adds ONE sentence that answers his question before the
+ * approved text (the address, the map and the hours stay exactly as written). Off is the approved text alone.
+ */
+function InfoWriter() {
+  const qc = useQueryClient();
+  const state = useQuery({ queryKey: ["testing", "info-writer"], queryFn: testing.infoWriter, retry: false });
+  const set = useMutation({
+    mutationFn: testing.setInfoWriter,
+    onSuccess: (r) => {
+      void qc.invalidateQueries({ queryKey: ["testing", "info-writer"] });
+      toast(r.on ? "جملة الرد على أسئلة المكتب شغّالة ✅" : "ردود العنوان والمواعيد رجعت زي الأول ✅");
+    },
+  });
+  if (state.isError && !(state.error instanceof ApiError && state.error.status === 404)) {
+    return <ErrorState message={errorMessage(state.error)} onRetry={() => void state.refetch()} />;
+  }
+  if (!state.data) return null;
+  const on = state.data.on;
+
+  const flip = async () => {
+    const ok = await confirmAction({
+      title: on ? "ترجّع ردود العنوان والمواعيد زي الأول؟" : "تشغّل جملة الرد على أسئلة المكتب؟",
+      body: on
+        ? "العنوان والمواعيد هيتبعتوا نص جاهز بس، من غير جملة قبلهم."
+        : "لما العميل يسأل عن عنوان المكتب أو مواعيده، حازم هيجاوب على سؤاله في جملة واحدة وبعدها العنوان والخريطة والمواعيد زي ما هي بالحرف. تقدر تقفله في أي وقت.",
+      yes: on ? "أيوه، رجّعه" : "أيوه، شغّله",
+    });
+    if (ok) set.mutate(!on);
+  };
+
+  return (
+    <section aria-labelledby="testing-info-writer" className="liquid relative isolate grid gap-3 overflow-hidden rounded-[22px] p-4 sm:p-5">
+      <h2 id="testing-info-writer" className="flex items-center gap-2 text-[16px] font-bold">
+        <Icon name="alert-circle" className="size-4 text-gold-ink" />
+        جملة الرد على أسئلة المكتب
+      </h2>
+      <p className="text-[13px] text-ink-soft">
+        جملة تجاوب على سؤال العميل قبل العنوان والمواعيد (مثلًا «فيه فرع في إسكندرية؟»). النص الجاهز نفسه ما بيتغيّرش.
+      </p>
+      <div className="flex flex-wrap items-center gap-3 border-t border-line/60 pt-3">
+        <span className={`rounded-full px-3 py-1 text-[13px] font-bold ${on ? "bg-green-bg text-green-ink" : "bg-grey-bg text-ink-soft"}`}>{on ? "شغّالة" : "مقفولة"}</span>
+        <Button variant={on ? "secondary" : "primary"} busy={set.isPending} onClick={() => void flip()}>
+          {on ? "اقفلها" : "شغّلها"}
+        </Button>
+      </div>
+      {set.isError ? <p className="text-sm text-bad" role="alert">{errorMessage(set.error)}</p> : null}
+    </section>
+  );
+}
 
 /**
  * v1.52 (phase 1): Hazem reads the whole chat and the client's stance («بسأل بس»، «غالي»، أكتر من سؤال، السن بالحروف).
@@ -232,6 +285,7 @@ export function TestingPage() {
         </section>
       )}
       {off ? null : <Understanding />}
+      {off ? null : <InfoWriter />}
       {off ? null : <UrgentWindow />}
     </div>
   );

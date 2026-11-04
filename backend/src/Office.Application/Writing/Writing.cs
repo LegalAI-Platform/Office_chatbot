@@ -262,7 +262,7 @@ public static partial class ReplyGuard
 
     private static string Normal(string s) => Space().Replace(s, " ").Trim();
 
-    private static bool SharesFourWords(string text, string before)
+    internal static bool SharesFourWords(string text, string before)
     {
         static string[] Words(string s) => Regex.Split(s, @"[^\p{L}\p{N}]+").Where(w => w.Length > 0).ToArray();
         var b = Words(before);
@@ -382,6 +382,18 @@ public static class Conversational
         [TextKeys.PriceCaseRepresentation] = "tell him the lawyer sets a case's fees after hearing the matter (never a number for them)",
     };
 
+    /// <summary>hazem.settings: the office's address and hours answered with a sentence for his question (v1.61), off by default.</summary>
+    public const string InfoSwitchKey = "hazem.info_writer";
+
+    /// <summary>
+    /// v1.61 (the owner's chat: «ليكم فرع في اسكندريه» got the address again): these texts stay fixed (the address, the map, the
+    /// week), and with the switch on, when they are the only thing the turn says, the writer adds ONE sentence before them that
+    /// answers what he asked. The code puts the approved text after the sentence, to the letter.
+    /// </summary>
+    private static readonly HashSet<string> TailKeys = [TextKeys.OfficeAddress, TextKeys.OfficeHours];
+
+    private const string TailPurpose = "answer what he asked about the office in ONE short sentence from the OFFICE FACTS (for example whether there is another branch, or a day it is open); if he only asked for the address or the hours plainly, one short lead-in such as «تفضل 👇». The approved text (the address, the map, the hours) is added by the system right after your sentence, exactly as written: NEVER write the address, the hours, a link or a number yourself, and ask nothing";
+
     /// <summary>v1.45: texts that only follow another one in the same message (never the message's main purpose).</summary>
     private static readonly HashSet<string> AddOns = [TextKeys.SituationAskTopic];
 
@@ -439,11 +451,14 @@ public static class Conversational
         HazemSettings settings, CancellationToken ct, string facts, List<ChatLine> lines, string client, IReplyReviewer? reviewer = null)
     {
         var keyOf = composed.Records.GroupBy(r => r.IdempotencyKey).ToDictionary(g => g.Key, g => g.First().Key, StringComparer.Ordinal);
+        // v1.61: the address and the hours join the writable texts only when nothing else of the turn is written
+        var tailOn = settings.Flag(InfoSwitchKey) && !composed.Records.Any(r => MayWrite(r.Key));
+        bool Has(string k) => Purposes.ContainsKey(k) || tailOn && TailKeys.Contains(k);
         int start = -1, end = -1;
         for (var i = 0; i < composed.Actions.Count; i++)
         {
             var a = composed.Actions[i];
-            var ok = keyOf.TryGetValue(a.IdempotencyKey, out var k) && MayWrite(k)
+            var ok = keyOf.TryGetValue(a.IdempotencyKey, out var k) && (MayWrite(k) || tailOn && TailKeys.Contains(k))
                      && (a.Type == ActionType.SendText || a.Type == ActionType.SendInteractive);
             if (!ok)
             {
@@ -471,8 +486,8 @@ public static class Conversational
         var run = composed.Actions.Skip(start).Take(end - start + 1).ToList();
         // The run's main text: its last one that has a purpose (a greeting in kind only opens it).
         // v1.45: an add-on («لو حابب تكتب الموضوع…») never takes the main text's place; the writer is told every purpose.
-        var mainKey = run.Select(a => keyOf[a.IdempotencyKey]).LastOrDefault(k => Purposes.ContainsKey(k) && !AddOns.Contains(k))
-                      ?? run.Select(a => keyOf[a.IdempotencyKey]).LastOrDefault(Purposes.ContainsKey);
+        var mainKey = run.Select(a => keyOf[a.IdempotencyKey]).LastOrDefault(k => Has(k) && !AddOns.Contains(k))
+                      ?? run.Select(a => keyOf[a.IdempotencyKey]).LastOrDefault(Has);
         if (mainKey is null)
         {
             return new Rewritten(composed, null); // a greeting in kind alone stays as approved
@@ -480,7 +495,7 @@ public static class Conversational
 
         var approved = string.Join("\n", run.Select(a => a.Text));
         var previous = lines.LastOrDefault(l => !l.FromClient)?.Text;
-        var purpose = string.Join("; then ", run.Select(a => keyOf[a.IdempotencyKey]).Where(Purposes.ContainsKey).Select(k => Purposes[k]).Distinct());
+        var purpose = string.Join("; then ", run.Select(a => keyOf[a.IdempotencyKey]).Where(Has).Select(k => Purposes.TryGetValue(k, out var p) ? p : TailPurpose).Distinct());
         var request = new WriteRequest(purpose, approved, call.Trim(), lines)
         {
             Facts = facts, Client = client,
@@ -541,6 +556,12 @@ public static class Conversational
                 problem = "said_confirmed"; // v1.45: the transfer is still under the office's review
             }
 
+            // v1.61: the sentence before the address never says the address (or the hours) itself: the code adds them
+            if (problem is null && tailOn && TailKeys.Contains(mainKey) && ReplyGuard.SharesFourWords(o.Reply!, approved))
+            {
+                problem = "tail_repeated";
+            }
+
             // v1.53 (B-34, layer 4): a free answer is also read for its meaning (a promise, the law, a fact not given, harm);
             // no reviewer, or it cannot answer → the reply never goes. v1.54: with understanding v2 on, EVERY written reply is
             // read; the approved text it rewrites counts as given, so its prices and steps are no «fact not given».
@@ -590,7 +611,7 @@ public static class Conversational
         var merged = first with
         {
             Type = last.Type,
-            Text = written.Text,
+            Text = tailOn && TailKeys.Contains(mainKey) ? written.Text + "\n" + approved : written.Text,
             Interactive = last.Interactive,
         };
         var dropped = run.Skip(1).Select(a => a.IdempotencyKey).ToHashSet(StringComparer.Ordinal);

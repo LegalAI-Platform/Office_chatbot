@@ -74,6 +74,7 @@ public static class ReplyRetry
         "same_as_previous" => "It is the same as your previous message. Say it differently and shorter.",
         "too_long" => "It is too long: at most three short sentences.",
         "link" or "not_arabic" => "No links, e-mails or foreign words: Arabic only.",
+        "tail_repeated" => "Do not write the address, the hours or the map: they are added right after your sentence. Write only the answer to his question.",
         "price_dropped" => "It dropped the price the client asked about: say it exactly as in the approved text.",
         "refusal_dropped" => "It must say that the lawyer himself answers this in the consultation.",
         "asked_back" => "Do not end with a question: the handoff is done.",

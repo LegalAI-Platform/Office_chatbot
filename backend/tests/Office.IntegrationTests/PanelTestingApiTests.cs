@@ -127,6 +127,27 @@ public sealed class PanelTestingApiTests(TestDatabase db) : IAsyncLifetime
         }
     }
 
+    [Fact]
+    public async Task V161_the_lawyer_switches_the_info_writer_and_it_is_audited()
+    {
+        try
+        {
+            var lawyer = await SignIn("lawyer");
+            Assert.False((bool)(await lawyer.GetFromJsonAsync<JsonNode>("/api/panel/testing/info-writer", Ct))!["on"]!);
+            Assert.Equal(HttpStatusCode.BadRequest, (await lawyer.PutAsJsonAsync("/api/panel/testing/info-writer", new { }, Ct)).StatusCode);
+            Assert.Equal(HttpStatusCode.OK, (await lawyer.PutAsJsonAsync("/api/panel/testing/info-writer", new { on = true }, Ct)).StatusCode);
+            Assert.Equal("true", await db.ScalarAsync<string>("SELECT value FROM hazem.settings WHERE key = 'hazem.info_writer'"));
+            Assert.Equal("true", await db.ScalarAsync<string>(
+                "SELECT detail ->> 'on' FROM hazem.panel_audit WHERE action = 'testing.info_writer' ORDER BY at DESC LIMIT 1"));
+            var staff = await SignIn("yasmin");
+            Assert.Equal(HttpStatusCode.Forbidden, (await staff.PutAsJsonAsync("/api/panel/testing/info-writer", new { on = false }, Ct)).StatusCode);
+        }
+        finally
+        {
+            await db.SetAsync("hazem.info_writer", "false");
+        }
+    }
+
     /// <summary>v1.52 (phase 1): the switch of understanding v2, with its audit row (the first try on the server failed on it).</summary>
     [Fact]
     public async Task V152_the_lawyer_switches_understanding_v2_and_it_is_audited()
