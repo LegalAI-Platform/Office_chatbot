@@ -349,6 +349,8 @@ public static class Conversational
         // v1.48: the office facts answer many of these («هقابل المستشار نفسه؟»): from them, and from_facts true; otherwise as v1.46
         [TextKeys.ServiceDetail] = "if the OFFICE FACTS answer his question, answer it from them only (from_facts true, and say nothing about the office answering); otherwise tell him his question reached the office and they will answer it here (from_facts false, never the answer yourself)",
         [TextKeys.OfficePrivacy] = "reassure him that everything he tells the office stays private: the office never discloses its clients' secrets (nothing else: no prices, no question)",
+        // v1.53 (phase 2): anything no approved text answers, from the office facts and «دليل التعامل» only
+        [TextKeys.FreeAnswer] = "answer what he just wrote, in one short message, as the office's receptionist would, following «دليل التعامل»: from the office facts only; something the facts do not answer, say kindly the lawyer explains it in the consultation (never when, never any legal information); if he only chats, a short kind answer",
         // v1.52 (phase 1)
         [TextKeys.NoPressure] = "tell him kindly there is no pressure and he can write here any time he likes (nothing else: no offer, no question)",
         [TextKeys.PriceObjection] = "show him you understand the price matters; the value from the text only (the lawyer himself; the fee counts towards a case's fees) and the cheaper way it names; never a discount; the door open, no pushing",
