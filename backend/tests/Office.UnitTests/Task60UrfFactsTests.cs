@@ -1,5 +1,8 @@
+using Office.Application.Booking;
+using Office.Application.Conversations;
 using Office.Application.Responders;
 using Office.Application.Texts;
+using Office.Application.Turns;
 using Office.Application.Understanding;
 using Office.Application.Urf;
 using Office.Application.Writing;
@@ -114,6 +117,53 @@ public sealed partial class BookingFlowTests
         var d = await Say("ليكم فرع في اسكندريه");
         Assert.Equal("📍 عنوان المكتب: 1 شارع التحرير.", d.Actions[^1].Text);
         Assert.Null(d.Effects!.Written);
+    }
+
+    private async Task<TurnDecision> UrfBookedAndPaying()
+    {
+        ApproveTask16Texts();
+        UrfFactsOn();
+        await ToTheGuardian(past: "first");
+        await Answer(UrfStep.Guardian, "father");
+        var times = await Answer(UrfStep.Witnesses, "office");
+        await Press(times.Actions.Single().Interactive!.Choices[0].Id);
+        _texts[TextKeys.ServiceCheck] = new ApprovedText(TextKeys.ServiceCheck, 1, "هسأل المكتب عن ده، ويردوا على حضرتك هنا.", 300, true);
+        return times;
+    }
+
+    [Fact]
+    public async Task A_change_to_a_booked_case_is_told_to_the_office_and_changes_nothing_by_itself()
+    {
+        await UrfBookedAndPaying();
+        _script["هجيب الشهود من عندي"] = new("reschedule_or_cancel", null, "unknown", null, 0.75, UrfWitnesses: "own");
+        var d = await Say("هجيب الشهود من عندي");
+        Assert.Equal([TextKeys.ServiceCheck], Keys(d));
+        Assert.Contains(PendingTask.UrfHelp, TaskKinds(d));
+        Assert.Equal("office", TheCase.Witnesses); // the price paid and the documents are the office's decision
+    }
+
+    [Fact]
+    public async Task Other_words_from_a_client_with_a_time_held_are_kept_for_the_office_not_answered_with_his_status()
+    {
+        await UrfBookedAndPaying();
+        _script["هبعت المستندات لما اجي المكتب"] = new("other", null, "unknown", null, 0.7);
+        var d = await Say("هبعت المستندات لما اجي المكتب");
+        Assert.Equal([TextKeys.TopicReceived], Keys(d));
+        Assert.Contains(PendingTask.ExistingClientMessage, TaskKinds(d));
+    }
+
+    [Fact]
+    public async Task Where_to_pay_comes_after_the_answers_to_what_else_he_asked()
+    {
+        UnderstandingOn();
+        OfficeOn();
+        _settings[OfficeInfo.InstaPayKey] = "test@instapay";
+        _settings[OfficeInfo.WalletNumberKey] = "01000000000";
+        await ToTheOffer();
+        _script["الحجز بيتم ازاي ومينفعش ادفع في المكتب"] = new("office_info", null, "unknown", null, 0.85, InfoTopic: "how_to_pay",
+            AlsoAsked: ["how_to_book"]);
+        var keys = Keys(await Say("الحجز بيتم ازاي ومينفعش ادفع في المكتب"));
+        Assert.True(keys.IndexOf(TextKeys.OfficeHowToBook) < keys.IndexOf(TextKeys.OfficeHowToPay), string.Join(",", keys));
     }
 
     [Fact]

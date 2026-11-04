@@ -185,6 +185,19 @@ public static class UrfRules
         };
     }
 
+    /// <summary>
+    /// v1.62 (the owner's chat: he paid for the office's witnesses, then wrote «الشهود هجيبهم من عندي»): a fact that DIFFERS from the
+    /// case's answer when the case already has its time held or confirmed. Nothing changes by itself then (the price paid, the
+    /// documents, a refund are the office's decision): the office is told.
+    /// </summary>
+    public static bool ChangesBooked(UrfCase c, string? wifePast, string? guardian, string? witnesses)
+    {
+        var locked = c.State is UrfCase.Booked or UrfCase.Approved || c.State == UrfCase.DocumentsPending && c.AppointmentId is not null;
+        static bool Differs(string? now, string? said, params string[] allowed) => said is not null && allowed.Contains(said) && said != now;
+        return locked && (Differs(c.Witnesses, witnesses, "office", "own")
+            || c.IsMarriage && (Differs(c.WifePast, wifePast, "first", "divorced", "khul") || Differs(c.Guardian, guardian, "father", "brother", "uncle")));
+    }
+
     /// <summary>B-11.1: the typed ages. Under 18 on either side closes the case without a price or a time.</summary>
     /// <param name="words">v1.52 (phase 1): numbers in words («الاتنين تلاتين») are read too.</param>
     public static (UrfCase Case, UrfNext Next) Ages(UrfCase c, string? text, bool words = false)
