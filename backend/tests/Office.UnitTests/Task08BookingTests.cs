@@ -1626,7 +1626,10 @@ public sealed partial class BookingFlowTests
         public Task<ClassifierOutcome> ClassifyAsync(string text, HazemSettings settings, CancellationToken ct) =>
             Task.FromResult(down?.Invoke() == true
                 ? new ClassifierOutcome(null, ClassifierOutcome.Error, "fake", "v", 1)
-                : new ClassifierOutcome(script.TryGetValue(Office.Application.Understanding.AiContext.MessageOf(text), out var r) ? r : new("other", null, "unknown", null, 0.9), null, "fake", "v", 1));
+                : new ClassifierOutcome(script.TryGetValue(Office.Application.Understanding.AiContext.MessageOf(text), out var r) ? r : new("other", null, "unknown", null, 0.9), null, "fake", "v", 1)
+                {
+                    Tokens = new Office.Application.Costs.TokenUsage(500, 14000, 0, 190), // v1.58: every call of a turn is counted
+                });
     }
 
     private sealed class FakeCalendar : IBusyCalendar

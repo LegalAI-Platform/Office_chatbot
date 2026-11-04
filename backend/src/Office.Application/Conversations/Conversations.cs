@@ -124,4 +124,5 @@ public sealed record TurnEffects(
     ClassificationRecord? Classification,
     IReadOnlyList<ReplyRecord> Replies,
     Writing.WrittenReply? Written = null, // v1.41 (TASK 17): the everyday reply in the writer's words, or why not
-    Urf.UrfCase? Urf = null); // TASK 18: the Urfi case this turn changed, written after the person and the intake
+    Urf.UrfCase? Urf = null, // TASK 18: the Urfi case this turn changed, written after the person and the intake
+    IReadOnlyList<Costs.AiUsage>? Usage = null); // v1.58: every AI call of this turn (tokens and cost, hazem.ai_usage)

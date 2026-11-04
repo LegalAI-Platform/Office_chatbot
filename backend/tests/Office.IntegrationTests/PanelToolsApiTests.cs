@@ -26,7 +26,7 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
         await db.ExecAsync("""
             TRUNCATE hazem.panel_audit; DELETE FROM hazem.panel_users;
             TRUNCATE hazem.panel_alerts, hazem.panel_alert_reads, hazem.ops_runs; DELETE FROM app.workflow_errors; DELETE FROM app.wa_turns WHERE wa_id LIKE '2010000009%';
-            TRUNCATE hazem.turns, hazem.generated_replies, hazem.send_results, hazem.turn_replies, hazem.classifications, hazem.panel_alerts, hazem.panel_alert_reads, hazem.staff_tasks, hazem.list_entries;
+            TRUNCATE hazem.turns, hazem.ai_usage, hazem.generated_replies, hazem.send_results, hazem.turn_replies, hazem.classifications, hazem.panel_alerts, hazem.panel_alert_reads, hazem.staff_tasks, hazem.list_entries;
             DELETE FROM hazem.staff; DELETE FROM hazem.intakes; DELETE FROM hazem.conversations; DELETE FROM hazem.persons;
             UPDATE hazem.settings SET value = to_char((now() - interval '1 hour') AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
              WHERE key = 'alerts.since';
@@ -393,6 +393,48 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
     }
 
     // ---------- reports ----------
+
+    /// <summary>v1.58: the AI cost by conversation and by message (hazem.ai_usage), for the manager and the lawyer only.</summary>
+    [Fact]
+    public async Task V158_the_ai_cost_by_conversation_and_by_message_for_the_lawyer_only()
+    {
+        var person = await NewTask();
+        var turn = await db.ScalarAsync<string>(
+            $"SELECT t.turn_id FROM hazem.turns t JOIN hazem.persons p ON p.wa_id = t.wa_id WHERE p.id = '{person}'");
+        await db.ExecAsync($"""
+            INSERT INTO hazem.ai_usage (turn_id, kind, model, input_tokens, cache_read_tokens, cache_write_tokens, output_tokens, cost_usd) VALUES
+              ('{turn}', 'classify', 'claude-opus-5-5', 500, 14000, 0, 190, 0.008800),
+              ('{turn}', 'write', 'claude-haiku-5-5', 4400, 0, 0, 110, 0.000495),
+              ('{turn}', 'review', 'some-other-model', 1500, 0, 0, 20, NULL);
+            """);
+        var lawyer = await SignIn("lawyer");
+
+        var all = (await lawyer.GetFromJsonAsync<JsonNode>("/api/panel/reports/ai-cost", Ct))!;
+        Assert.Equal(3, (int)all["summary"]!["calls"]!);
+        Assert.Equal(1, (int)all["summary"]!["conversations"]!);
+        Assert.Equal(1, (int)all["summary"]!["unpriced"]!);
+        Assert.Equal(0.009295m, (decimal)all["summary"]!["total_usd"]!);
+        Assert.Equal(20190, (long)all["summary"]!["input_tokens"]!);
+        var row = Assert.Single(all["conversations"]!.AsArray())!;
+        Assert.Equal("سارة محمد علي حسن", (string)row["client"]!);
+        Assert.Equal(1, (int)row["turns"]!);
+        Assert.Equal(person, (Guid)row["person_id"]!);
+
+        var turns = (await lawyer.GetFromJsonAsync<JsonNode>($"/api/panel/reports/ai-cost/{person}", Ct))!["turns"]!.AsArray();
+        var calls = Assert.Single(turns)!["calls"]!.AsArray();
+        Assert.Equal(["classify", "write", "review"], calls.Select(c => (string)c!["kind"]!).ToArray());
+        Assert.Equal(14000, (int)calls[0]!["cache_read_tokens"]!);
+        Assert.Null(calls[2]!["cost_usd"]);
+
+        // the month's report carries the number the dashboard shows
+        var month = (await lawyer.GetFromJsonAsync<JsonNode>("/api/panel/reports", Ct))!;
+        Assert.Equal(0.009295m, (decimal)month["ai_cost"]!["total_usd"]!);
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await lawyer.GetAsync("/api/panel/reports/ai-cost?month=2026-13", Ct)).StatusCode);
+        var karim = await SignIn("karim");
+        Assert.Equal(HttpStatusCode.Forbidden, (await karim.GetAsync("/api/panel/reports/ai-cost", Ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await karim.GetAsync($"/api/panel/reports/ai-cost/{person}", Ct)).StatusCode);
+    }
 
     [Fact]
     public async Task The_month_report_counts_tasks_by_staff_and_new_clients_by_source()

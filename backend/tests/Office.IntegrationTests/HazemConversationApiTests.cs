@@ -26,7 +26,7 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
     public async ValueTask InitializeAsync()
     {
         await db.ExecAsync("""
-            TRUNCATE hazem.turns, hazem.generated_replies, hazem.send_results, hazem.turn_replies, hazem.classifications, hazem.panel_alerts, hazem.panel_alert_reads, hazem.staff_tasks, hazem.list_entries;
+            TRUNCATE hazem.turns, hazem.ai_usage, hazem.generated_replies, hazem.send_results, hazem.turn_replies, hazem.classifications, hazem.panel_alerts, hazem.panel_alert_reads, hazem.staff_tasks, hazem.list_entries;
             TRUNCATE hazem.panel_audit; DELETE FROM hazem.panel_users; -- they point at hazem.staff
             DELETE FROM hazem.staff;
             DELETE FROM hazem.intakes; DELETE FROM hazem.conversations; DELETE FROM hazem.persons;
@@ -91,6 +91,17 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
         // v1.30: the services list came after the name (not the offer), so the topic question follows the offer here
         Assert.Equal(["المستشار هو اللي هيجاوب حضرتك على ده في الاستشارة.", Offer, "ولو تحب، قولّي باختصار الموضوع عن إيه عشان المستشار يبقى عارفه."],
             Texts(await Say("ينفع أطلق؟")));
+    }
+
+    /// <summary>v1.58: the classifier's call leaves its tokens in hazem.ai_usage (the stub answers 400 prompt and 20 completion tokens).</summary>
+    [Fact]
+    public async Task V158_every_ai_call_of_a_turn_leaves_its_tokens()
+    {
+        await Say("السلام عليكم");
+        Assert.Equal("classify|400|0|0|20", await db.ScalarAsync<string>(
+            "SELECT kind || '|' || input_tokens || '|' || cache_read_tokens || '|' || cache_write_tokens || '|' || output_tokens FROM hazem.ai_usage ORDER BY created_at LIMIT 1"));
+        // the stub's model has no known price: the tokens are counted, the cost is not
+        Assert.Equal(1, await db.ScalarAsync<int>("SELECT count(*)::int FROM hazem.ai_usage WHERE cost_usd IS NULL"));
     }
 
     [Fact]

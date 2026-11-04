@@ -125,6 +125,35 @@ describe("TASK 07c tools", () => {
     expect(summary).toContain("المراجِع اتأخر (1)");
   });
 
+  it("v1.58: the AI cost by conversation, and by message when a row is opened", async () => {
+    const calls = serve({
+      "GET /auth/me": { body: lawyer },
+      "GET /reports": { body: { month: "2026-11", tasks: 0, done: 0, done_on_time: 0, late: 0, by_type: [], by_staff: [], new_clients: 0, by_source: [], by_matter: [], by_client_type: [], by_booking: [], received: 0, missing: 0, refunded: 0,
+        ratings: { sent: 0, answered: 0, by_service: [], low: [] }, ai_cost: { total_usd: 0.42, calls: 30, conversations: 2, input_tokens: 400000, output_tokens: 6000, unpriced: 0 } } },
+      "GET /reports/ai-cost": { body: { month: "2026-11", summary: { total_usd: 0.42, calls: 30, conversations: 2, input_tokens: 400000, output_tokens: 6000, unpriced: 0 },
+        conversations: [{ person_id: "p1", client: "ابو عماد", turns: 8, calls: 20, input_tokens: 300000, output_tokens: 4000, cost_usd: 0.31, last_at: "2026-11-03T20:00:00Z", unpriced: 0 },
+          { person_id: "p2", client: null, turns: 3, calls: 10, input_tokens: 100000, output_tokens: 2000, cost_usd: 0.11, last_at: "2026-11-03T18:00:00Z", unpriced: 1 }] } },
+      "GET /reports/ai-cost/p1": { body: { turns: [{ at: "2026-11-03T19:00:00Z", cost_usd: 0.0123, input_tokens: 14500, output_tokens: 210,
+        calls: [{ kind: "classify", model: "claude-opus-5-5", input_tokens: 500, cache_read_tokens: 14000, cache_write_tokens: 0, output_tokens: 190, cost_usd: 0.0088 },
+          { kind: "write", model: "claude-haiku-5-5", input_tokens: 4400, cache_read_tokens: 0, cache_write_tokens: 0, output_tokens: 20, cost_usd: 0.0005 }] }] } },
+    });
+    renderAt("/reports");
+    const section = await screen.findByRole("region", { name: "تكلفة المحادثات" });
+    expect(await within(section).findByText("$0.420")).toBeTruthy(); // the month's spend (once it loaded)
+    expect(within(section).getByText("$0.210 للمحادثة")).toBeTruthy();
+    const rows = within(section).getAllByRole("row").slice(1);
+    expect(rows[0]!.textContent).toContain("ابو عماد");
+    expect(rows[0]!.textContent).toContain("$0.310");
+    expect(rows[1]!.textContent).toContain("رقم من غير اسم");
+    expect(rows[1]!.textContent).toContain("+"); // a call with no known price
+    fireEvent.click(within(section).getByRole("button", { name: "ابو عماد" }));
+    const turn = await within(section).findByLabelText("رسايل المحادثة");
+    expect(turn.textContent).toContain("فهم الرسالة");
+    expect(turn.textContent).toContain("كتابة الرد");
+    expect(turn.textContent).toContain("$0.0123");
+    expect(calls.some((c) => c.path === "/reports/ai-cost/p1")).toBe(true);
+  });
+
   it("shows a month with no rating yet (the API leaves the average out) without breaking", async () => {
     serve({
       "GET /auth/me": { body: lawyer },

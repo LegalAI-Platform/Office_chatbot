@@ -100,6 +100,9 @@ public sealed record WriterOutcome(
     /// <summary>v1.48: the writer answered his question from «حقايق المكتب» (it says so in its output).</summary>
     public bool FromFacts { get; init; }
 
+    /// <summary>v1.58: what the call used, split for its price (null: the provider told nothing).</summary>
+    public Office.Application.Costs.TokenUsage? Tokens { get; init; }
+
     public const string NoKey = "no_key";
     public const string Timeout = "timeout";
     public const string Error = "error";
@@ -401,7 +404,7 @@ public static class Conversational
     public static bool MayWrite(string key) => Purposes.ContainsKey(key) || key.StartsWith(GreetPrefix, StringComparison.Ordinal);
 
     /// <summary>The turn's answer with its first run of everyday texts said by the writer, and what became of it.</summary>
-    public sealed record Rewritten(ReplyComposer.Composed Composed, WrittenReply? Written);
+    public sealed record Rewritten(ReplyComposer.Composed Composed, WrittenReply? Written, IReadOnlyList<Office.Application.Costs.AiUsage>? Usage = null);
 
     /// <summary>
     /// The first run of consecutive actions whose texts may be written (a buttons message only at its end) becomes one
@@ -489,6 +492,16 @@ public static class Conversational
         var kept = run.Where(a => Locked.Contains(keyOf[a.IdempotencyKey])).SelectMany(a => ReplyGuard.Numbers(a.Text ?? "")).ToHashSet(StringComparer.Ordinal);
         var understanding = settings.Flag(UnderstandingV2.SwitchKey);
 
+        // v1.58: every AI call of this reply (the writer, its retry, the reviewer) is counted
+        var usage = new List<Office.Application.Costs.AiUsage>();
+        void Note(WriterOutcome o)
+        {
+            if (o.Tokens is { } t)
+            {
+                usage.Add(new Office.Application.Costs.AiUsage(Office.Application.Costs.AiUsageKind.Write, o.Model, t, o.LatencyMs));
+            }
+        }
+
         // every check a written reply goes through (null: it may go; else why not)
         async Task<string?> CheckAsync(WriteRequest asked, WriterOutcome o)
         {
@@ -530,7 +543,7 @@ public static class Conversational
             {
                 problem = reviewer is null
                     ? ReplyReview.Prefix + ReplyReview.Unavailable + "_none"
-                    : await reviewer.ProblemAsync(new ReviewRequest(o.Reply!.Trim(), facts + "\nالنص المعتمد (مسموح بكل اللي فيه):\n" + approved, lines),
+                    : await reviewer.ProblemAsync(new ReviewRequest(o.Reply!.Trim(), facts + "\nالنص المعتمد (مسموح بكل اللي فيه):\n" + approved, lines) { Usage = usage },
                         settings, ct) is { } found
                         ? ReplyReview.Prefix + found
                         : null;
@@ -540,6 +553,7 @@ public static class Conversational
         }
 
         var outcome = await writer.WriteAsync(request, settings, ct);
+        Note(outcome);
         var problem = await CheckAsync(request, outcome);
         // v1.56: refused for something the writer can change → once more with the reason fed back, then the approved words
         var retried = false;
@@ -547,6 +561,7 @@ public static class Conversational
         {
             var again = request with { Feedback = ReplyRetry.Feedback(problem, outcome.Reply) };
             var second = await writer.WriteAsync(again, settings, ct);
+            Note(second);
             if (second.Reply is not null)
             {
                 retried = true;
@@ -563,7 +578,7 @@ public static class Conversational
         };
         if (problem is not null)
         {
-            return new Rewritten(composed, written);
+            return new Rewritten(composed, written, usage);
         }
 
         var last = run[^1];
@@ -579,6 +594,6 @@ public static class Conversational
         var main = composed.Records.First(r => r.Key == mainKey && run.Any(a => a.IdempotencyKey == r.IdempotencyKey));
         var records = composed.Records.Where(r => !run.Any(a => a.IdempotencyKey == r.IdempotencyKey)).ToList();
         records.Insert(composed.Records.TakeWhile(r => r.IdempotencyKey != first.IdempotencyKey).Count(), main with { IdempotencyKey = first.IdempotencyKey, Part = 0 });
-        return new Rewritten(new ReplyComposer.Composed(actions, records, composed.Skipped), written);
+        return new Rewritten(new ReplyComposer.Composed(actions, records, composed.Skipped), written, usage);
     }
 }
