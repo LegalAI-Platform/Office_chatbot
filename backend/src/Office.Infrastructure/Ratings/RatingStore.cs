@@ -121,6 +121,13 @@ public sealed class RatingStore(HazemDbContext db) : IRatingStore, IIntakeHistor
              WHERE t.wa_id = {waId} AND t.created_at > {since}
                AND r.text_key IN ('consultation_offer_urgent_day', 'consultation_offer_urgent_night')
             """).SingleAsync(ct) > 0;
-        return new SituationFacts(a, o, keys, waiting) { UrgentOffered = urgentOffered };
+        // v1.55: what he was told in his last three answered turns
+        var recent = await db.Database.SqlQuery<string>($"""
+            SELECT r.text_key AS "Value" FROM hazem.turn_replies r
+             WHERE r.turn_id IN (SELECT t.turn_id FROM hazem.turns t
+                                  WHERE t.wa_id = {waId} AND EXISTS (SELECT 1 FROM hazem.turn_replies x WHERE x.turn_id = t.turn_id)
+                                  ORDER BY t.created_at DESC LIMIT 3)
+            """).ToListAsync(ct);
+        return new SituationFacts(a, o, keys, waiting) { UrgentOffered = urgentOffered, RecentReplyKeys = recent };
     }
 }

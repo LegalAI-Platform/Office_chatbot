@@ -292,11 +292,14 @@ public sealed partial class BookingFlowTests
 
     private HazemResponder Hazem => new(new Store(_rows), new Scripted(_script, () => _aiDown), new Texts(_texts), _lists, new Clock(_now),
         new BookingDesk(_booking, _calendar), new Office.Application.Services.ServiceDesk(_booking),
-        new Office.Application.Urf.UrfDesk(new MemoryUrf(_booking, () => _now)), history: new MemorySituation(_booking, _lastReplies, _lastChoices),
+        new Office.Application.Urf.UrfDesk(new MemoryUrf(_booking, () => _now)), history: new MemorySituation(_booking, _lastReplies, _lastChoices, _recentReplies),
         urgentCalls: _acks, writer: _writer, chat: _writer, reviewer: _reviewer);
 
     /// <summary>v1.39: the texts of each client's last answered turn, as hazem.turn_replies.</summary>
     private readonly Dictionary<string, List<string>> _lastReplies = [];
+
+    /// <summary>v1.55: every answered turn's reply keys, per client (the situation reads the last three).</summary>
+    private readonly Dictionary<string, List<List<string>>> _recentReplies = [];
 
     /// <summary>v1.47 (B-32): the buttons or rows each client's last answered turn ended with, as hazem.turns keeps them.</summary>
     private readonly Dictionary<string, IReadOnlyList<InteractiveChoice>?> _lastChoices = [];
@@ -318,6 +321,7 @@ public sealed partial class BookingFlowTests
             if (e.Replies.Count > 0)
             {
                 _lastReplies[turn.WaId] = e.Replies.Select(r => r.Key).ToList();
+                (_recentReplies.TryGetValue(turn.WaId, out var seen) ? seen : _recentReplies[turn.WaId] = []).Add(_lastReplies[turn.WaId]);
                 _lastChoices[turn.WaId] = d.Actions.LastOrDefault()?.Interactive?.Choices;
             }
 

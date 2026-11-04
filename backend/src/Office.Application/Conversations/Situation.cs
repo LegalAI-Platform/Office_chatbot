@@ -41,6 +41,12 @@ public sealed record SituationFacts(OpenAppointment? Appointment, OpenOrder? Ord
     /// <summary>v1.49: the offer with the urgent call's line went to him in the last 24 hours (it is said once).</summary>
     public bool UrgentOffered { get; init; }
 
+    /// <summary>
+    /// v1.55: the approved texts of his last three answered turns (null: only the last turn is known). «غالي» answered with the
+    /// value once is not answered the same way again two messages later.
+    /// </summary>
+    public IReadOnlyList<string>? RecentReplyKeys { get; init; }
+
     public static SituationFacts Empty { get; } = new(null, null, []);
 }
 
@@ -63,6 +69,9 @@ public sealed record ClientSituation(SituationKind Kind, SituationFacts Facts)
     public bool BlocksPaidOffer => Kind is SituationKind.UrgentWaiting or SituationKind.HeldUnpaid or SituationKind.Confirmed;
 
     public bool RepliedLast(string key) => Facts.LastReplyKeys.Contains(key);
+
+    /// <summary>v1.55: said in one of his last three answered turns (the last one only when the rest is unknown).</summary>
+    public bool RepliedRecently(string key) => (Facts.RecentReplyKeys ?? Facts.LastReplyKeys).Contains(key);
 
     /// <summary>The situation reply (texts 1–4 of TASK 16), filled; null when there is nothing open.</summary>
     public ReplyStep? Reply(string call, DateTimeOffset now, int callWithinMinutes)

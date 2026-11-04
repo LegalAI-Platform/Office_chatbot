@@ -92,6 +92,19 @@ public sealed partial class BookingFlowTests
     }
 
     [Fact]
+    public async Task Too_dear_said_again_after_another_message_is_not_answered_with_the_same_words()
+    {
+        UnderstandingOn();
+        await ToTheOffer();
+        _script["غالية اوي"] = new("other", null, "unknown", null, 0.8, Stance: "price_objection");
+        Assert.Equal([TextKeys.PriceObjection], Keys(await Say("غالية اوي")));
+        _script["ازيك"] = new("greeting", null, "unknown", null, 0.9);
+        await Say("ازيك"); // another message in between: the last reply is no longer the objection's
+        _script["لا غالي اوي هشوف حد ارخص"] = new("other", null, "unknown", null, 0.8, Stance: "price_objection");
+        Assert.Equal([TextKeys.NoPressure], Keys(await Say("لا غالي اوي هشوف حد ارخص")));
+    }
+
+    [Fact]
     public async Task Every_office_question_of_one_message_gets_its_answer()
     {
         UnderstandingOn();
