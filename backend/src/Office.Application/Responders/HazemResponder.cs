@@ -1141,6 +1141,14 @@ public sealed class HazemResponder(
         /// </summary>
         private bool UrfFactsSaid(Classification turnClass, UrfCase running)
         {
+            // v1.62: a change to a case with its time held or confirmed is the office's: it is told (the price paid, the documents)
+            if (understanding && answering?.Call?.Answer is { } said
+                && UrfRules.ChangesBooked(running, said.UrfWifePast, said.UrfGuardian, said.UrfWitnesses))
+            {
+                HandToOffice(TextKeys.UnclearAgain, PendingTask.UrfHelp);
+                return true;
+            }
+
             var now = WithUrfFacts(running);
             if (now == running)
             {
@@ -1518,6 +1526,12 @@ public sealed class HazemResponder(
                     AskedStatus = true;
                     SaySituation();
                     return true;
+                case Intent.Other when understanding && !c.IsFallback && situation.Kind is SituationKind.Confirmed or SituationKind.HeldUnpaid:
+                    // v1.62 (the owner's chat: «مش هبعت المستندات، هبعتها لما أجي المكتب» was answered «ميعادك متأكد ✅»): words the AI
+                    // read that are not a question about his situation are his words to the office: they are kept as a task
+                    plan.Say(TextKeys.UnclearAgain);
+                    plan.Task(PendingTask.ExistingClientMessage, list.ExistingClient?.StaffId);
+                    return true;
                 case Intent.Greeting or Intent.ConsultationRequest or Intent.Other:
                 case Intent.Urgent when situation.BlocksPaidOffer:
                     SaySituation();
@@ -1725,6 +1739,30 @@ public sealed class HazemResponder(
             Intake.CountUnclear(turnClass.Intent == Intent.Other && (!understanding || turnClass.IsFallback));
             AnswerIntent(turnClass);
             AnswerAlso(turnClass);
+            PaymentDetailsLast();
+        }
+
+        /// <summary>
+        /// v1.62 (the owner's chat: «هل لازم تحويل؟ مينفعش اجي المكتب وادفع؟» got the InstaPay details first and the answer after
+        /// them): with understanding v2 on, where to pay comes after everything else the message asked.
+        /// </summary>
+        private void PaymentDetailsLast()
+        {
+            var pay = plan.Steps.FindIndex(s => s.Key == TextKeys.OfficeHowToPay);
+            if (!understanding || pay < 0)
+            {
+                return;
+            }
+
+            var last = plan.Steps.FindLastIndex(s => s.Key is TextKeys.OfficeHowToBook or TextKeys.OfficeRefund or TextKeys.OfficePrices
+                or TextKeys.OfficeFeePolicy or TextKeys.AboutLawyer or TextKeys.OfficeAddress or TextKeys.OfficeHours
+                or TextKeys.OfficePracticeAreas or TextKeys.OfficePrivacy);
+            if (last > pay)
+            {
+                var step = plan.Steps[pay];
+                plan.Steps.RemoveAt(pay);
+                plan.Steps.Insert(last, step);
+            }
         }
 
         private void AnswerIntent(Classification turnClass)
