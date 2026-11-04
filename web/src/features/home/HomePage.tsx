@@ -568,6 +568,10 @@ const MONTH_TILE: Record<string, string> = {
 };
 const egp = new Intl.NumberFormat("en-US");
 
+/** USD for the dashboard's tile: two decimals from a dollar up, three below it. */
+const usdShort = (n: number) =>
+  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: n >= 1 ? 2 : 3, maximumFractionDigits: n >= 1 ? 2 : 3 }).format(n);
+
 /** «الشهر ده» (the manager and the lawyer): the month's report in four numbers, as «التقارير» counts them. */
 function MonthPanel({ now }: { now: Date }) {
   const month = cairoDate(now).slice(0, 7);
@@ -579,13 +583,16 @@ function MonthPanel({ now }: { now: Date }) {
     { icon: "check-circle", tone: "green", title: "مهام خلصت", value: String(r.done), sub: `من ${r.tasks}` },
     { icon: "clock", tone: "blue", title: "خلصت في وقتها", value: onTime === null ? "—" : `${onTime}%` },
     { icon: "receipt", tone: "orange", title: "وصل (جنيه)", value: egp.format(r.received) },
+    // v1.58: what the AI cost this month (the conversations are in «التقارير»)
+    ...(r.ai_cost ? [{ icon: "trend-up" as IconName, tone: "gold", title: "صرف الذكاء الاصطناعي",
+      value: usdShort(r.ai_cost.total_usd), sub: r.ai_cost.conversations > 0 ? `على ${r.ai_cost.conversations} محادثة` : undefined }] : []),
   ] : [];
   return (
     <Panel title="الشهر ده" icon="trend-up" action={<SeeAll to="/reports" />} className="min-h-0" flush>
       {report.isPending ? <Rows n={2} /> : report.isError ? (
         <Quiet icon="top_calendar" title="أرقام الشهر مش متاحة دلوقتي">جرّب تاني بعد شوية.</Quiet>
       ) : (
-        <ul className="grid flex-1 grid-cols-2 gap-2 px-3 pb-3 2xl:grid-cols-4" aria-label="أرقام الشهر">
+        <ul className="grid flex-1 grid-cols-2 gap-2 px-3 pb-3 2xl:grid-cols-5" aria-label="أرقام الشهر">
           {tiles.map((t) => (
             <li key={t.title} className={`${ROW} grid content-center gap-2 px-3 py-3 hover:translate-y-0`}>
               <span className="flex items-center gap-2">

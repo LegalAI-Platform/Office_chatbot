@@ -24,11 +24,19 @@ public sealed partial class BookingFlowTests
         /// <summary>v1.56: the verdicts of the next reviews, in order (then <see cref="Problem"/>): a first try and its retry.</summary>
         public Queue<string?> Sequence { get; } = new();
 
+        /// <summary>v1.58: what each review used, noted in the request as the real reviewer does.</summary>
+        public Office.Application.Costs.TokenUsage? Tokens { get; set; }
+
         public ReviewRequest? Last { get; private set; }
 
         public Task<string?> ProblemAsync(ReviewRequest request, HazemSettings settings, CancellationToken ct)
         {
             Last = request;
+            if (Tokens is { } t)
+            {
+                request.Usage?.Add(new Office.Application.Costs.AiUsage(Office.Application.Costs.AiUsageKind.Review, "fake-reviewer", t));
+            }
+
             return Task.FromResult(Sequence.Count > 0 ? Sequence.Dequeue() : Problem);
         }
     }

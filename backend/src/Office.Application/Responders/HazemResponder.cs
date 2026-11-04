@@ -494,6 +494,13 @@ public sealed class HazemResponder(
 
         var composed = ReplyComposer.Compose(turn.TurnId, turn.Messages[^1].Wamid, plan.Steps, texts);
 
+        // v1.58: every AI call of this turn, for what the conversation cost (the classifier, the writer, its retry, the reviewer)
+        var usage = new List<Costs.AiUsage>();
+        if (classification?.Call is { Tokens: { } classified } call)
+        {
+            usage.Add(new Costs.AiUsage(Costs.AiUsageKind.Classify, call.Model, classified, call.LatencyMs));
+        }
+
         // v1.41 (TASK 17): the everyday reply in the writer's words, checked by code; off, down or doubtful → as approved.
         WrittenReply? written = null;
         if (writer is not null && chat is not null && settings.Flag(Conversational.SwitchKey) && composed.Actions.Count > 0)
@@ -508,8 +515,13 @@ public sealed class HazemResponder(
                     ? "دليل التعامل:\n" + prices.Fill(playbook)
                     : null)
                 .Where(t => t is not null));
-            (composed, written) = await Conversational.RewriteAsync(composed, writer, chat, turn, Salutation.Call(state.Person), settings, ct,
+            var rewritten = await Conversational.RewriteAsync(composed, writer, chat, turn, Salutation.Call(state.Person), settings, ct,
                 facts, state.Person.NameGender, reviewer);
+            (composed, written) = (rewritten.Composed, rewritten.Written);
+            if (rewritten.Usage is { } writing)
+            {
+                usage.AddRange(writing);
+            }
             if (written is { Guard: WrittenReply.Passed, FromFacts: true }) // set only when the message held service_detail
             {
                 // v1.48: his question was answered from «حقايق المكتب»: the office has nothing to answer, so no task for it
@@ -533,7 +545,7 @@ public sealed class HazemResponder(
         }
 
         var effects = new TurnEffects(state, plan.Tasks,
-            classification is null ? null : ClassificationRecord.From(turn.TurnId, classification), composed.Records, written, urfToSave);
+            classification is null ? null : ClassificationRecord.From(turn.TurnId, classification), composed.Records, written, urfToSave, usage);
         return new TurnDecision(ResponderName, composed.Actions, effects, notes);
     }
 

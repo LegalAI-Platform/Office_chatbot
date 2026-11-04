@@ -244,6 +244,58 @@ export interface MonthReport {
   free_answers?: FreeAnswerRow[];
   /** v1.56: every reply Hazem wrote this month, how many fell back to the approved words, and why. */
   written?: WrittenSummary;
+  /** v1.58: what the AI cost this month. */
+  ai_cost?: AiCostSummary;
+}
+
+/** v1.58 (the owner: «المحادثة صرفت قد إيه من الكريدت؟»): the month's AI spend in USD. */
+export interface AiCostSummary {
+  total_usd: number;
+  calls: number;
+  conversations: number;
+  input_tokens: number;
+  output_tokens: number;
+  /** calls of a model with no known price: their tokens count, their cost does not */
+  unpriced: number;
+}
+
+/** v1.58: one client's conversation in the month. */
+export interface AiCostConversation {
+  person_id: string;
+  client: string | null;
+  turns: number;
+  calls: number;
+  input_tokens: number;
+  output_tokens: number;
+  cost_usd: number;
+  last_at: string;
+  unpriced: number;
+}
+
+export interface AiCostReport {
+  month: string;
+  summary: AiCostSummary;
+  conversations: AiCostConversation[];
+}
+
+/** v1.58: one AI call of a message: what it was for (classify, write, review), its tokens and cost. */
+export interface AiCostCall {
+  kind: "classify" | "write" | "review";
+  model: string;
+  input_tokens: number;
+  cache_read_tokens: number;
+  cache_write_tokens: number;
+  output_tokens: number;
+  cost_usd: number | null;
+}
+
+/** v1.58: one message of a conversation (never its words). */
+export interface AiCostTurn {
+  at: string;
+  cost_usd: number;
+  input_tokens: number;
+  output_tokens: number;
+  calls: AiCostCall[];
 }
 
 export interface WrittenSummary {

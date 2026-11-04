@@ -292,6 +292,9 @@ public sealed partial class BookingFlowTests
         /// <summary>v1.56: replies for the next calls, in order (then <see cref="Reply"/>): a first try and its retry.</summary>
         public Queue<string> Then { get; } = new();
 
+        /// <summary>v1.58: what each call used (null: the provider told nothing).</summary>
+        public Office.Application.Costs.TokenUsage? Tokens { get; set; }
+
         public List<WriteRequest> All { get; } = [];
 
         public int Calls { get; private set; }
@@ -306,7 +309,7 @@ public sealed partial class BookingFlowTests
             Last = request;
             All.Add(request);
             var reply = Then.Count > 0 ? Then.Dequeue() : Reply;
-            return Task.FromResult(new WriterOutcome(reply, reply is null ? WriterOutcome.Error : null, "fake", "write-v1", 5) { FromFacts = FromFacts });
+            return Task.FromResult(new WriterOutcome(reply, reply is null ? WriterOutcome.Error : null, "fake", "write-v1", 5) { FromFacts = FromFacts, Tokens = Tokens });
         }
 
         public Task<IReadOnlyList<ChatLine>> RecentAsync(string waId, int turns, CancellationToken ct) =>

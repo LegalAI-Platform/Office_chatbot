@@ -127,6 +127,17 @@ public sealed class ConversationStore(HazemDbContext db) : IConversationStore
                 ON CONFLICT (idempotency_key) DO NOTHING
                 """, ct);
         }
+
+        // v1.58 (migration 0055): what each AI call of the turn used, and cost
+        foreach (var u in e.Usage ?? [])
+        {
+            var cost = Office.Application.Costs.AiPrices.Cost(u.Model, u.Tokens);
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO hazem.ai_usage (turn_id, kind, model, input_tokens, cache_read_tokens, cache_write_tokens, output_tokens, cost_usd, latency_ms)
+                VALUES ({turnId}, {u.Kind}, {u.Model}, {u.Tokens.Uncached}, {u.Tokens.CacheRead}, {u.Tokens.CacheWrite}, {u.Tokens.Output},
+                        {cost}, {u.LatencyMs})
+                """, ct);
+        }
     }
 
     private static Task SaveConversation(HazemDbContext db, Conversation conversation, CancellationToken ct) =>

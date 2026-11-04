@@ -1,7 +1,7 @@
-import { useId, useState, type ReactNode } from "react";
+import { Fragment, useId, useState, type ReactNode } from "react";
 import { queryOptions, useQuery, type QueryClient } from "@tanstack/react-query";
 import { api, errorMessage } from "../../shared/api/client";
-import type { FreeAnswerRow, MonthReport, RatingReport, ReportRow, ReviewRow, WrittenSummary } from "../../shared/api/types";
+import type { AiCostReport, AiCostTurn, FreeAnswerRow, MonthReport, RatingReport, ReportRow, ReviewRow, WrittenSummary } from "../../shared/api/types";
 import { APPOINTMENT_STATES, BOOKING_SERVICES, label, SERVICE_KINDS, SOURCES, TASK_TYPES, CLIENT_TYPES, matterLabel } from "../../shared/lib/labels";
 import { Icon, type IconName } from "../../shared/ui/Icon";
 import { ErrorState, Loading } from "../../shared/ui/ui";
@@ -100,6 +100,7 @@ export function ReportsPage() {
           {r.ratings ? <Ratings ratings={r.ratings} /> : null}
           <Review rows={r.review ?? []} />
           <FreeAnswers rows={r.free_answers ?? []} written={r.written} />
+          <AiCost month={month} />
         </>
       ) : null}
     </div>
@@ -158,7 +159,7 @@ const TONE: Record<string, { tile: string; bar: string }> = {
 };
 
 function Number({ icon, tone = "gold", title, value, note }: {
-  icon: IconName; tone?: string; title: string; value: number; note?: string | undefined;
+  icon: IconName; tone?: string; title: string; value: number | string; note?: string | undefined;
 }) {
   const t = TONE[tone] ?? TONE.gold!;
   return (
@@ -171,7 +172,7 @@ function Number({ icon, tone = "gold", title, value, note }: {
         </span>
       </div>
       <p className="tabular text-2xl sm:text-3xl font-bold">
-        {value.toLocaleString("en-US")}
+        {typeof value === "number" ? value.toLocaleString("en-US") : value}
         {note ? <span className="ms-2 inline-block rounded-full bg-gold-tint px-2 py-0.5 align-middle text-[12.5px] font-bold text-gold-ink">{note}</span> : null}
       </p>
     </div>
@@ -300,6 +301,104 @@ function Ratings({ ratings }: { ratings: RatingReport }) {
         </GlassCard>
       </div>
       <Note>التقييمات اللي اتبعتت الشهر ده. «ليس الآن» مش بيتحسب في المتوسط. سبب التقييم الضعيف في مهمته («كلام العميل»).</Note>
+    </section>
+  );
+}
+
+// ---------- v1.58: what the AI cost, by conversation and by message ----------
+
+const KIND_LABELS: Record<string, string> = { classify: "فهم الرسالة", write: "كتابة الرد", review: "مراجعة الرد" };
+
+/** USD: two decimals from a dollar up, more below it (a message costs fractions of a cent). */
+export const usd = (n: number) =>
+  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: n >= 1 ? 2 : 3, maximumFractionDigits: n >= 1 ? 2 : 4 }).format(n);
+
+const tokens = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}K` : String(n));
+
+const cairoWhen = (at: string) =>
+  new Intl.DateTimeFormat("ar-EG-u-nu-latn", { timeZone: "Africa/Cairo", day: "numeric", month: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(at));
+
+/** One conversation's messages with the calls of each (opened from its row). */
+function AiCostTurns({ personId, month }: { personId: string; month: string }) {
+  const q = useQuery({
+    queryKey: ["ai-cost", month, personId],
+    queryFn: () => api<{ turns: AiCostTurn[] }>("GET", `/reports/ai-cost/${personId}?month=${month}`),
+  });
+  if (q.isPending) return <Loading />;
+  if (q.isError) return <ErrorState message={errorMessage(q.error)} onRetry={() => void q.refetch()} />;
+  return (
+    <ul className="grid gap-1.5" aria-label="رسايل المحادثة">
+      {q.data.turns.map((t, i) => (
+        <li key={`${t.at}-${i}`} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 rounded-xl bg-card/60 px-3 py-2 text-[13px]">
+          <span className="tabular text-ink-soft">{cairoWhen(t.at)}</span>
+          <span className="flex flex-wrap gap-x-3 gap-y-1 text-ink-soft">
+            {t.calls.map((c, j) => (
+              <span key={j}>{KIND_LABELS[c.kind] ?? c.kind}: <span className="tabular" dir="ltr">{c.cost_usd === null ? "بدون سعر" : usd(c.cost_usd)}</span></span>
+            ))}
+          </span>
+          <span className="tabular font-bold" dir="ltr">
+            {usd(t.cost_usd)} <span className="font-normal text-ink-soft">· {tokens(t.input_tokens)} دخل / {tokens(t.output_tokens)} خرج</span>
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * «تكلفة المحادثات» (the owner): what the AI spent this month on each conversation, the dearest first, and on each of its
+ * messages (open a row). The tokens and USD of every call (understanding the message, writing the reply, reviewing it); never
+ * the words of the chat.
+ */
+function AiCost({ month }: { month: string }) {
+  const q = useQuery({ queryKey: ["ai-cost", month], queryFn: () => api<AiCostReport>("GET", `/reports/ai-cost?month=${month}`) });
+  const [open, setOpen] = useState<string | null>(null);
+  const s = q.data?.summary;
+  return (
+    <section className="grid gap-3" aria-labelledby="aicost-title">
+      <GroupHead id="aicost-title" icon="trend-up" title="تكلفة المحادثات" />
+      {q.isPending ? <Loading /> : q.isError ? <ErrorState message={errorMessage(q.error)} onRetry={() => void q.refetch()} /> : s ? (
+        <>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Number icon="trend-up" title="صرف الشهر ده" value={usd(s.total_usd)} />
+            <Number icon="chat" title="محادثات" value={s.conversations} note={s.conversations > 0 ? `${usd(s.total_usd / s.conversations)} للمحادثة` : undefined} />
+            <Number icon="document" title="نداءات للذكاء الاصطناعي" value={s.calls} note={`${tokens(s.input_tokens)} دخل / ${tokens(s.output_tokens)} خرج`} />
+          </div>
+          <GlassCard icon="chat" title="حسب المحادثة">
+            {q.data.conversations.length === 0 ? <Blank>مفيش صرف متسجّل الشهر ده.</Blank> : (
+              <div className="soft-scroll overflow-x-auto">
+                <table className="w-full min-w-[22rem] text-[13.5px]">
+                  <thead><tr className="border-b border-line/70"><th className={TH}>العميل</th><th className={TH}>رسايل</th><th className={TH}>توكن</th><th className={TH}>التكلفة</th></tr></thead>
+                  <tbody className="divide-y divide-line/60">
+                    {q.data.conversations.map((c) => (
+                      <Fragment key={c.person_id}>
+                        <tr className="transition hover:bg-card/60">
+                          <td className="px-2 py-2 font-semibold">
+                            <button type="button" aria-expanded={open === c.person_id} className="text-start underline-offset-2 hover:underline"
+                              onClick={() => setOpen(open === c.person_id ? null : c.person_id)}>
+                              {c.client ?? "رقم من غير اسم"}
+                            </button>
+                          </td>
+                          <td className="tabular px-2">{c.turns}</td>
+                          <td className="tabular px-2" dir="ltr">{tokens(c.input_tokens)} / {tokens(c.output_tokens)}</td>
+                          <td className="tabular px-2 font-bold" dir="ltr">{usd(c.cost_usd)}{c.unpriced > 0 ? " +" : ""}</td>
+                        </tr>
+                        {open === c.person_id ? (
+                          <tr><td colSpan={4} className="px-2 pb-3"><AiCostTurns personId={c.person_id} month={month} /></td></tr>
+                        ) : null}
+                      </Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </GlassCard>
+          <Note>
+            بتتحسب من أول ما الميزة اتفعّلت. فيها فهم الرسالة وكتابة الرد ومراجعته، بسعر Anthropic المنشور. تحويل الرسايل الصوتية لكلام
+            مش محسوب. «+» جنب الرقم = فيه نداء لموديل من غير سعر معروف.
+          </Note>
+        </>
+      ) : null}
     </section>
   );
 }

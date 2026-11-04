@@ -81,6 +81,9 @@ public sealed class AnthropicReplyReviewer(IOptions<HazemOptions> options) : IRe
                     Format = new JsonOutputFormat { Schema = Schema.ToDictionary(kv => kv.Key, kv => JsonSerializer.SerializeToElement(kv.Value)) },
                 },
             }, budget.Token);
+            // v1.58: what this call used, whatever it answered
+            request.Usage?.Add(new Office.Application.Costs.AiUsage(Office.Application.Costs.AiUsageKind.Review, model,
+                AnthropicReplyWriter.ModelTokens(response.Usage)));
             if (response.StopReason != "end_turn")
             {
                 return ReplyReview.Unavailable + "_stop_" + (response.StopReason?.ToString() ?? "none");

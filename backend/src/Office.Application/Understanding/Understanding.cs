@@ -237,6 +237,9 @@ public sealed record ClassifierOutcome(
     int? InputTokens = null,
     int? OutputTokens = null)
 {
+    /// <summary>v1.58: what the call used, split for its price (null: the provider told nothing).</summary>
+    public Office.Application.Costs.TokenUsage? Tokens { get; init; }
+
     public const string NoKey = "no_key";
     public const string Timeout = "timeout";
     public const string Error = "error";

@@ -8,7 +8,11 @@ namespace Office.Application.Writing;
 // catches what no list can. Unsure, down or slow → the free answer never goes (its approved words do).
 
 /// <summary>What the reviewer reads: the reply, the facts it may use, and the conversation it answers.</summary>
-public sealed record ReviewRequest(string Reply, string Facts, IReadOnlyList<ChatLine> History);
+public sealed record ReviewRequest(string Reply, string Facts, IReadOnlyList<ChatLine> History)
+{
+    /// <summary>v1.58: where the reviewer notes what its call used (the caller adds it to the turn's usage).</summary>
+    public List<Office.Application.Costs.AiUsage>? Usage { get; init; }
+}
 
 public interface IReplyReviewer
 {
