@@ -170,16 +170,16 @@ public static class UrfRules
 
         return (a.Step, a.Value) switch
         {
-            (UrfStep.WifePast, "first" or "divorced" or "khul") => (c with { WifePast = a.Value, Step = UrfStep.Guardian }, UrfNext.Ask),
+            (UrfStep.WifePast, "first" or "divorced" or "khul") => Advance(c with { WifePast = a.Value }),
             (UrfStep.Guardian, "none") => (c with { Guardian = "none", State = UrfCase.RejectedGuardian, Step = null, PolicyVersion = PolicyVersion },
                 UrfNext.RejectGuardian),
-            (UrfStep.Guardian, "father" or "brother" or "uncle") => (c with { Guardian = a.Value, Step = UrfStep.Witnesses }, UrfNext.Ask),
+            (UrfStep.Guardian, "father" or "brother" or "uncle") => Advance(c with { Guardian = a.Value }),
             (UrfStep.Witnesses, "office" or "own") => (c with { Witnesses = a.Value, State = UrfCase.DocumentsPending, Step = null }, UrfNext.Book),
-            (UrfStep.HasCopy, "yes") => (c with { HasCopy = true, Step = UrfStep.Agreed }, UrfNext.Ask),
+            (UrfStep.HasCopy, "yes") => Advance(c with { HasCopy = true }),
             (UrfStep.HasCopy, "no") => (Redirect(c with { HasCopy = false }), UrfNext.Redirect),
-            (UrfStep.Agreed, "yes") => (c with { Agreed = true, Step = UrfStep.Children }, UrfNext.Ask),
+            (UrfStep.Agreed, "yes") => Advance(c with { Agreed = true }),
             (UrfStep.Agreed, "no") => (Redirect(c with { Agreed = false }), UrfNext.Redirect),
-            (UrfStep.Children, "no") => (c with { Children = false, Step = UrfStep.Witnesses }, UrfNext.Ask),
+            (UrfStep.Children, "no") => Advance(c with { Children = false }),
             (UrfStep.Children, "yes") => (Redirect(c with { Children = true }), UrfNext.Redirect),
             _ => (c, UrfNext.Ask),
         };
@@ -204,7 +204,57 @@ public static class UrfRules
         var answered = c with { HusbandAge = husband, WifeAge = wife };
         return husband < MinAge || wife < MinAge
             ? (answered with { State = UrfCase.RejectedAge, Step = null, PolicyVersion = PolicyVersion }, UrfNext.RejectAge)
-            : (answered with { Step = UrfStep.WifePast }, UrfNext.Ask);
+            : Advance(answered);
+    }
+
+    /// <summary>
+    /// v1.60: the next question the case still needs, in B-11's order, skipping what is already known (said in his own words
+    /// before it was asked). Null: everything is known, the price and times can go.
+    /// </summary>
+    public static string? NextStep(UrfCase c) => c.IsMarriage
+        ? c.HusbandAge is null ? UrfStep.Ages
+            : c.WifePast is null ? UrfStep.WifePast
+            : c.Guardian is null ? UrfStep.Guardian
+            : c.Witnesses is null ? UrfStep.Witnesses : null
+        : c.HasCopy is null ? UrfStep.HasCopy
+            : c.Agreed is null ? UrfStep.Agreed
+            : c.Children is null ? UrfStep.Children
+            : c.Witnesses is null ? UrfStep.Witnesses : null;
+
+    private static (UrfCase Case, UrfNext Next) Advance(UrfCase c) =>
+        NextStep(c) is { } step
+            ? (c with { Step = step }, UrfNext.Ask)
+            : (c with { State = UrfCase.DocumentsPending, Step = null }, UrfNext.Book);
+
+    /// <summary>
+    /// v1.60 (the owner: «قال انها مطلقه ليه البوت ساله بعد كدا؟» and «عايز الشهود من المكتب» got the price of his own
+    /// witnesses): what the client said in his own words. While the questions are collected a fact fills an answer not given yet
+    /// (never one already given), and the questions it answers are skipped; while the price and times wait for a pick, a fact
+    /// that differs from the answer given CHANGES it, so the price and documents are worked out again. A case with a time held,
+    /// or closed, is the office's. Values outside the lists are ignored.
+    /// </summary>
+    public static UrfCase ApplyFacts(UrfCase c, string? wifePast, string? guardian, string? witnesses)
+    {
+        static string? Only(string? v, params string[] allowed) => v is not null && allowed.Contains(v) ? v : null;
+        var past = c.IsMarriage ? Only(wifePast, "first", "divorced", "khul") : null;
+        var guard = c.IsMarriage ? Only(guardian, "father", "brother", "uncle") : null;
+        var wit = Only(witnesses, "office", "own");
+        if (c.State == UrfCase.Collecting)
+        {
+            var filled = c with { WifePast = c.WifePast ?? past, Guardian = c.Guardian ?? guard, Witnesses = c.Witnesses ?? wit };
+            if (filled == c)
+            {
+                return c;
+            }
+
+            return NextStep(filled) is { } step
+                ? filled with { Step = step }
+                : filled with { State = UrfCase.DocumentsPending, Step = null };
+        }
+
+        return c.State == UrfCase.DocumentsPending && c.AppointmentId is null
+            ? c with { WifePast = past ?? c.WifePast, Guardian = guard ?? c.Guardian, Witnesses = wit ?? c.Witnesses }
+            : c;
     }
 
     private static UrfCase Redirect(UrfCase c) => c with { State = UrfCase.Redirected, Step = null };

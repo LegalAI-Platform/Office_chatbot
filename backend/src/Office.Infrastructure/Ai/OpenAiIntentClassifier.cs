@@ -23,7 +23,7 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
     public const string PromptVersion = "classify-v16";
 
     /// <summary>v1.52 (phase 1): the prompt while understanding v2 is on (the whole chat, the stance, the other questions).</summary>
-    public const string PromptVersionV2 = "classify-v17";
+    public const string PromptVersionV2 = "classify-v18";
     public const string StubEnabledKey = "ai.stub_enabled";
     public const string StubBaseUrlKey = "ai.stub_base_url";
 
@@ -162,7 +162,11 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
                 o["time_exact"] is JsonValue e && e.GetValueKind() is JsonValueKind.True or JsonValueKind.False ? e.GetValue<bool>() : null,
                 // v1.52 (phase 1): where he stands, and the office's other questions in the same message
                 StringOrNull(o["stance"]),
-                o["also_asked"] is JsonArray also ? also.Select(StringOrNull).OfType<string>().ToList() : null), null);
+                o["also_asked"] is JsonArray also ? also.Select(StringOrNull).OfType<string>().ToList() : null,
+                // v1.60: what he SAID about the Urfi case, so the questions already answered are not asked again
+                StringOrNull(o["urf_wife_past"]),
+                StringOrNull(o["urf_guardian"]),
+                StringOrNull(o["urf_witnesses"])), null);
         }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException)
         {
@@ -219,7 +223,7 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
             ["additionalProperties"] = false,
             ["required"] = new JsonArray("analysis", "subject", "scope", "intent", "service", "consultation_mode", "full_name", "confidence",
                 "matter_type", "matter_subtype", "sender_role", "info_topic", "courtesy", "name_gender", "picked", "asked_time", "time_exact",
-                "stance", "also_asked"),
+                "stance", "also_asked", "urf_wife_past", "urf_guardian", "urf_witnesses"),
             // v1.24: subject and scope come first, so the model names what the turn is about before it picks an
             // intent. The subject is a few words for that only: it is never read, kept or logged.
             ["properties"] = new JsonObject
@@ -248,6 +252,10 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
                 // v1.52 (phase 1): where he stands (just asking, not wanting it, the price too high…) and up to 3 other office questions
                 ["stance"] = new JsonObject { ["type"] = "string", ["enum"] = Codes<Stance>(false) },
                 ["also_asked"] = new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "string", ["enum"] = Codes<InfoTopic>(false) } },
+                // v1.60: what he said about the Urfi case in this message (null: nothing said)
+                ["urf_wife_past"] = new JsonObject { ["type"] = new JsonArray("string", "null"), ["enum"] = new JsonArray("first", "divorced", "khul", null) },
+                ["urf_guardian"] = new JsonObject { ["type"] = new JsonArray("string", "null"), ["enum"] = new JsonArray("father", "brother", "uncle", null) },
+                ["urf_witnesses"] = new JsonObject { ["type"] = new JsonArray("string", "null"), ["enum"] = new JsonArray("office", "own", null) },
             },
         };
     }
