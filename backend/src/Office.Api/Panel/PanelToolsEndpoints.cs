@@ -151,6 +151,30 @@ public static partial class PanelToolsEndpoints
 
             return Results.Ok(await tools.ReportAsync(year, m, ct));
         }).RequireAuthorization(PanelAuth.Policy(Permissions.ReportsView));
+
+        // v1.58 (the owner: «المحادثة صرفت قد إيه من الكريدت؟»): the AI cost by conversation, and one conversation's messages
+        panel.MapGet("/reports/ai-cost", async (string? month, PanelTools tools, TimeProvider clock, CancellationToken ct) =>
+            MonthOf(month, clock) is { } m ? Results.Ok(await tools.AiCostAsync(m.Year, m.Month, ct)) : Results.BadRequest(new { error = "invalid_month" }))
+            .RequireAuthorization(PanelAuth.Policy(Permissions.ReportsView));
+        panel.MapGet("/reports/ai-cost/{personId:guid}", async (Guid personId, string? month, PanelTools tools, TimeProvider clock, CancellationToken ct) =>
+            MonthOf(month, clock) is { } m ? Results.Ok(new { turns = await tools.AiCostTurnsAsync(personId, m.Year, m.Month, ct) })
+                : Results.BadRequest(new { error = "invalid_month" }))
+            .RequireAuthorization(PanelAuth.Policy(Permissions.ReportsView));
+    }
+
+    /// <summary>The month asked («2026-11»), this month when none; null when it is not a month from 2024 on.</summary>
+    private static (int Year, int Month)? MonthOf(string? month, TimeProvider clock)
+    {
+        var now = TimeZoneInfo.ConvertTime(clock.GetUtcNow(), Office.Domain.Tasks.OfficeHours.Cairo);
+        if (month is not { Length: > 0 })
+        {
+            return (now.Year, now.Month);
+        }
+
+        var parts = month.Split('-');
+        return parts.Length == 2 && int.TryParse(parts[0], out var y) && int.TryParse(parts[1], out var m) && y is >= 2024 and <= 2100 && m is >= 1 and <= 12
+            ? (y, m)
+            : null;
     }
 
     public sealed record UnmuteRequest(string? WaId);

@@ -54,6 +54,20 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
 
     public static JsonObject Schema { get; } = BuildSchema();
 
+    /// <summary>v1.58: OpenAI's usage as a priced split (its cached prompt tokens are the cache read; it charges no cache write).</summary>
+    public static Office.Application.Costs.TokenUsage? OpenAiTokens(JsonNode? usage)
+    {
+        var prompt = (int?)usage?["prompt_tokens"];
+        var output = (int?)usage?["completion_tokens"];
+        if (prompt is null || output is null)
+        {
+            return null;
+        }
+
+        var cached = Math.Min((int?)usage?["prompt_tokens_details"]?["cached_tokens"] ?? 0, prompt.Value);
+        return new Office.Application.Costs.TokenUsage(prompt.Value - cached, cached, 0, output.Value);
+    }
+
     /// <summary>The prompt in use, for both providers (v1.26).</summary>
     public static string PromptText => Prompt.Value;
 
@@ -95,7 +109,7 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
                 var body = await response.Content.ReadFromJsonAsync<JsonNode>(budget.Token);
                 var usage = body?["usage"];
                 var (answer, failure) = Parse(body?["choices"]?[0]?["message"]?["content"]?.GetValue<string>());
-                return Done(answer, failure, (int?)usage?["prompt_tokens"], (int?)usage?["completion_tokens"]);
+                return Done(answer, failure, (int?)usage?["prompt_tokens"], (int?)usage?["completion_tokens"]) with { Tokens = OpenAiTokens(usage) };
             }
             catch (OperationCanceledException) when (!ct.IsCancellationRequested)
             {

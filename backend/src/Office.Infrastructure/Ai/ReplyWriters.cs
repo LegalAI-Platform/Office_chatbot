@@ -105,6 +105,10 @@ public static class WriterPrompt
 /// <summary>v1.41: the writer through Anthropic (the classifier's key), its output held to the schema.</summary>
 public sealed class AnthropicReplyWriter(IOptions<HazemOptions> options, TimeProvider clock) : IReplyWriter
 {
+    /// <summary>v1.58: Anthropic's usage as a priced split.</summary>
+    internal static Office.Application.Costs.TokenUsage ModelTokens(Usage u) =>
+        new((int)u.InputTokens, (int)(u.CacheReadInputTokens ?? 0), (int)(u.CacheCreationInputTokens ?? 0), (int)u.OutputTokens);
+
     private const int MaxTokens = 1024;
     private AnthropicClient? _client;
     private string? _clientKey;
@@ -151,12 +155,13 @@ public sealed class AnthropicReplyWriter(IOptions<HazemOptions> options, TimePro
             var input = (int)(usage.InputTokens + (usage.CacheReadInputTokens ?? 0) + (usage.CacheCreationInputTokens ?? 0));
             if (response.StopReason != "end_turn")
             {
-                return Done(null, WriterOutcome.InvalidOutput, input, (int)usage.OutputTokens);
+                return Done(null, WriterOutcome.InvalidOutput, input, (int)usage.OutputTokens) with { Tokens = ModelTokens(usage) };
             }
 
             var content = response.Content.Select(b => b.Value).OfType<TextBlock>().LastOrDefault()?.Text;
             var reply = WriterPrompt.Parse(content);
-            return Done(reply, reply is null ? WriterOutcome.InvalidOutput : null, input, (int)usage.OutputTokens) with { FromFacts = WriterPrompt.FromFacts(content) };
+            return Done(reply, reply is null ? WriterOutcome.InvalidOutput : null, input, (int)usage.OutputTokens)
+                with { FromFacts = WriterPrompt.FromFacts(content), Tokens = ModelTokens(usage) };
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
@@ -215,7 +220,7 @@ public sealed class OpenAiReplyWriter(IHttpClientFactory http, IOptions<HazemOpt
             var content = body?["choices"]?[0]?["message"]?["content"]?.GetValue<string>();
             var reply = WriterPrompt.Parse(content);
             return Done(reply, reply is null ? WriterOutcome.InvalidOutput : null, (int?)body?["usage"]?["prompt_tokens"],
-                (int?)body?["usage"]?["completion_tokens"]) with { FromFacts = WriterPrompt.FromFacts(content) };
+                (int?)body?["usage"]?["completion_tokens"]) with { FromFacts = WriterPrompt.FromFacts(content), Tokens = OpenAiIntentClassifier.OpenAiTokens(body?["usage"]) };
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {

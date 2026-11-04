@@ -43,7 +43,30 @@ public sealed record MonthReport(string Month, int Tasks, int Done, int DoneOnTi
 
     /// <summary>v1.56 (B-34): how many replies Hazem wrote this month, how many went back to the approved words, and why.</summary>
     public WrittenSummary Written { get; init; } = new(0, 0, 0, []);
+
+    /// <summary>v1.58: what the AI cost this month (hazem.ai_usage).</summary>
+    public AiCostSummary AiCost { get; init; } = new(0m, 0, 0, 0, 0, 0);
 }
+
+/// <summary>
+/// v1.58 (the owner: «المحادثة صرفت قد إيه من الكريدت؟»): the month's AI spend in USD, its calls, the clients it was spent on and
+/// the tokens. <see cref="Unpriced"/>: calls of a model with no known price (their tokens count, their cost does not).
+/// </summary>
+public sealed record AiCostSummary(decimal TotalUsd, int Calls, int Conversations, long InputTokens, long OutputTokens, int Unpriced);
+
+/// <summary>v1.58: one client's conversation in the month: its turns (messages answered), calls, tokens and cost.</summary>
+public sealed record AiCostConversation(Guid PersonId, string? Client, int Turns, int Calls, long InputTokens, long OutputTokens,
+    decimal CostUsd, DateTimeOffset LastAt, int Unpriced);
+
+/// <summary>v1.58: the month's AI cost, by conversation, the dearest first (100 at most).</summary>
+public sealed record AiCostReport(string Month, AiCostSummary Summary, IReadOnlyList<AiCostConversation> Conversations);
+
+/// <summary>v1.58: one AI call of a message: what it was for (classify, write, review), the model, its tokens and its cost.</summary>
+public sealed record AiCostCall(string Kind, string Model, int InputTokens, int CacheReadTokens, int CacheWriteTokens, int OutputTokens,
+    decimal? CostUsd);
+
+/// <summary>v1.58: one message of a conversation (a turn): when, what it cost in all, and its calls. Never the words of the chat.</summary>
+public sealed record AiCostTurn(DateTimeOffset At, decimal CostUsd, long InputTokens, long OutputTokens, IReadOnlyList<AiCostCall> Calls);
 
 /// <summary>
 /// v1.56: the month's written replies (every purpose): <see cref="Total"/>, <see cref="Fallbacks"/> (a check refused it and the
@@ -367,6 +390,7 @@ public sealed partial class PanelTools(HazemDbContext db, ListImporter importer,
             Review = await ReviewAsync(start, end, ct),
             FreeAnswers = await FreeAnswersAsync(start, end, ct),
             Written = await WrittenAsync(start, end, ct),
+            AiCost = await AiCostSummaryAsync(start, end, ct),
         };
     }
 
@@ -438,6 +462,86 @@ public sealed partial class PanelTools(HazemDbContext db, ListImporter importer,
                 e.GetProperty("text").ValueKind == System.Text.Json.JsonValueKind.Null ? null : e.GetProperty("text").GetString(),
                 e.GetProperty("guard").GetString()!))
             .ToList();
+    }
+
+    private static (DateTimeOffset Start, DateTimeOffset End) MonthRange(int year, int month)
+    {
+        var cairo = Domain.Tasks.OfficeHours.Cairo;
+        var first = new DateTime(year, month, 1);
+        var next = first.AddMonths(1);
+        return (new DateTimeOffset(first, cairo.GetUtcOffset(first)).ToUniversalTime(), new DateTimeOffset(next, cairo.GetUtcOffset(next)).ToUniversalTime());
+    }
+
+    private static AiCostSummary ReadSummary(string json)
+    {
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        var r = doc.RootElement;
+        return new AiCostSummary(r.GetProperty("total").GetDecimal(), r.GetProperty("calls").GetInt32(), r.GetProperty("conversations").GetInt32(),
+            r.GetProperty("input").GetInt64(), r.GetProperty("output").GetInt64(), r.GetProperty("unpriced").GetInt32());
+    }
+
+    /// <summary>v1.58: the month's AI spend (the dashboard's number).</summary>
+    private async Task<AiCostSummary> AiCostSummaryAsync(DateTimeOffset start, DateTimeOffset end, CancellationToken ct) =>
+        ReadSummary(await db.Database.SqlQueryRaw<string>("""
+            SELECT json_build_object(
+                     'total', coalesce(sum(u.cost_usd), 0),
+                     'calls', count(*),
+                     'conversations', count(DISTINCT t.wa_id),
+                     'input', coalesce(sum(u.input_tokens + u.cache_read_tokens + u.cache_write_tokens), 0),
+                     'output', coalesce(sum(u.output_tokens), 0),
+                     'unpriced', count(*) FILTER (WHERE u.cost_usd IS NULL))::text AS "Value"
+              FROM hazem.ai_usage u JOIN hazem.turns t ON t.turn_id = u.turn_id
+             WHERE u.created_at >= {0} AND u.created_at < {1}
+            """, start, end).SingleAsync(ct));
+
+    /// <summary>v1.58: the month's AI cost by conversation (the client's name as the office sees it), the dearest first.</summary>
+    public async Task<AiCostReport> AiCostAsync(int year, int month, CancellationToken ct)
+    {
+        var (start, end) = MonthRange(year, month);
+        var json = await db.Database.SqlQueryRaw<string>($$"""
+            SELECT coalesce(json_agg(json_build_object('person_id', c.person_id, 'client', c.client, 'turns', c.turns, 'calls', c.calls,
+                                                       'input', c.input, 'output', c.output, 'cost', c.cost, 'last_at', c.last_at,
+                                                       'unpriced', c.unpriced) ORDER BY c.cost DESC), '[]')::text AS "Value"
+              FROM (SELECT pe.id AS person_id, coalesce(pe.office_name, pe.name_raw, '…' || right(pe.wa_id, 2)) AS client,
+                           count(DISTINCT t.turn_id) AS turns, count(*) AS calls,
+                           sum(u.input_tokens + u.cache_read_tokens + u.cache_write_tokens) AS input, sum(u.output_tokens) AS output,
+                           coalesce(sum(u.cost_usd), 0) AS cost, max(u.created_at) AS last_at, count(*) FILTER (WHERE u.cost_usd IS NULL) AS unpriced
+                      FROM hazem.ai_usage u JOIN hazem.turns t ON t.turn_id = u.turn_id JOIN hazem.persons pe ON pe.wa_id = t.wa_id
+                     WHERE u.created_at >= {0} AND u.created_at < {1}
+                     GROUP BY pe.id, pe.office_name, pe.name_raw, pe.wa_id
+                     ORDER BY coalesce(sum(u.cost_usd), 0) DESC LIMIT {{ReviewMax}}) c
+            """, start, end).SingleAsync(ct);
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        var rows = doc.RootElement.EnumerateArray().Select(e => new AiCostConversation(e.GetProperty("person_id").GetGuid(),
+            e.GetProperty("client").GetString(), e.GetProperty("turns").GetInt32(), e.GetProperty("calls").GetInt32(),
+            e.GetProperty("input").GetInt64(), e.GetProperty("output").GetInt64(), e.GetProperty("cost").GetDecimal(),
+            e.GetProperty("last_at").GetDateTimeOffset(), e.GetProperty("unpriced").GetInt32())).ToList();
+        return new AiCostReport($"{year:0000}-{month:00}", await AiCostSummaryAsync(start, end, ct), rows);
+    }
+
+    /// <summary>v1.58: one conversation's messages in the month with the calls of each: tokens and cost (never the chat's words).</summary>
+    public async Task<IReadOnlyList<AiCostTurn>> AiCostTurnsAsync(Guid personId, int year, int month, CancellationToken ct)
+    {
+        var (start, end) = MonthRange(year, month);
+        var json = await db.Database.SqlQueryRaw<string>("""
+            SELECT coalesce(json_agg(json_build_object('at', x.at, 'cost', x.cost, 'input', x.input, 'output', x.output, 'calls', x.calls)
+                                     ORDER BY x.at), '[]')::text AS "Value"
+              FROM (SELECT t.turn_id, min(u.created_at) AS at, coalesce(sum(u.cost_usd), 0) AS cost,
+                           sum(u.input_tokens + u.cache_read_tokens + u.cache_write_tokens) AS input, sum(u.output_tokens) AS output,
+                           json_agg(json_build_object('kind', u.kind, 'model', u.model, 'input', u.input_tokens, 'cache_read', u.cache_read_tokens,
+                                                      'cache_write', u.cache_write_tokens, 'output', u.output_tokens, 'cost', u.cost_usd)
+                                    ORDER BY u.created_at) AS calls
+                      FROM hazem.ai_usage u JOIN hazem.turns t ON t.turn_id = u.turn_id JOIN hazem.persons pe ON pe.wa_id = t.wa_id
+                     WHERE pe.id = {2} AND u.created_at >= {0} AND u.created_at < {1}
+                     GROUP BY t.turn_id) x
+            """, start, end, personId).SingleAsync(ct);
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        return doc.RootElement.EnumerateArray().Select(e => new AiCostTurn(e.GetProperty("at").GetDateTimeOffset(), e.GetProperty("cost").GetDecimal(),
+            e.GetProperty("input").GetInt64(), e.GetProperty("output").GetInt64(),
+            e.GetProperty("calls").EnumerateArray().Select(c => new AiCostCall(c.GetProperty("kind").GetString()!, c.GetProperty("model").GetString()!,
+                c.GetProperty("input").GetInt32(), c.GetProperty("cache_read").GetInt32(), c.GetProperty("cache_write").GetInt32(),
+                c.GetProperty("output").GetInt32(),
+                c.GetProperty("cost").ValueKind == System.Text.Json.JsonValueKind.Null ? null : c.GetProperty("cost").GetDecimal())).ToList())).ToList();
     }
 
     /// <summary>v1.56: the month's written replies, how many fell back to the approved words, how many were written twice, and why.</summary>

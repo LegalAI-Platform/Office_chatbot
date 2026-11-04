@@ -57,6 +57,8 @@ public sealed class AnthropicIntentClassifier(IOptions<HazemOptions> options, Ti
     private AnthropicClient? _client;
     private string? _clientKey;
 
+    private static Office.Application.Costs.TokenUsage Tokens(Usage u) => AnthropicReplyWriter.ModelTokens(u);
+
     public async Task<ClassifierOutcome> ClassifyAsync(string text, HazemSettings settings, CancellationToken ct)
     {
         var o = options.Value;
@@ -87,12 +89,12 @@ public sealed class AnthropicIntentClassifier(IOptions<HazemOptions> options, Ti
             var input = (int)(usage.InputTokens + (usage.CacheReadInputTokens ?? 0) + (usage.CacheCreationInputTokens ?? 0));
             if (response.StopReason != "end_turn")
             {
-                return Done(null, ClassifierOutcome.InvalidOutput, input, (int)usage.OutputTokens); // a refusal, or cut by max_tokens
+                return Done(null, ClassifierOutcome.InvalidOutput, input, (int)usage.OutputTokens) with { Tokens = Tokens(usage) }; // a refusal, or cut by max_tokens
             }
 
             var json = response.Content.Select(b => b.Value).OfType<TextBlock>().LastOrDefault()?.Text;
             var (answer, failure) = OpenAiIntentClassifier.Parse(json);
-            return Done(answer, failure, input, (int)usage.OutputTokens);
+            return Done(answer, failure, input, (int)usage.OutputTokens) with { Tokens = Tokens(usage) };
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
