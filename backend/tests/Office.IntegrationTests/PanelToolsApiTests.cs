@@ -414,7 +414,7 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal(1, (int)all["summary"]!["conversations"]!);
         Assert.Equal(1, (int)all["summary"]!["unpriced"]!);
         Assert.Equal(0.009295m, (decimal)all["summary"]!["total_usd"]!);
-        Assert.Equal(20190, (long)all["summary"]!["input_tokens"]!);
+        Assert.Equal(20400, (long)all["summary"]!["input_tokens"]!); // 500 + 14000 (cache read) + 4400 + 1500, every kind of input
         var row = Assert.Single(all["conversations"]!.AsArray())!;
         Assert.Equal("سارة محمد علي حسن", (string)row["client"]!);
         Assert.Equal(1, (int)row["turns"]!);
