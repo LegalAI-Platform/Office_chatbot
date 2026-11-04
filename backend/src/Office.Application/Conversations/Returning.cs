@@ -35,10 +35,10 @@ public interface IIntakeHistory
 /// <summary>B-01.7's rules. Pure: the flow and the tests use the same ones.</summary>
 public static class ReturningClient
 {
-    /// <summary>Silent this many days with nothing pending: a new request (hazem.settings, the owner's 7).</summary>
+    /// <summary>Silent this many days with nothing pending: a new request (hazem.settings; v1.63: the owner's 3, it was 7).</summary>
     public const string FreshAfterDaysKey = "intake.fresh_after_days";
 
-    public const int DefaultFreshAfterDays = 7;
+    public const int DefaultFreshAfterDays = 3;
 
     public static TimeSpan Quiet(HazemSettings s) =>
         TimeSpan.FromDays(int.TryParse(s.Get(FreshAfterDaysKey), out var d) && d is >= 1 and <= 365 ? d : DefaultFreshAfterDays);

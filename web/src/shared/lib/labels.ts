@@ -230,6 +230,7 @@ export const URF_STATES: Record<string, string> = {
   rejected_age: "اتقفل: السن أقل من 18",
   rejected_guardian: "اتقفل: مفيش ولي",
   redirected_consultation: "اتحوّل لاستشارة",
+  abandoned: "اتقفل: سكت وما كمّلش",
 };
 
 export const URF_ANSWERS: Record<string, string> = {

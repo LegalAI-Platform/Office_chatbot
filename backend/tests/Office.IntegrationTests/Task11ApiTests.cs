@@ -38,6 +38,25 @@ public sealed class Task11ApiTests(TestDatabase db) : IAsyncLifetime
         DELETE FROM hazem.staff; DELETE FROM hazem.intakes; DELETE FROM hazem.conversations; DELETE FROM hazem.persons;
         """;
 
+    /// <summary>v1.63: a Urfi case only collecting answers, left alone for the fresh days, is closed by the worker; a recent one and one with a time stay.</summary>
+    [Fact]
+    public async Task V163_an_urfi_case_left_alone_for_the_fresh_days_is_abandoned_and_the_others_stay()
+    {
+        var (old, recent, held) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        await db.ExecAsync($"""
+            INSERT INTO hazem.persons (id, wa_id) VALUES ('{old}', '201000000195'), ('{recent}', '201000000196'), ('{held}', '201000000197');
+            INSERT INTO hazem.urf_cases (person_id, kind, state, step, updated_at) VALUES
+              ('{old}', 'marriage', 'collecting', 'ages', now() - interval '4 days'),
+              ('{recent}', 'marriage', 'collecting', 'ages', now() - interval '1 day'),
+              ('{held}', 'marriage', 'rejected_age', NULL, now() - interval '30 days');
+            """);
+        await db.ExecAsync("SELECT hazem.urf_due()");
+        Assert.Equal("abandoned", await db.ScalarAsync<string>($"SELECT state FROM hazem.urf_cases WHERE person_id = '{old}'"));
+        Assert.Equal("collecting", await db.ScalarAsync<string>($"SELECT state FROM hazem.urf_cases WHERE person_id = '{recent}'"));
+        Assert.Equal("rejected_age", await db.ScalarAsync<string>($"SELECT state FROM hazem.urf_cases WHERE person_id = '{held}'")); // closed cases are not touched
+        Assert.Equal("3", await db.ScalarAsync<string>("SELECT value FROM hazem.settings WHERE key = 'intake.fresh_after_days'"));
+    }
+
     public async ValueTask InitializeAsync()
     {
         await db.ExecAsync(Clean);

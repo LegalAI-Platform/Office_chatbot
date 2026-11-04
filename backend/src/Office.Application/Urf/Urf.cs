@@ -28,6 +28,9 @@ public sealed record UrfCase(
     public const string LawyerRejected = "lawyer_rejected";
     public const string Approved = "approved";
 
+    /// <summary>v1.63: collecting or waiting for a time, never held, and left alone for the fresh days (the worker closes it).</summary>
+    public const string Abandoned = "abandoned";
+
     public static UrfCase Start(Guid personId, string kind) =>
         new(Guid.NewGuid(), personId, kind, Collecting, kind == Marriage ? UrfStep.Ages : UrfStep.HasCopy);
 
