@@ -133,3 +133,15 @@ public sealed class UrfFactsRuleTests
         Assert.Equal(booked, UrfRules.ApplyFacts(booked, null, null, "office"));
     }
 }
+
+public sealed class RetryFeedbackTests
+{
+    [Fact]
+    public void A_dropped_price_names_the_numbers_to_the_writer()
+    {
+        var told = Office.Application.Writing.ReplyRetry.Feedback("price_dropped", "رد", "500، 1,000");
+        Assert.Contains("500، 1,000", told);
+        Assert.Contains("dropped the price", told);
+        Assert.DoesNotContain("These numbers", Office.Application.Writing.ReplyRetry.Feedback("price_dropped", "رد"));
+    }
+}

@@ -49,9 +49,9 @@ public static class ReplyRetry
         !problem.StartsWith(ReplyReview.Prefix + ReplyReview.Unavailable, StringComparison.Ordinal);
 
     /// <summary>What the writer is told about its refused reply (in English, as its prompt is).</summary>
-    public static string Feedback(string problem, string reply) => $"""
+    public static string Feedback(string problem, string reply, string? detail = null) => $"""
         {reply.Trim()}
-        WHY IT WAS REFUSED: {Why(problem)}
+        WHY IT WAS REFUSED: {Why(problem)}{(detail is null ? "" : $" These numbers must appear exactly as written in the approved text: {detail}.")}
         """;
 
     private static string Why(string problem) => problem switch
