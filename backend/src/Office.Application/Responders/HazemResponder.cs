@@ -2002,7 +2002,11 @@ public sealed class HazemResponder(
 
             // TASK 18 (3.3): his question answered is the whole reply while a booking step is on the screen or the offer was
             // just said; otherwise the offer follows the answer, as B-20 says.
-            if (!existingClient && !(answered && OfferWouldStack))
+            // v1.60 (the owner's chats: the consultation price after «اي الفروع بتاعتكم»): with understanding v2 on, a question that
+            // only asks about the office (where, when, what it does, who the lawyer is, privacy) is answered and nothing is sold
+            // after it; he asks the next thing, or the greeting's choices are still there
+            var onlyAsked = understanding && topic is InfoTopic.Address or InfoTopic.Hours or InfoTopic.PracticeAreas or InfoTopic.Lawyer or InfoTopic.Privacy;
+            if (!existingClient && !(answered && (OfferWouldStack || onlyAsked)))
             {
                 Offer(askTopic: false);
             }

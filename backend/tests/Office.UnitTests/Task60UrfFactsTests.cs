@@ -66,6 +66,18 @@ public sealed partial class BookingFlowTests
     }
 
     [Fact]
+    public async Task A_question_that_only_asks_about_the_office_is_answered_without_the_consultation_offer()
+    {
+        UnderstandingOn();
+        await ToTheOffer();
+        _script["اي الفروع بتاعتكم"] = new("office_info", null, "unknown", null, 0.9, InfoTopic: "address");
+        Assert.Equal([TextKeys.OfficeAddress], Keys(await Say("اي الفروع بتاعتكم")));
+        _settings[UnderstandingV2.SwitchKey] = "false"; // off: as before, the offer follows the answer
+        Assert.Equal(TextKeys.OfficeAddress, Keys(await Say("اي الفروع بتاعتكم"))[0]);
+        Assert.True(Keys(await Say("اي الفروع بتاعتكم")).Count >= 1);
+    }
+
+    [Fact]
     public async Task With_the_switch_off_words_change_nothing()
     {
         UrfFactsOn();
