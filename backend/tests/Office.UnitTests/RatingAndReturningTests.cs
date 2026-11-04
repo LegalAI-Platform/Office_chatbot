@@ -88,9 +88,9 @@ public sealed class ReturningClientRulesTests
     [Fact]
     public void The_quiet_days_and_the_first_name_come_from_the_settings_and_the_stored_name()
     {
-        Assert.Equal(TimeSpan.FromDays(7), ReturningClient.Quiet(new HazemSettings(new Dictionary<string, string>())));
-        Assert.Equal(TimeSpan.FromDays(3), ReturningClient.Quiet(new HazemSettings(new Dictionary<string, string> { [ReturningClient.FreshAfterDaysKey] = "3" })));
-        Assert.Equal(TimeSpan.FromDays(7), ReturningClient.Quiet(new HazemSettings(new Dictionary<string, string> { [ReturningClient.FreshAfterDaysKey] = "0" })));
+        Assert.Equal(TimeSpan.FromDays(3), ReturningClient.Quiet(new HazemSettings(new Dictionary<string, string>()))); // v1.63: 3 days, it was 7
+        Assert.Equal(TimeSpan.FromDays(5), ReturningClient.Quiet(new HazemSettings(new Dictionary<string, string> { [ReturningClient.FreshAfterDaysKey] = "5" })));
+        Assert.Equal(TimeSpan.FromDays(3), ReturningClient.Quiet(new HazemSettings(new Dictionary<string, string> { [ReturningClient.FreshAfterDaysKey] = "0" })));
 
         var person = Person.New(Office.Domain.Common.WaId.From("201000000077"));
         Assert.Null(ReturningClient.FirstName(person));

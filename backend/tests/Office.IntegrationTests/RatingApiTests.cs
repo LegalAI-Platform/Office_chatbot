@@ -170,7 +170,7 @@ public sealed class RatingApiTests(TestDatabase db) : IAsyncLifetime
         var keys = string.Join(", ", RatingTexts.Keys.Append("welcome_back").Select(k => $"'{k}'"));
         Assert.Equal(11L, await db.ScalarAsync<long>($"SELECT count(*) FROM hazem.approved_texts WHERE active AND key IN ({keys})"));
         Assert.Equal(0L, await db.ScalarAsync<long>($"SELECT count(*) FROM hazem.approved_texts WHERE key IN ({keys}) AND char_length(text) > max_chars"));
-        Assert.Equal("7|true|2|24|30", await db.ScalarAsync<string>("""
+        Assert.Equal("3|true|2|24|30", await db.ScalarAsync<string>("""
             SELECT string_agg(value, '|' ORDER BY array_position(ARRAY['intake.fresh_after_days', 'rating.enabled',
                      'rating.after_appointment_hours', 'rating.after_delivery_hours', 'rating.repeat_days'], key))
               FROM hazem.settings WHERE key IN ('intake.fresh_after_days', 'rating.enabled', 'rating.after_appointment_hours',
