@@ -152,9 +152,9 @@ describe("routing and permissions", () => {
     serve(me());
     renderAt("/tasks");
     await screen.findByRole("heading", { name: "المهام" });
-    const who = screen.getByRole("group", { name: "مين" });
-    expect(within(who).queryByRole("button", { name: "الكل" })).toBeNull();
-    expect(within(who).getByRole("button", { name: "مهامي" }).getAttribute("aria-pressed")).toBe("true");
+    const who = screen.getByRole("combobox", { name: "مين" }) as HTMLSelectElement;
+    expect(within(who).queryByRole("option", { name: "كل المسؤولين" })).toBeNull();
+    expect(who.value).toBe("mine");
   });
 
   it("moves a page past the end back to the last page, and «رجوع لكل المهام» returns to it", async () => {
