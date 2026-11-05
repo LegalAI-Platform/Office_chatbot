@@ -212,6 +212,20 @@ public sealed partial class BookingFlowTests
         Assert.Equal(UrfStep.Ages, TheCase.Step); // the ages question comes back after it
     }
 
+    [Fact] // v1.78: «العقد العرفي بياخد قد ايه» is time or money: asked back, nothing pushed after it (he only asks)
+    public async Task How_much_it_takes_is_asked_back_time_or_money()
+    {
+        UrfFactsOn();
+        _texts[TextKeys.AskWhichMeaning] = new ApprovedText(TextKeys.AskWhichMeaning, 1, "حضرتك قصدك {{meanings}}؟ 🙏", 300, true);
+        await ToTheOffer();
+        Assert.Equal([TextKeys.UrfAskAges], Keys(await Say("عايز أعمل جواز عرفي")));
+        _script["العقد العرفي بياخد قد ايه"] = new("office_info", "urf_marriage", "unknown", null, 0.9, InfoTopic: "service_detail",
+            Stance: "just_asking", Meanings: ["إن العقد بياخد وقت قد ايه", "إن العقد بيتكلف كام"]);
+        var d = await Say("العقد العرفي بياخد قد ايه");
+        Assert.Equal([TextKeys.AskWhichMeaning], Keys(d)); // never a guessed price nor time
+        Assert.Equal("حضرتك قصدك إن العقد بياخد وقت قد ايه، ولا إن العقد بيتكلف كام؟ 🙏", d.Actions[0].Text);
+    }
+
     [Fact]
     public async Task One_meaning_or_none_is_no_reason_to_ask()
     {
