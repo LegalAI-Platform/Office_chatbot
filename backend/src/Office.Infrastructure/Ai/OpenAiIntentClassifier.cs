@@ -23,7 +23,7 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
     public const string PromptVersion = "classify-v16";
 
     /// <summary>v1.52 (phase 1): the prompt while understanding v2 is on (the whole chat, the stance, the other questions).</summary>
-    public const string PromptVersionV2 = "classify-v23";
+    public const string PromptVersionV2 = "classify-v24";
     public const string StubEnabledKey = "ai.stub_enabled";
     public const string StubBaseUrlKey = "ai.stub_base_url";
 
