@@ -256,9 +256,10 @@ public sealed class HazemResponder(
             var urfOn = urf is not null && bookingOn && UrfTextKeys.All(k => texts.TryGetValue(k, out var t) && t.Active);
             IReadOnlyList<UrfCase> urfOpen = urfOn ? await urf!.OpenAsync(state.Person.Id, ct) : [];
             var urfCase = urfOpen.FirstOrDefault();
-            // v1.20 (B-11.1): an age refusal in the last 24 hours, when its closing text is approved.
-            var ageRefusal = urfOn && texts.TryGetValue(TextKeys.UrfAgeClosed, out var closing) && closing.Active
-                ? await urf!.AgeRefusalAsync(state.Person.Id, now, ct)
+            // v1.20 (B-11.1): an age refusal in the last 24 hours, when its closing text is approved; v1.71: or no guardian
+            var ageRefusal = urfOn && await urf!.AgeRefusalAsync(state.Person.Id, now, ct) is { } refused
+                             && texts.TryGetValue(refused.ClosingKey, out var closing) && closing.Active
+                ? refused
                 : null;
             // v1.39 (TASK 16): what the client has with the office, read before every reply (his last answer too, for the
             // forbidden rule 2 and the wordings in turn); the situation replies only when their texts are approved.
@@ -1195,13 +1196,41 @@ public sealed class HazemResponder(
             if (urfOpen?.FirstOrDefault(c => c.Kind == kind) is { } open) // one running case per kind (urf_cases_one_open)
             {
                 Urf = WithUrfFacts(open);
-                AfterUrf(Urf.State == UrfCase.Collecting ? UrfNext.Ask : UrfNext.Book);
+                if (!AgesSaidWithRequest())
+                {
+                    AfterUrf(Urf.State == UrfCase.Collecting ? UrfNext.Ask : UrfNext.Book);
+                }
+
                 return;
             }
 
             Urf = WithUrfFacts(UrfCase.Start(State.Person.Id, kind));
             UrfChanged = true;
-            AfterUrf(Urf.State == UrfCase.Collecting ? UrfNext.Ask : UrfNext.Book);
+            if (!AgesSaidWithRequest())
+            {
+                AfterUrf(Urf.State == UrfCase.Collecting ? UrfNext.Ask : UrfNext.Book);
+            }
+        }
+
+        /// <summary>
+        /// v1.71 (Ahmed Amin's chat: «عايز اتجوز عرفي الزوجه 20 سنه وانا 40 سنه» was asked the ages): the two ages written in the
+        /// message that asks for the Urfi contract are its answer, as the typed answer to the question is (the under-18 refusal too).
+        /// Anything else (no ages, or not exactly two): false, and the question is asked as before.
+        /// </summary>
+        private bool AgesSaidWithRequest()
+        {
+            var said = AiInput.Build(turn);
+            if (Urf is not { State: UrfCase.Collecting, Step: UrfStep.Ages } u
+                || UrfAges.Parse(understanding && said is not null ? NumberWords.ToDigits(said) : said) is null)
+            {
+                return false;
+            }
+
+            var (next, how) = UrfRules.Ages(u, said, understanding);
+            Urf = next;
+            UrfChanged = true;
+            AfterUrf(how);
+            return true;
         }
 
         /// <summary>
@@ -1759,7 +1788,7 @@ public sealed class HazemResponder(
             {
                 if (ageRefusal.ClosingReplies < UrfRules.MaxClosingReplies)
                 {
-                    plan.Say(TextKeys.UrfAgeClosed);
+                    plan.Say(ageRefusal.ClosingKey);
                 }
 
                 return;
