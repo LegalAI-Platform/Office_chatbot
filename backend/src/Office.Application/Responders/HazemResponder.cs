@@ -278,21 +278,26 @@ public sealed class HazemResponder(
                 && turn.Messages.All(m => m.Interactive is null && m.Button is null) && FileIn(turn) is null
                 && AiInput.Build(turn) is { } typedWords && !Courtesy.Read(typedWords).EndsTheChat)
             {
-                var understood = await WithContextAsync(turn, typedWords, situation, settings, ct);
-                typedReading = Backstop.Apply(Classification.From(await classifier.ClassifyAsync(understood, settings, ct), settings), typedWords);
-                var raw = typedReading.Call?.Answer;
-                var typedPress = TypedChoice.Picked(waiting, raw);
-                if (typedPress is null && bookingOn && TypedChoice.Times(waiting, raw, now) is { } asked)
+                // v1.65: words that are one of the choices (its title, or its number) are that choice, by the code: no AI call
+                var typedPress = TypedChoice.ByWords(waiting, typedWords);
+                if (typedPress is null)
                 {
-                    typedPress = asked.Shown ?? (asked.Exact && await FreeAtAsync(booking!, bookingSettings, settings, asked, now, ct)
-                        ? TypedChoice.PickAt(asked.Times, asked.At)
-                        : TypedChoice.TimesFrom(asked.Times, asked.At));
+                    var understood = await WithContextAsync(turn, typedWords, situation, settings, ct);
+                    typedReading = Backstop.Apply(Classification.From(await classifier.ClassifyAsync(understood, settings, ct), settings), typedWords);
+                    var raw = typedReading.Call?.Answer;
+                    typedPress = TypedChoice.Picked(waiting, raw);
+                    if (typedPress is null && bookingOn && TypedChoice.Times(waiting, raw, now) is { } asked)
+                    {
+                        typedPress = asked.Shown ?? (asked.Exact && await FreeAtAsync(booking!, bookingSettings, settings, asked, now, ct)
+                            ? TypedChoice.PickAt(asked.Times, asked.At)
+                            : TypedChoice.TimesFrom(asked.Times, asked.At));
+                    }
                 }
 
                 if (typedPress is not null)
                 {
                     turn = turn with { Messages = [turn.Messages[^1] with { Type = MessageType.Interactive, Text = null, Interactive = typedPress }] };
-                    classification = typedReading; // kept in the log: what the AI read
+                    classification = typedReading; // kept in the log: what the AI read (null when the code read it)
                     typedReading = null;
                     flow = new Flow(turn, state, list, null, plan, settings.Flag(HandoffEnabledKey), bookingOn ? bookingSettings : null,
                         servicesOn, urfOn, urfOpen, ageRefusal: ageRefusal, urgentOn: urgentOn, situation: situation, understanding: understanding);

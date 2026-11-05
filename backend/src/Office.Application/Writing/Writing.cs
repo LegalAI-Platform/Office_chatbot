@@ -365,10 +365,10 @@ public static class Conversational
         // v1.52 (phase 1)
         [TextKeys.NoPressure] = "answer what he just wrote in one short kind sentence, following «دليل التعامل» (if he asked for a discount or instalments: the price is fixed and that is the office's decision; if he is leaving or only asking: nothing more), then tell him there is no pressure and he can write here any time (no offer, no question)",
         [TextKeys.PriceObjection] = "show him you understand the price matters; the value from the text only (the lawyer himself; the fee counts towards a case's fees) and the cheaper way it names; never a discount; the door open, no pushing",
-        [TextKeys.AskCallApp] = "ask where the lawyer should call him: WhatsApp or FaceTime (two buttons follow your sentence)",
-        [TextKeys.AskCallAppPhone] = "ask where the lawyer should call him at his appointment: WhatsApp, FaceTime, or a normal phone call from the office's number (three buttons follow your sentence)",
-        [TextKeys.BookingStepAgain] = "ask him kindly to pick from the choices below, or to write the day and time that suit him (the choices follow your sentence)",
-        [TextKeys.BookingChooseSlot] = "ask him to pick the time that suits him from the list (the list follows your sentence)",
+        [TextKeys.AskCallApp] = "ask where the lawyer should call him: WhatsApp or FaceTime (two buttons follow your sentence) (if his last message already answered this in words you did not take, never say it is registered or done: say you did not catch it and ask again, with the choices)",
+        [TextKeys.AskCallAppPhone] = "ask where the lawyer should call him at his appointment: WhatsApp, FaceTime, or a normal phone call from the office's number (three buttons follow your sentence) (if his last message already answered this in words you did not take, never say it is registered or done: say you did not catch it and ask again, with the choices)",
+        [TextKeys.BookingStepAgain] = "ask him kindly to pick from the choices below, or to write the day and time that suit him (the choices follow your sentence); never say a choice of his is registered or done: it was not taken",
+        [TextKeys.BookingChooseSlot] = "ask him to pick the time that suits him from the list (the list follows your sentence) (if his last message already answered this in words you did not take, never say it is registered or done: say you did not catch it and ask again, with the choices)",
         [TextKeys.AskNameBooking] = "ask his name to register the booking (a word of comfort first if he is worried)",
         // v1.48: the office already has his request (the handoff is done): a statement, never a question back to him
         [TextKeys.HumanRequest] = "tell him it is done: the office has his request to talk to someone, and someone will answer him here (a statement, never a question)",
