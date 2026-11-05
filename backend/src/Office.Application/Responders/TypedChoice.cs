@@ -102,7 +102,13 @@ public static class TypedChoice
     private static bool AsksQuestion(string words, string said) =>
         words.Contains('؟') || words.Contains('?') || said.Split(' ').Any(w => QuestionWords.Contains(w, StringComparer.Ordinal));
 
-    private static readonly string[] Filler = ["عايز", "عاوز", "تمام", "ايوه", "اوكي", "طيب", "ماشي", "اختار", "حابب", "ممكن", "برضو", "بتاع", "بتاعي"];
+    private static readonly string[] Filler =
+    [
+        "عايز", "عاوز", "تمام", "ايوه", "اوكي", "طيب", "ماشي", "اختار", "حابب", "ممكن", "برضو", "بتاع", "بتاعي",
+        // v1.68: the short words that say nothing about a choice («اول» does)
+        "انا", "انت", "احنا", "هو", "هي", "ده", "دي", "دا", "كده", "بس", "اه", "لو", "في", "من", "علي", "مع", "عن", "اللي", "يعني",
+        "ليها", "ليه", "ليا", "عندي", "عندها", "هيا", "هوا", "خلاص", "طب",
+    ];
 
     /// <summary>The real words of a short text, each without «ال» and the endings «ه / ي / ات» (so «عادي» and «عادية» are one).</summary>
     private static HashSet<string> Stems(string normalized)
@@ -110,7 +116,7 @@ public static class TypedChoice
         var stems = new HashSet<string>(StringComparer.Ordinal);
         foreach (var word in normalized.Split(' '))
         {
-            if (word.Length < 4 || Filler.Contains(word, StringComparer.Ordinal))
+            if (word.Length < 3 || Filler.Contains(word, StringComparer.Ordinal)) // v1.68: 3 letters too («اول»)
             {
                 continue;
             }

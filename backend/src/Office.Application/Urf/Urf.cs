@@ -39,19 +39,27 @@ public sealed record UrfCase(
     /// <summary>The booking it leads to: the contract or the divorce, with the office's witnesses (5,000) or theirs (4,000).</summary>
     public BookingService Service => BookingService.Urf(IsMarriage, Witnesses == "office");
 
-    /// <summary>B-11.5: what to send, from the answers.</summary>
+    /// <summary>v1.68 (the owner): the guardian is asked, and comes, only when it is her first marriage.</summary>
+    public bool NeedsGuardian => IsMarriage && WifePast == "first";
+
+    /// <summary>B-11.5: what to send, from the answers. v1.68: one paper for a divorce or a khul, the death certificate for a widow.</summary>
     public string Documents()
     {
         var items = IsMarriage
-            ? new List<string> { "بطاقة الزوج", "بطاقة الزوجة", $"بطاقة الولي ({GuardianName(Guardian)})" }
+            ? new List<string> { "بطاقة الزوج", "بطاقة الزوجة" }
             : ["نسخة العقد العرفي", "بطاقة الزوج", "بطاقة الزوجة"];
-        if (WifePast == "divorced")
+        if (NeedsGuardian && GuardianName(Guardian) is { Length: > 0 } guardian)
         {
-            items.Add("مستند الطلاق");
+            items.Add($"بطاقة الولي ({guardian})");
         }
-        else if (WifePast == "khul")
+
+        if (WifePast is "divorced" or "khul")
         {
-            items.Add("حكم الخلع");
+            items.Add("مستند الطلاق أو حكم الخلع");
+        }
+        else if (WifePast == "widow")
+        {
+            items.Add("شهادة وفاة الزوج السابق");
         }
 
         if (Witnesses == "own")
@@ -63,11 +71,13 @@ public sealed record UrfCase(
     }
 
     /// <summary>B-11.7: who comes to the office.</summary>
-    public string Attendees() => AttendeesFor(Kind, Witnesses);
+    public string Attendees() => AttendeesFor(Kind, Witnesses, NeedsGuardian ? Guardian : null);
 
     /// <summary>B-11.7 for a case read elsewhere (TASK 12: the reminder of its appointment).</summary>
-    public static string AttendeesFor(string kind, string? witnesses) =>
-        (kind == Marriage ? "الزوج والزوجة والولي" : "الطرفين") + (witnesses == "own" ? " والشاهدين" : "");
+    /// <param name="guardian">v1.68: the guardian who comes (a first marriage only); none: «الزوج والزوجة».</param>
+    public static string AttendeesFor(string kind, string? witnesses, string? guardian) =>
+        (kind == Marriage ? guardian is "father" or "brother" or "uncle" ? "الزوج والزوجة والولي" : "الزوج والزوجة" : "الطرفين")
+        + (witnesses == "own" ? " والشاهدين" : "");
 
     public static string GuardianName(string? guardian) => guardian switch
     {
@@ -173,7 +183,7 @@ public static class UrfRules
 
         return (a.Step, a.Value) switch
         {
-            (UrfStep.WifePast, "first" or "divorced" or "khul") => Advance(c with { WifePast = a.Value }),
+            (UrfStep.WifePast, "first" or "divorced" or "khul" or "widow") => Advance(c with { WifePast = a.Value }),
             (UrfStep.Guardian, "none") => (c with { Guardian = "none", State = UrfCase.RejectedGuardian, Step = null, PolicyVersion = PolicyVersion },
                 UrfNext.RejectGuardian),
             (UrfStep.Guardian, "father" or "brother" or "uncle") => Advance(c with { Guardian = a.Value }),
@@ -198,7 +208,7 @@ public static class UrfRules
         var locked = c.State is UrfCase.Booked or UrfCase.Approved || c.State == UrfCase.DocumentsPending && c.AppointmentId is not null;
         static bool Differs(string? now, string? said, params string[] allowed) => said is not null && allowed.Contains(said) && said != now;
         return locked && (Differs(c.Witnesses, witnesses, "office", "own")
-            || c.IsMarriage && (Differs(c.WifePast, wifePast, "first", "divorced", "khul") || Differs(c.Guardian, guardian, "father", "brother", "uncle")));
+            || c.IsMarriage && (Differs(c.WifePast, wifePast, "first", "divorced", "khul", "widow") || Differs(c.Guardian, guardian, "father", "brother", "uncle")));
     }
 
     /// <summary>B-11.1: the typed ages. Under 18 on either side closes the case without a price or a time.</summary>
@@ -230,7 +240,7 @@ public static class UrfRules
     public static string? NextStep(UrfCase c) => c.IsMarriage
         ? c.HusbandAge is null ? UrfStep.Ages
             : c.WifePast is null ? UrfStep.WifePast
-            : c.Guardian is null ? UrfStep.Guardian
+            : c.WifePast == "first" && c.Guardian is null ? UrfStep.Guardian // v1.68: a first marriage only
             : c.Witnesses is null ? UrfStep.Witnesses : null
         : c.HasCopy is null ? UrfStep.HasCopy
             : c.Agreed is null ? UrfStep.Agreed
@@ -252,7 +262,7 @@ public static class UrfRules
     public static UrfCase ApplyFacts(UrfCase c, string? wifePast, string? guardian, string? witnesses)
     {
         static string? Only(string? v, params string[] allowed) => v is not null && allowed.Contains(v) ? v : null;
-        var past = c.IsMarriage ? Only(wifePast, "first", "divorced", "khul") : null;
+        var past = c.IsMarriage ? Only(wifePast, "first", "divorced", "khul", "widow") : null;
         var guard = c.IsMarriage ? Only(guardian, "father", "brother", "uncle") : null;
         var wit = Only(witnesses, "office", "own");
         if (c.State == UrfCase.Collecting)

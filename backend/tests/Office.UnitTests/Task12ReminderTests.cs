@@ -85,9 +85,10 @@ public sealed class ReminderRulesTests
         Assert.Equal(("١٢ شارع التحرير، الدقي", "https://maps.example/x"), (fill["address"], fill["map"]));
         Assert.Equal(TextKeys.ReminderDetailsPhone, ReminderTexts.Details(BookingService.PhoneVideo, office, null).Key);
         Assert.Equal(TextKeys.ReminderDetailsPhone, ReminderTexts.Details(BookingService.Urgent, office, null).Key);
-        var urf = ReminderTexts.Details(BookingService.UrfMarriageOwn, office, UrfCase.AttendeesFor(UrfCase.Marriage, "own"));
+        var urf = ReminderTexts.Details(BookingService.UrfMarriageOwn, office, UrfCase.AttendeesFor(UrfCase.Marriage, "own", "father"));
         Assert.Equal((TextKeys.ReminderDetailsUrf, "الزوج والزوجة والولي والشاهدين"), (urf.Key, urf.Fill["attendees"]));
-        Assert.Equal("الطرفين", UrfCase.AttendeesFor("divorce", "office"));
+        Assert.Equal("الزوج والزوجة", UrfCase.AttendeesFor(UrfCase.Marriage, "office", null)); // v1.68: no guardian but for a first marriage
+        Assert.Equal("الطرفين", UrfCase.AttendeesFor("divorce", "office", null));
 
         // No address written yet (P1): the slot stays open, so the text is never sent half-written.
         var (k, missing) = ReminderTexts.Details(BookingService.Office, new OfficeInfo("", "", "", " ", ""), null);

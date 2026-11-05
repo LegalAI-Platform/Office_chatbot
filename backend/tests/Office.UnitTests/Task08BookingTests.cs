@@ -1216,10 +1216,16 @@ public sealed partial class BookingFlowTests
     [Fact]
     public async Task Urf_a_khul_asks_for_its_ruling_and_the_office_s_witnesses_cost_5000_for_60_minutes()
     {
-        await ToTheGuardian(past: "khul");
-        await Answer(Office.Application.Urf.UrfStep.Guardian, "father");
+        // v1.68: a khul is no first marriage: no guardian question, straight to the witnesses
+        UrfOn();
+        await ToTheOffer();
+        await Say("عايز أعمل جواز عرفي");
+        _script["30 و 25"] = new("other", null, "unknown", null, 0.9);
+        await Say("30 و 25");
+        Assert.Equal([TextKeys.UrfAskWitnesses], Keys(await Answer(Office.Application.Urf.UrfStep.WifePast, "khul")));
         var times = await Answer(Office.Application.Urf.UrfStep.Witnesses, "office");
         Assert.Contains("حكم الخلع", times.Actions.Single().Text);
+        Assert.DoesNotContain("بطاقة الولي", times.Actions.Single().Text);
         Assert.Contains("5,000", times.Actions.Single().Text);
         Assert.DoesNotContain("الشاهدين", times.Actions.Single().Text);
 
