@@ -111,6 +111,22 @@ describe("routing and permissions", () => {
     expect(within(table).getByRole("link", { name: "افتح مهمة سارة محمد" }).getAttribute("href")).toBe("/tasks/t1");
   });
 
+  it("greets whoever is signed in by their own name, a lawyer as «أستاذ» (not one fixed name)", async () => {
+    serve(me({ role: "lawyer", display_name: "نهاد الخولي" }));
+    renderAt("/");
+    expect(await screen.findByRole("heading", { level: 1, name: /يا أستاذ نهاد$/ })).toBeTruthy();
+    cleanup();
+    vi.restoreAllMocks();
+    serve(me({ role: "lawyer", display_name: "المستشار سعد فتحي" }));
+    renderAt("/");
+    expect(await screen.findByRole("heading", { level: 1, name: /يا أستاذ سعد$/ })).toBeTruthy();
+    cleanup();
+    vi.restoreAllMocks();
+    serve(me({ role: "manager", display_name: "Mohamed Emad" }));
+    renderAt("/");
+    expect(await screen.findByRole("heading", { level: 1, name: /يا Mohamed$/ })).toBeTruthy();
+  });
+
   it("opens the urgent tasks from «أمور عاجلة», and the calendar's arrows move the week", async () => {
     serve(me());
     renderAt("/");

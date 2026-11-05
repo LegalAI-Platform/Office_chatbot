@@ -58,7 +58,10 @@ export function HomePage() {
   const middle = !month ? "xl:grid-rows-[auto_minmax(13rem,1fr)]"
     : quiet ? "xl:grid-rows-[auto_auto_minmax(0,1fr)]" : "xl:grid-rows-[auto_minmax(13rem,1fr)_auto]";
   const greeting = cairoHour(now) < 12 ? "صباح الخير" : "مساء الخير";
-  const name = me?.role === "lawyer" ? "أستاذ سعد" : me?.display_name.split(/\s+/)[0] ?? "";
+  // the owner: the name follows the account that is signed in (it was «أستاذ سعد» for every lawyer); a lawyer keeps «أستاذ»
+  // before his first name, unless the name already carries a title
+  const first = (me?.display_name ?? "").replace(/^(الأستاذ|الاستاذ|أستاذ|استاذ|المستشار|الدكتور|دكتور)\s+/, "").split(/\s+/)[0] ?? "";
+  const name = me?.role === "lawyer" && first ? `أستاذ ${first}` : first;
 
   return (
     // from a laptop's width the page fills the screen to its foot (the owner: the space under the cards looked empty):
