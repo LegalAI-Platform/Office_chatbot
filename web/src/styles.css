@@ -272,25 +272,58 @@
   /* «liquid glass» (the account page): the card see-through over the page's soft gold light, a lit top edge, blur behind */
   .liquid,
   .liquid-kids > .surface {
+    /* positioned and isolated: the sheen below sits inside the card, behind its words (a utility such as .absolute still wins) */
+    position: relative;
+    isolation: isolate;
     background: color-mix(in oklab, var(--card) 62%, transparent);
     border: 1px solid color-mix(in oklab, var(--card) 40%, rgb(255 255 255 / 0.55));
     box-shadow:
-      inset 0 1px 0 rgb(255 255 255 / 0.35),
-      inset 0 -1px 0 rgb(0 0 0 / 0.03),
-      0 12px 32px -12px rgb(60 44 20 / 0.18);
-    backdrop-filter: blur(18px) saturate(160%);
-    -webkit-backdrop-filter: blur(18px) saturate(160%);
+      inset 0 1.5px 1px rgb(255 255 255 / 0.7),
+      inset 0 -1px 1px rgb(255 255 255 / 0.25),
+      inset 0 0 18px rgb(255 255 255 / 0.12),
+      0 14px 34px -14px rgb(60 44 20 / 0.24),
+      0 2px 6px rgb(60 44 20 / 0.05);
+    backdrop-filter: blur(20px) saturate(170%);
+    -webkit-backdrop-filter: blur(20px) saturate(170%);
+  }
+  /* the specular sheen (iOS-style): a curved light from the top corner that fades out across the glass */
+  .liquid::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    border-radius: inherit;
+    background:
+      radial-gradient(110% 70% at 6% -14%, rgb(255 255 255 / 0.5) 0%, rgb(255 255 255 / 0.12) 40%, transparent 64%),
+      linear-gradient(to bottom, rgb(255 255 255 / 0.1), transparent 34%);
+  }
+  /* a card that sits over other content (a menu of alerts): the same glass, thicker, so what is behind never crosses its words */
+  .liquid.liquid-strong {
+    background: color-mix(in oklab, var(--card) 97%, transparent); /* the bar above it already blurs: a thinner body let the greeting show through its words */
+    backdrop-filter: blur(28px) saturate(180%);
+    -webkit-backdrop-filter: blur(28px) saturate(180%);
   }
   :root[data-theme="dark"] .liquid,
   :root[data-theme="dark"] .liquid-kids > .surface {
-    border-color: rgb(255 255 255 / 0.08);
-    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 12px 32px -12px rgb(0 0 0 / 0.6);
+    border-color: rgb(255 255 255 / 0.1);
+    box-shadow: inset 0 1.5px 1px rgb(255 255 255 / 0.12), inset 0 -1px 1px rgb(255 255 255 / 0.04), 0 12px 32px -12px rgb(0 0 0 / 0.6);
+  }
+  :root[data-theme="dark"] .liquid::before {
+    background:
+      radial-gradient(110% 70% at 6% -14%, rgb(255 255 255 / 0.14) 0%, rgb(255 255 255 / 0.04) 40%, transparent 64%),
+      linear-gradient(to bottom, rgb(255 255 255 / 0.04), transparent 34%);
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) .liquid,
     :root:not([data-theme="light"]) .liquid-kids > .surface {
-      border-color: rgb(255 255 255 / 0.08);
-      box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 12px 32px -12px rgb(0 0 0 / 0.6);
+      border-color: rgb(255 255 255 / 0.1);
+      box-shadow: inset 0 1.5px 1px rgb(255 255 255 / 0.12), inset 0 -1px 1px rgb(255 255 255 / 0.04), 0 12px 32px -12px rgb(0 0 0 / 0.6);
+    }
+    :root:not([data-theme="light"]) .liquid::before {
+      background:
+        radial-gradient(110% 70% at 6% -14%, rgb(255 255 255 / 0.14) 0%, rgb(255 255 255 / 0.04) 40%, transparent 64%),
+        linear-gradient(to bottom, rgb(255 255 255 / 0.04), transparent 34%);
     }
   }
   /*
