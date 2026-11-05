@@ -52,11 +52,8 @@ export function HomePage() {
     refetchInterval: LIVE,
   });
   const nextList = next.data?.filter(isOpen).sort(byStart);
-  // «الشهر ده» for whoever sees the reports; it takes the room the appointments leave (a quiet week leaves a lot)
+  // «الشهر ده» for whoever sees the reports
   const month = can(me, "reports.view");
-  const quiet = nextList?.length === 0;
-  const middle = !month ? "xl:grid-rows-[auto_minmax(13rem,1fr)]"
-    : quiet ? "xl:grid-rows-[auto_auto_minmax(0,1fr)]" : "xl:grid-rows-[auto_minmax(13rem,1fr)_auto]";
   const greeting = cairoHour(now) < 12 ? "صباح الخير" : "مساء الخير";
   // the owner: the name follows the account that is signed in (it was «أستاذ سعد» for every lawyer); a lawyer keeps «أستاذ»
   // before his first name, unless the name already carries a title
@@ -102,7 +99,9 @@ export function HomePage() {
             <span className="absolute -bottom-10 start-[2%] size-[18rem] rounded-full bg-[#d9b48a]/30 blur-[100px]" />
           </div>
           <CalendarPanel now={now} items={todayList} />
-          <div className={`grid min-w-0 gap-4 xl:h-0 xl:min-h-full ${middle} 2xl:gap-5`}>
+          {/* the owner: nothing scrolls inside a card (a thick grey bar in the middle of the page was confusing): every card
+              takes the height its content needs, and the page itself is the only thing that scrolls */}
+          <div className="grid min-w-0 content-start gap-4 2xl:gap-5">
             <TodayPanel items={todayList} pending={appointments.isPending} failed={appointments.isError} />
             <UpcomingPanel now={now} items={nextList} pending={next.isPending} failed={next.isError} />
             {month ? <MonthPanel now={now} /> : null}
@@ -367,7 +366,7 @@ function TodayPanel({ items, pending, failed }: { items?: Appointment[] | undefi
             })}
           </ul>
           {/* wider: the mockup's table */}
-          <div className="hidden overflow-x-auto px-3 pb-3 sm:block">
+          <div className="soft-scroll hidden overflow-x-auto px-3 pb-3 sm:block">
             <table className="w-full border-separate border-spacing-y-0.5 text-[12.5px] 2xl:text-[13.5px]">
               <thead>
                 <tr>{heads.map((h) => <th key={h} className={`${TH} border-y border-line/60 bg-card/55 first:rounded-s-[12px] first:border-s last:rounded-e-[12px] last:border-e`}>{h}</th>)}</tr>
@@ -527,7 +526,7 @@ function UpcomingPanel({ now, items: open, pending, failed }: { now: Date; items
           </span>
         </p>
       ) : (
-        <ul className={`${LIST} soft-scroll overflow-y-auto`} aria-label="أقرب المواعيد">
+        <ul className={LIST} aria-label="أقرب المواعيد">
           {items.map((a) => {
             const k = kindOf(a);
             const t = TINT[k.icon] ?? TINT.phone!;
