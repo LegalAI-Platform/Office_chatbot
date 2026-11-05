@@ -32,6 +32,21 @@ public sealed class ReplyGuardTests
     public void The_check_lets_through_only_the_approved_facts_and_no_law_promise_or_money(string reply, string? problem) =>
         Assert.Equal(problem, ReplyGuard.Problem(reply, R("أكيد 👋 حضرتك عندك استشارة عاجلة مدفوعة، والمستشار هيكلم حضرتك حوالي الساعة 10:00 ص."), null));
 
+    [Theory] // v1.70 (Nehad's chat): privacy said where nobody asked is refused; «سريع» is no privacy
+    [InlineData("ابعت الصورة هنا، وكلامك مع المكتب بيفضل سري.", true)]
+    [InlineData("كل كلام حضرتك مع المكتب بسرية تامة", true)]
+    [InlineData("المكتب عمره ما بيفشي أسرار عملائه", true)]
+    [InlineData("خصوصية حضرتك محفوظة", true)]
+    [InlineData("هرد على حضرتك بشكل سريع", false)]
+    [InlineData("ابعت صورة التحويل هنا في الشات", false)]
+    public void Privacy_words_are_found(string text, bool privacy) => Assert.Equal(privacy, ReplyGuard.SpeaksOfPrivacy(text));
+
+    [Theory]
+    [InlineData("هو حد هيعرف إني جيت؟", true)]
+    [InlineData("محدش يعرف حاجة صح", true)]
+    [InlineData("عايز احجز ميعاد", false)]
+    public void Asking_whether_anyone_will_know_is_asking_about_privacy(string text, bool asks) => Assert.Equal(asks, ReplyGuard.AsksWhoKnows(text));
+
     [Fact]
     public void A_sentence_too_long_or_the_same_as_the_last_one_does_not_go()
     {

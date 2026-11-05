@@ -441,6 +441,18 @@ public sealed partial class BookingFlowTests
     }
 
     [Fact]
+    public async Task After_the_abuse_warning_the_name_waiting_is_asked_again() // v1.70 (Nehad's chat)
+    {
+        _texts[TextKeys.AbuseWarning] = new ApprovedText(TextKeys.AbuseWarning, 1, "معلش، خلّينا نتكلم باحترام عشان نقدر نساعد حضرتك.", 300, true);
+        await ToTheOfferWithoutName();
+        await Press(NamePick);
+        _script["شتيمة"] = new("abusive", null, "unknown", null, 0.95);
+        Assert.Equal([TextKeys.AbuseWarning, TextKeys.AskNameBooking], Keys(await Say("شتيمة")));
+        Assert.Empty(_booking.Appointments);
+        Assert.Equal(NamePick, _rows[Number].Intake.PickWaitingForName); // the time still waits for the name
+    }
+
+    [Fact]
     public async Task A_client_who_told_his_name_before_is_not_asked_it_at_the_booking()
     {
         await ToTheOffer(); // the name came on the way
@@ -703,6 +715,28 @@ public sealed partial class BookingFlowTests
             new MediaRef(MediaStatus.Stored, "office-sensitive", "doc", "application/pdf", 1000, "bb", "receipt.pdf")));
         Assert.Equal([TextKeys.ReceiptSendImage], Keys(d));
         Assert.Equal(AppointmentInfo.PendingPayment, Assert.Single(_booking.Appointments).State);
+    }
+
+    [Fact]
+    public async Task A_video_while_the_time_waits_for_the_receipt_asks_for_the_screenshot() // v1.70 (Nehad's chat)
+    {
+        await ToTheOffer();
+        await Press(BookingChoice.Pick(BookingService.PhoneVideo, AvailabilityTests.At(20, 12)));
+        var d = await Send(new IncomingMessage($"wamid.{++_turn}", MessageType.Video, null, null, null, null,
+            new MediaRef(MediaStatus.Stored, "office-sensitive", "vid", "video/mp4", 1000, "cc", null)));
+        Assert.Equal([TextKeys.ReceiptSendImage], Keys(d));
+        Assert.Null(d.Effects!.Classification); // never to the AI
+        Assert.Equal(AppointmentInfo.PendingPayment, Assert.Single(_booking.Appointments).State);
+    }
+
+    [Fact]
+    public async Task No_new_list_of_times_for_a_service_he_already_holds() // v1.70 (Ahmed Amin's chat)
+    {
+        await ToTheOffer();
+        await BookAndPay(BookingService.PhoneVideo, AvailabilityTests.At(20, 12));
+        var d = await Press(BookingChoice.More(BookingService.PhoneVideo, AvailabilityTests.At(20, 12))); // «مواعيد تانية» of the old list
+        Assert.Equal([TextKeys.BookingExisting], Keys(d)); // his time, with «تغيير / إلغاء»: never a second list
+        Assert.Single(_booking.Appointments);
     }
 
     [Fact]
