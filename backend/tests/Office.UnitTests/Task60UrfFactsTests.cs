@@ -143,9 +143,26 @@ public sealed partial class BookingFlowTests
     {
         UrfFactsOn();
         await ToTheGuardian(); // the ages 30 و 25, a first marriage
+        _texts[TextKeys.UrfAnswerCorrected] = new ApprovedText(TextKeys.UrfAnswerCorrected, 1, "تمام، عدّلت {{changed}} ✅", 300, true);
         _script["لا قصدي الزوجه 22"] = new("other", null, "unknown", null, 0.8, UrfHusbandAge: 30, UrfWifeAge: 22);
-        await Say("لا قصدي الزوجه 22");
+        var d = await Say("لا قصدي الزوجه 22");
         Assert.Equal((30, 22, UrfStep.Guardian), (TheCase.HusbandAge, TheCase.WifeAge, TheCase.Step));
+        // v1.75: said back, then the question waiting plainly (never «علشان نكمّل…»)
+        Assert.Equal([TextKeys.UrfAnswerCorrected, TextKeys.UrfAskGuardian], Keys(d));
+        Assert.Equal("تمام، عدّلت السن: الزوج 30 سنة والزوجة 22 سنة ✅", d.Actions[0].Text);
+    }
+
+    [Fact] // v1.75: every answer has its words; several are joined
+    public void What_was_corrected_is_said_in_words_for_every_answer()
+    {
+        var c = UrfCase.Start(Guid.NewGuid(), UrfCase.Marriage) with { HusbandAge = 30, WifeAge = 25, WifePast = "first", Guardian = "father", Witnesses = "own", Step = null };
+        Assert.Equal("إنها اتطلقت أو اختلعت قبل كده", UrfRules.Corrected(c, c with { WifePast = "divorced" }));
+        Assert.Equal("إنها أرملة", UrfRules.Corrected(c, c with { WifePast = "widow" }));
+        Assert.Equal("الولي يبقى الأخ", UrfRules.Corrected(c, c with { Guardian = "brother" }));
+        Assert.Equal("المكتب هيوفّر الشهود", UrfRules.Corrected(c, c with { Witnesses = "office" }));
+        Assert.Equal("السن: الزوج 30 سنة والزوجة 22 سنة، والمكتب هيوفّر الشهود", UrfRules.Corrected(c, c with { WifeAge = 22, Witnesses = "office" }));
+        Assert.Null(UrfRules.Corrected(c with { Witnesses = null }, c)); // filled for the first time: no correction
+        Assert.Null(UrfRules.Corrected(c, c));
     }
 
     [Fact]

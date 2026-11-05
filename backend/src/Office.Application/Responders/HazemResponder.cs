@@ -826,6 +826,9 @@ public sealed class HazemResponder(
         /// <summary>The case changed in this turn and must be saved.</summary>
         public bool UrfChanged { get; private set; }
 
+        /// <summary>v1.75: an answer given before was corrected this turn (said back first): its question is asked plainly, never «علشان نكمّل».</summary>
+        private bool urfCorrected;
+
         /// <summary>TASK 10: the written service to open an order for (B-16.1), once the flow is done.</summary>
         public ServiceKind? ServiceToOpen { get; private set; }
 
@@ -1193,6 +1196,14 @@ public sealed class HazemResponder(
             }
 
             Urf = now;
+            // v1.75 (the owner: «خلي الرد يكون معبر ويشمل كل الكيسزز»): an answer he corrected is said back first, then the case
+            // goes on (the next question plainly, or the price again); a refusal says itself
+            if (now.State is not (UrfCase.RejectedAge or UrfCase.RejectedGuardian) && UrfRules.Corrected(running, now) is { } changed)
+            {
+                plan.Say(TextKeys.UrfAnswerCorrected, Fill: new Dictionary<string, string> { ["changed"] = changed });
+                urfCorrected = true;
+            }
+
             // v1.74: a correction that refuses the case (under 18, no guardian for a first marriage) is always said, whatever else
             // the message asked: the case cannot go on
             if (now.State is UrfCase.RejectedAge or UrfCase.RejectedGuardian)
@@ -1294,13 +1305,13 @@ public sealed class HazemResponder(
                 // v1.46 (the forbidden rule 2 for the Urfi questions): the question he got last time is never sent the same
                 // way again. The second time it comes with «علشان نكمّل…» (the ages: «اكتبلي السن بالأرقام…»); the third
                 // time the office takes it, as two unclear answers do.
-                case UrfNext.Ask when AskedUrfAgain(c.Step):
+                case UrfNext.Ask when AskedUrfAgain(c.Step) && !urfCorrected:
                     HandToOffice(TextKeys.UnclearAgain, PendingTask.UrfHelp);
                     break;
-                case UrfNext.Ask when c.Step == UrfStep.Ages && situation.RepliedLast(TextKeys.UrfAskAges):
+                case UrfNext.Ask when c.Step == UrfStep.Ages && situation.RepliedLast(TextKeys.UrfAskAges) && !urfCorrected:
                     plan.Say(TextKeys.UrfAgesAgain);
                     break;
-                case UrfNext.Ask when UrfQuestion(c.Step) is { } asked && situation.RepliedLast(asked):
+                case UrfNext.Ask when UrfQuestion(c.Step) is { } asked && situation.RepliedLast(asked) && !urfCorrected:
                     plan.Say(TextKeys.UrfStepAgain);
                     AskUrf(c.Step);
                     break;

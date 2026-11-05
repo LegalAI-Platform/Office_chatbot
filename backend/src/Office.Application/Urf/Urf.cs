@@ -232,6 +232,42 @@ public static class UrfRules
         _ => UrfNext.Book,
     };
 
+    /// <summary>
+    /// v1.75: what he corrected (an answer given before that is now different), in the words said back before the next question:
+    /// «السن: الزوج 26 سنة والزوجة 25 سنة»، «إنها اتطلقت أو اختلعت قبل كده»… joined with «، و». Null when nothing given was changed
+    /// (an answer filled for the first time is no correction).
+    /// </summary>
+    public static string? Corrected(UrfCase before, UrfCase after)
+    {
+        var said = new List<string>();
+        if (before.HusbandAge is not null && (before.HusbandAge, before.WifeAge) != (after.HusbandAge, after.WifeAge))
+        {
+            said.Add($"السن: الزوج {after.HusbandAge} سنة والزوجة {after.WifeAge} سنة");
+        }
+
+        if (before.WifePast is not null && before.WifePast != after.WifePast && after.WifePast is { } past)
+        {
+            said.Add(past switch
+            {
+                "first" => "إنها أول جوازة ليها",
+                "widow" => "إنها أرملة",
+                _ => "إنها اتطلقت أو اختلعت قبل كده",
+            });
+        }
+
+        if (before.Guardian is not null && before.Guardian != after.Guardian && UrfCase.GuardianName(after.Guardian) is { Length: > 0 } guardian)
+        {
+            said.Add($"الولي يبقى {guardian}");
+        }
+
+        if (before.Witnesses is not null && before.Witnesses != after.Witnesses && after.Witnesses is { } witnesses)
+        {
+            said.Add(witnesses == "office" ? "المكتب هيوفّر الشهود" : "الشهود هتجيبهم حضرتك");
+        }
+
+        return said.Count == 0 ? null : string.Join("، و", said);
+    }
+
     private static (int, int)? Ages(int? husband, int? wife) =>
         husband is >= 1 and <= 120 && wife is >= 1 and <= 120 ? (husband.Value, wife.Value) : null;
 
