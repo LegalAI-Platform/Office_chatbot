@@ -127,6 +127,27 @@ public sealed partial class BookingFlowTests
         Assert.Equal(AppointmentInfo.Confirmed, Assert.Single(_booking.Appointments).State);
     }
 
+    [Fact] // v1.74 (Ahmed Amin's chat): «الأب», then «اقصد لا مفيش حد من اهل الزوجه» got the witnesses question again
+    public async Task Saying_no_guardian_after_naming_one_refuses_the_first_marriage()
+    {
+        UrfFactsOn();
+        await ToTheGuardian();
+        Assert.Equal([TextKeys.UrfAskWitnesses], Keys(await Answer(UrfStep.Guardian, "father")));
+        _script["اقصد لا مفيش حد من اهل الزوجه"] = new("service_by_name", "urf_marriage", "unknown", null, 0.8, UrfGuardian: "none");
+        Assert.Equal([TextKeys.UrfNoGuardian], Keys(await Say("اقصد لا مفيش حد من اهل الزوجه")));
+        Assert.Equal((UrfCase.RejectedGuardian, "none"), (TheCase.State, TheCase.Guardian));
+    }
+
+    [Fact] // v1.74 (Ahmed Amin's chat): «لا قصدي الزوجه 25» was not taken
+    public async Task A_corrected_age_is_taken_while_the_questions_go_on()
+    {
+        UrfFactsOn();
+        await ToTheGuardian(); // the ages 30 و 25, a first marriage
+        _script["لا قصدي الزوجه 22"] = new("other", null, "unknown", null, 0.8, UrfHusbandAge: 30, UrfWifeAge: 22);
+        await Say("لا قصدي الزوجه 22");
+        Assert.Equal((30, 22, UrfStep.Guardian), (TheCase.HusbandAge, TheCase.WifeAge, TheCase.Step));
+    }
+
     [Fact]
     public async Task Everything_said_up_front_goes_straight_to_the_price_once_the_ages_are_in()
     {
@@ -276,14 +297,31 @@ public sealed class UrfFactsRuleTests
         UrfCase.Start(Guid.NewGuid(), UrfCase.Marriage) with { State = state, Step = step };
 
     [Fact]
-    public void While_collecting_a_fact_fills_only_what_was_not_answered()
+    public void While_collecting_what_he_says_fills_or_corrects_the_answers() // v1.74: a correction is the answer
     {
         var c = Marriage() with { HusbandAge = 30, WifeAge = 25, WifePast = "first", Step = UrfStep.Guardian };
-        var said = UrfRules.ApplyFacts(c, "divorced", "brother", "office");
-        Assert.Equal("first", said.WifePast); // an answer already given is never overwritten here
-        Assert.Equal("brother", said.Guardian);
+        var said = UrfRules.ApplyFacts(c, "divorced", null, "office");
+        Assert.Equal("divorced", said.WifePast); // «لا قصدي اتطلقت»: corrected
         Assert.Equal("office", said.Witnesses);
-        Assert.Equal(UrfCase.DocumentsPending, said.State); // nothing left to ask: the price can go
+        Assert.Equal(UrfCase.DocumentsPending, said.State); // no guardian for a divorced wife, nothing left to ask: the price can go
+    }
+
+    [Fact] // v1.74 (Ahmed Amin's chat): «الأب», then «اقصد لا مفيش حد من اهل الزوجه»
+    public void A_correction_to_no_guardian_refuses_a_first_marriage()
+    {
+        var c = Marriage() with { HusbandAge = 26, WifeAge = 27, WifePast = "first", Guardian = "father", Step = UrfStep.Witnesses };
+        var said = UrfRules.ApplyFacts(c, null, "none", null);
+        Assert.Equal((UrfCase.RejectedGuardian, "none"), (said.State, said.Guardian));
+        Assert.Equal(UrfNext.RejectGuardian, UrfRules.NextOf(said));
+    }
+
+    [Fact] // v1.74 (Ahmed Amin's chat): «26و27», then «لا قصدي الزوجه 25»; and a correction under 18 refuses
+    public void A_correction_of_the_ages_is_taken_and_checked()
+    {
+        var c = Marriage() with { HusbandAge = 26, WifeAge = 27, Step = UrfStep.WifePast };
+        Assert.Equal((26, 25, UrfStep.WifePast), UrfRules.ApplyFacts(c, null, null, null, 26, 25) is var a ? (a.HusbandAge, a.WifeAge, a.Step) : default);
+        Assert.Equal(UrfCase.RejectedAge, UrfRules.ApplyFacts(c, null, null, null, 26, 17).State);
+        Assert.Equal(c, UrfRules.ApplyFacts(c, null, null, null, 26, null)); // one age alone changes nothing
     }
 
     [Fact]
@@ -295,12 +333,11 @@ public sealed class UrfFactsRuleTests
     }
 
     [Fact]
-    public void The_ages_are_always_asked_and_nobody_present_is_never_a_fact()
+    public void The_ages_are_asked_first_and_no_guardian_refuses_once_they_are_in() // v1.74: «none» is a fact now
     {
         var said = UrfRules.ApplyFacts(Marriage(), "first", "none", "own");
-        Assert.Equal(UrfStep.Ages, said.Step);
-        Assert.Null(said.Guardian);
-        Assert.Equal("own", said.Witnesses);
+        Assert.Equal((UrfCase.Collecting, UrfStep.Ages, "none"), (said.State, said.Step, said.Guardian)); // B-11's order: the ages first
+        Assert.Equal((UrfCase.RejectedGuardian, UrfNext.RejectGuardian), UrfRules.Ages(said, "30 و 25") is var (c, n) ? (c.State, n) : default);
     }
 
     [Fact]

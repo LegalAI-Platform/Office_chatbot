@@ -211,15 +211,29 @@ public static class UrfRules
     /// <summary>
     /// v1.62 (the owner's chat: he paid for the office's witnesses, then wrote «الشهود هجيبهم من عندي»): a fact that DIFFERS from the
     /// case's answer when the case already has its time held or confirmed. Nothing changes by itself then (the price paid, the
-    /// documents, a refund are the office's decision): the office is told.
+    /// documents, a refund are the office's decision): the office is told. v1.74: «no guardian» and the ages too.
     /// </summary>
-    public static bool ChangesBooked(UrfCase c, string? wifePast, string? guardian, string? witnesses)
+    public static bool ChangesBooked(UrfCase c, string? wifePast, string? guardian, string? witnesses, int? husbandAge = null, int? wifeAge = null)
     {
         var locked = c.State is UrfCase.Booked or UrfCase.Approved || c.State == UrfCase.DocumentsPending && c.AppointmentId is not null;
         static bool Differs(string? now, string? said, params string[] allowed) => said is not null && allowed.Contains(said) && said != now;
         return locked && (Differs(c.Witnesses, witnesses, "office", "own")
-            || c.IsMarriage && (Differs(c.WifePast, wifePast, "first", "divorced", "khul", "widow") || Differs(c.Guardian, guardian, "father", "brother", "uncle")));
+            || c.IsMarriage && (Differs(c.WifePast, wifePast, "first", "divorced", "khul", "widow")
+                || Differs(c.Guardian, guardian, "father", "brother", "uncle", "none")
+                || Ages(husbandAge, wifeAge) is { } said && said != (c.HusbandAge, c.WifeAge)));
     }
+
+    /// <summary>v1.74: what the step means for the reply: the next question, the price and times, or the refusal.</summary>
+    public static UrfNext NextOf(UrfCase c) => c.State switch
+    {
+        UrfCase.Collecting => UrfNext.Ask,
+        UrfCase.RejectedGuardian => UrfNext.RejectGuardian,
+        UrfCase.RejectedAge => UrfNext.RejectAge,
+        _ => UrfNext.Book,
+    };
+
+    private static (int, int)? Ages(int? husband, int? wife) =>
+        husband is >= 1 and <= 120 && wife is >= 1 and <= 120 ? (husband.Value, wife.Value) : null;
 
     /// <summary>B-11.1: the typed ages. Under 18 on either side closes the case without a price or a time.</summary>
     /// <param name="words">v1.52 (phase 1): numbers in words («الاتنين تلاتين») are read too.</param>
@@ -257,56 +271,75 @@ public static class UrfRules
             : c.Children is null ? UrfStep.Children
             : c.Witnesses is null ? UrfStep.Witnesses : null;
 
-    private static (UrfCase Case, UrfNext Next) Advance(UrfCase c) =>
-        NextStep(c) is { } step
-            ? (c with { Step = step }, UrfNext.Ask)
-            : (c with { State = UrfCase.DocumentsPending, Step = null }, UrfNext.Book);
+    private static (UrfCase Case, UrfNext Next) Advance(UrfCase c)
+    {
+        var settled = Settle(c);
+        return (settled, NextOf(settled));
+    }
+
+    /// <summary>
+    /// v1.74: the answers as they are now, through B-11's rules in its order: once the ages are known, under 18 refuses, then «no
+    /// guardian» for a first marriage refuses; otherwise the next question, or the price and times when nothing is left.
+    /// </summary>
+    private static UrfCase Settle(UrfCase c)
+    {
+        if (c.HusbandAge is not null && (c.HusbandAge < MinAge || c.WifeAge < MinAge))
+        {
+            return c with { State = UrfCase.RejectedAge, Step = null, PolicyVersion = PolicyVersion };
+        }
+
+        if (c.HusbandAge is not null && c.NeedsGuardian && c.Guardian == "none")
+        {
+            return c with { State = UrfCase.RejectedGuardian, Step = null, PolicyVersion = PolicyVersion };
+        }
+
+        return NextStep(c) is { } step
+            ? c with { State = UrfCase.Collecting, Step = step }
+            : c with { State = UrfCase.DocumentsPending, Step = null };
+    }
 
     /// <summary>
     /// v1.60 (the owner: «قال انها مطلقه ليه البوت ساله بعد كدا؟» and «عايز الشهود من المكتب» got the price of his own
-    /// witnesses): what the client said in his own words. While the questions are collected a fact fills an answer not given yet
-    /// (never one already given), and the questions it answers are skipped; while the price and times wait for a pick, a fact
-    /// that differs from the answer given CHANGES it, so the price and documents are worked out again. A case with a time held,
-    /// or closed, is the office's. Values outside the lists are ignored.
+    /// witnesses): what the client said in his own words, as the AI read it from the chat. v1.74 (Ahmed Amin's chat: «لا قصدي
+    /// الزوجه 25» and «اقصد لا مفيش حد من اهل الزوجه» were not taken, and the case kept «the father»): what he says is the
+    /// answer, filled or CORRECTED, while the questions are collected and while the price and times wait for a pick; then the
+    /// same rules run again on the answers as they are now (under 18, no guardian for a first marriage, the next question).
+    /// A case with a time held, or closed, is the office's. Values outside the lists are ignored.
     /// </summary>
-    public static UrfCase ApplyFacts(UrfCase c, string? wifePast, string? guardian, string? witnesses)
+    public static UrfCase ApplyFacts(UrfCase c, string? wifePast, string? guardian, string? witnesses, int? husbandAge = null, int? wifeAge = null)
     {
         static string? Only(string? v, params string[] allowed) => v is not null && allowed.Contains(v) ? v : null;
         var past = c.IsMarriage ? Only(wifePast, "first", "divorced", "khul", "widow") : null;
-        var guard = c.IsMarriage ? Only(guardian, "father", "brother", "uncle") : null;
+        var guard = c.IsMarriage ? Only(guardian, "father", "brother", "uncle", "none") : null;
         var wit = Only(witnesses, "office", "own");
-        if (c.State == UrfCase.Collecting)
+        var ages = c.IsMarriage ? Ages(husbandAge, wifeAge) : null;
+        if (c.State == UrfCase.Collecting || c.State == UrfCase.DocumentsPending && c.AppointmentId is null)
         {
-            var filled = c with { WifePast = c.WifePast ?? past, Guardian = c.Guardian ?? guard, Witnesses = c.Witnesses ?? wit };
-            if (filled == c)
+            var now = c with
             {
-                return c;
-            }
-
-            return NextStep(filled) is { } step
-                ? filled with { Step = step }
-                : filled with { State = UrfCase.DocumentsPending, Step = null };
+                WifePast = past ?? c.WifePast, Guardian = guard ?? c.Guardian, Witnesses = wit ?? c.Witnesses,
+                HusbandAge = ages?.Item1 ?? c.HusbandAge, WifeAge = ages?.Item2 ?? c.WifeAge,
+            };
+            return now == c ? c : Settle(now);
         }
 
         // v1.72 (Ahmed Amin's chat: «طب هجيب ابوها» after «مفيش حد منهم» got the closing text, then silence): the refusal for no
         // guardian is the answer «none» like any other answer, so what he says after it changes it as it changes the others: a
         // guardian named, or a past that needs none. The case goes on from where it stopped, as a new case (a refused case is never
         // written again); its other answers are kept. The age refusal has nothing to change: it stays.
-        if (c.State == UrfCase.RejectedGuardian && (guard is not null || past is not null and not "first"))
+        if (c.State == UrfCase.RejectedGuardian && (guard is not null and not "none" || past is not null and not "first"))
         {
             var again = c with
             {
                 Id = Guid.NewGuid(), State = UrfCase.Collecting, Step = null, PolicyVersion = null,
-                WifePast = past ?? c.WifePast, Guardian = guard, Witnesses = c.Witnesses ?? wit,
+                WifePast = past ?? c.WifePast, Guardian = guard is "none" ? null : guard, Witnesses = c.Witnesses ?? wit,
             };
             return NextStep(again) is { } next
                 ? again with { Step = next }
                 : again with { State = UrfCase.DocumentsPending };
         }
 
-        return c.State == UrfCase.DocumentsPending && c.AppointmentId is null
-            ? c with { WifePast = past ?? c.WifePast, Guardian = guard ?? c.Guardian, Witnesses = wit ?? c.Witnesses }
-            : c;
+        return c;
     }
 
     private static UrfCase Redirect(UrfCase c) => c with { State = UrfCase.Redirected, Step = null };
