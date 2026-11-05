@@ -206,6 +206,7 @@ public sealed class HazemResponder(
         var plan = new Plan(now);
         Check(state.Conversation.ClientWroteAt(now)); // B-12: 12 hours after the staff
         Classification? classification = null;
+        IReadOnlyList<string>? lastReplyKeys = null; // v1.66: what Hazem said last turn (with understanding v2 on), for the writer
         UrfCase? urfToSave = null; // TASK 18: saved with the turn, after the person and the intake (a first message may open it)
         var texts = await approvedTexts.GetActiveAsync(settings, ct);
         var bookingSettings = BookingSettings.From(settings);
@@ -267,6 +268,7 @@ public sealed class HazemResponder(
                 : new ClientSituation(SituationKind.None, facts);
             // v1.52 (phase 1): understanding v2 (the whole chat, his stance, the other questions); off is Hazem exactly as before
             var understanding = settings.Flag(UnderstandingV2.SwitchKey);
+            lastReplyKeys = understanding ? situation.Facts.LastReplyKeys : null;
             var flow = new Flow(turn, state, list, null, plan, settings.Flag(HandoffEnabledKey), bookingOn ? bookingSettings : null, servicesOn,
                 urfOn, urfOpen, ageRefusal: ageRefusal, urgentOn: urgentOn, situation: situation, understanding: understanding);
             var freeText = false;
@@ -521,7 +523,7 @@ public sealed class HazemResponder(
                     : null)
                 .Where(t => t is not null));
             var rewritten = await Conversational.RewriteAsync(composed, writer, chat, turn, Salutation.Call(state.Person), settings, ct,
-                facts, state.Person.NameGender, reviewer);
+                facts, state.Person.NameGender, reviewer, lastReplyKeys);
             (composed, written) = (rewritten.Composed, rewritten.Written);
             if (rewritten.Usage is { } writing)
             {

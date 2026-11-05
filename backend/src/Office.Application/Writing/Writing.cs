@@ -418,6 +418,14 @@ public static class Conversational
 
     public static bool MayWrite(string key) => Purposes.ContainsKey(key) || key.StartsWith(GreetPrefix, StringComparison.Ordinal);
 
+    /// <summary>
+    /// v1.66 (the owner's test: «موبايلي عادي» under the call buttons got «تمام يا فندم، فاهم إن موبايلك عادي» while nothing was
+    /// taken, then the same question): a question of choices asked AGAIN goes as approved, never in the writer's words, so it can
+    /// never say a choice is registered.
+    /// </summary>
+    private static readonly HashSet<string> ChoiceQuestions =
+        [TextKeys.AskCallApp, TextKeys.AskCallAppPhone, TextKeys.BookingStepAgain, TextKeys.BookingChooseSlot];
+
     /// <summary>The turn's answer with its first run of everyday texts said by the writer, and what became of it.</summary>
     public sealed record Rewritten(ReplyComposer.Composed Composed, WrittenReply? Written, IReadOnlyList<Office.Application.Costs.AiUsage>? Usage = null);
 
@@ -428,7 +436,7 @@ public static class Conversational
     /// </summary>
     public static async Task<Rewritten> RewriteAsync(ReplyComposer.Composed composed, IReplyWriter writer, IConversationHistory history,
         Turn turn, string call, HazemSettings settings, CancellationToken ct, string facts = "", string? nameGender = null,
-        IReplyReviewer? reviewer = null)
+        IReplyReviewer? reviewer = null, IReadOnlyCollection<string>? lastReplyKeys = null)
     {
         var lines = (await history.RecentAsync(turn.WaId, HistoryTurns, ct)).ToList();
         if (AiInput.Build(turn) is { } now)
@@ -437,7 +445,7 @@ public static class Conversational
         }
 
         var client = ClientGender.Of(nameGender, lines);
-        var r = await WriteRunAsync(composed, writer, turn, call, settings, ct, facts, lines, client, reviewer);
+        var r = await WriteRunAsync(composed, writer, turn, call, settings, ct, facts, lines, client, reviewer, lastReplyKeys);
         if (client != ClientGender.Woman)
         {
             return r;
@@ -451,7 +459,8 @@ public static class Conversational
     }
 
     private static async Task<Rewritten> WriteRunAsync(ReplyComposer.Composed composed, IReplyWriter writer, Turn turn, string call,
-        HazemSettings settings, CancellationToken ct, string facts, List<ChatLine> lines, string client, IReplyReviewer? reviewer = null)
+        HazemSettings settings, CancellationToken ct, string facts, List<ChatLine> lines, string client, IReplyReviewer? reviewer = null,
+        IReadOnlyCollection<string>? lastReplyKeys = null)
     {
         var keyOf = composed.Records.GroupBy(r => r.IdempotencyKey).ToDictionary(g => g.Key, g => g.First().Key, StringComparer.Ordinal);
         // v1.61: the address and the hours join the writable texts only when nothing else of the turn is written
@@ -462,6 +471,7 @@ public static class Conversational
         {
             var a = composed.Actions[i];
             var ok = keyOf.TryGetValue(a.IdempotencyKey, out var k) && (MayWrite(k) || tailOn && TailKeys.Contains(k))
+                     && !(lastReplyKeys is not null && ChoiceQuestions.Contains(k) && lastReplyKeys.Contains(k))
                      && (a.Type == ActionType.SendText || a.Type == ActionType.SendInteractive);
             if (!ok)
             {
