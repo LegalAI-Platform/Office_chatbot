@@ -1620,7 +1620,8 @@ public sealed partial class BookingFlowTests
     {
         public Task<Office.Application.Urf.AgeRefusal?> AgeRefusalAsync(Guid personId, DateTimeOffset since, CancellationToken ct) =>
             Task.FromResult(booking.AgeRefusedAt is { } at && at > since
-                ? new Office.Application.Urf.AgeRefusal(at, booking.AgeClosingReplies, booking.AgeMovedOn, booking.RefusedState)
+                            && booking.UrfCases.LastOrDefault() is { } newest && newest.Id == booking.RefusedCaseId // v1.72: a newer case ends it
+                ? new Office.Application.Urf.AgeRefusal(at, booking.AgeClosingReplies, booking.AgeMovedOn, booking.RefusedState, newest)
                 : null);
 
         public Task<IReadOnlyList<Office.Application.Urf.UrfCase>> OpenAsync(Guid personId, CancellationToken ct) =>
@@ -1637,6 +1638,7 @@ public sealed partial class BookingFlowTests
             {
                 booking.AgeRefusedAt = now(); // updated_at when the case was refused (v1.71: the guardian too)
                 booking.RefusedState = c.State;
+                booking.RefusedCaseId = c.Id;
                 (booking.AgeClosingReplies, booking.AgeMovedOn) = (0, false);
             }
 
@@ -1918,6 +1920,8 @@ public sealed partial class BookingFlowTests
         public DateTimeOffset? AgeRefusedAt { get; set; }
 
         public string RefusedState { get; set; } = Office.Application.Urf.UrfCase.RejectedAge;
+
+        public Guid? RefusedCaseId { get; set; }
 
         public int AgeClosingReplies { get; set; }
 

@@ -1782,6 +1782,17 @@ public sealed class HazemResponder(
         private void Answer(Classification turnClass)
         {
             answering = turnClass;
+            // v1.72: what the AI read from the chat changes the answer a case was refused for (a guardian named after «مفيش حد
+            // منهم»), as it changes any other answer (v1.60): the case goes on from where it stopped. Only then the closing text.
+            if (urfOn && MayBook && ageRefusal?.Case is { } refused && WithUrfFacts(refused) is { State: not (UrfCase.RejectedAge or UrfCase.RejectedGuardian) } again)
+            {
+                Check(Intake.MoveTo(IntakeState.InServiceFlow));
+                Urf = again;
+                UrfChanged = true;
+                AfterUrf(again.State == UrfCase.Collecting ? UrfNext.Ask : UrfNext.Book);
+                return;
+            }
+
             // v1.20 (B-11.1): after the age refusal, the same marriage gets the closing text (no offer, no price, no
             // buttons), twice at most, then silence. Any other matter goes on below.
             if (ageRefusal is not null && UrfRules.FollowsAgeRefusal(turnClass, ageRefusal))

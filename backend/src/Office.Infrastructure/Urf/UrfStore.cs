@@ -45,11 +45,16 @@ public sealed class UrfStore(HazemDbContext db) : IUrfStore
                                                             WHERE person_id = {personId} AND state IN ('rejected_age', 'rejected_guardian')))
             SELECT json_build_object('at', c.updated_at,
                      'state', c.state,
+                     'id', c.id, 'kind', c.kind, 'husband_age', c.husband_age, 'wife_age', c.wife_age, 'wife_past', c.wife_past,
+                     'guardian', c.guardian, 'witnesses', c.witnesses, 'has_copy', c.has_copy, 'agreed', c.agreed,
+                     'children', c.children, 'policy_version', c.policy_version,
                      'replies', (SELECT count(*) FROM after WHERE text_key IN ('urf_age_closed', 'urf_guardian_closed')),
                      'moved_on', EXISTS (SELECT 1 FROM after WHERE text_key NOT IN
                                          ('urf_age_closed', 'urf_under_age', 'urf_guardian_closed', 'urf_no_guardian')))::text AS "Value"
               FROM hazem.urf_cases c
              WHERE c.person_id = {personId} AND c.state IN ('rejected_age', 'rejected_guardian') AND c.updated_at > {since}
+               -- v1.72: a case opened after it (the refusal changed by what he said) ends it
+               AND NOT EXISTS (SELECT 1 FROM hazem.urf_cases n WHERE n.person_id = c.person_id AND n.created_at > c.updated_at)
              ORDER BY c.updated_at DESC
              LIMIT 1
             """).SingleOrDefaultAsync(ct);
@@ -60,8 +65,16 @@ public sealed class UrfStore(HazemDbContext db) : IUrfStore
 
         using var doc = JsonDocument.Parse(json);
         var r = doc.RootElement;
+        static string? Text(JsonElement e) => e.ValueKind == JsonValueKind.String ? e.GetString() : null;
+        static int? Int(JsonElement e) => e.ValueKind == JsonValueKind.Number ? e.GetInt32() : null;
+        static bool? Flag(JsonElement e) => e.ValueKind is JsonValueKind.True or JsonValueKind.False ? e.GetBoolean() : null;
+        var state = r.GetProperty("state").GetString()!;
+        var refused = new UrfCase(r.GetProperty("id").GetGuid(), personId, r.GetProperty("kind").GetString()!, state, null,
+            Int(r.GetProperty("husband_age")), Int(r.GetProperty("wife_age")), Text(r.GetProperty("wife_past")), Text(r.GetProperty("guardian")),
+            Text(r.GetProperty("witnesses")), Flag(r.GetProperty("has_copy")), Flag(r.GetProperty("agreed")), Flag(r.GetProperty("children")),
+            PolicyVersion: Text(r.GetProperty("policy_version")));
         return new AgeRefusal(r.GetProperty("at").GetDateTimeOffset(), r.GetProperty("replies").GetInt32(), r.GetProperty("moved_on").GetBoolean(),
-            r.GetProperty("state").GetString()!);
+            state, refused);
     }
 
     public async Task<AddFileOutcome> AddFileAsync(Guid personId, StoredFile f, CancellationToken ct)

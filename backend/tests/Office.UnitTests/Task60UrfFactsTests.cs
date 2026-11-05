@@ -37,6 +37,41 @@ public sealed partial class BookingFlowTests
         Assert.Equal("divorced", TheCase.WifePast);
     }
 
+    [Fact] // v1.72 (Ahmed Amin's chat): «طب هجيب ابوها» after «مفيش حد منهم» got the closing text, «الزوجه معاها الاخ» silence
+    public async Task A_guardian_named_after_the_refusal_changes_it_and_the_case_goes_on()
+    {
+        UrfFactsOn();
+        await ToTheGuardian();
+        _texts[TextKeys.UrfGuardianClosed] = new ApprovedText(TextKeys.UrfGuardianClosed, 1, "T:guardian closed", 300, true);
+        Assert.Equal([TextKeys.UrfNoGuardian], Keys(await Answer(UrfStep.Guardian, "none")));
+        _script["ليه"] = new("other", null, "unknown", null, 0.9);
+        Assert.Equal([TextKeys.UrfGuardianClosed], Keys(await Say("ليه"))); // nothing changed: the closing text
+
+        _script["طب هجيب ابوها"] = new("service_by_name", "urf_marriage", "unknown", null, 0.9, UrfGuardian: "father");
+        Assert.Equal([TextKeys.UrfAskWitnesses], Keys(await Say("طب هجيب ابوها"))); // the next question, not the ages again
+        Assert.Equal(2, _booking.UrfCases.Count); // the refused case stays as it was; a new one goes on with its answers
+        var again = _booking.UrfCases[^1];
+        Assert.Equal((UrfCase.Collecting, "father", "first", 30, 25), (again.State, again.Guardian, again.WifePast, again.HusbandAge, again.WifeAge));
+        Assert.Equal(UrfCase.RejectedGuardian, _booking.UrfCases[0].State);
+
+        _script["الشهود هنجيبهم"] = new("other", null, "unknown", null, 0.9, UrfWitnesses: "own");
+        Assert.Equal([TextKeys.UrfChooseSlot], Keys(await Say("الشهود هنجيبهم"))); // the refusal is over: the case goes on
+    }
+
+    [Fact]
+    public async Task After_the_age_refusal_nothing_said_changes_it()
+    {
+        UrfFactsOn();
+        _texts[TextKeys.UrfAgeClosed] = new ApprovedText(TextKeys.UrfAgeClosed, 1, "T:closed", 300, true);
+        await ToTheOffer();
+        await Say("عايز أعمل جواز عرفي");
+        _script["الزوج 22 والزوجه 16"] = new("other", null, "unknown", null, 0.9);
+        Assert.Equal([TextKeys.UrfUnderAge], Keys(await Say("الزوج 22 والزوجه 16")));
+        _script["طب ابوها موافق"] = new("service_by_name", "urf_marriage", "unknown", null, 0.9, UrfGuardian: "father");
+        Assert.Equal([TextKeys.UrfAgeClosed], Keys(await Say("طب ابوها موافق")));
+        Assert.Equal(UrfCase.RejectedAge, TheCase.State);
+    }
+
     [Fact]
     public async Task Everything_said_up_front_goes_straight_to_the_price_once_the_ages_are_in()
     {
