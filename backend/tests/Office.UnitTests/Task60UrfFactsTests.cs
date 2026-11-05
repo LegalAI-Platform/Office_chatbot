@@ -165,6 +165,46 @@ public sealed partial class BookingFlowTests
         Assert.Null(UrfRules.Corrected(c, c));
     }
 
+    [Fact] // v1.76 (Ahmed Amin's chat): «فيه امان؟» can mean two things: he is asked which, once; the Urfi request goes on
+    public async Task A_question_with_two_meanings_is_asked_back_once()
+    {
+        UrfFactsOn();
+        _texts[TextKeys.AskWhichMeaning] = new ApprovedText(TextKeys.AskWhichMeaning, 1, "حضرتك قصدك {{meanings}}؟ 🙏", 300, true);
+        await ToTheOffer();
+        var meanings = new[] { "إن العقد يبقى قانوني ومضمون", "إن الموضوع يفضل سري" };
+        _script["عايز اتجوز عرفي وعايز اعرف فيه امان؟"] = new("office_info", "urf_marriage", "unknown", null, 0.7, InfoTopic: "service_detail", Meanings: meanings);
+        var d = await Say("عايز اتجوز عرفي وعايز اعرف فيه امان؟");
+        Assert.Equal([TextKeys.AskWhichMeaning, TextKeys.UrfAskAges], Keys(d));
+        Assert.Equal("حضرتك قصدك إن العقد يبقى قانوني ومضمون، ولا إن الموضوع يفضل سري؟ 🙏", d.Actions[0].Text);
+        Assert.DoesNotContain(PendingTask.ServiceQuestion, TaskKinds(d)); // not sent to the office before he says which
+
+        _script["لسه مش فاهم يعني فيه امان؟"] = new("office_info", "urf_marriage", "unknown", null, 0.7, InfoTopic: "service_detail", Meanings: meanings);
+        var again = await Say("لسه مش فاهم يعني فيه امان؟");
+        Assert.DoesNotContain(TextKeys.AskWhichMeaning, Keys(again)); // asked once: then as before
+        Assert.Contains(PendingTask.ServiceQuestion, TaskKinds(again));
+    }
+
+    [Fact] // v1.76: the real model reads that message as the Urfi request itself (service_by_name), with the two meanings
+    public async Task A_request_with_an_unclear_question_asks_which_and_starts_the_request()
+    {
+        UrfFactsOn();
+        _texts[TextKeys.AskWhichMeaning] = new ApprovedText(TextKeys.AskWhichMeaning, 1, "حضرتك قصدك {{meanings}}؟ 🙏", 300, true);
+        await ToTheOffer();
+        _script["عايز اتجوز عرفي وعايز اعرف فيه امان؟"] = new("service_by_name", "urf_marriage", "unknown", null, 0.9,
+            Meanings: ["إن العقد يبقى قانوني ومضمون", "إن الموضوع يفضل سري"]);
+        Assert.Equal([TextKeys.AskWhichMeaning, TextKeys.UrfAskAges], Keys(await Say("عايز اتجوز عرفي وعايز اعرف فيه امان؟")));
+    }
+
+    [Fact]
+    public async Task One_meaning_or_none_is_no_reason_to_ask()
+    {
+        UrfFactsOn();
+        _texts[TextKeys.AskWhichMeaning] = new ApprovedText(TextKeys.AskWhichMeaning, 1, "حضرتك قصدك {{meanings}}؟ 🙏", 300, true);
+        await ToTheOffer();
+        _script["الكلام هيفضل سري؟"] = new("office_info", null, "unknown", null, 0.9, InfoTopic: "privacy", Meanings: ["إن الموضوع يفضل سري"]);
+        Assert.DoesNotContain(TextKeys.AskWhichMeaning, Keys(await Say("الكلام هيفضل سري؟")));
+    }
+
     [Fact]
     public async Task Everything_said_up_front_goes_straight_to_the_price_once_the_ages_are_in()
     {
