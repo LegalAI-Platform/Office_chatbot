@@ -1164,7 +1164,7 @@ public sealed class HazemResponder(
                 return u;
             }
 
-            var changed = UrfRules.ApplyFacts(u, said.UrfWifePast, said.UrfGuardian, said.UrfWitnesses);
+            var changed = UrfRules.ApplyFacts(u, said.UrfWifePast, said.UrfGuardian, said.UrfWitnesses, said.UrfHusbandAge, said.UrfWifeAge);
             UrfChanged |= changed != u;
             return changed;
         }
@@ -1178,7 +1178,7 @@ public sealed class HazemResponder(
         {
             // v1.62: a change to a case with its time held or confirmed is the office's: it is told (the price paid, the documents)
             if (understanding && answering?.Call?.Answer is { } said
-                && UrfRules.ChangesBooked(running, said.UrfWifePast, said.UrfGuardian, said.UrfWitnesses))
+                && UrfRules.ChangesBooked(running, said.UrfWifePast, said.UrfGuardian, said.UrfWitnesses, said.UrfHusbandAge, said.UrfWifeAge))
             {
                 plan.Say(TextKeys.ServiceCheck); // said back in his words by the writer: what he wants changed, and the office answers
                 plan.Task(PendingTask.UrfHelp);
@@ -1193,12 +1193,20 @@ public sealed class HazemResponder(
             }
 
             Urf = now;
+            // v1.74: a correction that refuses the case (under 18, no guardian for a first marriage) is always said, whatever else
+            // the message asked: the case cannot go on
+            if (now.State is UrfCase.RejectedAge or UrfCase.RejectedGuardian)
+            {
+                AfterUrf(UrfRules.NextOf(now));
+                return true;
+            }
+
             if (turnClass.Intent is not (Intent.ServiceByName or Intent.Other) || UnderstandingV2.StanceOf(turnClass.Call?.Answer) != Stance.None)
             {
                 return false;
             }
 
-            AfterUrf(now.State == UrfCase.Collecting ? UrfNext.Ask : UrfNext.Book);
+            AfterUrf(UrfRules.NextOf(now));
             return true;
         }
 
@@ -1211,7 +1219,7 @@ public sealed class HazemResponder(
                 Urf = WithUrfFacts(open);
                 if (!AgesSaidWithRequest())
                 {
-                    AfterUrf(Urf.State == UrfCase.Collecting ? UrfNext.Ask : UrfNext.Book);
+                    AfterUrf(UrfRules.NextOf(Urf));
                 }
 
                 return;
@@ -1221,7 +1229,7 @@ public sealed class HazemResponder(
             UrfChanged = true;
             if (!AgesSaidWithRequest())
             {
-                AfterUrf(Urf.State == UrfCase.Collecting ? UrfNext.Ask : UrfNext.Book);
+                AfterUrf(UrfRules.NextOf(Urf));
             }
         }
 
@@ -1815,7 +1823,7 @@ public sealed class HazemResponder(
                 Check(Intake.MoveTo(IntakeState.InServiceFlow));
                 Urf = again;
                 UrfChanged = true;
-                AfterUrf(again.State == UrfCase.Collecting ? UrfNext.Ask : UrfNext.Book);
+                AfterUrf(UrfRules.NextOf(again));
                 return;
             }
 
