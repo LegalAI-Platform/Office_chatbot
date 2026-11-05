@@ -14,6 +14,7 @@ cleaned before it was added:
 |---|---|
 | `2026-10-22-main-chat-al-shat-al-harfi.zip` | «الشات الحرفي بكل التفاصيل»: TASK 00–02, the first .NET attempt |
 | `2026-10-22-side-chat-backend-and-tasks.zip` | «هو انت هتعمل ال باك اند ب اي ؟؟»: back to n8n, v1.3 (n8n + .NET), TASK 03, v1.4, TASK 04 prompt |
+| `2026-11-05-emad.zip` | Mohamed Emad, 2026-11-04/05: the last chats read and fixed (v1.60–v1.69: Urfi facts, the info writer, booked changes, 3 days and abandoned Urfi cases, typed choices, a past or busy hour, the widow and the guardian, the blue ticks), the panel (v1.64: the home cards, the tasks table, the first sign-in, liquid glass, the receipt window). Only the owner's messages and the assistant's replies: no tool calls or output, no images; numbers, e-mails and the server's address masked |
 
 The session after these (TASK 04 execution, PRs #1–#3, TASK 05a, DECISIONS v1.5/v1.6) is not
 exported here: it held a pasted API key. Its handoff, without secrets, is
