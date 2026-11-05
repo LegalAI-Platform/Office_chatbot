@@ -262,6 +262,21 @@ public static partial class ReplyGuard
 
     private static string Normal(string s) => Space().Replace(s, " ").Trim();
 
+    /// <summary>v1.70: the words say something stays secret or private («سري», «سرية», «أسرار», «خصوصية») — never «سريع».</summary>
+    public static bool SpeaksOfPrivacy(string text) => Privacy().IsMatch(text ?? "");
+
+    /// <summary>
+    /// v1.70: he fears or asks whether anyone will know («حد هيعرف؟», «خايف مراتي تعرف»), the other way to speak of privacy.
+    /// Read wide on purpose: it only lets a privacy sentence through, it never adds one.
+    /// </summary>
+    public static bool AsksWhoKnows(string text) => WhoKnows().IsMatch(text ?? "");
+
+    [GeneratedRegex(@"(?<!\p{L})(?:[بو]?(?:ال)?سر(?:ي|ية|يه|ّي|ّية|ّيه)?|(?:ال)?[أا]سرار(?:ه|ها|هم|ك|ي)?|(?:ال)?خصوصي(?:ة|ه)?)(?!\p{L})")]
+    private static partial Regex Privacy();
+
+    [GeneratedRegex(@"خايف|قلقان|فضيح|(?<!\p{L})م?حدش?(?!\p{L})|(?<!\p{L})[هح]?[يت]عرف(?:وا|و)?(?!\p{L})")]
+    private static partial Regex WhoKnows();
+
     internal static bool SharesFourWords(string text, string before)
     {
         static string[] Words(string s) => Regex.Split(s, @"[^\p{L}\p{N}]+").Where(w => w.Length > 0).ToArray();
@@ -568,6 +583,15 @@ public static class Conversational
                 && (o.Reply!.Contains("متأكد", StringComparison.Ordinal) || o.Reply.Contains("اتأكد", StringComparison.Ordinal)))
             {
                 problem = "said_confirmed"; // v1.45: the transfer is still under the office's review
+            }
+
+            // v1.70 (Nehad's chat: «وكلامك مع المكتب بيفضل سري» under «ابعت صورة التحويل»): privacy is said only where it belongs,
+            // when he spoke of it, the approved text says it, or the purpose asks for that comfort
+            if (problem is null && ReplyGuard.SpeaksOfPrivacy(o.Reply!) && !ReplyGuard.SpeaksOfPrivacy(approved)
+                && !purpose.Contains("private", StringComparison.Ordinal)
+                && !lines.Where(l => l.FromClient).TakeLast(2).Any(l => ReplyGuard.SpeaksOfPrivacy(l.Text) || ReplyGuard.AsksWhoKnows(l.Text)))
+            {
+                problem = "privacy_unasked";
             }
 
             // v1.61: the sentence before the address never says the address (or the hours) itself: the code adds them

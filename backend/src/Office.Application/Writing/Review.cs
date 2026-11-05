@@ -57,7 +57,9 @@ public static class ReplyRetry
     private static string Why(string problem) => problem switch
     {
         "review_promise" or "promise" =>
-            "It promises or guarantees something the office cannot control (for example that nobody will know, a result, or a time). Say only what is true: the facts, that what he tells the office stays private with the office, and the next step.",
+            "It promises or guarantees something the office cannot control (for example that nobody will know, a result, or a time). Say only what is true: the facts, that what he tells the office stays private with the office (only when he asked about that), and the next step.",
+        "privacy_unasked" =>
+            "It says his words stay secret or private, but he did not ask about that and the approved text does not say it. Leave that sentence out.",
         "review_legal" or "legal_word" =>
             "It contains legal information or a legal word. Never explain the law: say kindly that the lawyer answers it in the consultation.",
         "review_not_in_facts" or "number_not_given" =>

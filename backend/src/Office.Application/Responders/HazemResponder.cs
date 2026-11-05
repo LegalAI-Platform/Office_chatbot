@@ -358,6 +358,14 @@ public sealed class HazemResponder(
                         break;
                 }
             }
+            else if (choice is null && urfButton is null && !urfAges && (bookingOn || servicesOn) && flow.MayOrder && services is not null
+                     && turn.Messages.Any(x => x.Type == MessageType.Video))
+            {
+                // v1.70 (Nehad's chat: a video while his time waited for the receipt got «استلمت الفيديو ✅»): a video is no
+                // receipt either. While a payment waits for its image he is asked for the screenshot (P7's approved text).
+                var target = await services.FileTargetAsync(state.Person.Id, true, ct);
+                askImage = target.Target is FileTarget.Hold or FileTarget.BookingPayment or FileTarget.LateHold or FileTarget.OrderPayment;
+            }
 
             // v1.30 (B-01.3): a row of the services list, read without the AI: the service's own flow (or «احكي مشكلتي»).
             var servicePress = choice is null && urfButton is null && !urfAges && receipt is null && !askImage && documents is null
@@ -1330,6 +1338,26 @@ public sealed class HazemResponder(
             }
         }
 
+        /// <summary>
+        /// v1.70: after the warning, the question that still waits for his answer, in its approved words: the name for the time he
+        /// picked, the welcome's name, or the Urfi question on its step. Nothing when no question waits.
+        /// </summary>
+        private void AskWaitingAgain()
+        {
+            if (Intake.PickWaitingForName is not null && !State.Person.NameSettled)
+            {
+                plan.Say(TextKeys.AskNameBooking);
+            }
+            else if (Intake.State == IntakeState.AwaitingName)
+            {
+                plan.Say(TextKeys.WelcomeAskName);
+            }
+            else if (urfOn && Urf is { State: UrfCase.Collecting } u && UrfQuestion(u.Step) is not null)
+            {
+                AskUrf(u.Step);
+            }
+        }
+
         public void Respond(bool firstContact)
         {
             // S-01: insults or spam — a warning once, then silence for good (the manager unmutes).
@@ -1339,6 +1367,7 @@ public sealed class HazemResponder(
                 {
                     plan.Say(TextKeys.AbuseWarning);
                     plan.Task(PendingTask.Complaint);
+                    AskWaitingAgain(); // v1.70: the question he was asked comes back (Nehad's chat: the name was never asked again)
                 }
 
                 return;
@@ -2582,6 +2611,21 @@ public sealed class HazemResponder(
             string? app = null)
         {
             var now = plan.Now;
+            // v1.70 (Ahmed Amin's chat: «ايه شروط العرفي» after he booked and paid got the Urfi times again): a new list is
+            // never sent for a service he already has a confirmed time for (his receipt came). What else this turn says goes as
+            // it is; said alone, he hears his time with «تغيير / إلغاء». Moving a time (moving) is not a new booking, and a hold
+            // still waiting for its receipt is changed by picking another time from a new list (B-08), so it gets one.
+            if (moving is null && await desk.UpcomingForAsync(State.Person.Id, now, ct) is { State: AppointmentInfo.Confirmed } live
+                && live.Service == service.Code && live.Start > now)
+            {
+                if (plan.Steps.Count == 0)
+                {
+                    await ShowExistingAsync(desk, live.Id, ct);
+                }
+
+                return;
+            }
+
             var count = b.Rules.OfferCount;
             var today = BookingDesk.Today(now);
             var found = await desk.FindAsync(b, settings, service, now, after, service.IsUrgent ? today : null, count, moving, ct);
