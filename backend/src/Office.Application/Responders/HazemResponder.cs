@@ -337,6 +337,19 @@ public sealed class HazemResponder(
             {
                 var image = m.Type == MessageType.Image;
                 var target = await services.FileTargetAsync(state.Person.Id, image, ct);
+                // v1.72: an image while a payment waits is its receipt, unless his words with it say it is something else («دي
+                // البطاقة مش التحويل»): the AI reads those words (never the image), and the file then goes where a file that is
+                // not a receipt goes (the case's documents, or «ابعت صورة التحويل»). No words, or words that do not say: as before.
+                if (understanding && image && target.Target is FileTarget.Hold or FileTarget.BookingPayment or FileTarget.LateHold or FileTarget.OrderPayment
+                    && AiInput.Build(turn) is { } withFile && withFile.Any(char.IsLetter))
+                {
+                    classification = Classification.From(await classifier.ClassifyAsync("[مرفق صورة]\n" + withFile, settings, ct), settings);
+                    if (classification.Call?.Answer?.FileIs == "other")
+                    {
+                        target = await services.FileTargetAsync(state.Person.Id, false, ct);
+                    }
+                }
+
                 switch (target.Target)
                 {
                     case FileTarget.OrderPayment when servicesOn && booking is not null:
@@ -1215,13 +1228,12 @@ public sealed class HazemResponder(
         /// <summary>
         /// v1.71 (Ahmed Amin's chat: «عايز اتجوز عرفي الزوجه 20 سنه وانا 40 سنه» was asked the ages): the two ages written in the
         /// message that asks for the Urfi contract are its answer, as the typed answer to the question is (the under-18 refusal too).
-        /// Anything else (no ages, or not exactly two): false, and the question is asked as before.
+        /// v1.72: or the ages the AI read from the chat («منا قولتلك» after he said them), checked by the same rules. Neither:
+        /// false, and the question is asked as before.
         /// </summary>
         private bool AgesSaidWithRequest()
         {
-            var said = AiInput.Build(turn);
-            if (Urf is not { State: UrfCase.Collecting, Step: UrfStep.Ages } u
-                || UrfAges.Parse(understanding && said is not null ? NumberWords.ToDigits(said) : said) is null)
+            if (Urf is not { State: UrfCase.Collecting, Step: UrfStep.Ages } u || AgesText() is not { } said)
             {
                 return false;
             }
@@ -1231,6 +1243,20 @@ public sealed class HazemResponder(
             UrfChanged = true;
             AfterUrf(how);
             return true;
+        }
+
+        /// <summary>v1.72: the ages in his words (two numbers the code reads), else the two the AI read from the chat, as words.</summary>
+        private string? AgesText()
+        {
+            var said = AiInput.Build(turn);
+            if (UrfAges.Parse(understanding && said is not null ? NumberWords.ToDigits(said) : said) is not null)
+            {
+                return said;
+            }
+
+            return understanding && answering?.Call?.Answer is { UrfHusbandAge: { } h, UrfWifeAge: { } w }
+                ? $"الزوج {h} والزوجة {w}"
+                : null;
         }
 
         /// <summary>
@@ -1782,6 +1808,17 @@ public sealed class HazemResponder(
         private void Answer(Classification turnClass)
         {
             answering = turnClass;
+            // v1.72: what the AI read from the chat changes the answer a case was refused for (a guardian named after «مفيش حد
+            // منهم»), as it changes any other answer (v1.60): the case goes on from where it stopped. Only then the closing text.
+            if (urfOn && MayBook && ageRefusal?.Case is { } refused && WithUrfFacts(refused) is { State: not (UrfCase.RejectedAge or UrfCase.RejectedGuardian) } again)
+            {
+                Check(Intake.MoveTo(IntakeState.InServiceFlow));
+                Urf = again;
+                UrfChanged = true;
+                AfterUrf(again.State == UrfCase.Collecting ? UrfNext.Ask : UrfNext.Book);
+                return;
+            }
+
             // v1.20 (B-11.1): after the age refusal, the same marriage gets the closing text (no offer, no price, no
             // buttons), twice at most, then silence. Any other matter goes on below.
             if (ageRefusal is not null && UrfRules.FollowsAgeRefusal(turnClass, ageRefusal))
@@ -1791,6 +1828,12 @@ public sealed class HazemResponder(
                     plan.Say(ageRefusal.ClosingKey);
                 }
 
+                return;
+            }
+
+            // v1.72: the ages question waits and the AI read the ages from the chat («منا قولتلك»): they are its answer
+            if (urfOn && MayBook && AgesSaidWithRequest())
+            {
                 return;
             }
 

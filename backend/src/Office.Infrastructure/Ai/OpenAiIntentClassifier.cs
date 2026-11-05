@@ -23,7 +23,7 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
     public const string PromptVersion = "classify-v16";
 
     /// <summary>v1.52 (phase 1): the prompt while understanding v2 is on (the whole chat, the stance, the other questions).</summary>
-    public const string PromptVersionV2 = "classify-v20";
+    public const string PromptVersionV2 = "classify-v21";
     public const string StubEnabledKey = "ai.stub_enabled";
     public const string StubBaseUrlKey = "ai.stub_base_url";
 
@@ -166,7 +166,11 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
                 // v1.60: what he SAID about the Urfi case, so the questions already answered are not asked again
                 StringOrNull(o["urf_wife_past"]),
                 StringOrNull(o["urf_guardian"]),
-                StringOrNull(o["urf_witnesses"])), null);
+                StringOrNull(o["urf_witnesses"]),
+                // v1.72: the ages he said in the chat, and what his words say a file with them is
+                IntOrNull(o["urf_husband_age"]),
+                IntOrNull(o["urf_wife_age"]),
+                StringOrNull(o["file_is"])), null);
         }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException)
         {
@@ -183,6 +187,9 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
 
     private static string? StringOrNull(JsonNode? n) =>
         n is JsonValue v && v.GetValueKind() == JsonValueKind.String ? v.GetValue<string>() : null;
+
+    private static int? IntOrNull(JsonNode? n) =>
+        n is JsonValue v && v.GetValueKind() == JsonValueKind.Number && v.TryGetValue<int>(out var i) ? i : null;
 
     private static JsonObject Body(string model, string prompt, string text) => new()
     {
@@ -223,7 +230,7 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
             ["additionalProperties"] = false,
             ["required"] = new JsonArray("analysis", "subject", "scope", "intent", "service", "consultation_mode", "full_name", "confidence",
                 "matter_type", "matter_subtype", "sender_role", "info_topic", "courtesy", "name_gender", "picked", "asked_time", "time_exact",
-                "stance", "also_asked", "urf_wife_past", "urf_guardian", "urf_witnesses"),
+                "stance", "also_asked", "urf_wife_past", "urf_guardian", "urf_witnesses", "urf_husband_age", "urf_wife_age", "file_is"),
             // v1.24: subject and scope come first, so the model names what the turn is about before it picks an
             // intent. The subject is a few words for that only: it is never read, kept or logged.
             ["properties"] = new JsonObject
@@ -256,6 +263,10 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
                 ["urf_wife_past"] = new JsonObject { ["type"] = new JsonArray("string", "null"), ["enum"] = new JsonArray("first", "divorced", "khul", "widow", null) },
                 ["urf_guardian"] = new JsonObject { ["type"] = new JsonArray("string", "null"), ["enum"] = new JsonArray("father", "brother", "uncle", null) },
                 ["urf_witnesses"] = new JsonObject { ["type"] = new JsonArray("string", "null"), ["enum"] = new JsonArray("office", "own", null) },
+                // v1.72: the ages he said (in the chat too), and what his words say a file sent with them is
+                ["urf_husband_age"] = new JsonObject { ["type"] = new JsonArray("integer", "null") },
+                ["urf_wife_age"] = new JsonObject { ["type"] = new JsonArray("integer", "null") },
+                ["file_is"] = new JsonObject { ["type"] = new JsonArray("string", "null"), ["enum"] = new JsonArray("receipt", "other", null) },
             },
         };
     }

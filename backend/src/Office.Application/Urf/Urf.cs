@@ -143,7 +143,9 @@ public sealed record UrfAnswer(string Step, string Value)
 /// v1.20 (B-11.1) the age refusal; v1.71 any Urfi refusal of the client (the age, or no guardian for a first marriage), with
 /// the closing text that answers the same matter after it (<see cref="ClosingKey"/>).
 /// </summary>
-public sealed record AgeRefusal(DateTimeOffset At, int ClosingReplies, bool MovedOn = false, string State = UrfCase.RejectedAge)
+/// <remarks>v1.72: <see cref="Case"/> is the refused case itself, so what he says after it can change the answer it was refused for.</remarks>
+public sealed record AgeRefusal(DateTimeOffset At, int ClosingReplies, bool MovedOn = false, string State = UrfCase.RejectedAge,
+    UrfCase? Case = null)
 {
     public string ClosingKey => State == UrfCase.RejectedGuardian ? TextKeys.UrfGuardianClosed : TextKeys.UrfAgeClosed;
 }
@@ -284,6 +286,22 @@ public static class UrfRules
             return NextStep(filled) is { } step
                 ? filled with { Step = step }
                 : filled with { State = UrfCase.DocumentsPending, Step = null };
+        }
+
+        // v1.72 (Ahmed Amin's chat: «طب هجيب ابوها» after «مفيش حد منهم» got the closing text, then silence): the refusal for no
+        // guardian is the answer «none» like any other answer, so what he says after it changes it as it changes the others: a
+        // guardian named, or a past that needs none. The case goes on from where it stopped, as a new case (a refused case is never
+        // written again); its other answers are kept. The age refusal has nothing to change: it stays.
+        if (c.State == UrfCase.RejectedGuardian && (guard is not null || past is not null and not "first"))
+        {
+            var again = c with
+            {
+                Id = Guid.NewGuid(), State = UrfCase.Collecting, Step = null, PolicyVersion = null,
+                WifePast = past ?? c.WifePast, Guardian = guard, Witnesses = c.Witnesses ?? wit,
+            };
+            return NextStep(again) is { } next
+                ? again with { Step = next }
+                : again with { State = UrfCase.DocumentsPending };
         }
 
         return c.State == UrfCase.DocumentsPending && c.AppointmentId is null
