@@ -199,6 +199,7 @@ public static class TextKeys
     public const string UrfAskAges = "urf_ask_ages";
     public const string UrfUnderAge = "urf_under_age";
     public const string UrfAgeClosed = "urf_age_closed";                    // v1.20 (B-11.1): the same matter after the age refusal
+    public const string UrfAnswerCorrected = "urf_answer_corrected";        // v1.75: «تمام، عدّلت … ✅» before the next question
     public const string UrfGuardianClosed = "urf_guardian_closed";          // v1.71: the same matter after «مفيش ولي» (a first marriage)
     public const string UrfAskWifePast = "urf_ask_wife_past";
     public const string UrfAskGuardian = "urf_ask_guardian";
