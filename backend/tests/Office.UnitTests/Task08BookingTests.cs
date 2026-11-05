@@ -326,9 +326,10 @@ public sealed partial class BookingFlowTests
             }
 
             // as hazem.turn_replies: the closing texts sent after the age refusal, and any other reply since (v1.20)
-            _booking.AgeClosingReplies += e.Replies.Count(r => r.Key == TextKeys.UrfAgeClosed);
+            _booking.AgeClosingReplies += e.Replies.Count(r => r.Key is TextKeys.UrfAgeClosed or TextKeys.UrfGuardianClosed);
             _booking.AgeMovedOn |= _booking.AgeRefusedAt is not null
-                                   && e.Replies.Any(r => r.Key is not (TextKeys.UrfAgeClosed or TextKeys.UrfUnderAge));
+                                   && e.Replies.Any(r => r.Key is not (TextKeys.UrfAgeClosed or TextKeys.UrfUnderAge
+                                                                     or TextKeys.UrfGuardianClosed or TextKeys.UrfNoGuardian));
         }
 
         return d;
@@ -1122,6 +1123,39 @@ public sealed partial class BookingFlowTests
     public void Urf_one_age_said_for_both_is_both_ages(string text, int husband, int wife) =>
         Assert.Equal((husband, wife), Office.Application.Urf.UrfAges.Parse(text));
 
+    [Theory] // v1.71 (Ahmed Amin's chat): the word before each number says whose age it is
+    [InlineData("الزوجه 20 سنه وانا 40 سنه", 40, 20)]
+    [InlineData("مراتي ٢٥ وانا ٣٠", 30, 25)]
+    [InlineData("هي 22 وهو 28", 28, 22)]
+    [InlineData("انا 35 والزوجة 30", 35, 30)]
+    [InlineData("عندها 25 وانا 30", 30, 25)]
+    [InlineData("20 و 40", 20, 40)] // no word: the husband first, as the question asks
+    public void Urf_the_ages_follow_the_words_that_name_them(string text, int husband, int wife) =>
+        Assert.Equal((husband, wife), Office.Application.Urf.UrfAges.Parse(text));
+
+    [Fact]
+    public async Task Urf_the_ages_in_the_message_that_asks_for_it_are_not_asked() // v1.71 (Ahmed Amin's chat)
+    {
+        UrfOn();
+        await ToTheOffer();
+        _script["عايز اتجوز عرفي الزوجه 20 سنه وانا 40 سنه"] = new("service_by_name", "urf_marriage", "unknown", null, 0.95);
+        Assert.Equal([TextKeys.UrfAskWifePast], Keys(await Say("عايز اتجوز عرفي الزوجه 20 سنه وانا 40 سنه")));
+        Assert.Equal((40, 20), (TheCase.HusbandAge, TheCase.WifeAge));
+    }
+
+    [Fact]
+    public async Task Urf_after_no_guardian_why_gets_the_closing_text_not_the_first_question() // v1.71 (Ahmed Amin's chat)
+    {
+        await ToTheGuardian();
+        _texts[TextKeys.UrfGuardianClosed] = new ApprovedText(TextKeys.UrfGuardianClosed, 1, "T:guardian closed", 300, true);
+        Assert.Equal([TextKeys.UrfNoGuardian], Keys(await Answer(Office.Application.Urf.UrfStep.Guardian, "none")));
+        _script["ليه كده"] = new("other", null, "unknown", null, 0.9);
+        Assert.Equal([TextKeys.UrfGuardianClosed], Keys(await Say("ليه كده")));
+        Assert.Equal([TextKeys.UrfGuardianClosed], Keys(await Say("عايز أعمل جواز عرفي"))); // not the ages again
+        Assert.Empty(Keys(await Say("ليه كده"))); // twice at most, then silence
+        Assert.Equal(Office.Application.Urf.UrfCase.RejectedGuardian, TheCase.State);
+    }
+
     [Fact]
     public void Urf_one_age_without_a_word_for_both_is_still_not_read() =>
         Assert.Null(Office.Application.Urf.UrfAges.Parse("الزوج 20"));
@@ -1586,7 +1620,7 @@ public sealed partial class BookingFlowTests
     {
         public Task<Office.Application.Urf.AgeRefusal?> AgeRefusalAsync(Guid personId, DateTimeOffset since, CancellationToken ct) =>
             Task.FromResult(booking.AgeRefusedAt is { } at && at > since
-                ? new Office.Application.Urf.AgeRefusal(at, booking.AgeClosingReplies, booking.AgeMovedOn)
+                ? new Office.Application.Urf.AgeRefusal(at, booking.AgeClosingReplies, booking.AgeMovedOn, booking.RefusedState)
                 : null);
 
         public Task<IReadOnlyList<Office.Application.Urf.UrfCase>> OpenAsync(Guid personId, CancellationToken ct) =>
@@ -1598,9 +1632,11 @@ public sealed partial class BookingFlowTests
         {
             // In place (the store keeps a case's creation order); a new case is the newest.
             var i = booking.UrfCases.FindIndex(x => x.Id == c.Id);
-            if (c.State == Office.Application.Urf.UrfCase.RejectedAge && (i < 0 || booking.UrfCases[i].State != c.State))
+            if (c.State is Office.Application.Urf.UrfCase.RejectedAge or Office.Application.Urf.UrfCase.RejectedGuardian
+                && (i < 0 || booking.UrfCases[i].State != c.State))
             {
-                booking.AgeRefusedAt = now(); // updated_at when the case became rejected_age
+                booking.AgeRefusedAt = now(); // updated_at when the case was refused (v1.71: the guardian too)
+                booking.RefusedState = c.State;
                 (booking.AgeClosingReplies, booking.AgeMovedOn) = (0, false);
             }
 
@@ -1880,6 +1916,8 @@ public sealed partial class BookingFlowTests
         public List<Office.Application.Urf.UrfCase> UrfCases { get; } = [];
 
         public DateTimeOffset? AgeRefusedAt { get; set; }
+
+        public string RefusedState { get; set; } = Office.Application.Urf.UrfCase.RejectedAge;
 
         public int AgeClosingReplies { get; set; }
 

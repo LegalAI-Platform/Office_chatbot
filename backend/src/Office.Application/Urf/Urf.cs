@@ -2,6 +2,7 @@ using System.Globalization;
 using Office.Application.Booking;
 using Office.Application.Services;
 using Office.Application.Understanding;
+using Office.Application.Texts;
 
 namespace Office.Application.Urf;
 
@@ -138,7 +139,14 @@ public sealed record UrfAnswer(string Step, string Value)
 /// v1.20 (B-11.1): the client's last age refusal, how many closing texts followed it, and whether Hazem has answered
 /// anything else since (the client moved on: thanks, a booking, another matter…).
 /// </summary>
-public sealed record AgeRefusal(DateTimeOffset At, int ClosingReplies, bool MovedOn = false);
+/// <summary>
+/// v1.20 (B-11.1) the age refusal; v1.71 any Urfi refusal of the client (the age, or no guardian for a first marriage), with
+/// the closing text that answers the same matter after it (<see cref="ClosingKey"/>).
+/// </summary>
+public sealed record AgeRefusal(DateTimeOffset At, int ClosingReplies, bool MovedOn = false, string State = UrfCase.RejectedAge)
+{
+    public string ClosingKey => State == UrfCase.RejectedGuardian ? TextKeys.UrfGuardianClosed : TextKeys.UrfAgeClosed;
+}
 
 public static class UrfRules
 {
@@ -297,7 +305,10 @@ public static class UrfAges
         }
 
         var numbers = new List<int>();
+        var roles = new List<char?>(); // v1.71: 'h' or 'w' from the word said before each number, if any
+        char? said = null;
         var digits = new System.Text.StringBuilder();
+        var word = new System.Text.StringBuilder();
         foreach (var ch in text + " ")
         {
             var d = CharUnicodeInfo.GetDecimalDigitValue(ch);
@@ -315,7 +326,32 @@ public static class UrfAges
                 }
 
                 numbers.Add(int.Parse(digits.ToString(), CultureInfo.InvariantCulture));
+                roles.Add(said);
+                said = null;
                 digits.Clear();
+            }
+
+            if (char.IsLetter(ch))
+            {
+                word.Append(ch);
+                continue;
+            }
+
+            if (word.Length > 0)
+            {
+                said = RoleOf(word.ToString()) ?? said;
+                word.Clear();
+            }
+        }
+
+        // v1.71 (Ahmed Amin's chat: «الزوجه 20 سنه وانا 40 سنه» was read as the husband 20): a number after «الزوجة / مراتي /
+        // هي» is hers, after «الزوج / انا / هو» his; one named, the other is the other one. None named: the husband first.
+        if (numbers.Count == 2)
+        {
+            var (first, second) = (roles[0], roles[1]);
+            if (first == 'w' && second != 'w' || second == 'h' && first != 'h')
+            {
+                (numbers[0], numbers[1]) = (numbers[1], numbers[0]);
             }
         }
 
@@ -330,6 +366,32 @@ public static class UrfAges
 
     /// <summary>On the normalized text (Courtesy.Normalize), with the spaces around.</summary>
     private static readonly string[] BothWords = [" الاتنين ", " الاثنين ", " التنين ", " كلهم ", " كل واحد ", " زي بعض ", " نفس السن ", " both "];
+
+    /// <summary>v1.71: the words that name the wife or the husband before an age (normalized: ه for ة, ي for ى, ا for أ).</summary>
+    private static readonly HashSet<string> WifeWords = new(StringComparer.Ordinal)
+        { "الزوجه", "زوجه", "زوجتي", "مراتي", "مراته", "العروسه", "عروسه", "العروس", "هي", "البنت", "الست", "خطيبتي" };
+
+    private static readonly HashSet<string> HusbandWords = new(StringComparer.Ordinal)
+        { "الزوج", "زوج", "زوجها", "جوزها", "انا", "العريس", "عريس", "هو", "الراجل", "خطيبها" };
+
+    private static char? RoleOf(string raw)
+    {
+        var w = Courtesy.Normalize(raw).Trim();
+        foreach (var form in w.Length > 2 && w[0] is 'و' or 'ب' or 'ل' ? new[] { w, w[1..] } : [w])
+        {
+            if (WifeWords.Contains(form))
+            {
+                return 'w';
+            }
+
+            if (HusbandWords.Contains(form))
+            {
+                return 'h';
+            }
+        }
+
+        return null;
+    }
 }
 
 public interface IUrfStore
