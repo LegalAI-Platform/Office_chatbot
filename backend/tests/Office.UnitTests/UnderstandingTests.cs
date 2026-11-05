@@ -218,6 +218,11 @@ public sealed class UnderstandingTests
         Assert.Equal("null", service[1].GetProperty("type").GetString());
         Assert.Equal("string", schema["properties"].GetProperty("full_name").GetProperty("anyOf")[0].GetProperty("type").GetString());
         Assert.Equal("string", schema["properties"].GetProperty("intent").GetProperty("type").GetString()); // not nullable: as it was
+        // v1.73: a nullable integer stays an integer (the choice picked, the ages came back as text and were read as nothing)
+        foreach (var name in new[] { "picked", "urf_husband_age", "urf_wife_age" })
+        {
+            Assert.Equal("integer", schema["properties"].GetProperty(name).GetProperty("anyOf")[0].GetProperty("type").GetString());
+        }
     }
 
     [Fact]
