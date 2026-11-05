@@ -125,10 +125,10 @@ type KpiTone = "gold" | "sand" | "copper" | "mahogany";
 // brand's gold and bronze, a champagne sand, a copper and a deep mahogany for what is late, all warm like the library's picture.
 // --kpi-tint is the glass's colour (styles.css, .kpi-glass); the numbers keep a strong ink of the same family in both themes.
 const KPI: Record<KpiTone, { card: string; ink: string; stroke: string }> = {
-  gold: { card: "kpi-glass [--kpi-tint:#c9a063]", ink: "text-[#8a5a24]", stroke: "#b08552" },
-  sand: { card: "kpi-glass [--kpi-tint:#dcc29a]", ink: "text-[#6b4626]", stroke: "#8c6a3f" },
-  copper: { card: "kpi-glass [--kpi-tint:#c8793c]", ink: "text-[#9a4d10]", stroke: "#b8651f" },
-  mahogany: { card: "kpi-glass [--kpi-tint:#a65a48]", ink: "text-[#8a2f1f]", stroke: "#9a3b2a" },
+  gold: { card: "kpi-glass [--kpi-tint:#e0a92e]", ink: "text-[#7a4f00]", stroke: "#b8860b" },
+  sand: { card: "kpi-glass [--kpi-tint:#9a6a3a]", ink: "text-[#5a3718]", stroke: "#7a5028" },
+  copper: { card: "kpi-glass [--kpi-tint:#e8742a]", ink: "text-[#9a3f00]", stroke: "#cf5f12" },
+  mahogany: { card: "kpi-glass [--kpi-tint:#b02a3c]", ink: "text-[#8a1626]", stroke: "#a3202f" },
 };
 
 function Kpi({ tone, icon, title, value, series, to, more }: {
