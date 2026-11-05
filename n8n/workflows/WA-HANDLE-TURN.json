@@ -31,7 +31,7 @@
     },
     {
       "parameters": {
-        "content": "### v1.39 (TASK 16): blue ticks and «بيكتب…»\nBefore the API is asked: the turn's last message marked as read, with Meta's typing indicator (it stops when the reply goes, or after 25 s). Same rules as a send: never in dry run or through WAHA, and only the test numbers while sends are restricted (0006). A failure here never stops the turn.",
+        "content": "### v1.39 (TASK 16): blue ticks and «بيكتب…»\nBefore the API is asked: the turn's last message marked as read, with Meta's typing indicator (it stops when the reply goes, or after 25 s). Same rules as a send: never in dry run or through WAHA, and only the test numbers while sends are restricted (0006). A failure here never stops the turn.\nv1.69: «بيكتب…» only when Hazem will answer (app.wa_hazem_answers): never while the chat is with the office; the blue ticks always. The first ticks now go as the message arrives (META-WA-INBOUND).",
         "height": 200,
         "width": 520
       },
@@ -55,7 +55,7 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT (COALESCE((SELECT value FROM app.settings WHERE key = 'whatsapp.dry_run'), 'false') <> 'true' AND COALESCE((SELECT value FROM app.settings WHERE key = 'whatsapp.provider'), 'meta') = 'meta' AND (COALESCE((SELECT value FROM app.settings WHERE key = 'whatsapp.send_restricted'), 'true') = 'false' OR app.wa_is_test_recipient($1)) AND $2 <> '') AS ok, $2 AS wamid",
+        "query": "SELECT (COALESCE((SELECT value FROM app.settings WHERE key = 'whatsapp.dry_run'), 'false') <> 'true' AND COALESCE((SELECT value FROM app.settings WHERE key = 'whatsapp.provider'), 'meta') = 'meta' AND (COALESCE((SELECT value FROM app.settings WHERE key = 'whatsapp.send_restricted'), 'true') = 'false' OR app.wa_is_test_recipient($1)) AND $2 <> '') AS ok, $2 AS wamid, app.wa_hazem_answers($1) AS typing",
         "options": {
           "queryReplacement": "={{ [ $json.wa_id, (() => { const m = ($json.messages || []).filter((x) => x && x.wamid); return m.length ? String(m[m.length - 1].wamid) : ''; })() ] }}"
         }
@@ -154,7 +154,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ messaging_product: 'whatsapp', status: 'read', message_id: $('Read and typing?').first().json.wamid, typing_indicator: { type: 'text' } }) }}"
+        "jsonBody": "={{ JSON.stringify(Object.assign({ messaging_product: 'whatsapp', status: 'read', message_id: $('Read and typing?').first().json.wamid }, $('Read and typing?').first().json.typing ? { typing_indicator: { type: 'text' } } : {})) }}"
       },
       "id": "e2d4f6a8-1c3b-5d7e-9f0a-b1c2d3e4f5a6",
       "name": "Read and typing",

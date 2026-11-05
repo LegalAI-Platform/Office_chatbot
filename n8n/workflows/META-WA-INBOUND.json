@@ -177,6 +177,151 @@
         300
       ],
       "webhookId": "f42b07b3-a5f2-5bcd-bf91-2fa9aa22b3de"
+    },
+    {
+      "parameters": {
+        "content": "### v1.69: the blue ticks at once\nAs soon as a message is stored (before the 8 s quiet period that groups several messages), it is marked read, with «بيكتب…» only when Hazem will answer (app.wa_hazem_answers: the chat is not with the office, Hazem answers this number). Same rules as a send (dry run, WAHA, the test numbers). A failure here never stops the turn.",
+        "height": 200,
+        "width": 520
+      },
+      "id": "3b3a5007-0802-49ea-9931-74ea782dfb2c",
+      "name": "Note: ticks at once",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        700,
+        -160
+      ]
+    },
+    {
+      "id": "61c92772-1576-432b-9093-045ddbcb059a",
+      "name": "Read at once?",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        720,
+        80
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH m AS (SELECT i.wa_id, i.wamid FROM app.wa_inbound_messages i WHERE i.wamid = $1 LIMIT 1) SELECT (COALESCE((SELECT value FROM app.settings WHERE key = 'whatsapp.dry_run'), 'false') <> 'true' AND COALESCE((SELECT value FROM app.settings WHERE key = 'whatsapp.provider'), 'meta') = 'meta' AND (COALESCE((SELECT value FROM app.settings WHERE key = 'whatsapp.send_restricted'), 'true') = 'false' OR app.wa_is_test_recipient(m.wa_id))) AS ok, m.wamid AS wamid, app.wa_hazem_answers(m.wa_id) AS typing FROM m",
+        "options": {
+          "queryReplacement": "={{ [ (() => { const m = ($('WhatsApp Trigger').first().json.messages || []).filter((x) => x && x.id); return m.length ? String(m[m.length - 1].id) : ''; })() ] }}"
+        }
+      },
+      "credentials": {
+        "postgres": {
+          "id": "CRED:office-postgres-app",
+          "name": "office-postgres-app"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "4eb0ee79-0120-4f2b-bbf3-9c974b1bbcfa",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "a9f33ed8-61a5-4205-8aa1-61cf78811fc4",
+      "name": "Mark it read at once?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        960,
+        80
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "91ea3813-361f-4f65-8ae7-30e5aa46d3e1",
+      "name": "Read config (at once)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.4,
+      "position": [
+        1200,
+        80
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "WaCfgGet00000001",
+          "mode": "id",
+          "cachedResultName": "CFG-GET"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/{{ $('Read config (at once)').first().json.cfg['whatsapp.graph_api_version'] }}/{{ $('Read config (at once)').first().json.cfg['whatsapp.phone_number_id'] }}/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 5000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify(Object.assign({ messaging_product: 'whatsapp', status: 'read', message_id: $('Read at once?').first().json.wamid }, $('Read at once?').first().json.typing ? { typing_indicator: { type: 'text' } } : {})) }}"
+      },
+      "id": "e370332f-415b-4dc5-aaf5-5e208afbeb95",
+      "name": "Read and typing (at once)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1440,
+        80
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CRED:meta-whatsapp-token",
+          "name": "meta-whatsapp-token"
+        }
+      },
+      "retryOnFail": false,
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -196,6 +341,11 @@
         [
           {
             "node": "Fetch media",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Read at once?",
             "type": "main",
             "index": 0
           }
@@ -229,6 +379,39 @@
         [
           {
             "node": "Forward turns",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read at once?": {
+      "main": [
+        [
+          {
+            "node": "Mark it read at once?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark it read at once?": {
+      "main": [
+        [
+          {
+            "node": "Read config (at once)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read config (at once)": {
+      "main": [
+        [
+          {
+            "node": "Read and typing (at once)",
             "type": "main",
             "index": 0
           }
