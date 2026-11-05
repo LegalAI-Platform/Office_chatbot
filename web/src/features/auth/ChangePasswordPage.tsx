@@ -1,17 +1,18 @@
-import { useState, type FormEvent } from "react";
+import { useId, useState, type FormEvent, type InputHTMLAttributes, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import { api, errorMessage, resetCsrf } from "../../shared/api/client";
 import { meKey, useMe, useLogout } from "../../shared/api/session";
 import { Icon } from "../../shared/ui/Icon";
-import { Button, Field } from "../../shared/ui/ui";
+import { Button } from "../../shared/ui/ui";
 import { AuthLayout, Notice } from "./AuthLayout";
 
 export const MIN_PASSWORD = 12;
 
 /**
- * First sign-in (a temporary password) or any time from «حسابي». In the sign-in's layout (the office's black panel and
- * a card), with how long the new one is.
+ * First sign-in (a temporary password from the manager) or any time from «حسابي». In the sign-in's layout (the office's
+ * black panel and a card). The first time it says what to do in two steps; every password can be shown while it is typed;
+ * and what the new one still needs is a list that ticks itself.
  */
 export function ChangePasswordPage() {
   const { data: me } = useMe();
@@ -25,12 +26,15 @@ export function ChangePasswordPage() {
   const [busy, setBusy] = useState(false);
   const forced = !!me?.must_change_password;
 
-  const tooShort = next.length > 0 && next.length < MIN_PASSWORD;
-  const mismatch = repeat.length > 0 && repeat !== next;
+  const longEnough = next.length >= MIN_PASSWORD;
+  const same = next.length > 0 && repeat === next;
+  const differs = next.length > 0 && next !== current;
+  const ready = !!current && longEnough && same && differs;
+  const first = me?.display_name.split(/\s+/)[0];
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (next.length < MIN_PASSWORD || next !== repeat) return;
+    if (!ready) return;
     setError(undefined);
     setBusy(true);
     try {
@@ -49,26 +53,38 @@ export function ChangePasswordPage() {
   return (
     <AuthLayout title="تغيير كلمة السر">
       {forced ? (
-        <p className="flex items-start gap-2 rounded-[14px] border border-orange/30 bg-orange-bg px-3 py-2.5 text-sm text-orange-ink">
-          <Icon name="key" className="mt-0.5 size-4 shrink-0" />
-          دي كلمة سر مؤقتة من المدير. غيّرها الأول عشان تكمّل.
-        </p>
+        <div className="grid gap-2.5 rounded-[16px] border border-gold-line/70 bg-gold-tint/60 px-4 py-3 text-sm">
+          <p className="flex items-center gap-2 font-bold text-gold-ink">
+            <Icon name="key" className="size-4 shrink-0" />
+            {first ? `أهلًا يا ${first} 👋` : "أهلًا بحضرتك 👋"}
+          </p>
+          <p>دي أول مرة تدخل، وكلمة السر اللي دخلت بيها مؤقتة من المدير. خطوتين بس وتكمّل:</p>
+          <ol className="grid gap-1 ps-1">
+            <Step n={1}>اكتب كلمة السر المؤقتة اللي المدير ادّاهالك.</Step>
+            <Step n={2}>اختار كلمة سر جديدة بتاعتك (محدش غيرك هيعرفها).</Step>
+          </ol>
+        </div>
       ) : null}
       <form onSubmit={submit} className="grid gap-4" noValidate>
-        <Field label="كلمة السر الحالية" type="password" autoComplete="current-password" dir="ltr" required
+        <PasswordField label={forced ? "كلمة السر المؤقتة" : "كلمة السر الحالية"} autoComplete="current-password"
           value={current} onChange={(e) => setCurrent(e.target.value)} />
-        <Field label="كلمة السر الجديدة" type="password" autoComplete="new-password" dir="ltr" required
-          hint={`${MIN_PASSWORD} حرف على الأقل. جملة طويلة سهل تفتكرها أحسن من كلمة معقدة.`}
-          error={tooShort ? `لسه ${MIN_PASSWORD - next.length} حرف.` : undefined}
+        <PasswordField label="كلمة السر الجديدة" autoComplete="new-password"
           value={next} onChange={(e) => setNext(e.target.value)} />
         <Strength length={next.length} />
-        <Field label="اكتبها تاني" type="password" autoComplete="new-password" dir="ltr" required
-          error={mismatch ? "مش زي اللي فوق." : undefined}
+        <PasswordField label="اكتبها تاني" autoComplete="new-password"
           value={repeat} onChange={(e) => setRepeat(e.target.value)} />
+
+        {/* what the new password still needs: it ticks itself while it is typed */}
+        <ul className="grid gap-1.5 rounded-[14px] border border-line/60 bg-card-2/50 px-3.5 py-3 text-[13px]" aria-label="شروط كلمة السر الجديدة">
+          <Rule ok={longEnough} started={next.length > 0}>{MIN_PASSWORD} حرف على الأقل{next.length > 0 && !longEnough ? ` (لسه ${MIN_PASSWORD - next.length})` : ""}</Rule>
+          <Rule ok={differs} started={next.length > 0}>غير كلمة السر المؤقتة أو الحالية</Rule>
+          <Rule ok={same} started={repeat.length > 0}>الاتنين زي بعض</Rule>
+          <li className="pt-0.5 text-[12px] text-ink-soft">جملة طويلة سهل تفتكرها أحسن من كلمة معقدة.</li>
+        </ul>
+
         {error ? <Notice>{error}</Notice> : null}
         <div className="flex flex-wrap gap-2">
-          <Button type="submit" variant="primary" className="rounded-full" busy={busy}
-            disabled={!current || next.length < MIN_PASSWORD || next !== repeat}>
+          <Button type="submit" variant="primary" className="rounded-full" busy={busy} disabled={!ready}>
             غيّر كلمة السر
           </Button>
           {forced ? (
@@ -85,6 +101,48 @@ export function ChangePasswordPage() {
         </div>
       </form>
     </AuthLayout>
+  );
+}
+
+function Step({ n, children }: { n: number; children: string }) {
+  return (
+    <li className="flex items-center gap-2">
+      <span aria-hidden className="tabular grid size-5 shrink-0 place-items-center rounded-full bg-gold text-[11px] font-bold text-white">{n}</span>
+      {children}
+    </li>
+  );
+}
+
+function Rule({ ok, started, children }: { ok: boolean; started: boolean; children: ReactNode }) {
+  return (
+    <li className={`flex items-center gap-2 ${ok ? "text-green-ink" : started ? "text-ink" : "text-ink-soft"}`}>
+      <span aria-hidden className={`grid size-4 shrink-0 place-items-center rounded-full ${ok ? "bg-green-bg" : "border border-line-strong"}`}>
+        {ok ? <Icon name="check" className="size-3" /> : null}
+      </span>
+      <span>{children}</span>
+      <span className="sr-only">{ok ? "تمام" : "لسه"}</span>
+    </li>
+  );
+}
+
+/** A password field that can be shown while it is typed (a typo in a new password is the commonest way to lock oneself out). */
+function PasswordField({ label, ...input }: InputHTMLAttributes<HTMLInputElement> & { label: string }) {
+  const id = useId();
+  const [shown, setShown] = useState(false);
+  return (
+    <div className="grid gap-1.5">
+      <label htmlFor={id} className="text-sm font-semibold">
+        {label} <span className="text-bad">*</span>
+      </label>
+      <div className="relative">
+        <input id={id} {...input} type={shown ? "text" : "password"} dir="ltr" required
+          className="min-h-11 w-full rounded-[var(--radius-control)] border border-line-strong bg-card ps-16 pe-3.5 text-base text-ink focus:border-gold" />
+        <button type="button" onClick={() => setShown((v) => !v)} aria-pressed={shown} aria-label={`${shown ? "إخفاء" : "إظهار"} ${label}`}
+          className="absolute inset-y-1.5 end-1.5 rounded-[10px] px-2.5 text-[12.5px] font-semibold text-gold-ink hover:bg-gold-tint">
+          {shown ? "إخفاء" : "إظهار"}
+        </button>
+      </div>
+    </div>
   );
 }
 

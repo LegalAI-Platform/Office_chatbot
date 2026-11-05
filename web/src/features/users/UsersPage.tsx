@@ -5,7 +5,7 @@ import { useMe } from "../../shared/api/session";
 import type { NewUserResult, PanelUser, Role } from "../../shared/api/types";
 import { label, ROLES } from "../../shared/lib/labels";
 import { cairoWhen } from "../../shared/lib/time";
-import { confirmAction } from "../../shared/ui/feedback";
+import { confirmAction, toast } from "../../shared/ui/feedback";
 import { Icon, type IconName } from "../../shared/ui/Icon";
 import { Avatar, Button, Chip, ErrorState, Field, Loading } from "../../shared/ui/ui";
 
@@ -21,7 +21,7 @@ const select = "min-h-11 rounded-[14px] border border-line/70 bg-card/70 px-3 te
 export function UsersPage() {
   const users = useQuery({ queryKey: usersKey, queryFn: () => api<PanelUser[]>("GET", "/users") });
   const [adding, setAdding] = useState(false);
-  const [secret, setSecret] = useState<{ name: string; password: string } | null>(null);
+  const [secret, setSecret] = useState<{ name: string; password: string; username?: string } | null>(null);
   const waiting = users.data?.filter((u) => u.pending) ?? [];
 
   return (
@@ -43,7 +43,7 @@ export function UsersPage() {
       {secret ? <TemporaryPassword {...secret} onDone={() => setSecret(null)} /> : null}
       {adding ? (
         <AddUser onCancel={() => setAdding(false)}
-          onCreated={(r) => { setAdding(false); setSecret({ name: r.user.display_name, password: r.temporary_password }); }} />
+          onCreated={(r) => { setAdding(false); setSecret({ name: r.user.display_name, password: r.temporary_password, username: r.user.username }); }} />
       ) : null}
 
       {users.isPending ? (
@@ -170,8 +170,19 @@ function Nothing() {
 // ---------- a new account, and its password shown once ----------
 
 /** Shown once: the server never returns it again. */
-function TemporaryPassword({ name, password, onDone }: { name: string; password: string; onDone: () => void }) {
-  const [copied, setCopied] = useState(false);
+function TemporaryPassword({ name, password, username, onDone }: { name: string; password: string; username?: string | undefined; onDone: () => void }) {
+  const [copied, setCopied] = useState<"password" | "message" | null>(null);
+  // the message to send to the person (WhatsApp): where to go, the user name, the temporary password and what happens next
+  const message = [
+    `أهلًا ${name.split(/\s+/)[0]} 👋 حسابك على لوحة المكتب جاهز.`,
+    `الرابط: ${window.location.origin}`,
+    username ? `اسم المستخدم: ${username}` : null,
+    `كلمة السر المؤقتة: ${password}`,
+    "أول ما تدخل هتطلب منك تغيّرها بكلمة سر بتاعتك.",
+  ].filter(Boolean).join("\n");
+  const copy = async (text: string, what: "password" | "message") => {
+    try { await navigator.clipboard.writeText(text); setCopied(what); } catch { setCopied(null); }
+  };
   return (
     <GlassCard bar="bg-orange" className="border-orange/40">
       <div className="flex items-start gap-3">
@@ -181,18 +192,18 @@ function TemporaryPassword({ name, password, onDone }: { name: string; password:
         <div className="grid gap-0.5">
           <h2 className="text-[17px] font-bold">كلمة السر المؤقتة لـ {name}</h2>
           <p className="text-[13px] text-ink-soft">
-            بتظهر المرة دي بس. ادّيها لصاحب الحساب بنفسك، وهو هيغيّرها أول ما يدخل.
+            بتظهر المرة دي بس. ابعتها لصاحب الحساب بنفسك، وهو هيغيّرها أول ما يدخل.
           </p>
         </div>
       </div>
       <code className="tabular select-all rounded-[14px] border border-dashed border-gold-line bg-card/70 px-4 py-3 text-lg break-all" dir="ltr">
         {password}
       </code>
+      <pre className="whitespace-pre-wrap rounded-[14px] border border-line/60 bg-card-2/50 px-4 py-3 text-[13px] leading-relaxed font-sans" aria-label="الرسالة اللي هتبعتها">{message}</pre>
       <div className="flex flex-wrap gap-2">
-        <Button className="rounded-full" onClick={async () => {
-          try { await navigator.clipboard.writeText(password); setCopied(true); } catch { setCopied(false); }
-        }}>{copied ? "اتنسخت" : "انسخ"}</Button>
-        <Button variant="primary" className="rounded-full" onClick={onDone}>خلاص، ادّيتها له</Button>
+        <Button className="rounded-full" onClick={() => void copy(message, "message")}>{copied === "message" ? "اتنسخت الرسالة" : "انسخ الرسالة كاملة"}</Button>
+        <Button variant="ghost" className="rounded-full" onClick={() => void copy(password, "password")}>{copied === "password" ? "اتنسخت" : "انسخ كلمة السر بس"}</Button>
+        <Button variant="primary" className="rounded-full" onClick={onDone}>خلاص، بعتّها له</Button>
       </div>
     </GlassCard>
   );
@@ -281,7 +292,10 @@ function PendingCard({ user }: { user: PanelUser }) {
   const act = useMutation({
     mutationFn: (path: "approve" | "reject") => api<unknown>("POST", `/users/${user.id}/${path}`,
       path === "approve" ? { role, staff_name: role === "staff" ? staffName.trim() || user.display_name : null } : undefined),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: usersKey }),
+    onSuccess: (_r, path) => {
+      void qc.invalidateQueries({ queryKey: usersKey });
+      toast(path === "approve" ? `اتفعّل حساب ${user.display_name} ✅ وهيدخل بكلمة السر اللي اختارها` : `اترفض طلب ${user.display_name}`);
+    },
   });
 
   return (
@@ -301,14 +315,19 @@ function PendingCard({ user }: { user: PanelUser }) {
             <span className="text-sm font-semibold">الدور</span>
             <select className={select} value={role}
               onChange={(e) => setRole(e.target.value as Role)}>
-              <option value="staff">موظف</option>
-              <option value="lawyer">المستشار</option>
-              <option value="manager">مدير</option>
+              <option value="staff">موظف: مهامه والمهام اللي مش متعيّنة</option>
+              <option value="lawyer">المستشار: كل المهام، ويوزّعها</option>
+              <option value="manager">مدير: كل حاجة، ومنها الحسابات</option>
             </select>
           </label>
           {role === "staff" ? (
-            <Field label="اسمه في قوايم المكتب" value={staffName} onChange={(e) => setStaffName(e.target.value)} />
+            <Field label="اسمه في قوايم المكتب" value={staffName} onChange={(e) => setStaffName(e.target.value)}
+              hint="زي ما هو مكتوب في عمود الموظف في قايمة الموكلين." />
           ) : null}
+          <p className="flex items-start gap-1.5 text-[12.5px] text-ink-soft sm:col-span-2">
+            <Icon name="info" className="mt-0.5 size-3.5 shrink-0 text-gold-ink" />
+            لما تفعّله هيقدر يدخل بكلمة السر اللي اختارها وقت التسجيل (مش محتاج كلمة مؤقتة).
+          </p>
         </div>
       ) : (
         <p className="flex items-start gap-1.5 text-[13px] text-ink-soft">
@@ -338,7 +357,7 @@ function PendingCard({ user }: { user: PanelUser }) {
   );
 }
 
-function UserCard({ user, onSecret }: { user: PanelUser; onSecret: (s: { name: string; password: string }) => void }) {
+function UserCard({ user, onSecret }: { user: PanelUser; onSecret: (s: { name: string; password: string; username?: string }) => void }) {
   const { data: me } = useMe();
   const qc = useQueryClient();
   const self = me?.id === user.id;
@@ -348,7 +367,7 @@ function UserCard({ user, onSecret }: { user: PanelUser; onSecret: (s: { name: s
     onSuccess: (r) => {
       setConfirm(null);
       void qc.invalidateQueries({ queryKey: usersKey });
-      if ("temporary_password" in r) onSecret({ name: user.display_name, password: r.temporary_password });
+      if ("temporary_password" in r) onSecret({ name: user.display_name, password: r.temporary_password, username: user.username });
     },
   });
   const bar = !user.active ? "bg-ink-soft/50" : user.locked ? "bg-orange" : "bg-green";
