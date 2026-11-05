@@ -52,13 +52,13 @@ export function HomePage() {
     refetchInterval: LIVE,
   });
   const nextList = next.data?.filter(isOpen).sort(byStart);
-  // «الشهر ده» for whoever sees the reports; it takes the room the appointments leave (a quiet week leaves a lot)
+  // «الشهر ده» for whoever sees the reports
   const month = can(me, "reports.view");
-  const quiet = nextList?.length === 0;
-  const middle = !month ? "xl:grid-rows-[auto_minmax(13rem,1fr)]"
-    : quiet ? "xl:grid-rows-[auto_auto_minmax(0,1fr)]" : "xl:grid-rows-[auto_minmax(13rem,1fr)_auto]";
   const greeting = cairoHour(now) < 12 ? "صباح الخير" : "مساء الخير";
-  const name = me?.role === "lawyer" ? "أستاذ سعد" : me?.display_name.split(/\s+/)[0] ?? "";
+  // the owner: the name follows the account that is signed in (it was «أستاذ سعد» for every lawyer); a lawyer keeps «أستاذ»
+  // before his first name, unless the name already carries a title
+  const first = (me?.display_name ?? "").replace(/^(الأستاذ|الاستاذ|أستاذ|استاذ|المستشار|الدكتور|دكتور)\s+/, "").split(/\s+/)[0] ?? "";
+  const name = me?.role === "lawyer" && first ? `أستاذ ${first}` : first;
 
   return (
     // from a laptop's width the page fills the screen to its foot (the owner: the space under the cards looked empty):
@@ -68,21 +68,22 @@ export function HomePage() {
       <section className="relative isolate overflow-hidden">
         <OwnerImg name="hero" className="fade-right absolute inset-y-0 left-0 -z-10 h-full w-auto max-w-[75%] object-cover object-left" />
         <span className="absolute inset-0 -z-10 bg-gradient-to-l from-page via-page/60 to-transparent sm:hidden" aria-hidden />
-        <div className="grid min-h-[8.85rem] content-center gap-1 px-4 py-4 lg:px-7">
+        <div className="grid min-h-[13rem] content-center gap-1 px-4 pt-4 pb-20 lg:px-7">
           <h1 className="text-[26px] leading-tight font-bold text-hello lg:text-[34px]">{greeting} يا {name}</h1>
           <p className="text-[15px] lg:text-[18px]">إليك أهم ما تحتاج إلى معرفته اليوم</p>
         </div>
       </section>
 
-      <div className="flex flex-1 flex-col gap-5 px-4 lg:px-7">
+      {/* the owner: the cards float over the banner's picture (half on it, half on the page), as in the mockup */}
+      <div className="relative z-10 -mt-[5.5rem] flex flex-1 flex-col gap-5 px-4 lg:px-7">
         {dash.isError ? <ErrorState message={errorMessage(dash.error)} onRetry={() => void dash.refetch()} /> : null}
 
         {/* the four numbers */}
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <Kpi tone="blue" icon="stat_calendar_blue" title="مواعيد اليوم" value={appointments.isError ? null : todays} to="/appointments" more="عرض المواعيد" />
-          <Kpi tone="green" icon="stat_card_green" title="إيصالات تحتاج تأكيد" value={receipts.isError ? null : receipts.data?.length} to="/receipts" more="من الإيصالات" />
-          <Kpi tone="orange" icon="stat_alert_yellow" title="أمور عاجلة" value={dash.data?.urgent} series={dash.data?.urgent_by_day} to="/tasks?state=urgent" more="عرض التفاصيل" />
-          <Kpi tone="red" icon="stat_clock_red" title="مهام متأخرة" value={dash.data?.overdue} series={dash.data?.overdue_by_day} to="/tasks?state=overdue" more="عرض المهام" />
+          <Kpi tone="gold" icon="stat_calendar_blue" title="مواعيد اليوم" value={appointments.isError ? null : todays} to="/appointments" more="عرض المواعيد" />
+          <Kpi tone="sand" icon="stat_card_green" title="إيصالات تحتاج تأكيد" value={receipts.isError ? null : receipts.data?.length} to="/receipts" more="من الإيصالات" />
+          <Kpi tone="copper" icon="stat_alert_yellow" title="أمور عاجلة" value={dash.data?.urgent} series={dash.data?.urgent_by_day} to="/tasks?state=urgent" more="عرض التفاصيل" />
+          <Kpi tone="mahogany" icon="stat_clock_red" title="مهام متأخرة" value={dash.data?.overdue} series={dash.data?.overdue_by_day} to="/tasks?state=overdue" more="عرض المهام" />
         </div>
 
         {/* the mockup's three columns: the calendar on the right, today's and the next appointments in the middle, the
@@ -98,7 +99,9 @@ export function HomePage() {
             <span className="absolute -bottom-10 start-[2%] size-[18rem] rounded-full bg-[#d9b48a]/30 blur-[100px]" />
           </div>
           <CalendarPanel now={now} items={todayList} />
-          <div className={`grid min-w-0 gap-4 xl:h-0 xl:min-h-full ${middle} 2xl:gap-5`}>
+          {/* the owner: nothing scrolls inside a card (a thick grey bar in the middle of the page was confusing): every card
+              takes the height its content needs, and the page itself is the only thing that scrolls */}
+          <div className="grid min-w-0 content-start gap-4 2xl:gap-5">
             <TodayPanel items={todayList} pending={appointments.isPending} failed={appointments.isError} />
             <UpcomingPanel now={now} items={nextList} pending={next.isPending} failed={next.isError} />
             {month ? <MonthPanel now={now} /> : null}
@@ -115,14 +118,16 @@ export function HomePage() {
 
 // ---------- the four numbers ----------
 
-type KpiTone = "blue" | "green" | "orange" | "red";
+type KpiTone = "gold" | "sand" | "copper" | "mahogany";
 
-// The cards are pastel in both themes (the mockups), so their numbers keep the strong light-theme inks.
+// The cards are «liquid glass» (the owner) in the office's own colours (the owner: «ألوان الكروت لها علاقة بلون هوية المكتب»): the
+// brand's gold and bronze, a champagne sand, a copper and a deep mahogany for what is late, all warm like the library's picture.
+// --kpi-tint is the glass's colour (styles.css, .kpi-glass); the numbers keep a strong ink of the same family in both themes.
 const KPI: Record<KpiTone, { card: string; ink: string; stroke: string }> = {
-  blue: { card: "bg-kpi-blue border-blue/20", ink: "text-[#2563eb]", stroke: "var(--blue)" },
-  green: { card: "bg-kpi-green border-green/20", ink: "text-[#078a5d]", stroke: "var(--green)" },
-  orange: { card: "bg-kpi-orange border-orange/25", ink: "text-[#c77700]", stroke: "var(--orange)" },
-  red: { card: "bg-kpi-red border-red/20", ink: "text-[#dc2626]", stroke: "var(--red)" },
+  gold: { card: "kpi-glass [--kpi-tint:#e0a92e]", ink: "text-[#7a4f00]", stroke: "#b8860b" },
+  sand: { card: "kpi-glass [--kpi-tint:#9a6a3a]", ink: "text-[#5a3718]", stroke: "#7a5028" },
+  copper: { card: "kpi-glass [--kpi-tint:#e8742a]", ink: "text-[#9a3f00]", stroke: "#cf5f12" },
+  mahogany: { card: "kpi-glass [--kpi-tint:#b02a3c]", ink: "text-[#8a1626]", stroke: "#a3202f" },
 };
 
 function Kpi({ tone, icon, title, value, series, to, more }: {
@@ -130,10 +135,7 @@ function Kpi({ tone, icon, title, value, series, to, more }: {
 }) {
   const k = KPI[tone];
   return (
-    <section className={`relative isolate grid min-h-[8.5rem] grid-cols-[1fr_auto] overflow-hidden rounded-[18px] border px-5 pt-4 pb-3 text-kpi-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.7),0_12px_30px_-14px_rgb(60_44_20/0.3)] transition hover:-translate-y-0.5 hover:shadow-[inset_0_1px_0_rgb(255_255_255/0.7),0_18px_36px_-14px_rgb(60_44_20/0.38)] motion-reduce:transition-none motion-reduce:hover:translate-y-0 ${k.card}`}>
-      {/* the glass's sheen: light from the top corner, a bright edge */}
-      <span aria-hidden className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-br from-white/55 via-white/10 to-transparent" />
-      <span aria-hidden className="pointer-events-none absolute -top-12 -start-10 -z-10 size-36 rounded-full bg-white/50 blur-2xl" />
+    <section className={`relative isolate grid min-h-[8.5rem] grid-cols-[1fr_auto] overflow-hidden rounded-[24px] px-5 pt-4 pb-3 text-kpi-ink transition duration-300 hover:-translate-y-1 motion-reduce:transition-none motion-reduce:hover:translate-y-0 ${k.card}`}>
       <div className="grid content-start">
         <h2 className="text-[18px] leading-snug font-bold">{title}</h2>
         <p className={`tabular text-[38px] leading-tight font-bold ${k.ink}`}>
@@ -141,7 +143,7 @@ function Kpi({ tone, icon, title, value, series, to, more }: {
         </p>
       </div>
       <span className="grid size-16 place-items-center rounded-full border border-white/70 bg-white/45 shadow-[inset_0_1px_0_rgb(255_255_255/0.9),0_6px_16px_-8px_rgb(0_0_0/0.25)] backdrop-blur-sm">
-        <OwnerImg name={icon} className="size-12 object-contain" />
+        <OwnerImg name={icon} className="size-12 object-contain [filter:sepia(0.85)_saturate(1.5)_hue-rotate(-12deg)]" />
       </span>
       <div className="col-span-2 flex items-end justify-between gap-2">
         <Link to={to} className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap text-[14px] font-bold ${k.ink} hover:underline`}>
@@ -364,7 +366,7 @@ function TodayPanel({ items, pending, failed }: { items?: Appointment[] | undefi
             })}
           </ul>
           {/* wider: the mockup's table */}
-          <div className="hidden overflow-x-auto px-3 pb-3 sm:block">
+          <div className="soft-scroll hidden overflow-x-auto px-3 pb-3 sm:block">
             <table className="w-full border-separate border-spacing-y-0.5 text-[12.5px] 2xl:text-[13.5px]">
               <thead>
                 <tr>{heads.map((h) => <th key={h} className={`${TH} border-y border-line/60 bg-card/55 first:rounded-s-[12px] first:border-s last:rounded-e-[12px] last:border-e`}>{h}</th>)}</tr>
@@ -524,7 +526,7 @@ function UpcomingPanel({ now, items: open, pending, failed }: { now: Date; items
           </span>
         </p>
       ) : (
-        <ul className={`${LIST} soft-scroll overflow-y-auto`} aria-label="أقرب المواعيد">
+        <ul className={LIST} aria-label="أقرب المواعيد">
           {items.map((a) => {
             const k = kindOf(a);
             const t = TINT[k.icon] ?? TINT.phone!;

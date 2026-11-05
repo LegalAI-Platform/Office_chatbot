@@ -17,10 +17,16 @@ export function AuthLayout({ title, subtitle, children }: { title: string; subti
         </div>
       </section>
 
-      <div className="relative grid place-items-center px-4 pt-20 pb-10 lg:py-10">
+      <div className="relative isolate grid place-items-center overflow-hidden px-4 pt-20 pb-10 lg:py-10">
+        {/* the soft light the glass card shows through (the page's gold and warm sand) */}
+        <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
+          <span className="absolute -top-16 end-[8%] size-[24rem] rounded-full bg-gold/35 blur-[90px]" />
+          <span className="absolute -bottom-20 start-[6%] size-[22rem] rounded-full bg-[#d9b48a]/45 blur-[90px]" />
+          <span className="absolute top-1/3 start-[40%] size-[14rem] rounded-full bg-blue/10 blur-[80px]" />
+        </div>
         {/* the look before signing in too (the same choice as inside, kept in the browser) */}
         <ThemePicker label="الشكل" className="absolute top-4 end-4 w-44" />
-        <div className="surface grid w-full max-w-sm gap-5 rounded-[var(--radius-sheet)] p-6 lg:p-8">
+        <div className="liquid grid w-full max-w-sm gap-5 rounded-[var(--radius-sheet)] p-6 lg:p-8">
           <div className="grid gap-1">
             <h1 className="text-2xl">{title}</h1>
             {subtitle ? <p className="text-sm text-ink-soft">{subtitle}</p> : null}

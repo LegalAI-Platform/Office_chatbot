@@ -111,6 +111,22 @@ describe("routing and permissions", () => {
     expect(within(table).getByRole("link", { name: "افتح مهمة سارة محمد" }).getAttribute("href")).toBe("/tasks/t1");
   });
 
+  it("greets whoever is signed in by their own name, a lawyer as «أستاذ» (not one fixed name)", async () => {
+    serve(me({ role: "lawyer", display_name: "نهاد الخولي" }));
+    renderAt("/");
+    expect(await screen.findByRole("heading", { level: 1, name: /يا أستاذ نهاد$/ })).toBeTruthy();
+    cleanup();
+    vi.restoreAllMocks();
+    serve(me({ role: "lawyer", display_name: "المستشار سعد فتحي" }));
+    renderAt("/");
+    expect(await screen.findByRole("heading", { level: 1, name: /يا أستاذ سعد$/ })).toBeTruthy();
+    cleanup();
+    vi.restoreAllMocks();
+    serve(me({ role: "manager", display_name: "Mohamed Emad" }));
+    renderAt("/");
+    expect(await screen.findByRole("heading", { level: 1, name: /يا Mohamed$/ })).toBeTruthy();
+  });
+
   it("opens the urgent tasks from «أمور عاجلة», and the calendar's arrows move the week", async () => {
     serve(me());
     renderAt("/");
@@ -136,9 +152,9 @@ describe("routing and permissions", () => {
     serve(me());
     renderAt("/tasks");
     await screen.findByRole("heading", { name: "المهام" });
-    const who = screen.getByRole("group", { name: "مين" });
-    expect(within(who).queryByRole("button", { name: "الكل" })).toBeNull();
-    expect(within(who).getByRole("button", { name: "مهامي" }).getAttribute("aria-pressed")).toBe("true");
+    const who = screen.getByRole("combobox", { name: "مين" }) as HTMLSelectElement;
+    expect(within(who).queryByRole("option", { name: "كل المسؤولين" })).toBeNull();
+    expect(who.value).toBe("mine");
   });
 
   it("moves a page past the end back to the last page, and «رجوع لكل المهام» returns to it", async () => {

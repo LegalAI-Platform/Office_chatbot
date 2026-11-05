@@ -11,10 +11,10 @@ import { Icon, type IconName } from "../../shared/ui/Icon";
 import { Avatar, Chip, ErrorState, Loading } from "../../shared/ui/ui";
 import { tasksQuery, useTasks, type Scope, type StateFilter } from "./api";
 
-const SCOPES: { value: Scope; label: string; icon: IconName; needsAll?: boolean }[] = [
-  { value: "mine", label: "مهامي", icon: "account" },
-  { value: "unassigned", label: "مش متعيّنة", icon: "user-plus" },
-  { value: "all", label: "الكل", icon: "users", needsAll: true },
+const SCOPES: { value: Scope; label: string; needsAll?: boolean }[] = [
+  { value: "mine", label: "مهامي" },
+  { value: "unassigned", label: "مش متعيّنة" },
+  { value: "all", label: "كل المسؤولين", needsAll: true },
 ];
 
 const STATES: { value: StateFilter; label: string; icon: IconName }[] = [
@@ -33,8 +33,9 @@ export function prefetchData(qc: QueryClient, me: Me | null | undefined) {
 }
 
 /**
- * «المهام» as «liquid glass»: the filters as glass pills, and every task a glass card that reads as a sentence (who, what
- * they need, who has it, by when, where it stands). How to use the panel is for a first-login dialog, not this page.
+ * «المهام» as the mockup's table (the owner): the numbers on top, a search and a «who» menu, the state tabs with their counts,
+ * and every task a row of a table: what they need, the client, who has it, by when, how urgent and where it stands. Under a wide
+ * screen the same row becomes a small card (every value with its name).
  */
 export function TasksPage() {
   const { data: me } = useMe();
@@ -49,6 +50,14 @@ export function TasksPage() {
   // the page too (?page=2), so «رجوع» from a task lands on the same page; page 1 is left out
   const page = Math.max(1, Number.parseInt(params.get("page") ?? "", 10) || 1);
   const tasks = useTasks({ scope, state, page, ...(q ? { q } : {}) });
+  // the numbers of the cards and the tabs: how many tasks each state has for the same people (and the same search)
+  const counts = {
+    active: useTasks({ scope, state: "active", page: 1, ...(q ? { q } : {}) }).data?.total,
+    urgent: useTasks({ scope, state: "urgent", page: 1, ...(q ? { q } : {}) }).data?.total,
+    overdue: useTasks({ scope, state: "overdue", page: 1, ...(q ? { q } : {}) }).data?.total,
+    done: useTasks({ scope, state: "done", page: 1, ...(q ? { q } : {}) }).data?.total,
+    cancelled: useTasks({ scope, state: "cancelled", page: 1, ...(q ? { q } : {}) }).data?.total,
+  } satisfies Record<StateFilter, number | undefined>;
 
   // one change of the address at a time: two setParams in the same click would drop the first
   const change = (edit: (next: URLSearchParams) => void) =>
@@ -76,6 +85,52 @@ export function TasksPage() {
 
       <Intro total={tasks.data?.total} />
 
+      {/* the numbers: each one opens its tab */}
+      <section aria-label="أرقام المهام" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Stat tone="gold" icon="play" title="محتاجة شغل" value={counts.active} on={state === "active"} onClick={() => pick("state", "active")("active")} />
+        <Stat tone="red" icon="alert-circle" title="عاجلة" value={counts.urgent} on={state === "urgent"} onClick={() => pick("state", "active")("urgent")} />
+        <Stat tone="orange" icon="clock" title="متأخرة" value={counts.overdue} on={state === "overdue"} onClick={() => pick("state", "active")("overdue")} />
+        <Stat tone="green" icon="check-circle" title="خلصت" value={counts.done} on={state === "done"} onClick={() => pick("state", "active")("done")} />
+      </section>
+
+      <section aria-label="البحث والتصفية" className="liquid flex flex-wrap items-center gap-3 rounded-[22px] p-3 sm:p-4">
+        <form role="search" className="relative min-w-[14rem] flex-1" onSubmit={(e) => {
+          e.preventDefault();
+          const v = String(new FormData(e.currentTarget).get("q") ?? "").trim();
+          change((next) => { if (v) next.set("q", v); else next.delete("q"); next.delete("page"); });
+        }}>
+          <Icon name="search" className="pointer-events-none absolute inset-y-0 start-3.5 my-auto size-[18px] text-ink-soft" />
+          <input key={q ?? ""} name="q" type="search" defaultValue={q ?? ""} placeholder="ابحث في المهام (اسم العميل أو آخر أرقام رقمه)..." aria-label="ابحث في المهام"
+            className="min-h-10 w-full rounded-full border border-line/60 bg-card/60 ps-10 pe-4 text-[14px] shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)] outline-none focus:border-gold-line" />
+        </form>
+        <label className="relative">
+          <span className="sr-only">مين</span>
+          <select aria-label="مين" value={scope} onChange={(e) => pick("scope", scopeFallback)(e.target.value)}
+            className="min-h-10 appearance-none rounded-full border border-line/60 bg-card/60 ps-4 pe-9 text-[14px] font-semibold shadow-[inset_0_1px_0_rgb(255_255_255/0.45)] outline-none focus:border-gold-line">
+            {scopes.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+          </select>
+          <Icon name="chevron-down" className="pointer-events-none absolute inset-y-0 end-3 my-auto size-4 text-ink-soft" />
+        </label>
+      </section>
+
+      {/* the state tabs, with the number of tasks of each */}
+      <div className="liquid flex gap-1 overflow-x-auto rounded-[20px] p-1.5" role="group" aria-label="الحالة">
+        {STATES.map((s) => {
+          const on = state === s.value;
+          const n = counts[s.value];
+          return (
+            <button key={s.value} type="button" aria-pressed={on} onClick={() => pick("state", "active")(s.value)}
+              className={`flex min-h-11 shrink-0 grow items-center justify-center gap-2 whitespace-nowrap rounded-[16px] px-4 text-[14px] transition ${on
+                ? "btn-gold font-bold shadow-[inset_0_1px_0_rgb(255_255_255/0.4),0_6px_14px_-6px_rgb(140_98_58/0.8)]"
+                : "text-ink hover:bg-card/80"}`}>
+              <Icon name={s.icon} className="size-4" />
+              {s.label}
+              {n !== undefined ? <span className="tabular text-[12px] opacity-80">({n})</span> : null}
+            </button>
+          );
+        })}
+      </div>
+
       {q ? (
         <p className="liquid flex flex-wrap items-center gap-2 rounded-full px-4 py-2 text-sm">
           <Icon name="search" className="size-4 text-gold-ink" />
@@ -86,11 +141,6 @@ export function TasksPage() {
         </p>
       ) : null}
 
-      <section aria-label="الفلاتر" className="liquid grid gap-3 rounded-[22px] p-3 sm:p-4 2xl:grid-cols-2">
-        <FilterRow label="مين" value={scope} onChange={pick("scope", scopeFallback)} options={scopes} />
-        <FilterRow label="الحالة" value={state} onChange={pick("state", "active")} options={STATES} />
-      </section>
-
       {tasks.isPending || outOfRange ? (
         <Loading />
       ) : tasks.isError ? (
@@ -99,13 +149,17 @@ export function TasksPage() {
         <Nothing state={state} />
       ) : (
         <>
-          <ul className="grid gap-2.5" aria-label="المهام">
+          <div role="list" aria-label="المهام" className="grid gap-2.5">
+            {/* the table's head (a wide screen only): the names of the columns */}
+            <div aria-hidden className={`hidden gap-x-5 px-5 py-2.5 text-[13px] font-bold text-ink-soft xl:grid ${COLUMNS}`}>
+              <span>المهمة</span><span>العميل</span><span>المسؤول</span><span>الموعد النهائي</span><span>الأولوية</span><span>الحالة</span><span />
+            </div>
             {tasks.data.items.map((t) => (
-              <li key={t.id}>
-                <TaskCard task={t} />
-              </li>
+              <div key={t.id} role="listitem">
+                <TaskRow task={t} />
+              </div>
             ))}
-          </ul>
+          </div>
           <Pager page={tasks.data.page} pageSize={tasks.data.page_size} total={tasks.data.total} onPage={setPage} />
         </>
       )}
@@ -131,26 +185,28 @@ function Intro({ total }: { total?: number | undefined }) {
   );
 }
 
-// ---------- the filters ----------
+const STAT_TONES = {
+  gold: "bg-gold-tint text-gold-ink",
+  red: "bg-red-bg text-red-ink",
+  orange: "bg-orange-bg text-orange-ink",
+  green: "bg-green-bg text-green-ink",
+} as const;
 
-function FilterRow<T extends string>({ label: name, value, options, onChange }: {
-  label: string; value: T; options: { value: T; label: string; icon: IconName }[]; onChange: (v: T) => void;
+/** One of the numbers: a small glass card; pressing it opens that state's tab. */
+function Stat({ tone, icon, title, value, on, onClick }: {
+  tone: keyof typeof STAT_TONES; icon: IconName; title: string; value: number | undefined; on: boolean; onClick: () => void;
 }) {
   return (
-    <div className="flex gap-1 overflow-x-auto rounded-full border border-line/60 bg-card/45 p-1 shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)]" role="group" aria-label={name}>
-        {options.map((o) => {
-          const on = value === o.value;
-          return (
-            <button key={o.value} type="button" aria-pressed={on} onClick={() => onChange(o.value)}
-              className={`flex min-h-9 shrink-0 grow items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-3.5 text-[13.5px] transition ${on
-                ? "btn-gold font-bold shadow-[inset_0_1px_0_rgb(255_255_255/0.4),0_6px_14px_-6px_rgb(140_98_58/0.8)]"
-                : "text-ink hover:bg-card/80"}`}>
-              <Icon name={o.icon} className="size-4" />
-              {o.label}
-            </button>
-          );
-        })}
-    </div>
+    <button type="button" onClick={onClick} aria-pressed={on}
+      className={`liquid flex items-center justify-between gap-3 rounded-[20px] px-4 py-3.5 text-start transition hover:-translate-y-0.5 motion-reduce:transition-none motion-reduce:hover:translate-y-0 ${on ? "ring-2 ring-gold-line" : ""}`}>
+      <span className="grid gap-0.5">
+        <span className="text-[13.5px] font-semibold text-ink-soft">{title}</span>
+        <span className="tabular text-[28px] leading-none font-bold">{value === undefined ? "—" : value}</span>
+      </span>
+      <span aria-hidden className={`grid size-11 shrink-0 place-items-center rounded-full ${STAT_TONES[tone]}`}>
+        <Icon name={icon} className="size-6" />
+      </span>
+    </button>
   );
 }
 
@@ -158,7 +214,10 @@ function FilterRow<T extends string>({ label: name, value, options, onChange }: 
 
 const who = (t: TaskListItem) => t.client_name ?? "رقم من غير اسم";
 
-// the line at a card's start and the tint of its state
+// the table's columns on a wide screen: what they need, the client, who has it, by when, how urgent, where it stands, the arrow
+const COLUMNS = "xl:grid-cols-[minmax(14rem,2.2fr)_minmax(9rem,1.1fr)_minmax(8rem,1fr)_minmax(9rem,1fr)_5.5rem_7rem_2.25rem]";
+
+// the line at a row's start and the tint of its state
 const LOOK: Record<string, { bar: string; ring: string }> = {
   urgent: { bar: "bg-red", ring: "hover:border-red/40" },
   overdue: { bar: "bg-orange", ring: "hover:border-orange/40" },
@@ -168,58 +227,57 @@ const LOOK: Record<string, { bar: string; ring: string }> = {
   cancelled: { bar: "bg-ink-soft/50", ring: "hover:border-line-strong" },
 };
 
-function StateChips({ task }: { task: TaskListItem }) {
-  return (
-    <span className="flex flex-wrap justify-end gap-1.5">
-      {isUrgent(task) && task.state !== "done" && task.state !== "cancelled" ? <Chip tone="urgent">عاجل</Chip> : null}
-      <Chip tone={task.state}>{label(TASK_STATES, task.state)}</Chip>
-    </span>
-  );
-}
-
-/** A task as one sentence: who, what they need (and about what), who has it, by when, and where it stands. */
-function TaskCard({ task: t }: { task: TaskListItem }) {
+/** A task as a row of the table: what they need (and about what), the client, who has it, by when, how urgent, where it stands. */
+function TaskRow({ task: t }: { task: TaskListItem }) {
   const live = t.state !== "done" && t.state !== "cancelled";
-  const look = LOOK[isUrgent(t) && live ? "urgent" : t.state] ?? LOOK.open!;
+  const urgent = isUrgent(t) && live;
+  const look = LOOK[urgent ? "urgent" : t.state] ?? LOOK.open!;
   const late = t.state === "overdue";
   // the list's filters and page go along, for the task's «رجوع لكل المهام»
   const { search } = useLocation();
   return (
     <Link to={`/tasks/${t.id}`} state={{ from: search }}
-      className={`group relative grid items-center gap-x-5 gap-y-3 overflow-hidden rounded-[18px] border border-line/60 bg-card/60 py-3.5 ps-5 pe-4 shadow-[inset_0_1px_0_rgb(255_255_255/0.45),0_6px_18px_-12px_rgb(60_44_20/0.35)] backdrop-blur-md transition hover:-translate-y-px hover:bg-card/85 hover:shadow-[0_14px_30px_-14px_rgb(60_44_20/0.4)] motion-reduce:transition-none motion-reduce:hover:translate-y-0 sm:grid-cols-2 xl:grid-cols-[minmax(12rem,1.1fr)_minmax(0,2fr)_minmax(9rem,0.9fr)_minmax(9rem,0.9fr)_auto] ${look.ring}`}>
+      className={`group relative grid items-center gap-x-5 gap-y-3 overflow-hidden rounded-[18px] border border-line/60 bg-card/60 py-3.5 ps-5 pe-4 shadow-[inset_0_1px_0_rgb(255_255_255/0.45),0_6px_18px_-12px_rgb(60_44_20/0.35)] backdrop-blur-md transition hover:-translate-y-px hover:bg-card/85 hover:shadow-[0_14px_30px_-14px_rgb(60_44_20/0.4)] motion-reduce:transition-none motion-reduce:hover:translate-y-0 sm:grid-cols-2 ${COLUMNS} ${look.ring}`}>
       <span aria-hidden className={`absolute inset-y-3 start-0 w-1 rounded-e-full ${look.bar}`} />
 
-      {/* who */}
-      <span className="flex min-w-0 items-center gap-3">
-        <Avatar name={who(t)} className="size-10 shrink-0 text-[12px]" />
-        <span className="grid min-w-0">
-          <span className="truncate text-[15px] font-bold">{who(t)}</span>
-          <span className="tabular text-[12px] text-ink-soft" dir="ltr" style={{ textAlign: "right" }}>…{t.phone_last3}</span>
-        </span>
-      </span>
-
       {/* what they need */}
-      <Field icon="message" term="المطلوب">
-        <span className="font-semibold">{label(TASK_TYPES, t.type)}</span>
+      <Cell term="المهمة">
+        <span className="font-bold">{label(TASK_TYPES, t.type)}</span>
         {t.matter_type ? (
           <span className="ms-2 inline-block rounded-full border border-line/70 bg-card/70 px-2 py-0.5 align-middle text-[11.5px] font-normal text-ink-soft">{matterLabel(t.matter_type)}</span>
         ) : null}
-      </Field>
+      </Cell>
+
+      {/* the client */}
+      <Cell term="العميل">
+        <span className="flex min-w-0 items-center gap-2.5">
+          <Avatar name={who(t)} className="size-9 shrink-0 text-[12px]" />
+          <span className="grid min-w-0">
+            <span className="truncate font-semibold">{who(t)}</span>
+            <span className="tabular text-[12px] text-ink-soft" dir="ltr" style={{ textAlign: "right" }}>…{t.phone_last3}</span>
+          </span>
+        </span>
+      </Cell>
 
       {/* who has it */}
-      <Field icon={t.staff ? "account" : "user-plus"} term="مع مين">
+      <Cell term="المسؤول">
         {t.staff ? <span className="font-semibold">{t.staff.name}</span>
           : <span className="font-semibold text-orange-ink">{live ? "محدش استلمها لسه" : "مش متعيّنة"}</span>}
-      </Field>
+      </Cell>
 
       {/* by when */}
-      <Field icon="clock" term={late ? "كان المفروض" : "المفروض تخلص"}>
+      <Cell term={late ? "كان المفروض" : "الموعد النهائي"}>
         <span className={`tabular font-semibold ${late ? "text-red-ink" : ""}`}>{cairoWhen(t.due_at)}</span>
-      </Field>
+      </Cell>
+
+      {/* how urgent */}
+      <Cell term="الأولوية">
+        <Chip tone={urgent ? "urgent" : "gold"}>{urgent ? "عاجلة" : "عادية"}</Chip>
+      </Cell>
 
       {/* where it stands */}
-      <span className="flex items-center justify-between gap-3 xl:justify-end">
-        <StateChips task={t} />
+      <span className="flex items-center justify-between gap-3 sm:col-span-2 xl:col-span-2 xl:grid xl:grid-cols-[7rem_2.25rem]">
+        <Chip tone={t.state}>{label(TASK_STATES, t.state)}</Chip>
         <span aria-hidden className="grid size-8 shrink-0 place-items-center rounded-full border border-line/60 bg-card/70 text-ink-soft transition group-hover:border-gold-line group-hover:bg-gold-tint group-hover:text-gold-ink">
           <Icon name="chevron-start" className="size-4 transition group-hover:-translate-x-0.5" />
         </span>
@@ -228,13 +286,11 @@ function TaskCard({ task: t }: { task: TaskListItem }) {
   );
 }
 
-function Field({ icon, term, children }: { icon: IconName; term: string; children: ReactNode }) {
+/** A value of a row. On a wide screen the table's head names it; on a smaller one it names itself above. */
+function Cell({ term, children }: { term: string; children: ReactNode }) {
   return (
     <span className="grid min-w-0 gap-0.5">
-      <span className="flex items-center gap-1 text-[11.5px] text-ink-soft">
-        <Icon name={icon} className="size-3.5" />
-        {term}
-      </span>
+      <span className="text-[11.5px] text-ink-soft xl:hidden">{term}</span>
       <span className="min-w-0 text-[13.5px] leading-snug">{children}</span>
     </span>
   );

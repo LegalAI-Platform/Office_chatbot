@@ -232,7 +232,7 @@ function Bell({ late }: { late: number }) {
         ) : null}
       </button>
       {open ? (
-        <div role="dialog" aria-label="التنبيهات" className="surface absolute top-[calc(100%+0.5rem)] left-0 z-30 grid w-[min(22rem,calc(100vw-2rem))] gap-1 rounded-xl p-2">
+        <div role="dialog" aria-label="التنبيهات" className="liquid liquid-strong absolute top-[calc(100%+0.5rem)] left-0 z-30 grid w-[min(22rem,calc(100vw-2rem))] gap-1 rounded-2xl p-2">
           <div className="flex items-center justify-between px-2 py-1">
             <span className="font-bold">التنبيهات</span>
             {unread > 0 ? (

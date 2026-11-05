@@ -194,6 +194,52 @@ describe("sign-in, sign-up and the authenticator (v1.9)", () => {
     await vi.waitFor(() => expect(calls.find((c) => c.path === "/users/s1/role")?.body).toEqual({ role: "lawyer" }));
   });
 
+  it("the first sign-in: two steps, the new password's list ticks itself, and a password can be shown while it is typed", async () => {
+    const calls = serve({
+      "GET /auth/me": { body: { ...boss, display_name: "منى علي", must_change_password: true } },
+      "POST /auth/change-password": { status: 204 },
+    });
+    renderAt("/change-password");
+    expect(await screen.findByText(/أهلًا يا منى/)).toBeTruthy();
+    const submit = screen.getByRole("button", { name: "غيّر كلمة السر" }) as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+    type(/^كلمة السر المؤقتة/, "Temp-123");
+    type(/^كلمة السر الجديدة/, "a long new password");
+    expect(submit.disabled).toBe(true); // the repeat is still empty
+    const rules = screen.getByRole("list", { name: "شروط كلمة السر الجديدة" });
+    expect(within(rules).getByText("12 حرف على الأقل").closest("li")!.textContent).toContain("تمام");
+    expect(within(rules).getByText("الاتنين زي بعض").closest("li")!.textContent).toContain("لسه");
+    type(/^اكتبها تاني/, "a long new password");
+    expect(submit.disabled).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "إظهار كلمة السر الجديدة" }));
+    expect((screen.getByLabelText(/^كلمة السر الجديدة/) as HTMLInputElement).type).toBe("text");
+    fireEvent.click(submit);
+    await vi.waitFor(() => expect(calls.find((c) => c.path === "/auth/change-password")?.body)
+      .toEqual({ current_password: "Temp-123", new_password: "a long new password" }));
+  });
+
+  it("a new account's temporary password comes with the message to send (the address, the user name, the password)", async () => {
+    serve({
+      "GET /auth/me": { body: boss },
+      "GET /users": { body: [] },
+      "POST /users": { body: { user: { id: "n1", username: "ahmed.samir", display_name: "أحمد سمير", email: "a@example.test", role: "staff", active: true,
+        locked: false, must_change_password: true, pending: false, email_verified: true, two_factor: false, created_at: "2026-11-05T08:00:00Z" },
+        temporary_password: "Tmp-Kz9-4pQ-xT7m" } },
+      "GET /dashboard": { body: { urgent: 0, overdue: 0, unassigned: 0, active: 0, urgent_by_day: [], overdue_by_day: [], recent: [], priority: [] } },
+    });
+    renderAt("/users");
+    fireEvent.click(await screen.findByRole("button", { name: "ضيف حساب" }));
+    type(/الاسم اللي هيظهر/, "أحمد سمير");
+    type(/اسم المستخدم/, "ahmed.samir");
+    type(/الإيميل/, "a@example.test");
+    fireEvent.click(screen.getByRole("button", { name: "اعمل الحساب" }));
+    const message = await screen.findByLabelText("الرسالة اللي هتبعتها");
+    expect(message.textContent).toContain("اسم المستخدم: ahmed.samir");
+    expect(message.textContent).toContain("كلمة السر المؤقتة: Tmp-Kz9-4pQ-xT7m");
+    expect(message.textContent).toContain("أهلًا أحمد");
+    expect(screen.getByRole("button", { name: "انسخ الرسالة كاملة" })).toBeTruthy();
+  });
+
   it("shows a new account's field errors in Arabic, without the general line", async () => {
     serve({
       "GET /auth/me": { body: boss },

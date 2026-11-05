@@ -272,26 +272,110 @@
   /* «liquid glass» (the account page): the card see-through over the page's soft gold light, a lit top edge, blur behind */
   .liquid,
   .liquid-kids > .surface {
+    /* positioned and isolated: the sheen below sits inside the card, behind its words (a utility such as .absolute still wins) */
+    position: relative;
+    isolation: isolate;
     background: color-mix(in oklab, var(--card) 62%, transparent);
     border: 1px solid color-mix(in oklab, var(--card) 40%, rgb(255 255 255 / 0.55));
     box-shadow:
-      inset 0 1px 0 rgb(255 255 255 / 0.35),
-      inset 0 -1px 0 rgb(0 0 0 / 0.03),
-      0 12px 32px -12px rgb(60 44 20 / 0.18);
-    backdrop-filter: blur(18px) saturate(160%);
-    -webkit-backdrop-filter: blur(18px) saturate(160%);
+      inset 0 1.5px 1px rgb(255 255 255 / 0.7),
+      inset 0 -1px 1px rgb(255 255 255 / 0.25),
+      inset 0 0 18px rgb(255 255 255 / 0.12),
+      0 14px 34px -14px rgb(60 44 20 / 0.24),
+      0 2px 6px rgb(60 44 20 / 0.05);
+    backdrop-filter: blur(20px) saturate(170%);
+    -webkit-backdrop-filter: blur(20px) saturate(170%);
+  }
+  /* the specular sheen (iOS-style): a curved light from the top corner that fades out across the glass */
+  .liquid::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    border-radius: inherit;
+    background:
+      radial-gradient(110% 70% at 6% -14%, rgb(255 255 255 / 0.5) 0%, rgb(255 255 255 / 0.12) 40%, transparent 64%),
+      linear-gradient(to bottom, rgb(255 255 255 / 0.1), transparent 34%);
+  }
+  /* a card that sits over other content (a menu of alerts): the same glass, thicker, so what is behind never crosses its words */
+  .liquid.liquid-strong {
+    background: color-mix(in oklab, var(--card) 97%, transparent); /* the bar above it already blurs: a thinner body let the greeting show through its words */
+    backdrop-filter: blur(28px) saturate(180%);
+    -webkit-backdrop-filter: blur(28px) saturate(180%);
   }
   :root[data-theme="dark"] .liquid,
   :root[data-theme="dark"] .liquid-kids > .surface {
-    border-color: rgb(255 255 255 / 0.08);
-    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 12px 32px -12px rgb(0 0 0 / 0.6);
+    border-color: rgb(255 255 255 / 0.1);
+    box-shadow: inset 0 1.5px 1px rgb(255 255 255 / 0.12), inset 0 -1px 1px rgb(255 255 255 / 0.04), 0 12px 32px -12px rgb(0 0 0 / 0.6);
+  }
+  :root[data-theme="dark"] .liquid::before {
+    background:
+      radial-gradient(110% 70% at 6% -14%, rgb(255 255 255 / 0.14) 0%, rgb(255 255 255 / 0.04) 40%, transparent 64%),
+      linear-gradient(to bottom, rgb(255 255 255 / 0.04), transparent 34%);
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) .liquid,
     :root:not([data-theme="light"]) .liquid-kids > .surface {
-      border-color: rgb(255 255 255 / 0.08);
-      box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 12px 32px -12px rgb(0 0 0 / 0.6);
+      border-color: rgb(255 255 255 / 0.1);
+      box-shadow: inset 0 1.5px 1px rgb(255 255 255 / 0.12), inset 0 -1px 1px rgb(255 255 255 / 0.04), 0 12px 32px -12px rgb(0 0 0 / 0.6);
     }
+    :root:not([data-theme="light"]) .liquid::before {
+      background:
+        radial-gradient(110% 70% at 6% -14%, rgb(255 255 255 / 0.14) 0%, rgb(255 255 255 / 0.04) 40%, transparent 64%),
+        linear-gradient(to bottom, rgb(255 255 255 / 0.04), transparent 34%);
+    }
+  }
+  /*
+   * «liquid glass» for the home page's four number cards (the owner: like iOS): a tinted see-through body that blurs and
+   * brightens what is behind it (the banner's picture), a lit specular edge on top, a soft rim light underneath, and a diagonal
+   * sheen. --kpi-tint is set per card. Kept light in both themes so the dark ink of the numbers always reads.
+   */
+  .kpi-glass {
+    /* the tint over a light body: the dark picture behind the card never turns the colour muddy, it only shows as depth */
+    background:
+      linear-gradient(135deg, color-mix(in oklab, var(--kpi-tint) 62%, transparent) 0%, color-mix(in oklab, var(--kpi-tint) 36%, transparent) 100%),
+      linear-gradient(rgb(255 255 255 / 0.62), rgb(255 255 255 / 0.62));
+    border: 1px solid color-mix(in oklab, var(--kpi-tint) 45%, rgb(255 255 255 / 0.7));
+    box-shadow:
+      inset 0 1.5px 1px rgb(255 255 255 / 0.95),
+      inset 0 -1.5px 1px rgb(255 255 255 / 0.4),
+      inset 0 0 22px rgb(255 255 255 / 0.28),
+      0 22px 44px -18px rgb(30 20 8 / 0.5),
+      0 3px 8px rgb(30 20 8 / 0.08);
+    backdrop-filter: blur(22px) saturate(185%) brightness(1.15);
+    -webkit-backdrop-filter: blur(22px) saturate(185%) brightness(1.15);
+  }
+  .kpi-glass:hover {
+    box-shadow:
+      inset 0 1.5px 1px rgb(255 255 255 / 0.95),
+      inset 0 -1.5px 1px rgb(255 255 255 / 0.45),
+      inset 0 0 26px rgb(255 255 255 / 0.34),
+      0 28px 52px -18px rgb(30 20 8 / 0.55),
+      0 4px 10px rgb(30 20 8 / 0.1);
+  }
+  /* the specular sheen: a curved light from the top corner that fades out across the glass */
+  .kpi-glass::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    border-radius: inherit;
+    background:
+      radial-gradient(120% 90% at 8% -10%, rgb(255 255 255 / 0.85) 0%, rgb(255 255 255 / 0.25) 38%, transparent 62%),
+      linear-gradient(to bottom, rgb(255 255 255 / 0.22), transparent 40%);
+  }
+  /* a thin rim light along the lower edge, as the glass catches the light from underneath */
+  .kpi-glass::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    border-radius: inherit;
+    background: linear-gradient(to top, color-mix(in oklab, var(--kpi-tint) 22%, rgb(255 255 255 / 0.5)), transparent 28%);
+    opacity: 0.55;
   }
   .btn-gold {
     background: linear-gradient(180deg, #c99c68 0%, var(--gold) 45%, var(--gold-deep) 100%);
