@@ -195,6 +195,23 @@ public sealed partial class BookingFlowTests
         Assert.Equal([TextKeys.AskWhichMeaning, TextKeys.UrfAskAges], Keys(await Say("عايز اتجوز عرفي وعايز اعرف فيه امان؟")));
     }
 
+    [Fact] // v1.77 (the owner: «المستشار يشرح»): «قصدي العقد قانوني» after «قصدك إيه؟» is the lawyer's at the appointment
+    public async Task After_which_meaning_the_legal_one_is_explained_at_the_appointment_and_the_question_comes_back()
+    {
+        UrfFactsOn();
+        _texts[TextKeys.AskWhichMeaning] = new ApprovedText(TextKeys.AskWhichMeaning, 1, "حضرتك قصدك {{meanings}}؟ 🙏", 300, true);
+        _texts[TextKeys.UrfQuestionLater] = new ApprovedText(TextKeys.UrfQuestionLater, 2, "المستشار هيوضح النقطة دي لحضرتك في الميعاد.", 300, true);
+        await ToTheOffer();
+        _script["عايز اتجوز عرفي وعايز اعرف فيه امان؟"] = new("service_by_name", "urf_marriage", "unknown", null, 0.9,
+            Meanings: ["إن العقد يبقى قانوني ومضمون", "إن الموضوع يفضل سري"]);
+        await Say("عايز اتجوز عرفي وعايز اعرف فيه امان؟");
+        _script["لا قصدي العقد قانوني ولا لا"] = new("legal_question", "urf_marriage", "unknown", null, 0.9);
+        var d = await Say("لا قصدي العقد قانوني ولا لا");
+        Assert.Equal(TextKeys.UrfQuestionLater, Keys(d)[0]);
+        Assert.DoesNotContain(PendingTask.ServiceQuestion, TaskKinds(d));
+        Assert.Equal(UrfStep.Ages, TheCase.Step); // the ages question comes back after it
+    }
+
     [Fact]
     public async Task One_meaning_or_none_is_no_reason_to_ask()
     {
