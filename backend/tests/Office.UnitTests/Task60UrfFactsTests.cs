@@ -72,6 +72,61 @@ public sealed partial class BookingFlowTests
         Assert.Equal(UrfCase.RejectedAge, TheCase.State);
     }
 
+    [Fact] // v1.72: «منا قولتلك» while the ages wait: the ages the AI read from the chat are the answer
+    public async Task The_ages_the_ai_read_from_the_chat_answer_the_ages_question()
+    {
+        UrfFactsOn();
+        await ToTheOffer();
+        Assert.Equal([TextKeys.UrfAskAges], Keys(await Say("عايز أعمل جواز عرفي")));
+        _script["منا قولتلك"] = new("other", null, "unknown", null, 0.8, UrfHusbandAge: 40, UrfWifeAge: 20);
+        Assert.Equal([TextKeys.UrfAskWifePast], Keys(await Say("منا قولتلك")));
+        Assert.Equal((40, 20), (TheCase.HusbandAge, TheCase.WifeAge));
+    }
+
+    [Fact]
+    public async Task The_ages_the_ai_read_go_through_the_same_under_18_rule()
+    {
+        UrfFactsOn();
+        await ToTheOffer();
+        await Say("عايز أعمل جواز عرفي");
+        _script["زي ما قولتلك"] = new("other", null, "unknown", null, 0.8, UrfHusbandAge: 30, UrfWifeAge: 16);
+        Assert.Equal([TextKeys.UrfUnderAge], Keys(await Say("زي ما قولتلك")));
+        Assert.Equal(UrfCase.RejectedAge, TheCase.State);
+    }
+
+    [Fact]
+    public async Task Without_the_ages_from_the_ai_the_question_is_asked_again_as_before()
+    {
+        UrfFactsOn();
+        await ToTheOffer();
+        await Say("عايز أعمل جواز عرفي");
+        _script["منا قولتلك"] = new("other", null, "unknown", null, 0.8, UrfHusbandAge: 40); // one age only: not used
+        Assert.Equal([TextKeys.UrfAgesAgain], Keys(await Say("منا قولتلك")));
+    }
+
+    [Fact] // v1.72: «دي البطاقة مش التحويل» with an image while the time waits for its receipt
+    public async Task An_image_his_words_say_is_not_the_receipt_is_not_taken_as_one()
+    {
+        UrfFactsOn();
+        await ToTheOffer();
+        await Press(BookingChoice.Pick(BookingService.PhoneVideo, AvailabilityTests.At(20, 12)));
+        _script["[مرفق صورة]\nدي البطاقة مش التحويل"] = new("other", null, "unknown", null, 0.9, FileIs: "other");
+        var d = await Receipt(caption: "دي البطاقة مش التحويل");
+        Assert.Equal([TextKeys.ReceiptSendImage], Keys(d));
+        Assert.Equal(AppointmentInfo.PendingPayment, Assert.Single(_booking.Appointments).State);
+    }
+
+    [Fact]
+    public async Task An_image_with_words_that_say_it_is_the_transfer_is_the_receipt()
+    {
+        UrfFactsOn();
+        await ToTheOffer();
+        await Press(BookingChoice.Pick(BookingService.PhoneVideo, AvailabilityTests.At(20, 12)));
+        _script["[مرفق صورة]\nاهو التحويل"] = new("other", null, "unknown", null, 0.9, FileIs: "receipt");
+        Assert.Equal([TextKeys.BookingPaid], Keys(await Receipt(caption: "اهو التحويل")));
+        Assert.Equal(AppointmentInfo.Confirmed, Assert.Single(_booking.Appointments).State);
+    }
+
     [Fact]
     public async Task Everything_said_up_front_goes_straight_to_the_price_once_the_ages_are_in()
     {
