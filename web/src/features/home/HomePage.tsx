@@ -71,13 +71,14 @@ export function HomePage() {
       <section className="relative isolate overflow-hidden">
         <OwnerImg name="hero" className="fade-right absolute inset-y-0 left-0 -z-10 h-full w-auto max-w-[75%] object-cover object-left" />
         <span className="absolute inset-0 -z-10 bg-gradient-to-l from-page via-page/60 to-transparent sm:hidden" aria-hidden />
-        <div className="grid min-h-[8.85rem] content-center gap-1 px-4 py-4 lg:px-7">
+        <div className="grid min-h-[13rem] content-center gap-1 px-4 pt-4 pb-20 lg:px-7">
           <h1 className="text-[26px] leading-tight font-bold text-hello lg:text-[34px]">{greeting} يا {name}</h1>
           <p className="text-[15px] lg:text-[18px]">إليك أهم ما تحتاج إلى معرفته اليوم</p>
         </div>
       </section>
 
-      <div className="flex flex-1 flex-col gap-5 px-4 lg:px-7">
+      {/* the owner: the cards float over the banner's picture (half on it, half on the page), as in the mockup */}
+      <div className="relative z-10 -mt-[5.5rem] flex flex-1 flex-col gap-5 px-4 lg:px-7">
         {dash.isError ? <ErrorState message={errorMessage(dash.error)} onRetry={() => void dash.refetch()} /> : null}
 
         {/* the four numbers */}
@@ -133,7 +134,7 @@ function Kpi({ tone, icon, title, value, series, to, more }: {
 }) {
   const k = KPI[tone];
   return (
-    <section className={`relative isolate grid min-h-[8.5rem] grid-cols-[1fr_auto] overflow-hidden rounded-[18px] border px-5 pt-4 pb-3 text-kpi-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.7),0_12px_30px_-14px_rgb(60_44_20/0.3)] transition hover:-translate-y-0.5 hover:shadow-[inset_0_1px_0_rgb(255_255_255/0.7),0_18px_36px_-14px_rgb(60_44_20/0.38)] motion-reduce:transition-none motion-reduce:hover:translate-y-0 ${k.card}`}>
+    <section className={`relative isolate grid min-h-[8.5rem] grid-cols-[1fr_auto] overflow-hidden rounded-[18px] border px-5 pt-4 pb-3 text-kpi-ink ring-4 ring-white/90 shadow-[inset_0_1px_0_rgb(255_255_255/0.7),0_22px_40px_-16px_rgb(40_28_12/0.55)] transition hover:-translate-y-0.5 hover:shadow-[inset_0_1px_0_rgb(255_255_255/0.7),0_18px_36px_-14px_rgb(60_44_20/0.38)] motion-reduce:transition-none motion-reduce:hover:translate-y-0 ${k.card}`}>
       {/* the glass's sheen: light from the top corner, a bright edge */}
       <span aria-hidden className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-br from-white/55 via-white/10 to-transparent" />
       <span aria-hidden className="pointer-events-none absolute -top-12 -start-10 -z-10 size-36 rounded-full bg-white/50 blur-2xl" />
