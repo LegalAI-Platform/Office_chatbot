@@ -374,6 +374,8 @@ public static class Conversational
         [TextKeys.ServiceCheck] = "tell him the office will answer him here on whether it does this; if he asked to change something in his booking (for example the witnesses), say back in a few words what he wants changed, and that the office will answer him here (never that it is changed, never a price)",
         // v1.48: the office facts answer many of these («هقابل المستشار نفسه؟»): from them, and from_facts true; otherwise as v1.46
         [TextKeys.ServiceDetail] = "if the OFFICE FACTS answer his question, answer it from them only (from_facts true, and say nothing about the office answering); otherwise tell him his question reached the office and they will answer it here (from_facts false, never the answer yourself)",
+        // v1.76: one short question back, the meanings as given (none added, none answered)
+        [TextKeys.AskWhichMeaning] = "ask him, in one short and kind question, which of the meanings in the approved text he means (only those meanings, none added; never answer any of them, no promise, no price)",
         [TextKeys.OfficePrivacy] = "reassure him that everything he tells the office stays private: the office never discloses its clients' secrets (nothing else: no prices, no question)",
         // v1.53 (phase 2): anything no approved text answers, from the office facts and «دليل التعامل» only
         [TextKeys.FreeAnswer] = "answer what he just wrote, in one short message, as the office's receptionist would, following «دليل التعامل»: from the office facts only; something the facts do not answer, say kindly the lawyer explains it in the consultation (never when, never any legal information); if he only chats, a short kind answer",

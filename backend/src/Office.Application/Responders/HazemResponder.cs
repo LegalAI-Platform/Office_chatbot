@@ -1900,8 +1900,53 @@ public sealed class HazemResponder(
             }
         }
 
+        /// <summary>
+        /// v1.76 (the owner on «عايز اتجوز عرفي وعايز اعرف فيه امان؟»: «اسأله… قصدك ايه بامان… كلمة واحدة مش هتقدر تحدد»): a
+        /// question that can plainly mean two or three things, as the AI read it with the chat, is never guessed nor sent to the
+        /// office first: he is asked which one he means («حضرتك قصدك إن…، ولا إن…؟»), once. His answer is read with the chat as any
+        /// message; asked last time already, the question goes on as before. The request with it goes on (the Urfi question
+        /// waiting, a service he named).
+        /// </summary>
+        private bool AskWhichMeant(Classification turnClass)
+        {
+            if (!understanding || turnClass.Intent is not (Intent.LegalQuestion or Intent.Other or Intent.OfficeInfo or Intent.ServiceByName)
+                || turnClass.Call?.Answer?.Meanings is not { } meant || situation.RepliedLast(TextKeys.AskWhichMeaning))
+            {
+                return false;
+            }
+
+            var meanings = meant.Select(m => m.Trim()).Where(m => m.Length is > 2 and <= 60 && !m.Any(char.IsDigit))
+                .Distinct().Take(3).ToList();
+            if (meanings.Count < 2)
+            {
+                return false;
+            }
+
+            plan.Say(TextKeys.AskWhichMeaning, Fill: new Dictionary<string, string> { ["meanings"] = string.Join("، ولا ", meanings) });
+            if (paused)
+            {
+                return true;
+            }
+
+            if (urfOn && Urf is { State: UrfCase.Collecting })
+            {
+                AfterUrf(UrfNext.Ask);
+            }
+            else if (turnClass is { Intent: Intent.OfficeInfo or Intent.ServiceByName, Service: { } named })
+            {
+                AnswerService(named);
+            }
+
+            return true;
+        }
+
         private void AnswerIntent(Classification turnClass)
         {
+            if (AskWhichMeant(turnClass))
+            {
+                return;
+            }
+
             switch (turnClass.Intent)
             {
                 case Intent.ConsultationRequest:
