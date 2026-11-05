@@ -293,6 +293,55 @@
       box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 12px 32px -12px rgb(0 0 0 / 0.6);
     }
   }
+  /*
+   * «liquid glass» for the home page's four number cards (the owner: like iOS): a tinted see-through body that blurs and
+   * brightens what is behind it (the banner's picture), a lit specular edge on top, a soft rim light underneath, and a diagonal
+   * sheen. --kpi-tint is set per card. Kept light in both themes so the dark ink of the numbers always reads.
+   */
+  .kpi-glass {
+    background:
+      linear-gradient(135deg, color-mix(in oklab, var(--kpi-tint) 30%, rgb(255 255 255 / 0.6)) 0%, color-mix(in oklab, var(--kpi-tint) 12%, rgb(255 255 255 / 0.5)) 100%);
+    border: 1px solid rgb(255 255 255 / 0.65);
+    box-shadow:
+      inset 0 1.5px 1px rgb(255 255 255 / 0.95),
+      inset 0 -1.5px 1px rgb(255 255 255 / 0.4),
+      inset 0 0 22px rgb(255 255 255 / 0.28),
+      0 22px 44px -18px rgb(30 20 8 / 0.5),
+      0 3px 8px rgb(30 20 8 / 0.08);
+    backdrop-filter: blur(22px) saturate(185%) brightness(1.08);
+    -webkit-backdrop-filter: blur(22px) saturate(185%) brightness(1.08);
+  }
+  .kpi-glass:hover {
+    box-shadow:
+      inset 0 1.5px 1px rgb(255 255 255 / 0.95),
+      inset 0 -1.5px 1px rgb(255 255 255 / 0.45),
+      inset 0 0 26px rgb(255 255 255 / 0.34),
+      0 28px 52px -18px rgb(30 20 8 / 0.55),
+      0 4px 10px rgb(30 20 8 / 0.1);
+  }
+  /* the specular sheen: a curved light from the top corner that fades out across the glass */
+  .kpi-glass::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    border-radius: inherit;
+    background:
+      radial-gradient(120% 90% at 8% -10%, rgb(255 255 255 / 0.85) 0%, rgb(255 255 255 / 0.25) 38%, transparent 62%),
+      linear-gradient(to bottom, rgb(255 255 255 / 0.22), transparent 40%);
+  }
+  /* a thin rim light along the lower edge, as the glass catches the light from underneath */
+  .kpi-glass::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    border-radius: inherit;
+    background: linear-gradient(to top, color-mix(in oklab, var(--kpi-tint) 22%, rgb(255 255 255 / 0.5)), transparent 28%);
+    opacity: 0.55;
+  }
   .btn-gold {
     background: linear-gradient(180deg, #c99c68 0%, var(--gold) 45%, var(--gold-deep) 100%);
     color: #fff;

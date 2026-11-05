@@ -121,12 +121,13 @@ export function HomePage() {
 
 type KpiTone = "blue" | "green" | "orange" | "red";
 
-// The cards are pastel in both themes (the mockups), so their numbers keep the strong light-theme inks.
+// The cards are «liquid glass» (the owner): a see-through tint with blur, a lit edge and a soft sheen, in both themes; their
+// numbers keep the strong light-theme inks. --kpi-tint is the glass's colour (styles.css, .kpi-glass).
 const KPI: Record<KpiTone, { card: string; ink: string; stroke: string }> = {
-  blue: { card: "bg-kpi-blue border-blue/20", ink: "text-[#2563eb]", stroke: "var(--blue)" },
-  green: { card: "bg-kpi-green border-green/20", ink: "text-[#078a5d]", stroke: "var(--green)" },
-  orange: { card: "bg-kpi-orange border-orange/25", ink: "text-[#c77700]", stroke: "var(--orange)" },
-  red: { card: "bg-kpi-red border-red/20", ink: "text-[#dc2626]", stroke: "var(--red)" },
+  blue: { card: "kpi-glass [--kpi-tint:#3b82f6]", ink: "text-[#2563eb]", stroke: "var(--blue)" },
+  green: { card: "kpi-glass [--kpi-tint:#10b981]", ink: "text-[#078a5d]", stroke: "var(--green)" },
+  orange: { card: "kpi-glass [--kpi-tint:#f59e0b]", ink: "text-[#c77700]", stroke: "var(--orange)" },
+  red: { card: "kpi-glass [--kpi-tint:#ef4444]", ink: "text-[#dc2626]", stroke: "var(--red)" },
 };
 
 function Kpi({ tone, icon, title, value, series, to, more }: {
@@ -134,10 +135,7 @@ function Kpi({ tone, icon, title, value, series, to, more }: {
 }) {
   const k = KPI[tone];
   return (
-    <section className={`relative isolate grid min-h-[8.5rem] grid-cols-[1fr_auto] overflow-hidden rounded-[18px] border px-5 pt-4 pb-3 text-kpi-ink ring-4 ring-white/90 shadow-[inset_0_1px_0_rgb(255_255_255/0.7),0_22px_40px_-16px_rgb(40_28_12/0.55)] transition hover:-translate-y-0.5 hover:shadow-[inset_0_1px_0_rgb(255_255_255/0.7),0_18px_36px_-14px_rgb(60_44_20/0.38)] motion-reduce:transition-none motion-reduce:hover:translate-y-0 ${k.card}`}>
-      {/* the glass's sheen: light from the top corner, a bright edge */}
-      <span aria-hidden className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-br from-white/55 via-white/10 to-transparent" />
-      <span aria-hidden className="pointer-events-none absolute -top-12 -start-10 -z-10 size-36 rounded-full bg-white/50 blur-2xl" />
+    <section className={`relative isolate grid min-h-[8.5rem] grid-cols-[1fr_auto] overflow-hidden rounded-[24px] px-5 pt-4 pb-3 text-kpi-ink transition duration-300 hover:-translate-y-1 motion-reduce:transition-none motion-reduce:hover:translate-y-0 ${k.card}`}>
       <div className="grid content-start">
         <h2 className="text-[18px] leading-snug font-bold">{title}</h2>
         <p className={`tabular text-[38px] leading-tight font-bold ${k.ink}`}>
