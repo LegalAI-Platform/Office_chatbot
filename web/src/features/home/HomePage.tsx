@@ -83,10 +83,10 @@ export function HomePage() {
 
         {/* the four numbers */}
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <Kpi tone="blue" icon="stat_calendar_blue" title="مواعيد اليوم" value={appointments.isError ? null : todays} to="/appointments" more="عرض المواعيد" />
-          <Kpi tone="green" icon="stat_card_green" title="إيصالات تحتاج تأكيد" value={receipts.isError ? null : receipts.data?.length} to="/receipts" more="من الإيصالات" />
-          <Kpi tone="orange" icon="stat_alert_yellow" title="أمور عاجلة" value={dash.data?.urgent} series={dash.data?.urgent_by_day} to="/tasks?state=urgent" more="عرض التفاصيل" />
-          <Kpi tone="red" icon="stat_clock_red" title="مهام متأخرة" value={dash.data?.overdue} series={dash.data?.overdue_by_day} to="/tasks?state=overdue" more="عرض المهام" />
+          <Kpi tone="gold" icon="stat_calendar_blue" title="مواعيد اليوم" value={appointments.isError ? null : todays} to="/appointments" more="عرض المواعيد" />
+          <Kpi tone="sand" icon="stat_card_green" title="إيصالات تحتاج تأكيد" value={receipts.isError ? null : receipts.data?.length} to="/receipts" more="من الإيصالات" />
+          <Kpi tone="copper" icon="stat_alert_yellow" title="أمور عاجلة" value={dash.data?.urgent} series={dash.data?.urgent_by_day} to="/tasks?state=urgent" more="عرض التفاصيل" />
+          <Kpi tone="mahogany" icon="stat_clock_red" title="مهام متأخرة" value={dash.data?.overdue} series={dash.data?.overdue_by_day} to="/tasks?state=overdue" more="عرض المهام" />
         </div>
 
         {/* the mockup's three columns: the calendar on the right, today's and the next appointments in the middle, the
@@ -119,15 +119,16 @@ export function HomePage() {
 
 // ---------- the four numbers ----------
 
-type KpiTone = "blue" | "green" | "orange" | "red";
+type KpiTone = "gold" | "sand" | "copper" | "mahogany";
 
-// The cards are «liquid glass» (the owner): a see-through tint with blur, a lit edge and a soft sheen, in both themes; their
-// numbers keep the strong light-theme inks. --kpi-tint is the glass's colour (styles.css, .kpi-glass).
+// The cards are «liquid glass» (the owner) in the office's own colours (the owner: «ألوان الكروت لها علاقة بلون هوية المكتب»): the
+// brand's gold and bronze, a champagne sand, a copper and a deep mahogany for what is late, all warm like the library's picture.
+// --kpi-tint is the glass's colour (styles.css, .kpi-glass); the numbers keep a strong ink of the same family in both themes.
 const KPI: Record<KpiTone, { card: string; ink: string; stroke: string }> = {
-  blue: { card: "kpi-glass [--kpi-tint:#3b82f6]", ink: "text-[#2563eb]", stroke: "var(--blue)" },
-  green: { card: "kpi-glass [--kpi-tint:#10b981]", ink: "text-[#078a5d]", stroke: "var(--green)" },
-  orange: { card: "kpi-glass [--kpi-tint:#f59e0b]", ink: "text-[#c77700]", stroke: "var(--orange)" },
-  red: { card: "kpi-glass [--kpi-tint:#ef4444]", ink: "text-[#dc2626]", stroke: "var(--red)" },
+  gold: { card: "kpi-glass [--kpi-tint:#c9a063]", ink: "text-[#8a5a24]", stroke: "#b08552" },
+  sand: { card: "kpi-glass [--kpi-tint:#dcc29a]", ink: "text-[#6b4626]", stroke: "#8c6a3f" },
+  copper: { card: "kpi-glass [--kpi-tint:#c8793c]", ink: "text-[#9a4d10]", stroke: "#b8651f" },
+  mahogany: { card: "kpi-glass [--kpi-tint:#a65a48]", ink: "text-[#8a2f1f]", stroke: "#9a3b2a" },
 };
 
 function Kpi({ tone, icon, title, value, series, to, more }: {
@@ -143,7 +144,7 @@ function Kpi({ tone, icon, title, value, series, to, more }: {
         </p>
       </div>
       <span className="grid size-16 place-items-center rounded-full border border-white/70 bg-white/45 shadow-[inset_0_1px_0_rgb(255_255_255/0.9),0_6px_16px_-8px_rgb(0_0_0/0.25)] backdrop-blur-sm">
-        <OwnerImg name={icon} className="size-12 object-contain" />
+        <OwnerImg name={icon} className="size-12 object-contain [filter:sepia(0.85)_saturate(1.5)_hue-rotate(-12deg)]" />
       </span>
       <div className="col-span-2 flex items-end justify-between gap-2">
         <Link to={to} className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap text-[14px] font-bold ${k.ink} hover:underline`}>
