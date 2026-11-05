@@ -299,8 +299,10 @@
    * sheen. --kpi-tint is set per card. Kept light in both themes so the dark ink of the numbers always reads.
    */
   .kpi-glass {
+    /* the tint over a light body: the dark picture behind the card never turns the colour muddy, it only shows as depth */
     background:
-      linear-gradient(135deg, color-mix(in oklab, var(--kpi-tint) 62%, rgb(255 255 255 / 0.38)) 0%, color-mix(in oklab, var(--kpi-tint) 38%, rgb(255 255 255 / 0.3)) 100%);
+      linear-gradient(135deg, color-mix(in oklab, var(--kpi-tint) 62%, transparent) 0%, color-mix(in oklab, var(--kpi-tint) 36%, transparent) 100%),
+      linear-gradient(rgb(255 255 255 / 0.62), rgb(255 255 255 / 0.62));
     border: 1px solid color-mix(in oklab, var(--kpi-tint) 45%, rgb(255 255 255 / 0.7));
     box-shadow:
       inset 0 1.5px 1px rgb(255 255 255 / 0.95),
@@ -308,8 +310,8 @@
       inset 0 0 22px rgb(255 255 255 / 0.28),
       0 22px 44px -18px rgb(30 20 8 / 0.5),
       0 3px 8px rgb(30 20 8 / 0.08);
-    backdrop-filter: blur(22px) saturate(185%) brightness(1.08);
-    -webkit-backdrop-filter: blur(22px) saturate(185%) brightness(1.08);
+    backdrop-filter: blur(22px) saturate(185%) brightness(1.15);
+    -webkit-backdrop-filter: blur(22px) saturate(185%) brightness(1.15);
   }
   .kpi-glass:hover {
     box-shadow:
