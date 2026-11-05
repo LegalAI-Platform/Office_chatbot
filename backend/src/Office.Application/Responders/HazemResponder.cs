@@ -290,9 +290,15 @@ public sealed class HazemResponder(
                     typedPress = TypedChoice.Picked(waiting, raw);
                     if (typedPress is null && bookingOn && TypedChoice.Times(waiting, raw, now) is { } asked)
                     {
-                        typedPress = asked.Shown ?? (asked.Exact && await FreeAtAsync(booking!, bookingSettings, settings, asked, now, ct)
-                            ? TypedChoice.PickAt(asked.Times, asked.At)
-                            : TypedChoice.TimesFrom(asked.Times, asked.At));
+                        var free = asked.Shown is null && asked.Exact && await FreeAtAsync(booking!, bookingSettings, settings, asked, now, ct);
+                        typedPress = asked.Shown ?? (free ? TypedChoice.PickAt(asked.Times, asked.At) : TypedChoice.TimesFrom(asked.Times, asked.At));
+                        // v1.67 (the owner: «الساعة 4» at 4:41 got the list with no word why): why the time he asked is not the one
+                        // booked, in the owner's words, before the free times
+                        var why = asked.Passed ? TextKeys.BookingTimePassed : asked.Shown is null && asked.Exact && !free ? TextKeys.BookingTimeTaken : null;
+                        if (why is not null && texts.TryGetValue(why, out var whyText) && whyText.Active)
+                        {
+                            plan.Say(why, Fill: new Dictionary<string, string> { ["time"] = BookingWords.Time(asked.Asked ?? asked.At) });
+                        }
                     }
                 }
 
