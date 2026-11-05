@@ -369,7 +369,8 @@ public static class Conversational
         [TextKeys.AskCallAppPhone] = "ask where the lawyer should call him at his appointment: WhatsApp, FaceTime, or a normal phone call from the office's number (three buttons follow your sentence) (if his last message already answered this in words you did not take, never say it is registered or done: say you did not catch it and ask again, with the choices)",
         [TextKeys.BookingStepAgain] = "ask him kindly to pick from the choices below, or to write the day and time that suit him (the choices follow your sentence); never say a choice of his is registered or done: it was not taken",
         [TextKeys.BookingChooseSlot] = "ask him to pick the time that suits him from the list (the list follows your sentence) (if his last message already answered this in words you did not take, never say it is registered or done: say you did not catch it and ask again, with the choices)",
-        [TextKeys.AskNameBooking] = "ask his name to register the booking (a word of comfort first if he is worried)",
+        // v1.68 (the owner's test: «بكرة الساعة 10 الصبح» was held, and the writer asked him for a time again): the name question
+        // after a hold goes as approved, never in the writer's words
         // v1.48: the office already has his request (the handoff is done): a statement, never a question back to him
         [TextKeys.HumanRequest] = "tell him it is done: the office has his request to talk to someone, and someone will answer him here (a statement, never a question)",
         [TextKeys.NoPersonalNumber] = "say kindly the lawyer's personal number is not given out; he can book a consultation with the lawyer himself, or talk to someone from the office (two buttons follow your sentence)",

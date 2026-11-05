@@ -103,7 +103,7 @@ public sealed class ReminderNotices(HazemDbContext db, BookingStore store, ISett
             var service = BookingService.ByCode(r.Service) ?? BookingService.PhoneVideo;
             var attendees = service.IsUrf
                 ? await db.UrfCases.AsNoTracking().Where(c => c.AppointmentId == r.AppointmentId)
-                    .Select(c => UrfCase.AttendeesFor(c.Kind, c.Witnesses)).FirstOrDefaultAsync(ct)
+                    .Select(c => UrfCase.AttendeesFor(c.Kind, c.Witnesses, c.WifePast == "first" ? c.Guardian : null)).FirstOrDefaultAsync(ct)
                 : null;
             var (detailsKey, detailsFill) = ReminderTexts.Details(service, office, attendees, r.CallApp);
             var details = active.TryGetValue(detailsKey, out var d) ? TextRenderer.Render(d, detailsFill).Text : null;

@@ -218,7 +218,8 @@ public static class TextKeys
     public const string UrfRejected = "urf_rejected";                       // the worker after the lawyer's refusal
     public const string BtnUrfFirst = "btn_urf_first";
     public const string BtnUrfDivorced = "btn_urf_divorced";
-    public const string BtnUrfKhul = "btn_urf_khul";
+    public const string BtnUrfKhul = "btn_urf_khul";   // v1.68: no longer shown (one button for a divorce or a khul)
+    public const string BtnUrfWidow = "btn_urf_widow"; // v1.68
     public const string BtnUrfGuardianList = "btn_urf_guardian_list";
     public const string BtnUrfFather = "btn_urf_father";
     public const string BtnUrfBrother = "btn_urf_brother";

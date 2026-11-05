@@ -33,7 +33,7 @@ public sealed partial class BookingFlowTests
         Assert.Equal("divorced", TheCase.WifePast);
 
         _script["25 و 28"] = new("other", null, "unknown", null, 0.9);
-        Assert.Equal([TextKeys.UrfAskGuardian], Keys(await Say("25 و 28"))); // her past is known: straight to the guardian
+        Assert.Equal([TextKeys.UrfAskWitnesses], Keys(await Say("25 و 28"))); // her past is known (v1.68: no guardian for a divorced wife)
         Assert.Equal("divorced", TheCase.WifePast);
     }
 
@@ -200,7 +200,8 @@ public sealed class UrfFactsRuleTests
     public void The_step_waiting_moves_past_what_was_said()
     {
         var c = Marriage(step: UrfStep.WifePast) with { HusbandAge = 30, WifeAge = 25 };
-        Assert.Equal(UrfStep.Guardian, UrfRules.ApplyFacts(c, "khul", null, null).Step);
+        Assert.Equal(UrfStep.Witnesses, UrfRules.ApplyFacts(c, "khul", null, null).Step); // v1.68: no guardian after a khul
+        Assert.Equal(UrfStep.Guardian, UrfRules.ApplyFacts(c, "first", null, null).Step);
     }
 
     [Fact]

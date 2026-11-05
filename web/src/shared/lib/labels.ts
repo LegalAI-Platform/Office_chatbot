@@ -234,7 +234,7 @@ export const URF_STATES: Record<string, string> = {
 };
 
 export const URF_ANSWERS: Record<string, string> = {
-  first: "أول جوازة", divorced: "اتطلقت قبل كده", khul: "اختلعت قبل كده",
+  first: "أول جوازة", divorced: "اتطلقت أو اختلعت", khul: "اختلعت قبل كده", widow: "أرملة",
   father: "الأب", brother: "الأخ", uncle: "العم", none: "مفيش",
   office: "من المكتب", own: "من طرفهم",
 };

@@ -23,7 +23,7 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
     public const string PromptVersion = "classify-v16";
 
     /// <summary>v1.52 (phase 1): the prompt while understanding v2 is on (the whole chat, the stance, the other questions).</summary>
-    public const string PromptVersionV2 = "classify-v19";
+    public const string PromptVersionV2 = "classify-v20";
     public const string StubEnabledKey = "ai.stub_enabled";
     public const string StubBaseUrlKey = "ai.stub_base_url";
 
@@ -253,7 +253,7 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
                 ["stance"] = new JsonObject { ["type"] = "string", ["enum"] = Codes<Stance>(false) },
                 ["also_asked"] = new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "string", ["enum"] = Codes<InfoTopic>(false) } },
                 // v1.60: what he said about the Urfi case in this message (null: nothing said)
-                ["urf_wife_past"] = new JsonObject { ["type"] = new JsonArray("string", "null"), ["enum"] = new JsonArray("first", "divorced", "khul", null) },
+                ["urf_wife_past"] = new JsonObject { ["type"] = new JsonArray("string", "null"), ["enum"] = new JsonArray("first", "divorced", "khul", "widow", null) },
                 ["urf_guardian"] = new JsonObject { ["type"] = new JsonArray("string", "null"), ["enum"] = new JsonArray("father", "brother", "uncle", null) },
                 ["urf_witnesses"] = new JsonObject { ["type"] = new JsonArray("string", "null"), ["enum"] = new JsonArray("office", "own", null) },
             },

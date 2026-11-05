@@ -61,7 +61,7 @@ public sealed class HazemResponder(
         TextKeys.UrfAskAges, TextKeys.UrfUnderAge, TextKeys.UrfAskWifePast, TextKeys.UrfAskGuardian, TextKeys.UrfNoGuardian,
         TextKeys.UrfAskWitnesses, TextKeys.UrfAskCopy, TextKeys.UrfAskAgreed, TextKeys.UrfAskChildren, TextKeys.UrfConfirmed,
         TextKeys.UrfAgesAgain, TextKeys.UrfChooseSlot, TextKeys.UrfSendDocuments, TextKeys.UrfDocumentsReceived, TextKeys.UrfRejected,
-        TextKeys.BtnUrfFirst, TextKeys.BtnUrfDivorced, TextKeys.BtnUrfKhul, TextKeys.BtnUrfGuardianList, TextKeys.BtnUrfFather,
+        TextKeys.BtnUrfFirst, TextKeys.BtnUrfDivorced, TextKeys.BtnUrfWidow, TextKeys.BtnUrfGuardianList, TextKeys.BtnUrfFather,
         TextKeys.BtnUrfBrother, TextKeys.BtnUrfUncle, TextKeys.BtnUrfNoGuardian, TextKeys.BtnUrfWitnessOffice, TextKeys.BtnUrfWitnessOwn,
         TextKeys.BtnYes, TextKeys.BtnNo,
     ];
@@ -1294,7 +1294,7 @@ public sealed class HazemResponder(
                     break;
                 case UrfStep.WifePast:
                     plan.Ask(TextKeys.UrfAskWifePast, new ReplyChoices(InteractivePayload.Buttons,
-                        [Btn("first", TextKeys.BtnUrfFirst), Btn("divorced", TextKeys.BtnUrfDivorced), Btn("khul", TextKeys.BtnUrfKhul)]));
+                        [Btn("first", TextKeys.BtnUrfFirst), Btn("divorced", TextKeys.BtnUrfDivorced), Btn("widow", TextKeys.BtnUrfWidow)]));
                     break;
                 case UrfStep.Guardian:
                     plan.Ask(TextKeys.UrfAskGuardian, new ReplyChoices(InteractivePayload.List,
