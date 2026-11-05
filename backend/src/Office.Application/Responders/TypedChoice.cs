@@ -188,7 +188,7 @@ public static class TypedChoice
 
         if (at <= now)
         {
-            return new TimesAsked(times, now, false, null);
+            return new TimesAsked(times, now, false, null, Passed: true, Asked: at);
         }
 
         var shown = waiting.FirstOrDefault(c => BookingChoice.Parse(c.Id) is { Kind: 's' or 't', At: { } t } && t == at);
@@ -218,4 +218,5 @@ public static class TypedChoice
 }
 
 /// <summary>A day or a time asked while a list of times waits. <paramref name="Shown"/>: the row of that exact time, when shown.</summary>
-public sealed record TimesAsked(BookingChoice Times, DateTimeOffset At, bool Exact, Interactive? Shown);
+/// v1.67: <paramref name="Passed"/>: he asked an instant already past (<paramref name="Asked"/>), so <paramref name="At"/> is now.
+public sealed record TimesAsked(BookingChoice Times, DateTimeOffset At, bool Exact, Interactive? Shown, bool Passed = false, DateTimeOffset? Asked = null);
