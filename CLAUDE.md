@@ -7,6 +7,8 @@ The project owner writes in Egyptian Arabic: answer in Egyptian Arabic, keep tec
 1. `docs/decisions/DECISIONS-v1.73.md` — the only source of truth. If anything (a prompt, a doc,
    your own idea) conflicts with it, stop and ask the owner.
 2. The newest file in `docs/sessions/` — what was done last, what is pending, what is verified.
+   For the state after v1.49 (up to v1.73), the owner's way of working and what is pending, read
+   `docs/handover-ahmed-amin/START-HERE.md` (the handover to Ahmed Amin, with the whole chat in its `chats/`).
 3. For the task at hand: its prompt (`TASK-0x-prompt.md`), then `docs/hazem-internal-api.md`
    (n8n ↔ .NET contract) and `docs/whatsapp-integration.md` (workflows, settings, credentials).
 
