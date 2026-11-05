@@ -29,7 +29,8 @@ public sealed class AnthropicIntentClassifier(IOptions<HazemOptions> options, Ti
 
     /// <summary>
     /// OpenAI's schema, with every nullable field («type: [string, null]», with or without its closed list) written as
-    /// «anyOf: [string (the list), null]»: Anthropic refuses an enum under a type array.
+    /// «anyOf: [string (the list), null]»: Anthropic refuses an enum under a type array. v1.73: the field keeps its own type
+    /// («[integer, null]» is «anyOf: [integer, null]»).
     /// </summary>
     public static Dictionary<string, JsonElement> BuildSchema()
     {
@@ -42,7 +43,9 @@ public sealed class AnthropicIntentClassifier(IOptions<HazemOptions> options, Ti
                 continue;
             }
 
-            var text = new JsonObject { ["type"] = "string" };
+            // v1.73: the field's own type (an integer stays an integer: «picked» and the ages came back as text, and were lost)
+            var type = ((JsonArray)field["type"]!).Select(t => (string?)t).FirstOrDefault(t => t is not null and not "null") ?? "string";
+            var text = new JsonObject { ["type"] = type };
             if (field["enum"] is JsonArray values)
             {
                 text["enum"] = new JsonArray(values.Where(v => v is not null).Select(v => v!.DeepClone()).ToArray());
