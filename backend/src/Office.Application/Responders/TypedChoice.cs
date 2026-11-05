@@ -60,7 +60,81 @@ public static class TypedChoice
                 && (said.Contains(title, StringComparison.Ordinal) && said.Length <= title.Length + 14
                     || said.Length >= 4 && $" {title} ".Contains($" {said} ", StringComparison.Ordinal));
         }).ToList();
-        return hits.Count == 1 ? As(hits[0]) : null;
+        if (hits.Count == 1)
+        {
+            return As(hits[0]);
+        }
+
+        // v1.66: «ولا حد فيهم»، «محدش»، «مفيش» under a list that has a row for nobody
+        if (hits.Count == 0 && NoneSaid.Contains(said))
+        {
+            var none = waiting.Where(c => { var t = Courtesy.Normalize(c.Title); return t.StartsWith("مفيش", StringComparison.Ordinal) || t.Contains("ولا حد", StringComparison.Ordinal)
+                || t.Contains("لا حد", StringComparison.Ordinal) || t.Contains("ولا واحد", StringComparison.Ordinal); }).ToList();
+            return none.Count == 1 ? As(none[0]) : null;
+        }
+
+        // v1.66: a short answer that shares a real word with ONE row only («موبايلي عادي» under «مكالمة عادية»): that row. Never
+        // a question, never a refusal, never when two rows share a word.
+        if (hits.Count == 0 && said.Split(' ').Length <= 4 && !AsksQuestion(words, said) && !SaysNo(said))
+        {
+            var mine = Stems(said);
+            if (mine.Count > 0)
+            {
+                var shared = waiting.Where(c => Stems(Courtesy.Normalize(c.Title)).Overlaps(mine)).ToList();
+                if (shared.Count == 1)
+                {
+                    return As(shared[0]);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static readonly HashSet<string> NoneSaid = new(StringComparer.Ordinal)
+    {
+        "ولا حد", "ولا حد فيهم", "ولا حد منهم", "لا حد", "لا حد فيهم", "لا حد منهم", "محدش", "محدش فيهم", "محدش منهم", "مفيش", "مفيش حد",
+        "مفيش حد فيهم", "ولا واحد", "ولا واحد فيهم", "ولا واحد منهم", "لا ولا واحد", "لا مفيش حد",
+    };
+
+    private static readonly string[] QuestionWords = ["ايه", "بكام", "كام", "ازاي", "هل", "ليه", "فين", "امتي", "مين", "اي"];
+
+    private static bool AsksQuestion(string words, string said) =>
+        words.Contains('؟') || words.Contains('?') || said.Split(' ').Any(w => QuestionWords.Contains(w, StringComparer.Ordinal));
+
+    private static readonly string[] Filler = ["عايز", "عاوز", "تمام", "ايوه", "اوكي", "طيب", "ماشي", "اختار", "حابب", "ممكن", "برضو", "بتاع", "بتاعي"];
+
+    /// <summary>The real words of a short text, each without «ال» and the endings «ه / ي / ات» (so «عادي» and «عادية» are one).</summary>
+    private static HashSet<string> Stems(string normalized)
+    {
+        var stems = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var word in normalized.Split(' '))
+        {
+            if (word.Length < 4 || Filler.Contains(word, StringComparer.Ordinal))
+            {
+                continue;
+            }
+
+            var w = word.StartsWith("ال", StringComparison.Ordinal) ? word[2..] : word;
+            for (var i = 0; i < 2; i++)
+            {
+                if (w.EndsWith("ات", StringComparison.Ordinal) && w.Length > 4)
+                {
+                    w = w[..^2];
+                }
+                else if ((w.EndsWith('ه') || w.EndsWith('ي')) && w.Length > 3)
+                {
+                    w = w[..^1];
+                }
+            }
+
+            if (w.Length >= 3)
+            {
+                stems.Add(w);
+            }
+        }
+
+        return stems;
     }
 
     private static readonly string[] No = ["مش", "لا", "مفيش", "ولا", "غير", "بدل", "مو"];

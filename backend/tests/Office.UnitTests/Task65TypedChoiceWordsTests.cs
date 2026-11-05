@@ -34,7 +34,9 @@ public sealed class TypedChoiceWordsTests
     [InlineData("الأب", "urf:guardian:father")]
     [InlineData("الاب موجود", "urf:guardian:father")]   // spelling and a few words more
     [InlineData("اخوها", null)]                         // not the row's words: the AI reads it
-    [InlineData("ولا حد فيهم", null)]                   // not the row's words: the AI reads it (classify-v19)
+    [InlineData("ولا حد فيهم", "urf:guardian:none")]    // v1.66: nobody, said in the usual ways
+    [InlineData("محدش", "urf:guardian:none")]
+    [InlineData("ولا واحد منهم", "urf:guardian:none")]
     [InlineData("مش الأب", null)]                       // a refusal is never a pick
     [InlineData("2", "urf:guardian:brother")]
     [InlineData("رقم 3", "urf:guardian:uncle")]
@@ -50,7 +52,10 @@ public sealed class TypedChoiceWordsTests
     [InlineData("FaceTime", "call:facetime")]
     [InlineData("مكالمة عادية", "call:phone")]
     [InlineData("📞 مكالمة عادية", "call:phone")]
-    [InlineData("موبايلي عادي", null)] // a meaning, not the row's words: the AI picks it (classify-v19)
+    [InlineData("موبايلي عادي", "call:phone")]   // v1.66: shares the real word «عادي» with ONE row only
+    [InlineData("تليفون عادي", "call:phone")]
+    [InlineData("المكالمة دي بكام؟", null)]       // a question is never a pick
+    [InlineData("مش واتساب", null)]
     public void Words_that_are_a_way_of_calling_are_that_way(string words, string? id) => Assert.Equal(id, Id(Call, words));
 
     [Fact]
