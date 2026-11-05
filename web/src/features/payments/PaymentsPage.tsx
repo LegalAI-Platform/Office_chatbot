@@ -5,11 +5,12 @@ import { can, useMe } from "../../shared/api/session";
 import { APPOINTMENT_STATES, BOOKING_SERVICES, label, PAYMENT_STATES, REFUND_REASONS, SERVICE_KINDS, SERVICE_STATES } from "../../shared/lib/labels";
 import { cairoWhen } from "../../shared/lib/time";
 import { useUrlState } from "../../shared/lib/url";
-import { ActionBar, CaseCard, CaseHead, CaseNote, Facts, Files, Meta, Phone } from "../../shared/ui/caseCard";
+import { ActionBar, CaseCard, CaseHead, CaseNote, Facts, Meta, Phone } from "../../shared/ui/caseCard";
 import { toast } from "../../shared/ui/feedback";
 import { Icon, type IconName } from "../../shared/ui/Icon";
 import { Button, Chip, ErrorState, Field, Loading } from "../../shared/ui/ui";
-import { payments, pounds, receiptUrl, type Payment, type Review, type Show } from "./api";
+import { payments, pounds, type Payment, type Review, type Show } from "./api";
+import { ReceiptButtons } from "./ReceiptViewer";
 
 const TONE: Record<string, string> = {
   requested: "grey", proof_received: "blue", duplicate_suspected: "orange", verified: "green", partial: "orange",
@@ -158,7 +159,7 @@ function PaymentCard({ p }: { p: Payment }) {
           {p.duplicate ? <Chip tone="orange">نفس الصورة على حجز تاني</Chip> : null}
         </>} />
       <Facts items={facts} />
-      <Files label="صور التحويل" count={p.receipts} href={(i) => receiptUrl(p.appointment_id, i)} word="فتح الإيصال" icon="receipt" />
+      <ReceiptButtons p={p} tone={TONE[p.state] ?? "grey"} />
       {p.state === "refunded" ? (
         <CaseNote>اترد {pounds(p.refund_due ?? 0)} جنيه على {p.refund_method} · {p.refunded_by}{p.refunded_at ? `، ${cairoWhen(p.refunded_at)}` : ""}</CaseNote>
       ) : null}

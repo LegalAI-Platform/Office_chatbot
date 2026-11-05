@@ -49,7 +49,13 @@ describe("TASK 09 payments", () => {
     renderAt("/receipts");
     const card = (await screen.findByText(/محمد أحمد علي حسن/)).closest("li")!;
     expect(within(card).getByText("وصل إيصال، مستني المراجعة")).toBeTruthy();
-    expect(within(card).getByRole("link", { name: /فتح الإيصال/ }).getAttribute("href")).toBe("/api/panel/payments/a1/receipts/0");
+    // the receipt opens in a window of the panel (the picture, and what to check it against), not as a bare picture in a tab
+    fireEvent.click(within(card).getByRole("button", { name: /فتح الإيصال/ }));
+    const viewer = screen.getByRole("dialog", { name: "الإيصال" });
+    expect(within(viewer).getByRole("img", { name: "صورة التحويل" }).getAttribute("src")).toBe("/api/panel/payments/a1/receipts/0");
+    expect(within(viewer).getByRole("link", { name: /افتح في تبويب جديد/ }).getAttribute("href")).toBe("/api/panel/payments/a1/receipts/0");
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "الإيصال" })).toBeNull();
 
     fireEvent.change(within(card).getByLabelText(/المبلغ اللي وصل/), { target: { value: "300" } });
     expect((within(card).getByRole("button", { name: "تمام" }) as HTMLButtonElement).disabled).toBe(true); // less than due
