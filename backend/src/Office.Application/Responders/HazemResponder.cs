@@ -282,13 +282,30 @@ public sealed class HazemResponder(
                 && AiInput.Build(turn) is { } typedWords && !Courtesy.Read(typedWords).EndsTheChat)
             {
                 // v1.65: words that are one of the choices (its title, or its number) are that choice, by the code: no AI call
-                var typedPress = TypedChoice.ByWords(waiting, typedWords);
+                // v1.79 (the sweep: «عايز مقابلة في المكتب» under the welcome took «خدمات المكتب» by its shared word «المكتب»): with
+                // understanding on, the code takes only the choice's own words or its number; a guess from one shared word is
+                // the AI's to make, read with the chat, and the code's only when the AI cannot answer
+                var typedPress = TypedChoice.ByWords(waiting, typedWords, guess: !understanding);
                 if (typedPress is null)
                 {
                     var understood = await WithContextAsync(turn, typedWords, situation, settings, ct);
                     typedReading = Backstop.Apply(Classification.From(await classifier.ClassifyAsync(understood, settings, ct), settings), typedWords);
                     var raw = typedReading.Call?.Answer;
                     typedPress = TypedChoice.Picked(waiting, raw);
+                    if (typedPress is null && understanding && typedReading.IsFallback)
+                    {
+                        typedPress = TypedChoice.ByWords(waiting, typedWords);
+                    }
+
+                    // v1.79 (the sweep: «لا خليها فيس تايم» under the times of a WhatsApp call got «هسجلها FaceTime» and nothing
+                    // changed): the call he wants now is taken, said back, and its times come again for it
+                    if (typedPress is null && bookingOn && raw?.CallApp is { } app && CallApp.ByShort(CallApp.Short(app)) == app
+                        && waiting.Select(c => BookingChoice.Parse(c.Id)).FirstOrDefault(p => p is { Kind: 's' or 'n' }) is { } shown
+                        && shown.Service?.Code == BookingService.PhoneVideo.Code && (shown.App ?? CallApp.WhatsApp) != app)
+                    {
+                        typedPress = new Interactive("button_reply", $"bk:v:{CallApp.Short(app)}", CallApp.Name(app));
+                        plan.Say(TextKeys.UrfAnswerCorrected, Fill: new Dictionary<string, string> { ["changed"] = $"المكالمة تبقى {CallApp.Name(app)}" });
+                    }
                     if (typedPress is null && bookingOn && TypedChoice.Times(waiting, raw, now) is { } asked)
                     {
                         var free = asked.Shown is null && asked.Exact && await FreeAtAsync(booking!, bookingSettings, settings, asked, now, ct);
@@ -420,7 +437,7 @@ public sealed class HazemResponder(
             }
             else if (urfButton is not null)
             {
-                flow.RespondToOldUrfButton(); // a button from a question no longer waiting: never to the AI
+                flow.RespondToOldUrfButton(urfButton); // a button from a question no longer waiting: his answer to it (v1.79), never to the AI
             }
             else if (urfDocuments is { Status: not AddFileStatus.None })
             {
@@ -1144,6 +1161,13 @@ public sealed class HazemResponder(
                 WordsToOffice();
             }
 
+            // v1.79: a button of a question asked before (not the one waiting) is his answer to THAT question, as if he typed it
+            if (answer is not null && Urf is { State: UrfCase.Collecting } open && answer.Step != open.Step)
+            {
+                RespondToOldUrfButton(answer);
+                return;
+            }
+
             var (next, how) = answer is not null ? UrfRules.Answer(Urf!, answer) : UrfRules.Ages(Urf!, AiInput.Build(turn), understanding);
             Urf = next;
             UrfChanged = true;
@@ -1151,12 +1175,53 @@ public sealed class HazemResponder(
         }
 
         /// <summary>
-        /// An Urfi button from a question that no longer waits (the case moved on or closed): «تحت أمرك، قولّي المطلوب».
+        /// An Urfi button from a question that no longer waits. v1.79 (Nehad's chat: «الأب» pressed while the name for his time
+        /// waited got «تحت أمرك، قولّي المطلوب», and the name was never asked again): the press is his words, read as typed ones
+        /// are (v1.74): an answer that changes the case is said back («تمام، عدّلت…») and the case goes on; at a held or paid time
+        /// the change goes to the office (v1.62). One that changes nothing that matters (a guardian for a widow, the same answer)
+        /// only brings back the question waiting (the name, the Urfi step). Nothing waiting: «تحت أمرك، قولّي المطلوب» as before.
         /// </summary>
-        public void RespondToOldUrfButton()
+        public void RespondToOldUrfButton(UrfAnswer? pressed = null)
         {
             WordsToOffice();
-            plan.Say(TextKeys.UrfUnclear);
+            var (past, guard, wit) = pressed?.Step switch
+            {
+                UrfStep.WifePast => (pressed.Value, null, null),
+                UrfStep.Guardian => ((string?)null, pressed.Value, (string?)null),
+                UrfStep.Witnesses => (null, null, pressed.Value),
+                _ => ((string?)null, (string?)null, (string?)null),
+            };
+            if (urfOn && Urf is { } running && (past ?? guard ?? wit) is not null)
+            {
+                if (UrfRules.ChangesBooked(running, past, guard, wit))
+                {
+                    plan.Say(TextKeys.ServiceCheck);
+                    plan.Task(PendingTask.UrfHelp);
+                    Check(Intake.MoveTo(IntakeState.HandedToStaff));
+                    return;
+                }
+
+                var now = UrfRules.ApplyFacts(running, past, guard, wit);
+                var changed = UrfRules.Corrected(running, now);
+                if (now.State != running.State || now.Step != running.Step || changed is not null)
+                {
+                    Urf = now;
+                    UrfChanged = true;
+                    if (changed is not null && now.State is not (UrfCase.RejectedAge or UrfCase.RejectedGuardian))
+                    {
+                        plan.Say(TextKeys.UrfAnswerCorrected, Fill: new Dictionary<string, string> { ["changed"] = changed });
+                        urfCorrected = true;
+                    }
+
+                    AfterUrf(UrfRules.NextOf(now));
+                    return;
+                }
+            }
+
+            if (!AskWaitingAgain())
+            {
+                plan.Say(TextKeys.UrfUnclear);
+            }
         }
 
         /// <summary>v1.60: the case with what the client said in this message (witnesses, her past, her guardian) kept in it.</summary>
@@ -1416,20 +1481,27 @@ public sealed class HazemResponder(
         /// v1.70: after the warning, the question that still waits for his answer, in its approved words: the name for the time he
         /// picked, the welcome's name, or the Urfi question on its step. Nothing when no question waits.
         /// </summary>
-        private void AskWaitingAgain()
+        private bool AskWaitingAgain()
         {
             if (Intake.PickWaitingForName is not null && !State.Person.NameSettled)
             {
                 plan.Say(TextKeys.AskNameBooking);
+                return true;
             }
-            else if (Intake.State == IntakeState.AwaitingName)
+
+            if (Intake.State == IntakeState.AwaitingName)
             {
                 plan.Say(TextKeys.WelcomeAskName);
+                return true;
             }
-            else if (urfOn && Urf is { State: UrfCase.Collecting } u && UrfQuestion(u.Step) is not null)
+
+            if (urfOn && Urf is { State: UrfCase.Collecting } u && UrfQuestion(u.Step) is not null)
             {
                 AskUrf(u.Step);
+                return true;
             }
+
+            return false;
         }
 
         public void Respond(bool firstContact)
@@ -1944,6 +2016,16 @@ public sealed class HazemResponder(
         {
             if (AskWhichMeant(turnClass))
             {
+                return;
+            }
+
+            // v1.79 (the sweep: «لا خليها مكالمة عادية مش واتساب» at a held time got «تغيّر الميعاد ولا تلغيه؟»): the call he wants
+            // for his held or paid time, read with the chat, whatever the AI called the message (a change, or a consultation)
+            if (MayBook && understanding && turnClass.Intent is Intent.RescheduleOrCancel or Intent.ConsultationRequest
+                && turnClass.Call?.Answer?.CallApp is { } wants && CallApp.ByShort(CallApp.Short(wants)) == wants
+                && situation.Kind is SituationKind.HeldUnpaid or SituationKind.Confirmed)
+            {
+                work = new CallAppChange(wants);
                 return;
             }
 
@@ -2644,6 +2726,21 @@ public sealed class HazemResponder(
                 case ShowExisting s:
                     await ShowExistingAsync(desk, s.Id, ct);
                     break;
+                case CallAppChange x:
+                    // v1.79: the call he wants at his held or paid time is another one than booked: the office changes it (a change
+                    // after the time is held is the office's, v1.62), said back in his words; the same one: his time as before
+                    if (await desk.UpcomingForAsync(State.Person.Id, plan.Now, ct) is { IsOpen: true } held
+                        && (held.Service != BookingService.PhoneVideo.Code || (held.CallApp ?? CallApp.WhatsApp) != x.App))
+                    {
+                        plan.Say(TextKeys.ServiceCheck);
+                        plan.Task(PendingTask.RescheduleOrCancel);
+                    }
+                    else
+                    {
+                        await ShowExistingAsync(desk, null, ct);
+                    }
+
+                    break;
                 case StartChange s:
                     await StartChangeAsync(desk, b, settings, s.Id, ct);
                     break;
@@ -3340,6 +3437,9 @@ public sealed class HazemResponder(
     private sealed record AskCallApp : BookingWork;
 
     private sealed record ShowExisting(Guid? Id) : BookingWork;
+
+    /// <summary>v1.79: he wants another call (WhatsApp, FaceTime, a normal call, Meet) for his held or paid time.</summary>
+    private sealed record CallAppChange(string App) : BookingWork;
 
     private sealed record StartChange(Guid Id) : BookingWork;
 

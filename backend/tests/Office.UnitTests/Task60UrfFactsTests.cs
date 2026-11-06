@@ -236,6 +236,28 @@ public sealed partial class BookingFlowTests
         Assert.DoesNotContain(TextKeys.AskWhichMeaning, Keys(await Say("الكلام هيفضل سري؟")));
     }
 
+    [Fact] // v1.79: an old Urfi button is his answer to that question, as typed words are
+    public async Task An_old_button_that_changes_an_answer_is_said_back_and_the_case_goes_on()
+    {
+        UrfFactsOn();
+        _texts[TextKeys.UrfAnswerCorrected] = new ApprovedText(TextKeys.UrfAnswerCorrected, 1, "تمام، عدّلت {{changed}} ✅", 300, true);
+        await ToTheGuardian();
+        Assert.Equal([TextKeys.UrfAskWitnesses], Keys(await Answer(UrfStep.Guardian, "father")));
+        var d = await Answer(UrfStep.Guardian, "brother"); // the guardian's button again, while the witnesses wait
+        Assert.Equal([TextKeys.UrfAnswerCorrected, TextKeys.UrfAskWitnesses], Keys(d));
+        Assert.Equal("تمام، عدّلت الولي يبقى الأخ ✅", d.Actions[0].Text);
+        Assert.Equal("brother", TheCase.Guardian);
+    }
+
+    [Fact] // v1.79 (Nehad's chat): an old button that changes nothing brings back the question waiting
+    public async Task An_old_button_that_changes_nothing_brings_back_the_question_waiting()
+    {
+        UrfFactsOn();
+        await ToTheGuardian();
+        await Answer(UrfStep.Guardian, "father");
+        Assert.Equal([TextKeys.UrfAskWitnesses], Keys(await Answer(UrfStep.Guardian, "father"))); // the same answer: the witnesses again
+    }
+
     [Fact]
     public async Task Everything_said_up_front_goes_straight_to_the_price_once_the_ages_are_in()
     {

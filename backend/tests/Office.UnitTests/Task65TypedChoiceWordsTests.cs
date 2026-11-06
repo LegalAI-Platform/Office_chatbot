@@ -28,6 +28,17 @@ public sealed class TypedChoiceWordsTests
 
     private static string? Id(IReadOnlyList<InteractiveChoice> waiting, string words) => TypedChoice.ByWords(waiting, words)?.Id;
 
+    private static readonly InteractiveChoice[] Welcome = [new("svc:menu", "خدمات المكتب"), new("svc:tell", "💬 أحكي مشكلتي")];
+
+    [Fact] // v1.79 (the sweep): one shared word is a guess, and with understanding on the guess is the AI's
+    public void A_shared_word_alone_is_left_to_the_ai_when_it_reads_the_chat()
+    {
+        Assert.Equal("svc:menu", TypedChoice.ByWords(Welcome, "عايز مقابلة في المكتب")?.Id); // AI off (or down): the code's guess
+        Assert.Null(TypedChoice.ByWords(Welcome, "عايز مقابلة في المكتب", guess: false));
+        Assert.Equal("svc:menu", TypedChoice.ByWords(Welcome, "خدمات المكتب", guess: false)?.Id); // the choice's own words still are
+        Assert.Equal("call:facetime", TypedChoice.ByWords(Call, "2", guess: false)?.Id); // and its number
+    }
+
     [Theory]
     [InlineData("مفيش حد منهم", "urf:guardian:none")] // the row's own words
     [InlineData("مفيش حد منهم.", "urf:guardian:none")]

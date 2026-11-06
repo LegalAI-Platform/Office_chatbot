@@ -32,6 +32,14 @@ public sealed class ReplyGuardTests
     public void The_check_lets_through_only_the_approved_facts_and_no_law_promise_or_money(string reply, string? problem) =>
         Assert.Equal(problem, ReplyGuard.Problem(reply, R("أكيد 👋 حضرتك عندك استشارة عاجلة مدفوعة، والمستشار هيكلم حضرتك حوالي الساعة 10:00 ص."), null));
 
+    [Theory] // v1.79: a reply that says something is registered or booked
+    [InlineData("تمام يا فندم، هسجلها FaceTime بدل الواتساب", true)]
+    [InlineData("تحب أسجلك على ميعاد الساعة 1؟", true)]
+    [InlineData("تمام، حجزتلك الميعاد", true)]
+    [InlineData("اختار الميعاد اللي يناسبك من القايمة 👇", false)]
+    [InlineData("التسجيل بيتم بعد صورة التحويل", false)]
+    public void Saying_it_is_booked_is_found(string text, bool booked) => Assert.Equal(booked, ReplyGuard.SaysBooked(text));
+
     [Theory] // v1.70 (Nehad's chat): privacy said where nobody asked is refused; «سريع» is no privacy
     [InlineData("ابعت الصورة هنا، وكلامك مع المكتب بيفضل سري.", true)]
     [InlineData("كل كلام حضرتك مع المكتب بسرية تامة", true)]

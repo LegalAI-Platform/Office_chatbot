@@ -262,6 +262,12 @@ public static partial class ReplyGuard
 
     private static string Normal(string s) => Space().Replace(s, " ").Trim();
 
+    /// <summary>v1.79: the words say something is or will be registered or booked («سجلت»، «هسجلها»، «أسجلك»، «حجزتلك»، «اتحجز»).</summary>
+    public static bool SaysBooked(string text) => Booked().IsMatch((text ?? "").Replace("ّ", "", StringComparison.Ordinal));
+
+    [GeneratedRegex(@"سجل|حجزت|هحجز|حنحجز|هنحجز|[أا]حجزل|اتحجز|نحجزل")]
+    private static partial Regex Booked();
+
     /// <summary>v1.70: the words say something stays secret or private («سري», «سرية», «أسرار», «خصوصية») — never «سريع».</summary>
     public static bool SpeaksOfPrivacy(string text) => Privacy().IsMatch(text ?? "");
 
@@ -585,6 +591,13 @@ public static class Conversational
                 && (o.Reply!.Contains("متأكد", StringComparison.Ordinal) || o.Reply.Contains("اتأكد", StringComparison.Ordinal)))
             {
                 problem = "said_confirmed"; // v1.45: the transfer is still under the office's review
+            }
+
+            // v1.79 (the sweep: «هسجلها FaceTime» and «تحب أسجلك على ميعاد الساعة 1؟» while the code registered nothing and showed
+            // no time): a reply never says something is (or will be) registered or booked unless the approved text says it
+            if (problem is null && ReplyGuard.SaysBooked(o.Reply!) && !ReplyGuard.SaysBooked(approved))
+            {
+                problem = "said_booked";
             }
 
             // v1.70 (Nehad's chat: «وكلامك مع المكتب بيفضل سري» under «ابعت صورة التحويل»): privacy is said only where it belongs,
