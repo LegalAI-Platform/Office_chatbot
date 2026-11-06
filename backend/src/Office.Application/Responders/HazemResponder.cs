@@ -2696,6 +2696,20 @@ public sealed class HazemResponder(
                 Service.FormalNotice => ServiceRow.Notice,
                 _ => null,
             };
+            // v1.88 (the v1.87 replay: «بكام؟» under the guardian question got «ابدأ الطلب» and the question never came back): the
+            // Urfi price asked while its questions are open is answered as any other question there, the question waiting comes
+            // back (no start button: the request is open). Switch off: as v1.81.
+            if (key == TextKeys.PriceUrf && plan.CaseSaidOn && urfOn && Urf is { State: UrfCase.Collecting })
+            {
+                plan.Say(key, TextKeys.ConsultationOffer);
+                if (!paused)
+                {
+                    AfterUrf(UrfNext.Ask);
+                }
+
+                return;
+            }
+
             if (key is not null && row is not null && servicesOn && MayOrder && !situation.BlocksPaidOffer)
             {
                 plan.Ask(key, new ReplyChoices(InteractivePayload.Buttons, [new ReplyChoice(ServiceRow.Id(row), TextKeys.BtnStartOrder)]),
