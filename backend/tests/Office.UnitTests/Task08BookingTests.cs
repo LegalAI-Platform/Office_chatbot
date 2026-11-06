@@ -724,10 +724,10 @@ public sealed partial class BookingFlowTests
         await ToTheOffer();
         var alone = await Send(new IncomingMessage($"wamid.{++_turn}", MessageType.Unsupported, null, null, null, null, OriginalType: "album"));
         Assert.Empty(alone.Actions); // never «النوع ده مش مدعوم» for photos that did arrive
-        Assert.Empty(Keys(alone));
+        Assert.Null(alone.Effects); // nothing at all is done for it (no reply, no task)
 
         var other = await Send(new IncomingMessage($"wamid.{++_turn}", MessageType.Unsupported, null, null, null, null, OriginalType: "unsupported"));
-        Assert.NotEmpty(Keys(other)); // any other unknown kind is answered as before
+        Assert.NotNull(other.Effects); // any other unknown kind is not left out: it goes on as before
     }
 
     [Fact]
