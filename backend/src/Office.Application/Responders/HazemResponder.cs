@@ -1684,12 +1684,36 @@ public sealed class HazemResponder(
         /// («وصلت ✅ وهتبقى قدام المستشار»); «عاوز احكي مشكلتي» asks for it. A precise request (another service, a price,
         /// cancel, a person) goes on as before. True when the turn was answered here.
         /// </summary>
+        /// <summary>
+        /// v1.79 (the sweep: «لا خليها مكالمة عادية مش واتساب» at a held time got «تغيّر الميعاد ولا تلغيه؟»; v1.80: then the
+        /// situation's reply, where the writer said «المكالمة هتبقى عادية» and nothing changed): the call he wants for his held or
+        /// paid time, read with the chat, whatever the AI called the message (a change, a consultation, any other words). It is
+        /// checked against the booked call by the booking work: another one goes to the office; the same one shows his time.
+        /// </summary>
+        private bool CallAppAtHeldTime(Classification turnClass)
+        {
+            if (!MayBook || !understanding || turnClass.Call?.Answer?.CallApp is not { } wants || CallApp.ByShort(CallApp.Short(wants)) != wants
+                || situation.Kind is not (SituationKind.HeldUnpaid or SituationKind.Confirmed)
+                || turnClass.Intent is not (Intent.RescheduleOrCancel or Intent.ConsultationRequest or Intent.Other or Intent.ServiceByName))
+            {
+                return false;
+            }
+
+            work = new CallAppChange(wants);
+            return true;
+        }
+
         private bool AnswerSituation()
         {
             if (!situation.HasOpenItem || c is null || list.LawyerDirect || Intake.ClientType is ClientType.Colleague or ClientType.Press
                     or ClientType.Vendor)
             {
                 return false;
+            }
+
+            if (CallAppAtHeldTime(c))
+            {
+                return true;
             }
 
             // v1.43: an order still waiting for his papers is nothing the office works on yet: it is told only when he asks
@@ -2019,13 +2043,8 @@ public sealed class HazemResponder(
                 return;
             }
 
-            // v1.79 (the sweep: «لا خليها مكالمة عادية مش واتساب» at a held time got «تغيّر الميعاد ولا تلغيه؟»): the call he wants
-            // for his held or paid time, read with the chat, whatever the AI called the message (a change, or a consultation)
-            if (MayBook && understanding && turnClass.Intent is Intent.RescheduleOrCancel or Intent.ConsultationRequest
-                && turnClass.Call?.Answer?.CallApp is { } wants && CallApp.ByShort(CallApp.Short(wants)) == wants
-                && situation.Kind is SituationKind.HeldUnpaid or SituationKind.Confirmed)
+            if (CallAppAtHeldTime(turnClass))
             {
-                work = new CallAppChange(wants);
                 return;
             }
 
