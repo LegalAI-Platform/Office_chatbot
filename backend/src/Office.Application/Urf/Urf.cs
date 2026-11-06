@@ -121,6 +121,9 @@ public sealed record UrfAnswer(string Step, string Value)
 {
     public const string Prefix = "urf:";
 
+    /// <summary>v1.82: «لا» under «ينفع الأب؟»: that one does not come; nothing in the case changes.</summary>
+    public const string GuardianNo = "no";
+
     public static string Id(string step, string value) => $"{Prefix}{step}:{value}";
 
     public static UrfAnswer? Parse(string? id)
@@ -219,7 +222,7 @@ public static class UrfRules
         static bool Differs(string? now, string? said, params string[] allowed) => said is not null && allowed.Contains(said) && said != now;
         return locked && (Differs(c.Witnesses, witnesses, "office", "own")
             || c.IsMarriage && (Differs(c.WifePast, wifePast, "first", "divorced", "khul", "widow")
-                || Differs(c.Guardian, guardian, "father", "brother", "uncle", "none")
+                || Differs(c.Guardian, guardian, "father", "brother", "uncle", "none", "dropped")
                 || Ages(husbandAge, wifeAge) is { } said && said != (c.HusbandAge, c.WifeAge)));
     }
 
@@ -341,19 +344,22 @@ public static class UrfRules
     /// answer, filled or CORRECTED, while the questions are collected and while the price and times wait for a pick; then the
     /// same rules run again on the answers as they are now (under 18, no guardian for a first marriage, the next question).
     /// A case with a time held, or closed, is the office's. Values outside the lists are ignored.
+    /// v1.82 (Ahmed Amin's chat: «اخوها مش هيجي» was read as «nobody of her family» and refused the case): «dropped» is the
+    /// guardian he named (or one of them) who will not come, with nothing said of the others: the guardian is unknown again, so
+    /// the guardian question comes back (father, brother, uncle or nobody), and only «none» refuses.
     /// </summary>
     public static UrfCase ApplyFacts(UrfCase c, string? wifePast, string? guardian, string? witnesses, int? husbandAge = null, int? wifeAge = null)
     {
         static string? Only(string? v, params string[] allowed) => v is not null && allowed.Contains(v) ? v : null;
         var past = c.IsMarriage ? Only(wifePast, "first", "divorced", "khul", "widow") : null;
-        var guard = c.IsMarriage ? Only(guardian, "father", "brother", "uncle", "none") : null;
+        var guard = c.IsMarriage ? Only(guardian, "father", "brother", "uncle", "none", "dropped") : null;
         var wit = Only(witnesses, "office", "own");
         var ages = c.IsMarriage ? Ages(husbandAge, wifeAge) : null;
         if (c.State == UrfCase.Collecting || c.State == UrfCase.DocumentsPending && c.AppointmentId is null)
         {
             var now = c with
             {
-                WifePast = past ?? c.WifePast, Guardian = guard ?? c.Guardian, Witnesses = wit ?? c.Witnesses,
+                WifePast = past ?? c.WifePast, Guardian = guard == "dropped" ? null : guard ?? c.Guardian, Witnesses = wit ?? c.Witnesses,
                 HusbandAge = ages?.Item1 ?? c.HusbandAge, WifeAge = ages?.Item2 ?? c.WifeAge,
             };
             return now == c ? c : Settle(now);
@@ -363,12 +369,12 @@ public static class UrfRules
         // guardian is the answer «none» like any other answer, so what he says after it changes it as it changes the others: a
         // guardian named, or a past that needs none. The case goes on from where it stopped, as a new case (a refused case is never
         // written again); its other answers are kept. The age refusal has nothing to change: it stays.
-        if (c.State == UrfCase.RejectedGuardian && (guard is not null and not "none" || past is not null and not "first"))
+        if (c.State == UrfCase.RejectedGuardian && (guard is not null and not ("none" or "dropped") || past is not null and not "first"))
         {
             var again = c with
             {
                 Id = Guid.NewGuid(), State = UrfCase.Collecting, Step = null, PolicyVersion = null,
-                WifePast = past ?? c.WifePast, Guardian = guard is "none" ? null : guard, Witnesses = c.Witnesses ?? wit,
+                WifePast = past ?? c.WifePast, Guardian = guard is "none" or "dropped" ? null : guard, Witnesses = c.Witnesses ?? wit,
             };
             return NextStep(again) is { } next
                 ? again with { Step = next }

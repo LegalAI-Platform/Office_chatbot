@@ -23,7 +23,7 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
     public const string PromptVersion = "classify-v16";
 
     /// <summary>v1.52 (phase 1): the prompt while understanding v2 is on (the whole chat, the stance, the other questions).</summary>
-    public const string PromptVersionV2 = "classify-v27";
+    public const string PromptVersionV2 = "classify-v28";
     public const string StubEnabledKey = "ai.stub_enabled";
     public const string StubBaseUrlKey = "ai.stub_base_url";
 
@@ -174,7 +174,9 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
                 // v1.76: what an unclear question may mean (2 or 3), so he is asked which one
                 o["meanings"] is JsonArray meant ? meant.Select(StringOrNull).OfType<string>().ToList() : null,
                 // v1.79: how he wants the call (the latest he said)
-                StringOrNull(o["call_app"])), null);
+                StringOrNull(o["call_app"]),
+                // v1.82: one of her family he only ASKS about as the guardian («ينفع ابوها؟»), so he is answered and asked back
+                StringOrNull(o["urf_guardian_asked"])), null);
         }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException)
         {
@@ -234,7 +236,7 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
             ["additionalProperties"] = false,
             ["required"] = new JsonArray("analysis", "subject", "scope", "intent", "service", "consultation_mode", "full_name", "confidence",
                 "matter_type", "matter_subtype", "sender_role", "info_topic", "courtesy", "name_gender", "picked", "asked_time", "time_exact",
-                "stance", "also_asked", "urf_wife_past", "urf_guardian", "urf_witnesses", "urf_husband_age", "urf_wife_age", "file_is", "meanings", "call_app"),
+                "stance", "also_asked", "urf_wife_past", "urf_guardian", "urf_witnesses", "urf_husband_age", "urf_wife_age", "file_is", "meanings", "call_app", "urf_guardian_asked"),
             // v1.24: subject and scope come first, so the model names what the turn is about before it picks an
             // intent. The subject is a few words for that only: it is never read, kept or logged.
             ["properties"] = new JsonObject
@@ -265,7 +267,7 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
                 ["also_asked"] = new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "string", ["enum"] = Codes<InfoTopic>(false) } },
                 // v1.60: what he said about the Urfi case in this message (null: nothing said)
                 ["urf_wife_past"] = new JsonObject { ["type"] = new JsonArray("string", "null"), ["enum"] = new JsonArray("first", "divorced", "khul", "widow", null) },
-                ["urf_guardian"] = new JsonObject { ["type"] = new JsonArray("string", "null"), ["enum"] = new JsonArray("father", "brother", "uncle", "none", null) }, // v1.74: none
+                ["urf_guardian"] = new JsonObject { ["type"] = new JsonArray("string", "null"), ["enum"] = new JsonArray("father", "brother", "uncle", "none", "dropped", null) }, // v1.74: none; v1.82: dropped
                 ["urf_witnesses"] = new JsonObject { ["type"] = new JsonArray("string", "null"), ["enum"] = new JsonArray("office", "own", null) },
                 // v1.72: the ages he said (in the chat too), and what his words say a file sent with them is
                 ["urf_husband_age"] = new JsonObject { ["type"] = new JsonArray("integer", "null") },
@@ -275,6 +277,8 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
                 ["meanings"] = new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "string" } },
                 // v1.79: how he wants the phone or video call (null: not said)
                 ["call_app"] = new JsonObject { ["type"] = new JsonArray("string", "null"), ["enum"] = new JsonArray("whatsapp", "facetime", "phone", "meet", null) },
+                // v1.82: the one of her family he asks about as the guardian (null: no such question)
+                ["urf_guardian_asked"] = new JsonObject { ["type"] = new JsonArray("string", "null"), ["enum"] = new JsonArray("father", "brother", "uncle", null) },
             },
         };
     }
