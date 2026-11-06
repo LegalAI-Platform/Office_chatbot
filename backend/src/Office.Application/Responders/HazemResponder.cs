@@ -234,6 +234,7 @@ public sealed class HazemResponder(
         bool Active(string key) => texts.TryGetValue(key, out var t) && t.Active;
         plan.PhoneCallOn = Active(TextKeys.AskCallAppPhone) && Active(TextKeys.BtnAppPhone) && Active(TextKeys.BtnAppsList);
         plan.UrgentButtonOn = Active(TextKeys.BtnBookUrgent);
+        plan.GuardianCanOn = Active(TextKeys.UrfGuardianCan) && Active(TextKeys.BtnYes) && Active(TextKeys.BtnNo); // v1.82
         // TASK 12 (B-18): the reminders run whenever their texts are approved, the booking from WhatsApp on or off.
         var remindersOn = booking is not null && ReminderTexts.Keys.All(k => texts.TryGetValue(k, out var t) && t.Active);
         var servicesOn = services is not null && ServiceTextKeys.All(k => texts.TryGetValue(k, out var t) && t.Active);
@@ -1234,10 +1235,85 @@ public sealed class HazemResponder(
                 }
             }
 
+            // v1.82: «أيوه» under «ينفع الأب؟» after the refusal for no guardian opens the case again, as his words would (v1.72)
+            if (urfOn && MayBook && Urf is null && ageRefusal?.Case is { State: UrfCase.RejectedGuardian } refused
+                && UrfRules.ApplyFacts(refused, past, guard, wit) is { State: not (UrfCase.RejectedAge or UrfCase.RejectedGuardian) } again)
+            {
+                Reopen(refused, again);
+                return;
+            }
+
+            // v1.82: «لا» under «ينفع الأب؟» changes nothing: the case as it is (the question waiting, the times again), or the refusal
+            if (urfOn && pressed is { Step: UrfStep.Guardian, Value: UrfAnswer.GuardianNo })
+            {
+                if (Urf is { } open)
+                {
+                    AfterUrf(UrfRules.NextOf(open));
+                }
+                else if (ageRefusal is { Case.State: UrfCase.RejectedGuardian } closed && closed.ClosingReplies < UrfRules.MaxClosingReplies)
+                {
+                    plan.Say(closed.ClosingKey);
+                }
+
+                return;
+            }
+
             if (!AskWaitingAgain())
             {
                 plan.Say(TextKeys.UrfUnclear);
             }
+        }
+
+        /// <summary>
+        /// v1.72: a case refused for no guardian goes on with the answer that changed it. v1.82 (Ahmed Amin's chat: «ابوها موجود» got
+        /// the price with no word on what changed): that answer is said back first («تمام، عدّلت الولي يبقى الأب ✅»), as any
+        /// correction (v1.75), then the next question or the price and times.
+        /// </summary>
+        private void Reopen(UrfCase refused, UrfCase again)
+        {
+            Check(Intake.MoveTo(IntakeState.InServiceFlow));
+            Urf = again;
+            UrfChanged = true;
+            if (UrfRules.Corrected(refused, again) is { } changed)
+            {
+                plan.Say(TextKeys.UrfAnswerCorrected, Fill: new Dictionary<string, string> { ["changed"] = changed });
+                urfCorrected = true;
+            }
+
+            AfterUrf(UrfRules.NextOf(again));
+        }
+
+        /// <summary>
+        /// v1.82 (Ahmed Amin's chat: «ينفع ابوها بدل اخوها؟» got the closing refusal, which itself says the father may come; the owner:
+        /// a question is not «he comes»): one of her family he only ASKS about as the guardian (classify-v28 urf_guardian_asked) is
+        /// answered and asked back, «أيوه، الأب ينفع يبقى الولي. هو هيحضر معاكم وموافق؟». «أيوه» is that guardian (the case goes
+        /// on, a refused one too); «لا» brings the guardian question back. Only while a first marriage's case may still change
+        /// (collecting, the times waiting, or refused for no guardian); another relative stays the policy's refusal.
+        /// </summary>
+        private bool AskGuardianBack()
+        {
+            if (!urfOn || !MayBook || !understanding || !plan.GuardianCanOn
+                || answering?.Call?.Answer is not { UrfGuardianAsked: { } asked, UrfGuardian: null }
+                || UrfCase.GuardianName(asked) is not { Length: > 0 } name)
+            {
+                return false;
+            }
+
+            var c = Urf is { IsMarriage: true } running
+                    && (running.State == UrfCase.Collecting || running.State == UrfCase.DocumentsPending && running.AppointmentId is null)
+                ? running
+                : Urf is null && ageRefusal?.Case is { State: UrfCase.RejectedGuardian } refused ? refused : null;
+            if (c is null || c.WifePast is not (null or "first") || c.Guardian == asked)
+            {
+                return false;
+            }
+
+            plan.Ask(TextKeys.UrfGuardianCan, new ReplyChoices(InteractivePayload.Buttons,
+            [
+                new ReplyChoice(UrfAnswer.Id(UrfStep.Guardian, asked), TextKeys.BtnYes),
+                new ReplyChoice(UrfAnswer.Id(UrfStep.Guardian, UrfAnswer.GuardianNo), TextKeys.BtnNo),
+            ]), Fill: new Dictionary<string, string> { ["guardian"] = name });
+            return true;
         }
 
         /// <summary>v1.60: the case with what the client said in this message (witnesses, her past, her guardian) kept in it.</summary>
@@ -1943,10 +2019,13 @@ public sealed class HazemResponder(
             // منهم»), as it changes any other answer (v1.60): the case goes on from where it stopped. Only then the closing text.
             if (urfOn && MayBook && ageRefusal?.Case is { } refused && WithUrfFacts(refused) is { State: not (UrfCase.RejectedAge or UrfCase.RejectedGuardian) } again)
             {
-                Check(Intake.MoveTo(IntakeState.InServiceFlow));
-                Urf = again;
-                UrfChanged = true;
-                AfterUrf(UrfRules.NextOf(again));
+                Reopen(refused, again);
+                return;
+            }
+
+            // v1.82: «ينفع ابوها؟» is answered and asked back before the case takes him
+            if (AskGuardianBack())
+            {
                 return;
             }
 
@@ -3511,6 +3590,9 @@ public sealed class HazemResponder(
         public bool UrgentButtonOn { get; set; }
 
         public bool UrgentNightOn { get; set; }
+
+        /// <summary>v1.82: «أيوه، الأب ينفع يبقى الولي…» and its two buttons are approved.</summary>
+        public bool GuardianCanOn { get; set; }
 
         public void Say(string key, string? fallback = null, IReadOnlyDictionary<string, string>? Fill = null) =>
             Steps.Add(new ReplyStep(key, fallback, Fill));
