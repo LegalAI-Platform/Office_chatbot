@@ -171,6 +171,18 @@ public sealed class HazemResponder(
 
     public async Task<TurnDecision> DecideAsync(Turn turn, HazemSettings settings, CancellationToken ct)
     {
+        // v1.81 (Ahmed Amin's photos): several photos sent at once come as one image message each, and also as WhatsApp's
+        // album wrapper, which Meta reports as «unsupported» (type album). The wrapper is no message of his: it never gets the
+        // «not supported» answer. A turn that is only the wrapper gets nothing.
+        if (turn.Messages.Any(IsAlbumWrapper))
+        {
+            turn = turn with { Messages = [.. turn.Messages.Where(m => !IsAlbumWrapper(m))] };
+            if (turn.Messages.Count == 0)
+            {
+                return new TurnDecision(ResponderName, [], null, ["album wrapper only: no reply"]);
+            }
+        }
+
         // v1.33 (B-09): the urgent alert's buttons («شوف التحويل», then «التحويل تمام، هكلمه» or «فيه مشكلة»), from whoever got the
         // template (the lawyer or the manager, on the lawyer's list or not a client at all): read by code before anything else,
         // never the AI, and no reply in this turn: the urgent desk sends what each press needs (IUrgentCalls).
@@ -799,6 +811,10 @@ public sealed class HazemResponder(
     /// B-05 (P7), B-16: the last stored image or document with its place in storage. An image may be a
     /// receipt; a PDF or Word goes to a service order waiting for documents, or Hazem asks for an image.
     /// </summary>
+    /// <summary>v1.81: WhatsApp's album wrapper (photos sent at once), as wa_message_json gives it (migration 0065).</summary>
+    public static bool IsAlbumWrapper(IncomingMessage m) =>
+        m.Type == MessageType.Unsupported && string.Equals(m.OriginalType, "album", StringComparison.Ordinal);
+
     private static IncomingMessage? FileIn(Turn turn) => turn.Messages.LastOrDefault(m =>
         IsStoredFile(m) && (m.Type != MessageType.Image || m.Media!.Sha256 is not null)); // a receipt needs its sha256 (duplicates)
 

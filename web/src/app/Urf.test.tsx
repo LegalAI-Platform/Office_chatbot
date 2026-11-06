@@ -59,7 +59,11 @@ describe("TASK 11 Urfi cases", () => {
     const card = (await screen.findByText(/محمد أحمد علي حسن/)).closest("li")!;
     expect(within(card).getByText("الأخ")).toBeTruthy();
     expect(within(card).getByText("اختلعت قبل كده")).toBeTruthy();
-    expect(within(card).getByRole("link", { name: /مستند 2/ }).getAttribute("href")).toBe("/api/panel/urf/c1/files/1");
+    // v1.81: the document opens in the glass viewer inside the panel; its private link is there
+    fireEvent.click(within(card).getByRole("button", { name: /مستند 2/ }));
+    const viewer = await screen.findByRole("dialog", { name: "ورق العميل" });
+    expect(within(viewer).getByRole("link", { name: /افتح في تبويب جديد/ }).getAttribute("href")).toBe("/api/panel/urf/c1/files/1");
+    fireEvent.click(within(viewer).getByRole("button", { name: "اقفل" }));
     expect(within(card).queryByRole("button", { name: /موافق/ })).toBeNull();
   });
 

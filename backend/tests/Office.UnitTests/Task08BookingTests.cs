@@ -718,6 +718,18 @@ public sealed partial class BookingFlowTests
         Assert.Equal(AppointmentInfo.PendingPayment, Assert.Single(_booking.Appointments).State);
     }
 
+    [Fact] // v1.81: WhatsApp's album wrapper (photos sent at once) is no message of his
+    public async Task The_album_wrapper_is_left_out_and_alone_gets_no_reply()
+    {
+        await ToTheOffer();
+        var alone = await Send(new IncomingMessage($"wamid.{++_turn}", MessageType.Unsupported, null, null, null, null, OriginalType: "album"));
+        Assert.Empty(alone.Actions); // never «النوع ده مش مدعوم» for photos that did arrive
+        Assert.Empty(Keys(alone));
+
+        var other = await Send(new IncomingMessage($"wamid.{++_turn}", MessageType.Unsupported, null, null, null, null, OriginalType: "unsupported"));
+        Assert.NotEmpty(Keys(other)); // any other unknown kind is answered as before
+    }
+
     [Fact]
     public async Task A_video_while_the_time_waits_for_the_receipt_asks_for_the_screenshot() // v1.70 (Nehad's chat)
     {
