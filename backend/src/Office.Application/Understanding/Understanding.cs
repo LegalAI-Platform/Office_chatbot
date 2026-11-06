@@ -193,7 +193,8 @@ public sealed record RawClassification(
     int? UrfHusbandAge = null,
     int? UrfWifeAge = null,
     string? FileIs = null,
-    IReadOnlyList<string>? Meanings = null);
+    IReadOnlyList<string>? Meanings = null,
+    string? CallApp = null);
 
 /// <summary>
 /// v1.52 (phase 1, the owner: «اي الحل الصح المفروض»): where the client stands in this message, read with the whole chat.

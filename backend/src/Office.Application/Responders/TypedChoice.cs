@@ -28,7 +28,8 @@ public static class TypedChoice
     /// variants do not matter), or its number («2»، «رقم 2»، «التاني»). Never when his words say no («مش الأب»): then the AI
     /// reads them. Never a number when the choices are times (a bare «4» is an hour there). Null: no choice is meant for sure.
     /// </summary>
-    public static Interactive? ByWords(IReadOnlyList<InteractiveChoice> waiting, string? words)
+    /// <param name="guess">v1.79: false with understanding on: the shared-word guess is the AI's (it reads the chat).</param>
+    public static Interactive? ByWords(IReadOnlyList<InteractiveChoice> waiting, string? words, bool guess = true)
     {
         if (words is null || waiting.Count == 0)
         {
@@ -75,7 +76,7 @@ public static class TypedChoice
 
         // v1.66: a short answer that shares a real word with ONE row only («موبايلي عادي» under «مكالمة عادية»): that row. Never
         // a question, never a refusal, never when two rows share a word.
-        if (hits.Count == 0 && said.Split(' ').Length <= 4 && !AsksQuestion(words, said) && !SaysNo(said))
+        if (guess && hits.Count == 0 && said.Split(' ').Length <= 4 && !AsksQuestion(words, said) && !SaysNo(said))
         {
             var mine = Stems(said);
             if (mine.Count > 0)

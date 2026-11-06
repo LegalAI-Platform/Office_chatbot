@@ -58,6 +58,8 @@ public static class ReplyRetry
     {
         "review_promise" or "promise" =>
             "It promises or guarantees something the office cannot control (for example that nobody will know, a result, or a time). Say only what is true: the facts, that what he tells the office stays private with the office (only when he asked about that), and the next step.",
+        "said_booked" =>
+            "It says something is or will be registered or booked, but nothing was: never say «سجلت» or «هحجز». Say only the approved text's next step.",
         "privacy_unasked" =>
             "It says his words stay secret or private, but he did not ask about that and the approved text does not say it. Leave that sentence out.",
         "review_legal" or "legal_word" =>
