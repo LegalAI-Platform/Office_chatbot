@@ -29,7 +29,8 @@ public static class TypedChoice
     /// reads them. Never a number when the choices are times (a bare «4» is an hour there). Null: no choice is meant for sure.
     /// </summary>
     /// <param name="guess">v1.79: false with understanding on: the shared-word guess is the AI's (it reads the chat).</param>
-    public static Interactive? ByWords(IReadOnlyList<InteractiveChoice> waiting, string? words, bool guess = true)
+    /// <param name="more">v1.85: false with the Urfi case read as one list: the title with words more is the AI's (they may say more).</param>
+    public static Interactive? ByWords(IReadOnlyList<InteractiveChoice> waiting, string? words, bool guess = true, bool more = true)
     {
         if (words is null || waiting.Count == 0)
         {
@@ -56,9 +57,11 @@ public static class TypedChoice
                 return false;
             }
 
-            // his words are the title (a few words more), or whole words of it («FaceTime» for «FaceTime (آيفون)»)
+            // his words are the title (a few words more), or whole words of it («FaceTime» for «FaceTime (آيفون)»). v1.85 (Ahmed
+            // Amin's chat): with the case read as one list, the few words more are the AI's to read: they may say more of his
+            // case («اول جوازه واخوها جاي»), and the AI picks the row too, so nothing he said is dropped by the code's shortcut
             return said == title || !SaysNo(said)
-                && (said.Contains(title, StringComparison.Ordinal) && said.Length <= title.Length + 14
+                && (more && said.Contains(title, StringComparison.Ordinal) && said.Length <= title.Length + 14
                     || said.Length >= 4 && $" {title} ".Contains($" {said} ", StringComparison.Ordinal));
         }).ToList();
         if (hits.Count == 1)
