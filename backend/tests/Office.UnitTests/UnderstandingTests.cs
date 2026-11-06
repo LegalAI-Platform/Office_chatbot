@@ -223,6 +223,67 @@ public sealed class UnderstandingTests
         {
             Assert.Equal("integer", schema["properties"].GetProperty(name).GetProperty("anyOf")[0].GetProperty("type").GetString());
         }
+
+        Assert.False(schema["properties"].TryGetProperty("case_said", out _)); // v1.84: off is v1.81's schema
+
+        // v1.84 (TASK 20): with the switch on, inside case_said's items too (the ages stay integers; the value keeps its list)
+        var on = AnthropicIntentClassifier.BuildSchema(caseSaid: true);
+        Assert.False(on["properties"].TryGetProperty("urf_guardian", out _));
+        var item = on["properties"].GetProperty("case_said").GetProperty("items").GetProperty("properties");
+        foreach (var name in new[] { "husband_age", "wife_age" })
+        {
+            Assert.Equal("integer", item.GetProperty(name).GetProperty("anyOf")[0].GetProperty("type").GetString());
+        }
+
+        Assert.Contains("father", item.GetProperty("value").GetProperty("anyOf")[0].GetProperty("enum").EnumerateArray().Select(e => e.GetString()));
+        Assert.Equal("string", item.GetProperty("field").GetProperty("type").GetString());
+    }
+
+    [Fact]
+    public void The_switch_off_is_v1_81s_prompt_schema_and_budget_and_on_is_the_list()
+    {
+        var off = new HazemSettings(new Dictionary<string, string> { [UnderstandingV2.SwitchKey] = "true" });
+        var on = new HazemSettings(new Dictionary<string, string>
+        {
+            [UnderstandingV2.SwitchKey] = "true", [Office.Application.Urf.UrfCaseSaid.SwitchKey] = "true",
+        });
+        Assert.Equal("classify-v27", OpenAiIntentClassifier.VersionFor(off));
+        Assert.Equal("classify-v30", OpenAiIntentClassifier.VersionFor(on));
+        Assert.Equal(TimeSpan.FromSeconds(15), OpenAiIntentClassifier.BudgetFor(OpenAiIntentClassifier.DefaultBudget, off));
+        Assert.Equal(TimeSpan.FromSeconds(30), OpenAiIntentClassifier.BudgetFor(OpenAiIntentClassifier.DefaultBudget, on));
+        Assert.Contains("urf_guardian", ((System.Text.Json.Nodes.JsonArray)OpenAiIntentClassifier.SchemaFor(off)["required"]!).Select(n => (string)n!));
+        Assert.Contains("case_said", ((System.Text.Json.Nodes.JsonArray)OpenAiIntentClassifier.SchemaFor(on)["required"]!).Select(n => (string)n!));
+        // understanding v2 off: the switch alone changes nothing
+        var alone = new HazemSettings(new Dictionary<string, string> { [Office.Application.Urf.UrfCaseSaid.SwitchKey] = "true" });
+        Assert.Equal(OpenAiIntentClassifier.PromptVersion, OpenAiIntentClassifier.VersionFor(alone));
+    }
+
+    [Fact]
+    public void The_v1_81_schema_is_the_one_it_was()
+    {
+        var names = ((System.Text.Json.Nodes.JsonObject)OpenAiIntentClassifier.Schema["properties"]!).Select(p => p.Key).ToList();
+        Assert.Equal(["analysis", "subject", "scope", "intent", "service", "consultation_mode", "full_name", "matter_type", "matter_subtype",
+            "sender_role", "info_topic", "courtesy", "name_gender", "confidence", "picked", "asked_time", "time_exact", "stance", "also_asked",
+            "urf_wife_past", "urf_guardian", "urf_witnesses", "urf_husband_age", "urf_wife_age", "file_is", "meanings", "call_app"], names);
+    }
+
+    [Fact]
+    public void The_case_items_are_read_and_anything_unknown_is_dropped()
+    {
+        var json = """
+            {"intent":"other","confidence":0.8,"case_said":[
+              {"field":"guardian","kind":"withdrawn","value":"brother","husband_age":null,"wife_age":null,"word":null},
+              {"field":"guardian","kind":"asked","value":"father","husband_age":null,"wife_age":null,"word":null},
+              {"field":"ages","kind":"said","value":null,"husband_age":30,"wife_age":25,"word":null},
+              {"field":"price","kind":"said","value":"x","husband_age":null,"wife_age":null,"word":null},
+              {"field":"witnesses","kind":"maybe","value":"own","husband_age":null,"wife_age":null,"word":null}]}
+            """;
+        var (raw, failure) = OpenAiIntentClassifier.Parse(json);
+        Assert.Null(failure);
+        Assert.Equal(3, raw!.CaseSaid!.Count);
+        var facts = Office.Application.Urf.UrfFacts.Of(raw.CaseSaid);
+        Assert.Equal(("father", (string?)null, 30, 25), (facts.Asked?.Value, facts.Guardian, facts.HusbandAge, facts.WifeAge));
+        Assert.Empty(facts.Withdrawn); // the later question about the father is the latest of the guardian
     }
 
     [Fact]

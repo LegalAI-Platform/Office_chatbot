@@ -2,15 +2,15 @@
 # the real classifier and writer) and has the judge (Claude Opus, docs\ai\judge-v1.md) score every reply. It calls the real
 # AI and costs money: it needs HAZEM_ANTHROPIC_API_KEY in .env (entered by the owner; never printed here).
 # The report: docs\ai\quality\<label>.md and .json.
-#   quality-eval.ps1 [-Label baseline] [-Only id1,id2]
-param([string]$Label = 'baseline', [string]$Only = '')
+#   quality-eval.ps1 [-Label baseline] [-Only id1,id2] [-CaseSaid]   (-CaseSaid: hazem.urf_case_said on, v1.84)
+param([string]$Label = 'baseline', [string]$Only = '', [switch]$CaseSaid)
 . (Join-Path $PSScriptRoot '_common.ps1')
 Assert-EnvFile
 
 $vars = 'POSTGRES_SUPERUSER', 'POSTGRES_SUPERUSER_PASSWORD', 'OFFICE_MIGRATOR_PASSWORD', 'OFFICE_APP_PASSWORD', 'OFFICE_API_PASSWORD', 'HAZEM_ANTHROPIC_API_KEY'
 foreach ($v in $vars) { Set-Item -Path "env:$v" -Value (Get-EnvValue $v) }
 if (-not $env:HAZEM_ANTHROPIC_API_KEY) { Fail 'HAZEM_ANTHROPIC_API_KEY is empty in .env (the owner enters it).' }
-$env:QUALITY_EVAL = '1'; $env:QUALITY_LABEL = $Label; $env:QUALITY_ONLY = $Only
+$env:QUALITY_EVAL = '1'; $env:QUALITY_LABEL = $Label; $env:QUALITY_ONLY = $Only; $env:QUALITY_CASE_SAID = $(if ($CaseSaid) { '1' } else { '' })
 
 if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) { Fail 'quality-eval needs the .NET SDK on this machine (or run scripts/linux/quality-eval.sh).' }
 $env:OFFICE_TEST_PG_HOST = '127.0.0.1'

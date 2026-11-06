@@ -113,6 +113,20 @@ describe("أدوات التجربة", () => {
     expect(await screen.findByText("جملة الرد على أسئلة المكتب شغّالة ✅")).toBeTruthy();
   });
 
+  it("v1.84: the new Urfi way is switched on after asking, and off is v1.81", async () => {
+    const calls = serve({
+      "GET /auth/me": { body: lawyer }, "GET /testing/numbers": { body: numbers },
+      "GET /testing/urf-case-said": { body: { on: false } }, "PUT /testing/urf-case-said": { body: { on: true } },
+    });
+    renderAt("/testing");
+    const section = await screen.findByRole("region", { name: "طريقة العرفي الجديدة" });
+    expect(within(section).getByText("مقفولة")).toBeTruthy();
+    fireEvent.click(within(section).getByRole("button", { name: "شغّلها" }));
+    expect(await confirmYes()).toContain("تقدر تقفله في أي وقت");
+    await vi.waitFor(() => expect(calls.filter((c) => c.method === "PUT").map((c) => [c.path, c.body])).toEqual([["/testing/urf-case-said", { on: true }]]));
+    expect(await screen.findByText("طريقة العرفي الجديدة شغّالة ✅")).toBeTruthy();
+  });
+
   it("says the tools are off outside the test environment", async () => {
     serve({ "GET /auth/me": { body: lawyer }, "GET /testing/numbers": { status: 404, body: { error: "not_found" } } });
     renderAt("/testing");

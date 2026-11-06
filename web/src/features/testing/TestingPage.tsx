@@ -18,7 +18,60 @@ const testing = {
   setUnderstanding: (on: boolean) => api<{ on: boolean }>("PUT", "/testing/understanding", { on }),
   infoWriter: () => api<{ on: boolean }>("GET", "/testing/info-writer"),
   setInfoWriter: (on: boolean) => api<{ on: boolean }>("PUT", "/testing/info-writer", { on }),
+  caseSaid: () => api<{ on: boolean }>("GET", "/testing/urf-case-said"),
+  setCaseSaid: (on: boolean) => api<{ on: boolean }>("PUT", "/testing/urf-case-said", { on }),
 };
+
+/**
+ * v1.84 (TASK 20): the Urfi case read as one list: what the client says, asks («ينفع ابوها؟») or takes back («اخوها مش هيجي»),
+ * answered by the case's own rules. Off is the Urfi case exactly as v1.81 (the owner: «مقفول… بتاعت محمد، مفتوح يبقى شغلنا»).
+ */
+function CaseSaid() {
+  const qc = useQueryClient();
+  const state = useQuery({ queryKey: ["testing", "urf-case-said"], queryFn: testing.caseSaid, retry: false });
+  const set = useMutation({
+    mutationFn: testing.setCaseSaid,
+    onSuccess: (r) => {
+      void qc.invalidateQueries({ queryKey: ["testing", "urf-case-said"] });
+      toast(r.on ? "طريقة العرفي الجديدة شغّالة ✅" : "العرفي رجع زي نسخة 1.81 ✅");
+    },
+  });
+  if (state.isError && !(state.error instanceof ApiError && state.error.status === 404)) {
+    return <ErrorState message={errorMessage(state.error)} onRetry={() => void state.refetch()} />;
+  }
+  if (!state.data) return null;
+  const on = state.data.on;
+
+  const flip = async () => {
+    const ok = await confirmAction({
+      title: on ? "ترجّع العرفي زي نسخة 1.81؟" : "تشغّل طريقة العرفي الجديدة؟",
+      body: on
+        ? "حازم هيقرا أسئلة العرفي زي نسخة 1.81 بالظبط."
+        : "حازم هيفهم في العرفي لما العميل يقول، أو يسأل («ينفع ابوها؟»)، أو يرجع في كلامه («اخوها مش هيجي»)، ويجاوب من قواعد المكتب نفسها. تقدر تقفله في أي وقت.",
+      yes: on ? "أيوه، رجّعه" : "أيوه، شغّله",
+    });
+    if (ok) set.mutate(!on);
+  };
+
+  return (
+    <section aria-labelledby="testing-urf-case-said" className="liquid relative isolate grid gap-3 overflow-hidden rounded-[22px] p-4 sm:p-5">
+      <h2 id="testing-urf-case-said" className="flex items-center gap-2 text-[16px] font-bold">
+        <Icon name="alert-circle" className="size-4 text-gold-ink" />
+        طريقة العرفي الجديدة
+      </h2>
+      <p className="text-[13px] text-ink-soft">
+        «ينفع ابوها؟»، «ينفع أجيب الشهود؟»، «اخوها مش هيجي»: حازم بيجاوب من قواعد المكتب ومش بيحوّل للمكتب. مقفولة: العرفي زي نسخة 1.81 بالظبط.
+      </p>
+      <div className="flex flex-wrap items-center gap-3 border-t border-line/60 pt-3">
+        <span className={`rounded-full px-3 py-1 text-[13px] font-bold ${on ? "bg-green-bg text-green-ink" : "bg-grey-bg text-ink-soft"}`}>{on ? "شغّالة" : "مقفولة"}</span>
+        <Button variant={on ? "secondary" : "primary"} busy={set.isPending} onClick={() => void flip()}>
+          {on ? "اقفلها" : "شغّلها"}
+        </Button>
+      </div>
+      {set.isError ? <p className="text-sm text-bad" role="alert">{errorMessage(set.error)}</p> : null}
+    </section>
+  );
+}
 
 /**
  * v1.61: when the client asks about the office's address or hours, Hazem adds ONE sentence that answers his question before the
@@ -286,6 +339,7 @@ export function TestingPage() {
       )}
       {off ? null : <Understanding />}
       {off ? null : <InfoWriter />}
+      {off ? null : <CaseSaid />}
       {off ? null : <UrgentWindow />}
     </div>
   );

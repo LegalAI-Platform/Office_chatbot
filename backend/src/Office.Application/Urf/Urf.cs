@@ -216,15 +216,21 @@ public static class UrfRules
     /// case's answer when the case already has its time held or confirmed. Nothing changes by itself then (the price paid, the
     /// documents, a refund are the office's decision): the office is told. v1.74: «no guardian» and the ages too.
     /// </summary>
-    public static bool ChangesBooked(UrfCase c, string? wifePast, string? guardian, string? witnesses, int? husbandAge = null, int? wifeAge = null)
+    public static bool ChangesBooked(UrfCase c, string? wifePast, string? guardian, string? witnesses, int? husbandAge = null, int? wifeAge = null,
+        IReadOnlyCollection<string>? withdrawn = null)
     {
         var locked = c.State is UrfCase.Booked or UrfCase.Approved || c.State == UrfCase.DocumentsPending && c.AppointmentId is not null;
         static bool Differs(string? now, string? said, params string[] allowed) => said is not null && allowed.Contains(said) && said != now;
-        return locked && (Differs(c.Witnesses, witnesses, "office", "own")
-            || c.IsMarriage && (Differs(c.WifePast, wifePast, "first", "divorced", "khul", "widow")
-                || Differs(c.Guardian, guardian, "father", "brother", "uncle", "none", "dropped")
-                || Ages(husbandAge, wifeAge) is { } said && said != (c.HusbandAge, c.WifeAge)));
+        bool Took(string field, object? now) => withdrawn?.Contains(field) == true && now is not null; // v1.84: an answer taken back
+        return locked && (Differs(c.Witnesses, witnesses, "office", "own") || Took(UrfStep.Witnesses, c.Witnesses)
+            || c.IsMarriage && (Differs(c.WifePast, wifePast, "first", "divorced", "khul", "widow") || Took(UrfStep.WifePast, c.WifePast)
+                || Differs(c.Guardian, guardian, "father", "brother", "uncle", "none") || Took(UrfStep.Guardian, c.Guardian)
+                || Ages(husbandAge, wifeAge) is { } said && said != (c.HusbandAge, c.WifeAge) || Took(UrfStep.Ages, c.HusbandAge)));
     }
+
+    /// <summary>TASK 20 (v1.84): the same check for what the AI read this turn.</summary>
+    public static bool ChangesBooked(UrfCase c, UrfFacts f) =>
+        ChangesBooked(c, f.WifePast, f.Guardian, f.Witnesses, f.HusbandAge, f.WifeAge, f.Withdrawn);
 
     /// <summary>v1.74: what the step means for the reply: the next question, the price and times, or the refusal.</summary>
     public static UrfNext NextOf(UrfCase c) => c.State switch
@@ -344,23 +350,27 @@ public static class UrfRules
     /// answer, filled or CORRECTED, while the questions are collected and while the price and times wait for a pick; then the
     /// same rules run again on the answers as they are now (under 18, no guardian for a first marriage, the next question).
     /// A case with a time held, or closed, is the office's. Values outside the lists are ignored.
-    /// v1.82 (Ahmed Amin's chat: «اخوها مش هيجي» was read as «nobody of her family» and refused the case): «dropped» is the
-    /// guardian he named (or one of them) who will not come, with nothing said of the others: the guardian is unknown again, so
-    /// the guardian question comes back (father, brother, uncle or nobody), and only «none» refuses.
+    /// v1.82 / TASK 20 (v1.84): an answer he TAKES BACK («اخوها مش هيجي»، «الشهود مش هييجوا»), with nothing said in its place, is
+    /// unknown again, so its question comes back; only «none» refuses. <paramref name="withdrawn"/> holds those fields.
     /// </summary>
-    public static UrfCase ApplyFacts(UrfCase c, string? wifePast, string? guardian, string? witnesses, int? husbandAge = null, int? wifeAge = null)
+    public static UrfCase ApplyFacts(UrfCase c, string? wifePast, string? guardian, string? witnesses, int? husbandAge = null, int? wifeAge = null,
+        IReadOnlyCollection<string>? withdrawn = null)
     {
         static string? Only(string? v, params string[] allowed) => v is not null && allowed.Contains(v) ? v : null;
         var past = c.IsMarriage ? Only(wifePast, "first", "divorced", "khul", "widow") : null;
-        var guard = c.IsMarriage ? Only(guardian, "father", "brother", "uncle", "none", "dropped") : null;
+        var guard = c.IsMarriage ? Only(guardian, "father", "brother", "uncle", "none") : null;
         var wit = Only(witnesses, "office", "own");
         var ages = c.IsMarriage ? Ages(husbandAge, wifeAge) : null;
+        bool Took(string field) => withdrawn?.Contains(field) == true;
         if (c.State == UrfCase.Collecting || c.State == UrfCase.DocumentsPending && c.AppointmentId is null)
         {
             var now = c with
             {
-                WifePast = past ?? c.WifePast, Guardian = guard == "dropped" ? null : guard ?? c.Guardian, Witnesses = wit ?? c.Witnesses,
-                HusbandAge = ages?.Item1 ?? c.HusbandAge, WifeAge = ages?.Item2 ?? c.WifeAge,
+                WifePast = past ?? (Took(UrfStep.WifePast) ? null : c.WifePast),
+                Guardian = guard ?? (Took(UrfStep.Guardian) ? null : c.Guardian),
+                Witnesses = wit ?? (Took(UrfStep.Witnesses) ? null : c.Witnesses),
+                HusbandAge = ages?.Item1 ?? (Took(UrfStep.Ages) ? null : c.HusbandAge),
+                WifeAge = ages?.Item2 ?? (Took(UrfStep.Ages) ? null : c.WifeAge),
             };
             return now == c ? c : Settle(now);
         }
@@ -369,12 +379,12 @@ public static class UrfRules
         // guardian is the answer «none» like any other answer, so what he says after it changes it as it changes the others: a
         // guardian named, or a past that needs none. The case goes on from where it stopped, as a new case (a refused case is never
         // written again); its other answers are kept. The age refusal has nothing to change: it stays.
-        if (c.State == UrfCase.RejectedGuardian && (guard is not null and not ("none" or "dropped") || past is not null and not "first"))
+        if (c.State == UrfCase.RejectedGuardian && (guard is not null and not "none" || past is not null and not "first"))
         {
             var again = c with
             {
                 Id = Guid.NewGuid(), State = UrfCase.Collecting, Step = null, PolicyVersion = null,
-                WifePast = past ?? c.WifePast, Guardian = guard is "none" or "dropped" ? null : guard, Witnesses = c.Witnesses ?? wit,
+                WifePast = past ?? c.WifePast, Guardian = guard is "none" ? null : guard, Witnesses = c.Witnesses ?? wit,
             };
             return NextStep(again) is { } next
                 ? again with { Step = next }
@@ -383,6 +393,68 @@ public static class UrfRules
 
         return c;
     }
+
+    /// <summary>TASK 20 (v1.84): <see cref="ApplyFacts(UrfCase, string?, string?, string?, int?, int?, IReadOnlyCollection{string}?)"/> for what the AI read.</summary>
+    public static UrfCase ApplyFacts(UrfCase c, UrfFacts f) =>
+        ApplyFacts(c, f.WifePast, f.Guardian, f.Witnesses, f.HusbandAge, f.WifeAge, f.Withdrawn);
+
+    /// <summary>
+    /// TASK 20 (v1.84, the owner: «عايز حلول عامه»): a question about one answer («ينفع ابوها؟»، «ينفع أجيب الشهود؟»، «لو مطلقة ينفع؟»،
+    /// «لو هي 17 ينفع؟») is answered by the SAME B-11 rules that decide the case: the asked value is tried on a copy of the case
+    /// (<see cref="Settle"/>), and the case itself never changes. Refused by a rule → that rule's «cannot»; goes on → «can» (the
+    /// guardian, a person who must come, then asks back whether he comes). A relative outside the allowed ones is «cannot».
+    /// Null: nothing to answer here (a divorce question, a guardian a widow does not need, the same answer it already has).
+    /// </summary>
+    public static UrfAskAnswer? Try(UrfCase c, UrfSaid asked)
+    {
+        if (!c.IsMarriage || asked.Kind != UrfKind.Asked)
+        {
+            return null;
+        }
+
+        // the refused-for-no-guardian case is tried as the case it would be again (v1.72)
+        var open = c.State == UrfCase.RejectedGuardian ? c with { State = UrfCase.Collecting, Guardian = null } : c;
+        switch (asked.Field)
+        {
+            case UrfStep.Guardian when c.WifePast is not (null or "first"):
+                return null; // v1.68: a guardian is needed for a first marriage only
+            case UrfStep.Guardian when asked.Value is "father" or "brother" or "uncle":
+                return c.Guardian == asked.Value && c.State != UrfCase.RejectedGuardian
+                    ? null
+                    : new UrfAskAnswer(UrfAskAnswer.GuardianCan, asked.Value);
+            case UrfStep.Guardian when asked.Value == "none":
+                return new UrfAskAnswer(UrfAskAnswer.GuardianNone, null);
+            case UrfStep.Guardian when asked.Value == "other":
+                return new UrfAskAnswer(UrfAskAnswer.GuardianCannot, asked.Word);
+            case UrfStep.WifePast when asked.Value is "first" or "divorced" or "khul" or "widow":
+                return Of(Settle(open with { WifePast = asked.Value }), asked);
+            case UrfStep.Witnesses when asked.Value is "own" or "office":
+                return Of(Settle(open with { Witnesses = asked.Value }), asked);
+            case UrfStep.Ages when asked.HusbandAge is not null || asked.WifeAge is not null:
+                var tried = open with { HusbandAge = asked.HusbandAge ?? open.HusbandAge ?? MinAge, WifeAge = asked.WifeAge ?? open.WifeAge ?? MinAge };
+                return Of(Settle(tried), asked);
+            default:
+                return null;
+        }
+
+        static UrfAskAnswer Of(UrfCase tried, UrfSaid asked) => tried.State switch
+        {
+            UrfCase.RejectedAge => new UrfAskAnswer(UrfAskAnswer.AgeCannot, null),
+            UrfCase.RejectedGuardian => new UrfAskAnswer(UrfAskAnswer.GuardianNone, null),
+            _ => new UrfAskAnswer(UrfAskAnswer.OptionCan, OptionWords(asked)),
+        };
+    }
+
+    /// <summary>v1.84: {{option}} of «أيوه، {{option}} ينفع ✅», in the field's own words (never his).</summary>
+    public static string OptionWords(UrfSaid asked) => (asked.Field, asked.Value) switch
+    {
+        (UrfStep.WifePast, "first") => "إن دي تكون أول جوازة للزوجة",
+        (UrfStep.WifePast, "divorced" or "khul") => "إن الزوجة تكون مطلقة أو مختلعة",
+        (UrfStep.WifePast, "widow") => "إن الزوجة تكون أرملة",
+        (UrfStep.Witnesses, "own") => "إن حضرتك تجيب الشهود",
+        (UrfStep.Witnesses, "office") => "إن المكتب يوفّر الشهود",
+        _ => "السن ده",
+    };
 
     private static UrfCase Redirect(UrfCase c) => c with { State = UrfCase.Redirected, Step = null };
 }
@@ -522,4 +594,89 @@ public sealed class UrfDesk(IUrfStore store)
 
         return best;
     }
+}
+
+/// <summary>TASK 20 (v1.84): how he speaks of one answer of his Urfi case (classify-v30 <c>case_said</c>).</summary>
+public static class UrfKind
+{
+    /// <summary>He states it («ابوها موجود»، «هنجيب الشهود»).</summary>
+    public const string Said = "said";
+
+    /// <summary>He asks whether it is allowed («ينفع ابوها؟»، «لو مطلقة ينفع؟»).</summary>
+    public const string Asked = "asked";
+
+    /// <summary>He takes an answer back, saying nothing in its place («اخوها مش هيجي»).</summary>
+    public const string Withdrawn = "withdrawn";
+}
+
+/// <summary>
+/// TASK 20 (v1.84): one thing the client says about his Urfi case in this turn, as the AI read it. <see cref="Field"/> is a
+/// <see cref="UrfStep"/>; <see cref="Value"/> one of that field's values («other»: a relative outside the allowed ones); the ages
+/// come as two numbers; <see cref="Word"/> is his own word for an «other» relative («خالها»), used only when it is in his message.
+/// </summary>
+public sealed record UrfSaid(string Field, string Kind, string? Value = null, int? HusbandAge = null, int? WifeAge = null, string? Word = null);
+
+/// <summary>
+/// TASK 20 (v1.84): what the turn's items say, the LATEST per field (2.1 of TASK 20): its stated answers, the fields he took
+/// back, and the question he asked when that is the latest he said of its field.
+/// </summary>
+public sealed record UrfFacts(
+    string? WifePast, string? Guardian, string? Witnesses, int? HusbandAge, int? WifeAge, IReadOnlyCollection<string> Withdrawn, UrfSaid? Asked)
+{
+    public static readonly UrfFacts None = new(null, null, null, null, null, [], null);
+
+    public bool Any => WifePast is not null || Guardian is not null || Witnesses is not null || HusbandAge is not null || WifeAge is not null
+                       || Withdrawn.Count > 0;
+
+    /// <summary>v1.84: hazem.urf_case_said off: v1.81's fields one by one (only stated answers; nothing asked or taken back).</summary>
+    public static UrfFacts Fields(string? wifePast, string? guardian, string? witnesses, int? husbandAge, int? wifeAge) =>
+        new(wifePast, guardian, witnesses, husbandAge, wifeAge, [], null);
+
+    public static UrfFacts Of(IReadOnlyList<UrfSaid>? items)
+    {
+        if (items is null || items.Count == 0)
+        {
+            return None;
+        }
+
+        var latest = new Dictionary<string, UrfSaid>();
+        foreach (var i in items.Where(i => i.Kind is UrfKind.Said or UrfKind.Asked or UrfKind.Withdrawn))
+        {
+            latest[i.Field] = i; // the later one of a field wins
+        }
+
+        string? Said(string field) => latest.TryGetValue(field, out var i) && i.Kind == UrfKind.Said ? i.Value : null;
+        var ages = latest.TryGetValue(UrfStep.Ages, out var a) && a.Kind == UrfKind.Said ? a : null;
+        var asked = items.LastOrDefault(i => i.Kind == UrfKind.Asked && latest[i.Field] == i);
+        return new UrfFacts(Said(UrfStep.WifePast), Said(UrfStep.Guardian), Said(UrfStep.Witnesses), ages?.HusbandAge, ages?.WifeAge,
+            latest.Values.Where(i => i.Kind == UrfKind.Withdrawn).Select(i => i.Field).ToList(), asked);
+    }
+}
+
+/// <summary>TASK 20 (v1.84): the answer to a question about one Urfi answer (<see cref="UrfRules.Try"/>).</summary>
+public sealed record UrfAskAnswer(string What, string? Value)
+{
+    /// <summary>«أيوه، الأب ينفع يبقى الولي. هو هيحضر معاكم وموافق؟» (Value: the guardian).</summary>
+    public const string GuardianCan = "guardian_can";
+
+    /// <summary>«للأسف القريب ده مينفعش يبقى الولي…», then the guardian question.</summary>
+    public const string GuardianCannot = "guardian_cannot";
+
+    /// <summary>«لو مفيش حد ينفع؟»: the guardian policy, nothing closes.</summary>
+    public const string GuardianNone = "guardian_none";
+
+    /// <summary>«أيوه، {{option}} ينفع ✅» (Value: the option's words), then the question waiting.</summary>
+    public const string OptionCan = "option_can";
+
+    /// <summary>«للأسف لأ، سياسة المكتب إن الزوج والزوجة يكون سنهم 18 سنة أو أكتر.», then the question waiting.</summary>
+    public const string AgeCannot = "age_cannot";
+}
+
+/// <summary>
+/// TASK 20 (v1.84): the switch hazem.urf_case_said. Off (the default): the Urfi case exactly as v1.81 (classify-v27 and its fields,
+/// the AI's 15 seconds). On: v1.82–v1.84 (classify-v30's one list, the questions answered by the rules, 30 seconds).
+/// </summary>
+public static class UrfCaseSaid
+{
+    public const string SwitchKey = "hazem.urf_case_said";
 }

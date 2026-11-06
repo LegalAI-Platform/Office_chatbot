@@ -14,7 +14,8 @@ namespace Office.IntegrationTests;
 /// API in-process on the throwaway database, the fake calendar, the real classifier and writer as on the test server), and a
 /// judge (Claude Opus, docs/ai/judge-v1.md with docs/ai/judge-facts.md) scores every reply. The report goes to
 /// docs/ai/quality/&lt;QUALITY_LABEL&gt;.md and .json. It costs money: it runs only with QUALITY_EVAL=1 and the owner's
-/// HAZEM_ANTHROPIC_API_KEY (scripts quality-eval), never in backend-test. QUALITY_ONLY=id1,id2 runs some conversations only.
+/// HAZEM_ANTHROPIC_API_KEY (scripts quality-eval), never in backend-test. QUALITY_ONLY=id1,id2 runs some conversations only;
+/// QUALITY_CASE_SAID=1 runs them with hazem.urf_case_said on (v1.84), off otherwise (as v1.81).
 /// </summary>
 [Collection(nameof(HazemApiTests))]
 public sealed class QualityEvalTests(TestDatabase db)
@@ -34,7 +35,7 @@ public sealed class QualityEvalTests(TestDatabase db)
         DELETE FROM hazem.urf_files; DELETE FROM hazem.urf_cases;
         DELETE FROM hazem.payment_receipts; DELETE FROM hazem.payments; DELETE FROM hazem.service_files; DELETE FROM hazem.service_orders;
         DELETE FROM hazem.appointments; DELETE FROM hazem.booking_exceptions; DELETE FROM hazem.booking_changes;
-        UPDATE hazem.settings SET value = 'false' WHERE key IN ('booking.enabled', 'urgent.alert_in_window', 'hazem.open_to_all', 'hazem.conversational');
+        UPDATE hazem.settings SET value = 'false' WHERE key IN ('booking.enabled', 'urgent.alert_in_window', 'hazem.open_to_all', 'hazem.conversational', 'hazem.understanding_v2', 'hazem.info_writer', 'hazem.urf_case_said');
         UPDATE hazem.settings SET value = '' WHERE key IN ('booking.calendar_id', 'office.instapay', 'office.wallet_number', 'office.wallet_provider',
           'office.lawyer_whatsapp', 'office.manager_whatsapp', 'office.address', 'office.map_url', 'ai.writer_model');
         UPDATE hazem.settings SET value = 'openai' WHERE key = 'ai.provider';
@@ -63,7 +64,8 @@ public sealed class QualityEvalTests(TestDatabase db)
         await db.ExecAsync(Clean);
         await db.SetAsync("responder", "hazem");
         await db.ExecAsync($"""
-            UPDATE hazem.settings SET value = 'true' WHERE key IN ('booking.enabled', 'hazem.open_to_all', 'hazem.conversational');
+            UPDATE hazem.settings SET value = 'true' WHERE key IN ('booking.enabled', 'hazem.open_to_all', 'hazem.conversational', 'hazem.understanding_v2', 'hazem.info_writer'); -- as on the test server
+            UPDATE hazem.settings SET value = '{(Environment.GetEnvironmentVariable("QUALITY_CASE_SAID") == "1" ? "true" : "false")}' WHERE key = 'hazem.urf_case_said'; -- v1.84: QUALITY_CASE_SAID=1 runs the switch on
             UPDATE hazem.settings SET value = 'anthropic' WHERE key = 'ai.provider';
             UPDATE hazem.settings SET value = '{WriterModel}' WHERE key = 'ai.writer_model';
             UPDATE hazem.settings SET value = 'lawyer@example.test' WHERE key = 'booking.calendar_id';

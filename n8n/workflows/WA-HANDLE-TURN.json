@@ -184,7 +184,7 @@
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($json) }}",
         "options": {
-          "timeout": 30000,
+          "timeout": 75000,
           "response": {
             "response": {
               "fullResponse": true,
