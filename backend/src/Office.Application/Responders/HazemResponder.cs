@@ -300,7 +300,7 @@ public sealed class HazemResponder(
                 // v1.79 (the sweep: «عايز مقابلة في المكتب» under the welcome took «خدمات المكتب» by its shared word «المكتب»): with
                 // understanding on, the code takes only the choice's own words or its number; a guess from one shared word is
                 // the AI's to make, read with the chat, and the code's only when the AI cannot answer
-                var typedPress = TypedChoice.ByWords(waiting, typedWords, guess: !understanding);
+                var typedPress = TypedChoice.ByWords(waiting, typedWords, guess: !understanding, more: !plan.CaseSaidOn);
                 if (typedPress is null)
                 {
                     var understood = await WithContextAsync(turn, typedWords, situation, settings, ct);
@@ -341,7 +341,10 @@ public sealed class HazemResponder(
                     classification = typedReading; // kept in the log: what the AI read (null when the code read it)
                     typedReading = null;
                     flow = new Flow(turn, state, list, null, plan, settings.Flag(HandoffEnabledKey), bookingOn ? bookingSettings : null,
-                        servicesOn, urfOn, urfOpen, ageRefusal: ageRefusal, urgentOn: urgentOn, situation: situation, understanding: understanding);
+                        servicesOn, urfOn, urfOpen, ageRefusal: ageRefusal, urgentOn: urgentOn, situation: situation, understanding: understanding)
+                    {
+                        WordsRead = classification, // v1.85: the same reading, kept with the press (nothing when the code read them)
+                    };
                 }
             }
 
@@ -883,6 +886,14 @@ public sealed class HazemResponder(
         /// <summary>The classification being answered (the turn's, or the request kept from before the name).</summary>
         private Classification? answering;
 
+        /// <summary>
+        /// v1.85 (Ahmed Amin's chat: «اول جوازه وهجيب معاها اخوها والشهود هيبقوا صحابي» under «أول جوازة / اتطلقت / أرملة» was
+        /// taken as the press «أول جوازة» only, then the guardian and the witnesses were asked again): typed words that pick one of
+        /// the choices waiting are answered as that press, and what the AI read in the SAME words (the rest of his Urfi case) is
+        /// kept with it. Null when the press was a real button, or the code read the words alone.
+        /// </summary>
+        public Classification? WordsRead { get; set; }
+
         public bool HasBookingWork => work is not null;
 
         /// <summary>v1.22: the Urfi case has its price and its times sent, and the client has not picked one yet.</summary>
@@ -1192,6 +1203,22 @@ public sealed class HazemResponder(
             var (next, how) = answer is not null ? UrfRules.Answer(Urf!, answer) : UrfRules.Ages(Urf!, AiInput.Build(turn), understanding);
             Urf = next;
             UrfChanged = true;
+            // v1.85: typed words that picked this answer may say more of his case («اول جوازه وهجيب معاها اخوها والشهود صحابي»):
+            // a question in them is answered as any asked one (v1.84), and what he said is kept, so the case goes on from there
+            if (answer is not null && WordsRead is not null && plan.CaseSaidOn && next.State == UrfCase.Collecting)
+            {
+                if (AnswerAsked())
+                {
+                    return;
+                }
+
+                if (WithUrfFacts(next) is var after && after != next)
+                {
+                    Urf = after;
+                    how = UrfRules.NextOf(after);
+                }
+            }
+
             AfterUrf(how);
         }
 
@@ -1288,7 +1315,7 @@ public sealed class HazemResponder(
         }
 
         /// <summary>TASK 20 (v1.84): what the AI read of the Urfi case this turn, the latest per field (nothing with understanding off).</summary>
-        private UrfFacts Said => !understanding || answering?.Call?.Answer is not { } a ? UrfFacts.None
+        private UrfFacts Said => !understanding || (answering ?? (plan.CaseSaidOn ? WordsRead : null))?.Call?.Answer is not { } a ? UrfFacts.None
             : plan.CaseSaidOn ? UrfFacts.Of(a.CaseSaid)
             : UrfFacts.Fields(a.UrfWifePast, a.UrfGuardian, a.UrfWitnesses, a.UrfHusbandAge, a.UrfWifeAge); // off: v1.81's fields
 
