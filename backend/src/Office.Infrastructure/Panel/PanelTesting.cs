@@ -70,6 +70,23 @@ public sealed class PanelTesting(HazemDbContext db, ISettingsReader settings, Go
             new Dictionary<string, string?> { ["on"] = value }, ct);
     }
 
+    /// <summary>v1.84 (TASK 20): is the Urfi case read as one list (v1.82–v1.84), or exactly as v1.81?</summary>
+    public async Task<bool> CaseSaidAsync(CancellationToken ct) =>
+        (await settings.GetAsync(ct)).Flag(Application.Urf.UrfCaseSaid.SwitchKey);
+
+    /// <summary>v1.84: the switch, recorded in the audit. Off is the Urfi case exactly as v1.81.</summary>
+    public async Task SetCaseSaidAsync(Guid by, string username, bool on, CancellationToken ct)
+    {
+        var value = on ? "true" : "false";
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO hazem.settings (key, value, description, updated_by)
+            VALUES ({Application.Urf.UrfCaseSaid.SwitchKey}, {value}, 'v1.84 (TASK 20): the Urfi case as one list', {"panel:" + username})
+            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_by = EXCLUDED.updated_by
+            """, ct);
+        await PanelAudit.WriteAsync(db, clock, by, "testing.urf_case_said", "conversation", null,
+            new Dictionary<string, string?> { ["on"] = value }, ct);
+    }
+
     /// <summary>v1.61: does the writer answer his question before the office's address and hours?</summary>
     public async Task<bool> InfoWriterAsync(CancellationToken ct) =>
         (await settings.GetAsync(ct)).Flag(Application.Writing.Conversational.InfoSwitchKey);

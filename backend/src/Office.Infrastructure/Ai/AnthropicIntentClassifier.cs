@@ -27,17 +27,31 @@ public sealed class AnthropicIntentClassifier(IOptions<HazemOptions> options, Ti
 
     private static readonly Dictionary<string, JsonElement> Schema = BuildSchema();
 
+    /// <summary>TASK 20 (v1.84): the same for the schema with the Urfi case as one list (hazem.urf_case_said on).</summary>
+    private static readonly Dictionary<string, JsonElement> SchemaCaseSaid = BuildSchema(caseSaid: true);
+
     /// <summary>
     /// OpenAI's schema, with every nullable field («type: [string, null]», with or without its closed list) written as
     /// «anyOf: [string (the list), null]»: Anthropic refuses an enum under a type array. v1.73: the field keeps its own type
     /// («[integer, null]» is «anyOf: [integer, null]»).
     /// </summary>
-    public static Dictionary<string, JsonElement> BuildSchema()
+    public static Dictionary<string, JsonElement> BuildSchema(bool caseSaid = false)
     {
-        var schema = (JsonObject)OpenAiIntentClassifier.Schema.DeepClone();
-        var properties = (JsonObject)schema["properties"]!;
+        var schema = (JsonObject)(caseSaid ? OpenAiIntentClassifier.SchemaCaseSaid : OpenAiIntentClassifier.Schema).DeepClone();
+        Nullables((JsonObject)schema["properties"]!);
+        return schema.ToDictionary(kv => kv.Key, kv => JsonSerializer.SerializeToElement(kv.Value));
+    }
+
+    /// <summary>TASK 20 (v1.84): every level, so the fields of an array's objects (case_said) are written the same way.</summary>
+    private static void Nullables(JsonObject properties)
+    {
         foreach (var name in properties.Select(p => p.Key).ToList())
         {
+            if (properties[name] is JsonObject { } nested && nested["items"] is JsonObject { } items && items["properties"] is JsonObject inner)
+            {
+                Nullables(inner);
+            }
+
             if (properties[name] is not JsonObject { } field || field["type"] is not JsonArray)
             {
                 continue;
@@ -53,8 +67,6 @@ public sealed class AnthropicIntentClassifier(IOptions<HazemOptions> options, Ti
 
             properties[name] = new JsonObject { ["anyOf"] = new JsonArray(text, new JsonObject { ["type"] = "null" }) };
         }
-
-        return schema.ToDictionary(kv => kv.Key, kv => JsonSerializer.SerializeToElement(kv.Value));
     }
 
     private AnthropicClient? _client;
@@ -76,7 +88,7 @@ public sealed class AnthropicIntentClassifier(IOptions<HazemOptions> options, Ti
         }
 
         using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        budget.CancelAfter(Budget);
+        budget.CancelAfter(OpenAiIntentClassifier.BudgetFor(Budget, settings));
         try
         {
             var response = await Client(o.AnthropicApiKey).Messages.Create(new MessageCreateParams
@@ -85,7 +97,7 @@ public sealed class AnthropicIntentClassifier(IOptions<HazemOptions> options, Ti
                 MaxTokens = MaxTokens,
                 System = new List<TextBlockParam> { new() { Text = OpenAiIntentClassifier.PromptFor(settings), CacheControl = new CacheControlEphemeral() } },
                 Messages = [new() { Role = Role.User, Content = text }],
-                OutputConfig = new OutputConfig { Effort = Effort.Low, Format = new JsonOutputFormat { Schema = Schema } },
+                OutputConfig = new OutputConfig { Effort = Effort.Low, Format = new JsonOutputFormat { Schema = OpenAiIntentClassifier.CaseSaidOn(settings) ? SchemaCaseSaid : Schema } },
             }, budget.Token);
 
             var usage = response.Usage;

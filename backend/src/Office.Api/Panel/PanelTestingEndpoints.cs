@@ -69,6 +69,21 @@ public static class PanelTestingEndpoints
             return Results.Ok(new { on });
         });
 
+        // v1.84 (TASK 20): the Urfi case as one list (said / asked / taken back); off is the Urfi case exactly as v1.81.
+        testing.MapGet("/urf-case-said", async (PanelTesting t, CancellationToken ct) => Results.Ok(new { on = await t.CaseSaidAsync(ct) }));
+
+        testing.MapPut("/urf-case-said", async (UrgentWindowRequest? body, HttpContext ctx, PanelTesting t, CancellationToken ct) =>
+        {
+            if (body?.On is not { } on)
+            {
+                return Results.BadRequest(new { error = "invalid" });
+            }
+
+            var me = ctx.CurrentUser();
+            await t.SetCaseSaidAsync(me.Id, me.Username, on, ct);
+            return Results.Ok(new { on });
+        });
+
         testing.MapGet("/numbers", async (PanelTesting t, CancellationToken ct) =>
             Results.Ok(new { numbers = (await t.NumbersAsync(ct)).Select(n => new { key = n.Key, masked = n.Masked }) }));
 

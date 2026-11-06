@@ -203,6 +203,9 @@ public static class TextKeys
     public const string UrfAnswerCorrected = "urf_answer_corrected";        // v1.75: «تمام، عدّلت … ✅» before the next question
     public const string UrfGuardianClosed = "urf_guardian_closed";          // v1.71: the same matter after «مفيش ولي» (a first marriage)
     public const string UrfGuardianCan = "urf_guardian_can";                // v1.82: «أيوه، الأب ينفع يبقى الولي. هو هيحضر معاكم وموافق؟»
+    public const string UrfOptionCan = "urf_option_can";                    // v1.84: «أيوه، {{option}} ينفع ✅»
+    public const string UrfGuardianCannot = "urf_guardian_cannot";          // v1.84: «للأسف {{who}} مينفعش يبقى الولي…»
+    public const string UrfAgeCannot = "urf_age_cannot";                    // v1.84: «للأسف لأ، سياسة المكتب إن الزوج والزوجة…18 سنة…»
     public const string UrfAskWifePast = "urf_ask_wife_past";
     public const string UrfAskGuardian = "urf_ask_guardian";
     public const string UrfNoGuardian = "urf_no_guardian";

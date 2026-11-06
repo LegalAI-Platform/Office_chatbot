@@ -22,8 +22,11 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
     /// <summary>The prompt in use: Ai/prompts/{PromptVersion}.md. Older versions stay in the folder as history.</summary>
     public const string PromptVersion = "classify-v16";
 
-    /// <summary>v1.52 (phase 1): the prompt while understanding v2 is on (the whole chat, the stance, the other questions).</summary>
-    public const string PromptVersionV2 = "classify-v29";
+    /// <summary>v1.52 (phase 1): the prompt while understanding v2 is on (the whole chat, the stance, the other questions), as v1.81.</summary>
+    public const string PromptVersionV2 = "classify-v27";
+
+    /// <summary>TASK 20 (v1.84): the prompt while hazem.urf_case_said is on too (the Urfi case as one list).</summary>
+    public const string PromptVersionCaseSaid = "classify-v30";
     public const string StubEnabledKey = "ai.stub_enabled";
     public const string StubBaseUrlKey = "ai.stub_base_url";
 
@@ -32,11 +35,23 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
 
     public static readonly TimeSpan DefaultBudget = TimeSpan.FromSeconds(15);
 
+    /// <summary>TASK 20 (v1.84): 30 seconds while hazem.urf_case_said is on: a hard turn is read instead of falling back.</summary>
+    public static readonly TimeSpan CaseSaidBudget = TimeSpan.FromSeconds(30);
+
     /// <summary>Total time for the call and its one retry (tests shorten it).</summary>
     public TimeSpan Budget { get; init; } = DefaultBudget;
 
+    /// <summary>v1.84: the budget the switch picks; a budget a test set stays as it is.</summary>
+    public static TimeSpan BudgetFor(TimeSpan budget, HazemSettings settings) =>
+        budget == DefaultBudget && CaseSaidOn(settings) ? CaseSaidBudget : budget;
+
+    /// <summary>v1.84: the Urfi case as one list (understanding v2 and hazem.urf_case_said both on).</summary>
+    public static bool CaseSaidOn(HazemSettings settings) =>
+        settings.Flag(UnderstandingV2.SwitchKey) && settings.Flag(Office.Application.Urf.UrfCaseSaid.SwitchKey);
+
     private static readonly Lazy<string> Prompt = new(() => Load(PromptVersion));
     private static readonly Lazy<string> PromptV2 = new(() => Load(PromptVersionV2));
+    private static readonly Lazy<string> PromptCaseSaid = new(() => Load(PromptVersionCaseSaid));
 
     private static string Load(string version)
     {
@@ -47,12 +62,20 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
     }
 
     /// <summary>v1.52: the prompt version the switch picks (off: exactly as before).</summary>
-    public static string VersionFor(HazemSettings settings) => settings.Flag(UnderstandingV2.SwitchKey) ? PromptVersionV2 : PromptVersion;
+    public static string VersionFor(HazemSettings settings) =>
+        CaseSaidOn(settings) ? PromptVersionCaseSaid : settings.Flag(UnderstandingV2.SwitchKey) ? PromptVersionV2 : PromptVersion;
 
     /// <summary>v1.52: the prompt text the switch picks.</summary>
-    public static string PromptFor(HazemSettings settings) => settings.Flag(UnderstandingV2.SwitchKey) ? PromptV2.Value : Prompt.Value;
+    public static string PromptFor(HazemSettings settings) =>
+        CaseSaidOn(settings) ? PromptCaseSaid.Value : settings.Flag(UnderstandingV2.SwitchKey) ? PromptV2.Value : Prompt.Value;
 
-    public static JsonObject Schema { get; } = BuildSchema();
+    /// <summary>The schema as v1.81 (the Urfi fields one by one).</summary>
+    public static JsonObject Schema { get; } = BuildSchema(caseSaid: false);
+
+    /// <summary>TASK 20 (v1.84): the schema with the Urfi case as one list (case_said) instead of its fields.</summary>
+    public static JsonObject SchemaCaseSaid { get; } = BuildSchema(caseSaid: true);
+
+    public static JsonObject SchemaFor(HazemSettings settings) => CaseSaidOn(settings) ? SchemaCaseSaid : Schema;
 
     /// <summary>v1.58: OpenAI's usage as a priced split (its cached prompt tokens are the cache read; it charges no cache write).</summary>
     public static Office.Application.Costs.TokenUsage? OpenAiTokens(JsonNode? usage)
@@ -85,14 +108,14 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
         }
 
         using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        budget.CancelAfter(Budget);
+        budget.CancelAfter(BudgetFor(Budget, settings));
         for (var attempt = 1; ; attempt++)
         {
             try
             {
                 using var request = new HttpRequestMessage(HttpMethod.Post, baseUrl.TrimEnd('/') + "/chat/completions")
                 {
-                    Content = JsonContent.Create(Body(o.OpenAiModel, PromptFor(settings), text)),
+                    Content = JsonContent.Create(Body(o.OpenAiModel, PromptFor(settings), text, SchemaFor(settings))),
                 };
                 request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
                 using var response = await http.SendAsync(request, budget.Token);
@@ -163,7 +186,7 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
                 // v1.52 (phase 1): where he stands, and the office's other questions in the same message
                 StringOrNull(o["stance"]),
                 o["also_asked"] is JsonArray also ? also.Select(StringOrNull).OfType<string>().ToList() : null,
-                // v1.60: what he SAID about the Urfi case, so the questions already answered are not asked again
+                // v1.60: what he SAID about the Urfi case (hazem.urf_case_said off: the fields one by one, as v1.81)
                 StringOrNull(o["urf_wife_past"]),
                 StringOrNull(o["urf_guardian"]),
                 StringOrNull(o["urf_witnesses"]),
@@ -175,8 +198,8 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
                 o["meanings"] is JsonArray meant ? meant.Select(StringOrNull).OfType<string>().ToList() : null,
                 // v1.79: how he wants the call (the latest he said)
                 StringOrNull(o["call_app"]),
-                // v1.82: one of her family he only ASKS about as the guardian («ينفع ابوها؟»), so he is answered and asked back
-                StringOrNull(o["urf_guardian_asked"])), null);
+                // TASK 20 (v1.84): everything he says about his Urfi case, said / asked / taken back, in his order
+                CaseSaid(o["case_said"])), null);
         }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException)
         {
@@ -194,10 +217,23 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
     private static string? StringOrNull(JsonNode? n) =>
         n is JsonValue v && v.GetValueKind() == JsonValueKind.String ? v.GetValue<string>() : null;
 
+    /// <summary>TASK 20 (v1.84): the items with a known field and kind; anything else is dropped (the code checks every value).</summary>
+    private static IReadOnlyList<Office.Application.Urf.UrfSaid>? CaseSaid(JsonNode? n) => n is JsonArray items
+        ? items.OfType<JsonObject>()
+            .Select(i => (Field: StringOrNull(i["field"]), Kind: StringOrNull(i["kind"]), Item: i))
+            .Where(i => i.Field is not null && i.Kind is not null && CaseFields.Contains(i.Field) && CaseKinds.Contains(i.Kind))
+            .Select(i => new Office.Application.Urf.UrfSaid(i.Field!, i.Kind!, StringOrNull(i.Item["value"]),
+                IntOrNull(i.Item["husband_age"]), IntOrNull(i.Item["wife_age"]), StringOrNull(i.Item["word"])))
+            .ToList()
+        : null;
+
+    private static string[] CaseFields => ["wife_past", "guardian", "witnesses", "ages", "has_copy", "agreed", "children"];
+    private static string[] CaseKinds => ["said", "asked", "withdrawn"];
+
     private static int? IntOrNull(JsonNode? n) =>
         n is JsonValue v && v.GetValueKind() == JsonValueKind.Number && v.TryGetValue<int>(out var i) ? i : null;
 
-    private static JsonObject Body(string model, string prompt, string text) => new()
+    private static JsonObject Body(string model, string prompt, string text, JsonObject schema) => new()
     {
         ["model"] = model,
         ["temperature"] = 0,
@@ -207,11 +243,11 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
         ["response_format"] = new JsonObject
         {
             ["type"] = "json_schema",
-            ["json_schema"] = new JsonObject { ["name"] = "hazem_intent", ["strict"] = true, ["schema"] = Schema.DeepClone() },
+            ["json_schema"] = new JsonObject { ["name"] = "hazem_intent", ["strict"] = true, ["schema"] = schema.DeepClone() },
         },
     };
 
-    private static JsonObject BuildSchema()
+    private static JsonObject BuildSchema(bool caseSaid)
     {
         static JsonArray Codes<T>(bool nullable)
             where T : struct, Enum
@@ -230,13 +266,13 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
             return a;
         }
 
-        return new JsonObject
+        var schema = new JsonObject
         {
             ["type"] = "object",
             ["additionalProperties"] = false,
             ["required"] = new JsonArray("analysis", "subject", "scope", "intent", "service", "consultation_mode", "full_name", "confidence",
                 "matter_type", "matter_subtype", "sender_role", "info_topic", "courtesy", "name_gender", "picked", "asked_time", "time_exact",
-                "stance", "also_asked", "urf_wife_past", "urf_guardian", "urf_witnesses", "urf_husband_age", "urf_wife_age", "file_is", "meanings", "call_app", "urf_guardian_asked"),
+                "stance", "also_asked", "file_is", "meanings", "call_app", "case_said"),
             // v1.24: subject and scope come first, so the model names what the turn is about before it picks an
             // intent. The subject is a few words for that only: it is never read, kept or logged.
             ["properties"] = new JsonObject
@@ -265,21 +301,88 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
                 // v1.52 (phase 1): where he stands (just asking, not wanting it, the price too high…) and up to 3 other office questions
                 ["stance"] = new JsonObject { ["type"] = "string", ["enum"] = Codes<Stance>(false) },
                 ["also_asked"] = new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "string", ["enum"] = Codes<InfoTopic>(false) } },
-                // v1.60: what he said about the Urfi case in this message (null: nothing said)
-                ["urf_wife_past"] = new JsonObject { ["type"] = new JsonArray("string", "null"), ["enum"] = new JsonArray("first", "divorced", "khul", "widow", null) },
-                ["urf_guardian"] = new JsonObject { ["type"] = new JsonArray("string", "null"), ["enum"] = new JsonArray("father", "brother", "uncle", "none", "dropped", null) }, // v1.74: none; v1.82: dropped
-                ["urf_witnesses"] = new JsonObject { ["type"] = new JsonArray("string", "null"), ["enum"] = new JsonArray("office", "own", null) },
-                // v1.72: the ages he said (in the chat too), and what his words say a file sent with them is
-                ["urf_husband_age"] = new JsonObject { ["type"] = new JsonArray("integer", "null") },
-                ["urf_wife_age"] = new JsonObject { ["type"] = new JsonArray("integer", "null") },
+                // v1.72: what his words say a file sent with them is
                 ["file_is"] = new JsonObject { ["type"] = new JsonArray("string", "null"), ["enum"] = new JsonArray("receipt", "other", null) },
                 // v1.76: what an unclear question may mean (empty when it is clear)
                 ["meanings"] = new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "string" } },
                 // v1.79: how he wants the phone or video call (null: not said)
                 ["call_app"] = new JsonObject { ["type"] = new JsonArray("string", "null"), ["enum"] = new JsonArray("whatsapp", "facetime", "phone", "meet", null) },
-                // v1.82: the one of her family he asks about as the guardian (null: no such question)
-                ["urf_guardian_asked"] = new JsonObject { ["type"] = new JsonArray("string", "null"), ["enum"] = new JsonArray("father", "brother", "uncle", null) },
+                // TASK 20 (v1.84): what he says about his Urfi case, one item per thing, in his order (empty: nothing)
+                ["case_said"] = new JsonObject
+                {
+                    ["type"] = "array",
+                    ["items"] = new JsonObject
+                    {
+                        ["type"] = "object",
+                        ["additionalProperties"] = false,
+                        ["required"] = new JsonArray("field", "kind", "value", "husband_age", "wife_age", "word"),
+                        ["properties"] = new JsonObject
+                        {
+                            ["field"] = new JsonObject { ["type"] = "string", ["enum"] = new JsonArray(CaseFields.Select(f => (JsonNode?)f).ToArray()) },
+                            ["kind"] = new JsonObject { ["type"] = "string", ["enum"] = new JsonArray(CaseKinds.Select(k => (JsonNode?)k).ToArray()) },
+                            ["value"] = new JsonObject
+                            {
+                                ["type"] = new JsonArray("string", "null"),
+                                ["enum"] = new JsonArray("first", "divorced", "khul", "widow", "father", "brother", "uncle", "none", "other",
+                                    "own", "office", "yes", "no", null),
+                            },
+                            ["husband_age"] = new JsonObject { ["type"] = new JsonArray("integer", "null") },
+                            ["wife_age"] = new JsonObject { ["type"] = new JsonArray("integer", "null") },
+                            ["word"] = new JsonObject { ["type"] = new JsonArray("string", "null") },
+                        },
+                    },
+                },
             },
+        };
+        return caseSaid ? schema : AsV181(schema);
+    }
+
+    /// <summary>
+    /// v1.84: the schema exactly as v1.81 (hazem.urf_case_said off): the Urfi fields one by one, after also_asked, in v1.81's order,
+    /// and no case_said.
+    /// </summary>
+    private static JsonObject AsV181(JsonObject schema)
+    {
+        var urf = new (string Name, JsonObject Field)[]
+        {
+            ("urf_wife_past", new JsonObject { ["type"] = new JsonArray("string", "null"), ["enum"] = new JsonArray("first", "divorced", "khul", "widow", null) }),
+            ("urf_guardian", new JsonObject { ["type"] = new JsonArray("string", "null"), ["enum"] = new JsonArray("father", "brother", "uncle", "none", null) }),
+            ("urf_witnesses", new JsonObject { ["type"] = new JsonArray("string", "null"), ["enum"] = new JsonArray("office", "own", null) }),
+            ("urf_husband_age", new JsonObject { ["type"] = new JsonArray("integer", "null") }),
+            ("urf_wife_age", new JsonObject { ["type"] = new JsonArray("integer", "null") }),
+        };
+        var properties = new JsonObject();
+        var required = new JsonArray();
+        foreach (var (name, field) in ((JsonObject)schema["properties"]!).Where(p => p.Key != "case_said").ToList())
+        {
+            properties[name] = field!.DeepClone();
+            if (name == "also_asked")
+            {
+                foreach (var (n, f) in urf)
+                {
+                    properties[n] = f;
+                }
+            }
+        }
+
+        foreach (var name in ((JsonArray)schema["required"]!).Select(n => (string)n!).Where(n => n != "case_said"))
+        {
+            required.Add(name);
+            if (name == "also_asked")
+            {
+                foreach (var (n, _) in urf)
+                {
+                    required.Add(n);
+                }
+            }
+        }
+
+        return new JsonObject
+        {
+            ["type"] = schema["type"]!.DeepClone(),
+            ["additionalProperties"] = false,
+            ["required"] = required,
+            ["properties"] = properties,
         };
     }
 }

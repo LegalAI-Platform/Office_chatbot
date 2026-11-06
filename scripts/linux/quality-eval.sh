@@ -4,13 +4,14 @@
 # AI and costs money: it needs HAZEM_ANTHROPIC_API_KEY in .env (entered by the owner; never printed here).
 # The report: docs/ai/quality/<label>.md and .json.
 #   quality-eval.sh [label] [id1,id2,...]     label defaults to "baseline"; the ids run some conversations only
+#   QUALITY_CASE_SAID=1 quality-eval.sh …         the same with hazem.urf_case_said on (v1.84)
 source "$(dirname "$0")/_common.sh"
 require_env_file
 
 vars=(POSTGRES_SUPERUSER POSTGRES_SUPERUSER_PASSWORD OFFICE_MIGRATOR_PASSWORD OFFICE_APP_PASSWORD OFFICE_API_PASSWORD HAZEM_ANTHROPIC_API_KEY)
 for v in "${vars[@]}"; do export "$v=$(env_value "$v")"; done
 [[ -n "$HAZEM_ANTHROPIC_API_KEY" ]] || die "HAZEM_ANTHROPIC_API_KEY is empty in .env (the owner enters it)."
-export QUALITY_EVAL=1 QUALITY_LABEL="${1:-baseline}" QUALITY_ONLY="${2:-}"
+export QUALITY_EVAL=1 QUALITY_LABEL="${1:-baseline}" QUALITY_ONLY="${2:-}" QUALITY_CASE_SAID="${QUALITY_CASE_SAID:-}"
 
 SDK_IMAGE=mcr.microsoft.com/dotnet/sdk:10.0.403-alpine3.24
 filter=(--filter-class Office.IntegrationTests.QualityEvalTests)
@@ -19,7 +20,7 @@ if command -v dotnet >/dev/null 2>&1; then
   cd "$ROOT/backend"
   dotnet test --project tests/Office.IntegrationTests "${filter[@]}"
 else
-  env_args=(); for v in "${vars[@]}" QUALITY_EVAL QUALITY_LABEL QUALITY_ONLY; do env_args+=(-e "$v"); done
+  env_args=(); for v in "${vars[@]}" QUALITY_EVAL QUALITY_LABEL QUALITY_ONLY QUALITY_CASE_SAID; do env_args+=(-e "$v"); done
   docker run --rm --network office_net "${env_args[@]}" \
     -e OFFICE_TEST_PG_HOST=postgres -e OFFICE_TEST_MIGRATIONS_DIR=/migrations -e OFFICE_TEST_REPO_DIR=/repo \
     -e DOTNET_CLI_TELEMETRY_OPTOUT=1 -e DOTNET_NOLOGO=1 \

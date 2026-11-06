@@ -127,6 +127,28 @@ public sealed class PanelTestingApiTests(TestDatabase db) : IAsyncLifetime
         }
     }
 
+    /// <summary>v1.84 (TASK 20): the switch of the Urfi case as one list, off by default (the Urfi case as v1.81), audited.</summary>
+    [Fact]
+    public async Task V184_the_lawyer_switches_the_urfi_list_and_it_is_audited()
+    {
+        try
+        {
+            var lawyer = await SignIn("lawyer");
+            Assert.False((bool)(await lawyer.GetFromJsonAsync<JsonNode>("/api/panel/testing/urf-case-said", Ct))!["on"]!); // off by default
+            Assert.Equal(HttpStatusCode.BadRequest, (await lawyer.PutAsJsonAsync("/api/panel/testing/urf-case-said", new { }, Ct)).StatusCode);
+            Assert.Equal(HttpStatusCode.OK, (await lawyer.PutAsJsonAsync("/api/panel/testing/urf-case-said", new { on = true }, Ct)).StatusCode);
+            Assert.Equal("true", await db.ScalarAsync<string>("SELECT value FROM hazem.settings WHERE key = 'hazem.urf_case_said'"));
+            Assert.Equal("true", await db.ScalarAsync<string>(
+                "SELECT detail ->> 'on' FROM hazem.panel_audit WHERE action = 'testing.urf_case_said' ORDER BY at DESC LIMIT 1"));
+            var staff = await SignIn("yasmin");
+            Assert.Equal(HttpStatusCode.Forbidden, (await staff.PutAsJsonAsync("/api/panel/testing/urf-case-said", new { on = false }, Ct)).StatusCode);
+        }
+        finally
+        {
+            await db.SetAsync("hazem.urf_case_said", "false");
+        }
+    }
+
     [Fact]
     public async Task V161_the_lawyer_switches_the_info_writer_and_it_is_audited()
     {

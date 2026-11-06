@@ -195,7 +195,7 @@ public sealed record RawClassification(
     string? FileIs = null,
     IReadOnlyList<string>? Meanings = null,
     string? CallApp = null,
-    string? UrfGuardianAsked = null);
+    IReadOnlyList<Office.Application.Urf.UrfSaid>? CaseSaid = null);
 
 /// <summary>
 /// v1.52 (phase 1, the owner: «اي الحل الصح المفروض»): where the client stands in this message, read with the whole chat.

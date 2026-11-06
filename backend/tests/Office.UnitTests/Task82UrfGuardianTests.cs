@@ -18,12 +18,12 @@ public sealed partial class BookingFlowTests
     [Fact]
     public async Task The_named_guardian_who_will_not_come_brings_the_guardian_question_back_not_the_refusal()
     {
-        UrfFactsOn();
+        CaseSaidOn();
         await ToTheGuardian();
         await Answer(UrfStep.Guardian, "brother");
         Assert.Equal([TextKeys.UrfChooseSlot], Keys(await Answer(UrfStep.Witnesses, "own")));
 
-        _script["اخوها مش هيجي"] = new("service_by_name", "urf_marriage", "unknown", null, 0.85, UrfGuardian: "dropped");
+        _script["اخوها مش هيجي"] = new("service_by_name", "urf_marriage", "unknown", null, 0.85, CaseSaid: [new("guardian", "withdrawn", "brother")]);
         Assert.Equal([TextKeys.UrfAskGuardian], Keys(await Say("اخوها مش هيجي")));
         Assert.Equal((UrfCase.Collecting, UrfStep.Guardian, null, "own"), (TheCase.State, TheCase.Step, TheCase.Guardian, TheCase.Witnesses));
 
@@ -35,21 +35,29 @@ public sealed partial class BookingFlowTests
     [Fact]
     public async Task Nobody_of_her_family_still_refuses_after_the_guardian_question_comes_back()
     {
-        UrfFactsOn();
+        CaseSaidOn();
         await ToTheGuardian();
         await Answer(UrfStep.Guardian, "brother");
-        _script["اخوها مش هيجي"] = new("service_by_name", "urf_marriage", "unknown", null, 0.85, UrfGuardian: "dropped");
+        _script["اخوها مش هيجي"] = new("service_by_name", "urf_marriage", "unknown", null, 0.85, CaseSaid: [new("guardian", "withdrawn", "brother")]);
         await Say("اخوها مش هيجي");
         Assert.Equal([TextKeys.UrfNoGuardian], Keys(await Answer(UrfStep.Guardian, "none")));
         Assert.Equal(UrfCase.RejectedGuardian, TheCase.State);
     }
 
-    private void GuardianCanOn() =>
+    /// <summary>v1.84: the answers to a question about the case are on only with every one of their texts approved.</summary>
+    private void GuardianCanOn()
+    {
         _texts[TextKeys.UrfGuardianCan] = new ApprovedText(TextKeys.UrfGuardianCan, 1, "أيوه، {{guardian}} ينفع يبقى الولي. هو هيحضر معاكم وموافق؟", 300, true);
+        _texts[TextKeys.UrfOptionCan] = new ApprovedText(TextKeys.UrfOptionCan, 1, "أيوه، {{option}} ينفع ✅", 300, true);
+        _texts[TextKeys.UrfGuardianCannot] = new ApprovedText(TextKeys.UrfGuardianCannot, 1,
+            "للأسف {{who}} مينفعش يبقى الولي. سياسة المكتب: لو دي أول جوازة للزوجة، لازم يكون معاها الأب أو الأخ أو العم.", 300, true);
+        _texts[TextKeys.UrfAgeCannot] = new ApprovedText(TextKeys.UrfAgeCannot, 1, "للأسف لأ، سياسة المكتب إن الزوج والزوجة يكون سنهم 18 سنة أو أكتر.", 300, true);
+        _texts[TextKeys.UrfGuardianClosed] = new ApprovedText(TextKeys.UrfGuardianClosed, 1, "T:guardian closed", 300, true);
+    }
 
     private async Task ToTheRefusal()
     {
-        UrfFactsOn();
+        CaseSaidOn();
         CorrectedOn();
         GuardianCanOn();
         await ToTheGuardian();
@@ -60,10 +68,10 @@ public sealed partial class BookingFlowTests
     [Fact]
     public async Task A_question_about_a_relative_is_answered_and_asked_back_never_taken_as_he_comes()
     {
-        UrfFactsOn();
+        CaseSaidOn();
         GuardianCanOn();
         await ToTheGuardian();
-        _script["ينفع ابوها ؟"] = new("other", null, "unknown", null, 0.8, UrfGuardianAsked: "father");
+        _script["ينفع ابوها ؟"] = new("other", null, "unknown", null, 0.8, CaseSaid: [new("guardian", "asked", "father")]);
         var d = await Say("ينفع ابوها ؟");
         Assert.Equal([TextKeys.UrfGuardianCan], Keys(d));
         Assert.Contains("أيوه، الأب ينفع يبقى الولي", d.Actions[0].Text);
@@ -78,10 +86,10 @@ public sealed partial class BookingFlowTests
     [Fact]
     public async Task No_under_the_asked_back_question_brings_the_guardian_question_back()
     {
-        UrfFactsOn();
+        CaseSaidOn();
         GuardianCanOn();
         await ToTheGuardian();
-        _script["لو عمها ينفع؟"] = new("other", null, "unknown", null, 0.8, UrfGuardianAsked: "uncle");
+        _script["لو عمها ينفع؟"] = new("other", null, "unknown", null, 0.8, CaseSaid: [new("guardian", "asked", "uncle")]);
         Assert.Equal([TextKeys.UrfGuardianCan], Keys(await Say("لو عمها ينفع؟")));
         Assert.Equal([TextKeys.UrfAskGuardian], Keys(await Answer(UrfStep.Guardian, UrfAnswer.GuardianNo)));
         Assert.Equal((UrfCase.Collecting, UrfStep.Guardian, (string?)null), (TheCase.State, TheCase.Step, TheCase.Guardian));
@@ -91,7 +99,7 @@ public sealed partial class BookingFlowTests
     public async Task After_the_refusal_yes_opens_the_case_again_said_back_first()
     {
         await ToTheRefusal();
-        _script["ينفع ابوها بدل اخوها ؟"] = new("other", null, "unknown", null, 0.8, UrfGuardianAsked: "father");
+        _script["ينفع ابوها بدل اخوها ؟"] = new("other", null, "unknown", null, 0.8, CaseSaid: [new("guardian", "asked", "father")]);
         Assert.Equal([TextKeys.UrfGuardianCan], Keys(await Say("ينفع ابوها بدل اخوها ؟")));
 
         var d = await Answer(UrfStep.Guardian, "father");
@@ -105,7 +113,7 @@ public sealed partial class BookingFlowTests
     public async Task After_the_refusal_no_keeps_the_refusal()
     {
         await ToTheRefusal();
-        _script["ينفع عمها؟"] = new("other", null, "unknown", null, 0.8, UrfGuardianAsked: "uncle");
+        _script["ينفع عمها؟"] = new("other", null, "unknown", null, 0.8, CaseSaid: [new("guardian", "asked", "uncle")]);
         await Say("ينفع عمها؟");
         Assert.Equal([TextKeys.UrfGuardianClosed], Keys(await Answer(UrfStep.Guardian, UrfAnswer.GuardianNo)));
         Assert.Single(_booking.UrfCases);
@@ -115,7 +123,7 @@ public sealed partial class BookingFlowTests
     public async Task Saying_he_comes_after_the_refusal_is_said_back_and_goes_on_at_once()
     {
         await ToTheRefusal();
-        _script["ابوها موجود"] = new("service_by_name", "urf_marriage", "unknown", null, 0.9, UrfGuardian: "father");
+        _script["ابوها موجود"] = new("service_by_name", "urf_marriage", "unknown", null, 0.9, CaseSaid: [new("guardian", "said", "father")]);
         var d = await Say("ابوها موجود");
         Assert.Equal([TextKeys.UrfAnswerCorrected, TextKeys.UrfAskWitnesses], Keys(d));
         Assert.Contains("الولي يبقى الأب", d.Actions[0].Text);
@@ -136,17 +144,17 @@ public sealed partial class BookingFlowTests
         {
             AppointmentId = Guid.NewGuid(),
         };
-        Assert.True(UrfRules.ChangesBooked(held, null, "dropped", null));
-        Assert.Equal(held, UrfRules.ApplyFacts(held, null, "dropped", null)); // nothing changes by itself
+        Assert.True(UrfRules.ChangesBooked(held, null, null, null, withdrawn: [UrfStep.Guardian]));
+        Assert.Equal(held, UrfRules.ApplyFacts(held, null, null, null, withdrawn: [UrfStep.Guardian])); // nothing changes by itself
     }
 
     [Fact]
     public void Dropped_never_refuses_and_never_opens_a_refused_case()
     {
         var refused = new UrfCase(Guid.NewGuid(), Guid.NewGuid(), UrfCase.Marriage, UrfCase.RejectedGuardian, null, 30, 25, "first", "none", "own");
-        Assert.Equal(refused, UrfRules.ApplyFacts(refused, null, "dropped", null));
+        Assert.Equal(refused, UrfRules.ApplyFacts(refused, null, null, null, withdrawn: [UrfStep.Guardian]));
         var waiting = new UrfCase(Guid.NewGuid(), Guid.NewGuid(), UrfCase.Marriage, UrfCase.DocumentsPending, null, 30, 25, "first", "uncle", "office");
-        var asked = UrfRules.ApplyFacts(waiting, null, "dropped", null);
+        var asked = UrfRules.ApplyFacts(waiting, null, null, null, withdrawn: [UrfStep.Guardian]);
         Assert.Equal((UrfCase.Collecting, UrfStep.Guardian, (string?)null), (asked.State, asked.Step, asked.Guardian));
         Assert.Null(UrfRules.Corrected(waiting, asked)); // nothing to say back: the question asks
     }

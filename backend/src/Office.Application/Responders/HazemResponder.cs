@@ -234,7 +234,9 @@ public sealed class HazemResponder(
         bool Active(string key) => texts.TryGetValue(key, out var t) && t.Active;
         plan.PhoneCallOn = Active(TextKeys.AskCallAppPhone) && Active(TextKeys.BtnAppPhone) && Active(TextKeys.BtnAppsList);
         plan.UrgentButtonOn = Active(TextKeys.BtnBookUrgent);
-        plan.GuardianCanOn = Active(TextKeys.UrfGuardianCan) && Active(TextKeys.BtnYes) && Active(TextKeys.BtnNo); // v1.82
+        plan.CaseAnswersOn = new[] { TextKeys.UrfGuardianCan, TextKeys.UrfOptionCan, TextKeys.UrfGuardianCannot, TextKeys.UrfAgeCannot, TextKeys.UrfGuardianClosed, TextKeys.BtnYes, TextKeys.BtnNo }.All(Active); // v1.84
+        // v1.84 (TASK 20): the switch; off is the Urfi case exactly as v1.81
+        plan.CaseSaidOn = settings.Flag(UnderstandingV2.SwitchKey) && settings.Flag(UrfCaseSaid.SwitchKey);
         // TASK 12 (B-18): the reminders run whenever their texts are approved, the booking from WhatsApp on or off.
         var remindersOn = booking is not null && ReminderTexts.Keys.All(k => texts.TryGetValue(k, out var t) && t.Active);
         var servicesOn = services is not null && ServiceTextKeys.All(k => texts.TryGetValue(k, out var t) && t.Active);
@@ -354,7 +356,9 @@ public sealed class HazemResponder(
             var urfButton = choice is null ? UrfAnswerIn(turn) : null;
             var urfAnswer = urfButton is not null && urfCase is { State: UrfCase.Collecting } && flow.MayBook ? urfButton : null;
             var urfAges = choice is null && urfButton is null && urfCase is { State: UrfCase.Collecting, Step: UrfStep.Ages } && flow.MayBook
-                          && FileIn(turn) is null && AiInput.Build(turn) is { } typed && (typed.Any(char.IsDigit) || understanding && NumberWords.Any(typed));
+                          && FileIn(turn) is null && AiInput.Build(turn) is { } typed && (typed.Any(char.IsDigit) || understanding && NumberWords.Any(typed))
+                          // v1.84 (TASK 20): a QUESTION that is not the two ages («لو هي 17 سنة ينفع؟») is read by the AI, as any question
+                          && !(understanding && plan.CaseSaidOn && UrfAges.Parse(NumberWords.ToDigits(typed)) is null && typed.TrimEnd() is [.., '؟' or '?']);
             // TASK 09 / 10 (B-05, B-16, T-09): a file from the client never reaches the AI, nor any word sent with it:
             // a receipt (an image) for what waits for one, the documents of a service order, or «send an image».
             ReceiptOutcome? receipt = null;
@@ -1236,7 +1240,7 @@ public sealed class HazemResponder(
             }
 
             // v1.82: «أيوه» under «ينفع الأب؟» after the refusal for no guardian opens the case again, as his words would (v1.72)
-            if (urfOn && MayBook && Urf is null && ageRefusal?.Case is { State: UrfCase.RejectedGuardian } refused
+            if (urfOn && plan.CaseSaidOn && MayBook && Urf is null && ageRefusal?.Case is { State: UrfCase.RejectedGuardian } refused
                 && UrfRules.ApplyFacts(refused, past, guard, wit) is { State: not (UrfCase.RejectedAge or UrfCase.RejectedGuardian) } again)
             {
                 Reopen(refused, again);
@@ -1244,7 +1248,7 @@ public sealed class HazemResponder(
             }
 
             // v1.82: «لا» under «ينفع الأب؟» changes nothing: the case as it is (the question waiting, the times again), or the refusal
-            if (urfOn && pressed is { Step: UrfStep.Guardian, Value: UrfAnswer.GuardianNo })
+            if (urfOn && plan.CaseSaidOn && pressed is { Step: UrfStep.Guardian, Value: UrfAnswer.GuardianNo })
             {
                 if (Urf is { } open)
                 {
@@ -1274,7 +1278,7 @@ public sealed class HazemResponder(
             Check(Intake.MoveTo(IntakeState.InServiceFlow));
             Urf = again;
             UrfChanged = true;
-            if (UrfRules.Corrected(refused, again) is { } changed)
+            if (plan.CaseSaidOn && UrfRules.Corrected(refused, again) is { } changed) // off: as v1.81, the next question only
             {
                 plan.Say(TextKeys.UrfAnswerCorrected, Fill: new Dictionary<string, string> { ["changed"] = changed });
                 urfCorrected = true;
@@ -1283,48 +1287,125 @@ public sealed class HazemResponder(
             AfterUrf(UrfRules.NextOf(again));
         }
 
+        /// <summary>TASK 20 (v1.84): what the AI read of the Urfi case this turn, the latest per field (nothing with understanding off).</summary>
+        private UrfFacts Said => !understanding || answering?.Call?.Answer is not { } a ? UrfFacts.None
+            : plan.CaseSaidOn ? UrfFacts.Of(a.CaseSaid)
+            : UrfFacts.Fields(a.UrfWifePast, a.UrfGuardian, a.UrfWitnesses, a.UrfHusbandAge, a.UrfWifeAge); // off: v1.81's fields
+
         /// <summary>
-        /// v1.82 (Ahmed Amin's chat: «ينفع ابوها بدل اخوها؟» got the closing refusal, which itself says the father may come; the owner:
-        /// a question is not «he comes»): one of her family he only ASKS about as the guardian (classify-v28 urf_guardian_asked) is
-        /// answered and asked back, «أيوه، الأب ينفع يبقى الولي. هو هيحضر معاكم وموافق؟». «أيوه» is that guardian (the case goes
-        /// on, a refused one too); «لا» brings the guardian question back. Only while a first marriage's case may still change
-        /// (collecting, the times waiting, or refused for no guardian); another relative stays the policy's refusal.
+        /// TASK 20 (v1.84, the owner: «عايز حلول عامه»): a question about one answer of his Urfi case («ينفع ابوها؟»، «ينفع أجيب الشهود؟»،
+        /// «لو مطلقة ينفع؟»، «لو هي 17 ينفع؟») is answered by the case's own rules (<see cref="UrfRules.Try"/>), never sent to the
+        /// office, and never changes the case. What he SAID in the same turn is taken first (said back when corrected). The guardian
+        /// (v1.82): «أيوه، الأب ينفع يبقى الولي. هو هيحضر معاكم وموافق؟» with «أيوه» (that guardian, a refused case too) / «لا»
+        /// (nothing changes). Another field: «أيوه، … ينفع ✅» then the question waiting. A rule that refuses: its «cannot», nothing
+        /// closes. Only while a marriage's case may still change, or was refused for no guardian.
         /// </summary>
-        private bool AskGuardianBack()
+        private bool AnswerAsked()
         {
-            if (!urfOn || !MayBook || !understanding || !plan.GuardianCanOn
-                || answering?.Call?.Answer is not { UrfGuardianAsked: { } asked, UrfGuardian: null }
-                || UrfCase.GuardianName(asked) is not { Length: > 0 } name)
+            var said = Said;
+            if (!urfOn || !MayBook || !plan.CaseSaidOn || !plan.CaseAnswersOn || said.Asked is not { } asked)
             {
                 return false;
             }
 
-            var c = Urf is { IsMarriage: true } running
-                    && (running.State == UrfCase.Collecting || running.State == UrfCase.DocumentsPending && running.AppointmentId is null)
-                ? running
-                : Urf is null && ageRefusal?.Case is { State: UrfCase.RejectedGuardian } refused ? refused : null;
-            if (c is null || c.WifePast is not (null or "first") || c.Guardian == asked)
+            var running = Urf is { IsMarriage: true } open
+                          && (open.State == UrfCase.Collecting || open.State == UrfCase.DocumentsPending && open.AppointmentId is null)
+                ? open
+                : null;
+            // a time held or paid: the question is still answered (nothing changes; a change after it is the office's, v1.62)
+            var held = Urf is { IsMarriage: true } h && (h.State is UrfCase.Booked or UrfCase.Approved || h.State == UrfCase.DocumentsPending)
+                ? h
+                : null;
+            var refused = Urf is null && ageRefusal?.Case is { State: UrfCase.RejectedGuardian } r ? r : null;
+            if ((running ?? held ?? refused) is not { } c)
             {
                 return false;
             }
 
-            plan.Ask(TextKeys.UrfGuardianCan, new ReplyChoices(InteractivePayload.Buttons,
-            [
-                new ReplyChoice(UrfAnswer.Id(UrfStep.Guardian, asked), TextKeys.BtnYes),
-                new ReplyChoice(UrfAnswer.Id(UrfStep.Guardian, UrfAnswer.GuardianNo), TextKeys.BtnNo),
-            ]), Fill: new Dictionary<string, string> { ["guardian"] = name });
+            if (running is null && held is not null && said.Any && UrfRules.ChangesBooked(held, said))
+            {
+                return false; // he changes an answer too: the office takes it (UrfFactsSaid)
+            }
+
+            // what he said with it is kept first (v1.60), and said back when it corrects an answer (v1.75)
+            if (running is not null && said.Any)
+            {
+                var now = UrfRules.ApplyFacts(running, said);
+                if (now.State is UrfCase.RejectedAge or UrfCase.RejectedGuardian)
+                {
+                    return false; // a refusal says itself (UrfFactsSaid)
+                }
+
+                if (now != running)
+                {
+                    Urf = now;
+                    UrfChanged = true;
+                    if (UrfRules.Corrected(running, now) is { } changed)
+                    {
+                        plan.Say(TextKeys.UrfAnswerCorrected, Fill: new Dictionary<string, string> { ["changed"] = changed });
+                        urfCorrected = true;
+                    }
+
+                    c = now;
+                }
+            }
+
+            if (UrfRules.Try(c, asked) is not { } answer)
+            {
+                return false;
+            }
+
+            var waiting = c.State == UrfCase.Collecting && c == Urf ? c.Step : null;
+            switch (answer.What)
+            {
+                case UrfAskAnswer.GuardianCan:
+                    plan.Ask(TextKeys.UrfGuardianCan, new ReplyChoices(InteractivePayload.Buttons,
+                    [
+                        new ReplyChoice(UrfAnswer.Id(UrfStep.Guardian, answer.Value!), TextKeys.BtnYes),
+                        new ReplyChoice(UrfAnswer.Id(UrfStep.Guardian, UrfAnswer.GuardianNo), TextKeys.BtnNo),
+                    ]), Fill: new Dictionary<string, string> { ["guardian"] = UrfCase.GuardianName(answer.Value) });
+                    return true;
+                case UrfAskAnswer.GuardianCannot:
+                    plan.Say(TextKeys.UrfGuardianCannot, Fill: new Dictionary<string, string> { ["who"] = HisWord(answer.Value) });
+                    break;
+                case UrfAskAnswer.GuardianNone:
+                    plan.Say(TextKeys.UrfGuardianClosed); // the policy, said whole; nothing closes, it is a question
+                    return true;
+                case UrfAskAnswer.AgeCannot:
+                    plan.Say(TextKeys.UrfAgeCannot);
+                    break;
+                default:
+                    plan.Say(TextKeys.UrfOptionCan, Fill: new Dictionary<string, string> { ["option"] = answer.Value! });
+                    break;
+            }
+
+            if (waiting is not null)
+            {
+                AskUrf(waiting); // the question waiting, plainly (never «علشان نكمّل…»: he was just answered)
+            }
+
             return true;
+        }
+
+        /// <summary>v1.84: {{who}} is his own word for the relative, only when it is in his message (never the AI's), else «القريب ده».</summary>
+        private string HisWord(string? word)
+        {
+            var text = AiInput.Build(turn) ?? "";
+            return word is { Length: > 1 and <= 20 } w && !w.Any(char.IsDigit) && text.Contains(w.Trim(), StringComparison.Ordinal)
+                ? w.Trim()
+                : "القريب ده";
         }
 
         /// <summary>v1.60: the case with what the client said in this message (witnesses, her past, her guardian) kept in it.</summary>
         private UrfCase WithUrfFacts(UrfCase u)
         {
-            if (!understanding || answering?.Call?.Answer is not { } said)
+            var said = Said;
+            if (!said.Any)
             {
                 return u;
             }
 
-            var changed = UrfRules.ApplyFacts(u, said.UrfWifePast, said.UrfGuardian, said.UrfWitnesses, said.UrfHusbandAge, said.UrfWifeAge);
+            var changed = UrfRules.ApplyFacts(u, said);
             UrfChanged |= changed != u;
             return changed;
         }
@@ -1337,8 +1418,7 @@ public sealed class HazemResponder(
         private bool UrfFactsSaid(Classification turnClass, UrfCase running)
         {
             // v1.62: a change to a case with its time held or confirmed is the office's: it is told (the price paid, the documents)
-            if (understanding && answering?.Call?.Answer is { } said
-                && UrfRules.ChangesBooked(running, said.UrfWifePast, said.UrfGuardian, said.UrfWitnesses, said.UrfHusbandAge, said.UrfWifeAge))
+            if (Said is { Any: true } said && UrfRules.ChangesBooked(running, said))
             {
                 plan.Say(TextKeys.ServiceCheck); // said back in his words by the writer: what he wants changed, and the office answers
                 plan.Task(PendingTask.UrfHelp);
@@ -1430,7 +1510,7 @@ public sealed class HazemResponder(
                 return said;
             }
 
-            return understanding && answering?.Call?.Answer is { UrfHusbandAge: { } h, UrfWifeAge: { } w }
+            return Said is { HusbandAge: { } h, WifeAge: { } w }
                 ? $"الزوج {h} والزوجة {w}"
                 : null;
         }
@@ -2023,8 +2103,8 @@ public sealed class HazemResponder(
                 return;
             }
 
-            // v1.82: «ينفع ابوها؟» is answered and asked back before the case takes him
-            if (AskGuardianBack())
+            // v1.84 (TASK 20): a question about one Urfi answer («ينفع ابوها؟») is answered by the case's rules, never the office
+            if (AnswerAsked())
             {
                 return;
             }
@@ -3591,8 +3671,11 @@ public sealed class HazemResponder(
 
         public bool UrgentNightOn { get; set; }
 
-        /// <summary>v1.82: «أيوه، الأب ينفع يبقى الولي…» and its two buttons are approved.</summary>
-        public bool GuardianCanOn { get; set; }
+        /// <summary>v1.84: the answers to a question about the Urfi case («أيوه… ينفع»، «للأسف…») and their two buttons are approved.</summary>
+        public bool CaseAnswersOn { get; set; }
+
+        /// <summary>v1.84: hazem.urf_case_said with understanding v2: the Urfi case as one list (off: exactly as v1.81).</summary>
+        public bool CaseSaidOn { get; set; }
 
         public void Say(string key, string? fallback = null, IReadOnlyDictionary<string, string>? Fill = null) =>
             Steps.Add(new ReplyStep(key, fallback, Fill));
