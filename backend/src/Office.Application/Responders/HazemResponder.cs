@@ -1596,6 +1596,16 @@ public sealed class HazemResponder(
         private void AfterUrf(UrfNext next)
         {
             var c = Urf!;
+
+            // v1.89 (the v1.88 replay: «بكام؟» then «منا قولتلك اول جوازه» reached the office): after an answer to what he asked
+            // in this same reply, the question waiting comes back as it is, never counted as sent again (the reply is not the
+            // same); «علشان نكمّل…» and the office stay for the messages that leave it unanswered. Switch off: as v1.81.
+            if (next == UrfNext.Ask && plan.CaseSaidOn && plan.Steps.Count > 0)
+            {
+                AskUrf(c.Step);
+                return;
+            }
+
             switch (next)
             {
                 // v1.46 (the forbidden rule 2 for the Urfi questions): the question he got last time is never sent the same
