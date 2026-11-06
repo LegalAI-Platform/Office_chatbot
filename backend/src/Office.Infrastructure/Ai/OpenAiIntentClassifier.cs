@@ -26,7 +26,7 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
     public const string PromptVersionV2 = "classify-v27";
 
     /// <summary>TASK 20 (v1.84): the prompt while hazem.urf_case_said is on too (the Urfi case as one list).</summary>
-    public const string PromptVersionCaseSaid = "classify-v31";
+    public const string PromptVersionCaseSaid = "classify-v32";
     public const string StubEnabledKey = "ai.stub_enabled";
     public const string StubBaseUrlKey = "ai.stub_base_url";
 
@@ -223,12 +223,14 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
             .Select(i => (Field: StringOrNull(i["field"]), Kind: StringOrNull(i["kind"]), Item: i))
             .Where(i => i.Field is not null && i.Kind is not null && CaseFields.Contains(i.Field) && CaseKinds.Contains(i.Kind))
             .Select(i => new Office.Application.Urf.UrfSaid(i.Field!, i.Kind!, StringOrNull(i.Item["value"]),
-                IntOrNull(i.Item["husband_age"]), IntOrNull(i.Item["wife_age"]), StringOrNull(i.Item["word"])))
+                IntOrNull(i.Item["husband_age"]), IntOrNull(i.Item["wife_age"]), StringOrNull(i.Item["word"]),
+                // v1.87: his own words for it; missing is «no words» (never «not checked»), so the item is dropped by the check
+                StringOrNull(i.Item["quote"]) ?? ""))
             .ToList()
         : null;
 
     private static string[] CaseFields => ["wife_past", "guardian", "witnesses", "ages", "has_copy", "agreed", "children"];
-    private static string[] CaseKinds => ["said", "asked", "withdrawn"];
+    private static string[] CaseKinds => ["said", "asked", "withdrawn", "not_coming"]; // v1.87: not_coming (a guardian who will not come)
 
     private static int? IntOrNull(JsonNode? n) =>
         n is JsonValue v && v.GetValueKind() == JsonValueKind.Number && v.TryGetValue<int>(out var i) ? i : null;
@@ -315,7 +317,7 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
                     {
                         ["type"] = "object",
                         ["additionalProperties"] = false,
-                        ["required"] = new JsonArray("field", "kind", "value", "husband_age", "wife_age", "word"),
+                        ["required"] = new JsonArray("field", "kind", "value", "husband_age", "wife_age", "word", "quote"),
                         ["properties"] = new JsonObject
                         {
                             ["field"] = new JsonObject { ["type"] = "string", ["enum"] = new JsonArray(CaseFields.Select(f => (JsonNode?)f).ToArray()) },
@@ -329,6 +331,8 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
                             ["husband_age"] = new JsonObject { ["type"] = new JsonArray("integer", "null") },
                             ["wife_age"] = new JsonObject { ["type"] = new JsonArray("integer", "null") },
                             ["word"] = new JsonObject { ["type"] = new JsonArray("string", "null") },
+                            // v1.87: the client's own words that say it (checked against his messages)
+                            ["quote"] = new JsonObject { ["type"] = "string" },
                         },
                     },
                 },

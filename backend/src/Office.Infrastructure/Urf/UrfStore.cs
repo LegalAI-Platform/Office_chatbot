@@ -20,14 +20,14 @@ public sealed class UrfStore(HazemDbContext db) : IUrfStore
     internal static Task Write(HazemDbContext db, UrfCase c, Guid? intakeId, CancellationToken ct) =>
         db.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO hazem.urf_cases (id, person_id, intake_id, kind, state, step, husband_age, wife_age, wife_past, guardian, witnesses,
-                                         has_copy, agreed, children, age_tries, appointment_id, policy_version)
+                                         has_copy, agreed, children, age_tries, appointment_id, policy_version, guardian_out)
             VALUES ({c.Id}, {c.PersonId}, {intakeId}, {c.Kind}, {c.State}, {c.Step}, {c.HusbandAge}, {c.WifeAge}, {c.WifePast}, {c.Guardian},
-                    {c.Witnesses}, {c.HasCopy}, {c.Agreed}, {c.Children}, {c.AgeTries}, {c.AppointmentId}, {c.PolicyVersion})
+                    {c.Witnesses}, {c.HasCopy}, {c.Agreed}, {c.Children}, {c.AgeTries}, {c.AppointmentId}, {c.PolicyVersion}, {c.GuardianOut})
             ON CONFLICT (id) DO UPDATE SET
               state = EXCLUDED.state, step = EXCLUDED.step, husband_age = EXCLUDED.husband_age, wife_age = EXCLUDED.wife_age,
               wife_past = EXCLUDED.wife_past, guardian = EXCLUDED.guardian, witnesses = EXCLUDED.witnesses, has_copy = EXCLUDED.has_copy,
               agreed = EXCLUDED.agreed, children = EXCLUDED.children, age_tries = EXCLUDED.age_tries,
-              appointment_id = EXCLUDED.appointment_id, policy_version = EXCLUDED.policy_version
+              appointment_id = EXCLUDED.appointment_id, policy_version = EXCLUDED.policy_version, guardian_out = EXCLUDED.guardian_out
              -- a decision of the panel (approved, refused) or of the worker in between is never written over
              WHERE hazem.urf_cases.state IN ('collecting', 'documents_pending', 'booked')
             """, ct);
@@ -47,7 +47,7 @@ public sealed class UrfStore(HazemDbContext db) : IUrfStore
                      'state', c.state,
                      'id', c.id, 'kind', c.kind, 'husband_age', c.husband_age, 'wife_age', c.wife_age, 'wife_past', c.wife_past,
                      'guardian', c.guardian, 'witnesses', c.witnesses, 'has_copy', c.has_copy, 'agreed', c.agreed,
-                     'children', c.children, 'policy_version', c.policy_version,
+                     'children', c.children, 'policy_version', c.policy_version, 'guardian_out', c.guardian_out,
                      'replies', (SELECT count(*) FROM after WHERE text_key IN ('urf_age_closed', 'urf_guardian_closed')),
                      'moved_on', EXISTS (SELECT 1 FROM after WHERE text_key NOT IN
                                          ('urf_age_closed', 'urf_under_age', 'urf_guardian_closed', 'urf_no_guardian')))::text AS "Value"
@@ -72,7 +72,7 @@ public sealed class UrfStore(HazemDbContext db) : IUrfStore
         var refused = new UrfCase(r.GetProperty("id").GetGuid(), personId, r.GetProperty("kind").GetString()!, state, null,
             Int(r.GetProperty("husband_age")), Int(r.GetProperty("wife_age")), Text(r.GetProperty("wife_past")), Text(r.GetProperty("guardian")),
             Text(r.GetProperty("witnesses")), Flag(r.GetProperty("has_copy")), Flag(r.GetProperty("agreed")), Flag(r.GetProperty("children")),
-            PolicyVersion: Text(r.GetProperty("policy_version")));
+            PolicyVersion: Text(r.GetProperty("policy_version")), GuardianOut: Text(r.GetProperty("guardian_out")));
         return new AgeRefusal(r.GetProperty("at").GetDateTimeOffset(), r.GetProperty("replies").GetInt32(), r.GetProperty("moved_on").GetBoolean(),
             state, refused);
     }
@@ -93,5 +93,5 @@ public sealed class UrfStore(HazemDbContext db) : IUrfStore
     }
 
     internal static UrfCase ToCase(UrfCaseRow r) => new(r.Id, r.PersonId, r.Kind, r.State, r.Step, r.HusbandAge, r.WifeAge, r.WifePast,
-        r.Guardian, r.Witnesses, r.HasCopy, r.Agreed, r.Children, r.AgeTries, r.AppointmentId, r.PolicyVersion);
+        r.Guardian, r.Witnesses, r.HasCopy, r.Agreed, r.Children, r.AgeTries, r.AppointmentId, r.PolicyVersion, r.GuardianOut);
 }
