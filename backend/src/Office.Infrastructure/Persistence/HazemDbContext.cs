@@ -673,6 +673,7 @@ public sealed class UrfCaseRow
     public int AgeTries { get; set; }
     public Guid? AppointmentId { get; set; }
     public string? PolicyVersion { get; set; }
+    public string? GuardianOut { get; set; } // v1.87 (0069): the guardians he said will not come
     public Guid? DecidedBy { get; set; }
     public DateTimeOffset? DecidedAt { get; set; }
     public string? ClientNotice { get; set; }

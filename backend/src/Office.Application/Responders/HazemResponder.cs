@@ -236,6 +236,7 @@ public sealed class HazemResponder(
         plan.UrgentButtonOn = Active(TextKeys.BtnBookUrgent);
         plan.CaseAnswersOn = new[] { TextKeys.UrfGuardianCan, TextKeys.UrfOptionCan, TextKeys.UrfGuardianCannot, TextKeys.UrfAgeCannot, TextKeys.UrfGuardianClosed, TextKeys.BtnYes, TextKeys.BtnNo }.All(Active); // v1.84
         plan.GuardianNeededOn = Active(TextKeys.UrfGuardianNeeded); // v1.86
+        plan.GuardianOtherOn = Active(TextKeys.UrfAskGuardianOther); // v1.87
         // v1.84 (TASK 20): the switch; off is the Urfi case exactly as v1.81
         plan.CaseSaidOn = settings.Flag(UnderstandingV2.SwitchKey) && settings.Flag(UrfCaseSaid.SwitchKey);
         // TASK 12 (B-18): the reminders run whenever their texts are approved, the booking from WhatsApp on or off.
@@ -293,6 +294,7 @@ public sealed class HazemResponder(
             // a choice they pick (or a day or a time asked on a list of times) is answered as its press, by the code, like
             // every press below. Anything else goes on with that reading (no second call).
             Classification? typedReading = null;
+            IReadOnlyList<string>? clientWords = null; // v1.87: his own messages the AI read (the quote check)
             if (!firstContact && chat is not null && situation.Facts.Waiting is { Count: > 0 } waiting
                 && turn.Messages.All(m => m.Interactive is null && m.Button is null) && FileIn(turn) is null
                 && AiInput.Build(turn) is { } typedWords && !Courtesy.Read(typedWords).EndsTheChat)
@@ -304,7 +306,7 @@ public sealed class HazemResponder(
                 var typedPress = TypedChoice.ByWords(waiting, typedWords, guess: !understanding, more: !plan.CaseSaidOn);
                 if (typedPress is null)
                 {
-                    var understood = await WithContextAsync(turn, typedWords, situation, settings, ct);
+                    (var understood, clientWords) = await WithContextAsync(turn, typedWords, situation, settings, ct);
                     typedReading = Backstop.Apply(Classification.From(await classifier.ClassifyAsync(understood, settings, ct), settings), typedWords);
                     var raw = typedReading.Call?.Answer;
                     typedPress = TypedChoice.Picked(waiting, raw);
@@ -345,6 +347,7 @@ public sealed class HazemResponder(
                         servicesOn, urfOn, urfOpen, ageRefusal: ageRefusal, urgentOn: urgentOn, situation: situation, understanding: understanding)
                     {
                         WordsRead = classification, // v1.85: the same reading, kept with the press (nothing when the code read them)
+                        ClientWords = clientWords,
                     };
                 }
             }
@@ -497,7 +500,8 @@ public sealed class HazemResponder(
                     {
                         // 0032: the AI down → an insult or a plain thanks is still read by code (Backstop)
                         // v1.41 (TASK 17, part B): the AI reads the message with what a person would know before it
-                        var understood = chat is null || firstContact ? aiText : await WithContextAsync(turn, aiText, situation, settings, ct);
+                        var (understood, his) = chat is null || firstContact ? (aiText, [aiText]) : await WithContextAsync(turn, aiText, situation, settings, ct);
+                        clientWords = his;
                         classification = Backstop.Apply(
                             Classification.From(await classifier.ClassifyAsync(understood, settings, ct), settings), aiText);
                     }
@@ -507,7 +511,10 @@ public sealed class HazemResponder(
                         ? await OfficeDetailsAsync(settings, classification?.Topic == InfoTopic.Hours || also.Contains(InfoTopic.Hours), now, ct)
                         : null;
                     flow = new Flow(turn, state, list, classification, plan, settings.Flag(HandoffEnabledKey), bookingOn ? bookingSettings : null,
-                        servicesOn, urfOn, urfOpen, office, ageRefusal, returning, urgentOn, situation, understanding);
+                        servicesOn, urfOn, urfOpen, office, ageRefusal, returning, urgentOn, situation, understanding)
+                    {
+                        ClientWords = clientWords,
+                    };
                     freeText = aiText is not null;
                     // v1.32: the list did not know the greeting («صباحين الخير»): the kind the AI read, answered the same way
                     if (greet is null && classification is { IsFallback: false, Courtesy: not CourtesyKind.None } read
@@ -626,7 +633,9 @@ public sealed class HazemResponder(
     /// v1.41 (TASK 17, part B): the message as the classifier reads it: Hazem's last message, the client's message before
     /// this one, and what he has open, before it (AiContext). Nothing before it on a first contact.
     /// </summary>
-    private async Task<string> WithContextAsync(Turn turn, string message, ClientSituation situation, HazemSettings settings, CancellationToken ct)
+    /// <returns>The AI's input, and (v1.87) the client's own words in it: this message and his messages before it.</returns>
+    private async Task<(string Text, IReadOnlyList<string> His)> WithContextAsync(Turn turn, string message, ClientSituation situation,
+        HazemSettings settings, CancellationToken ct)
     {
         var understanding = settings.Flag(UnderstandingV2.SwitchKey);
         var lines = await chat!.RecentAsync(turn.WaId, understanding ? UnderstandingV2.HistoryTurns : 2, ct);
@@ -647,8 +656,8 @@ public sealed class HazemResponder(
         var earlier = understanding && lines.Count > 2
             ? lines.Take(lines.Count - 2).Select(l => (l.FromClient ? "العميل: " : "حازم: ") + l.Text).ToList()
             : null;
-        return AiContext.Build(message, lines.LastOrDefault(l => !l.FromClient)?.Text, lines.LastOrDefault(l => l.FromClient)?.Text, open,
-            waiting, today, earlier);
+        return (AiContext.Build(message, lines.LastOrDefault(l => !l.FromClient)?.Text, lines.LastOrDefault(l => l.FromClient)?.Text, open,
+            waiting, today, earlier), [message, .. lines.Where(l => l.FromClient).Select(l => l.Text)]);
     }
 
     /// <summary>v1.53 (phase 3): «دليل التعامل», its approved parts in order (never sent).</summary>
@@ -894,6 +903,12 @@ public sealed class HazemResponder(
         /// kept with it. Null when the press was a real button, or the code read the words alone.
         /// </summary>
         public Classification? WordsRead { get; set; }
+
+        /// <summary>
+        /// v1.87 (the owner: the AI may change an answer he did not speak of): the client's own messages, this one and the ones before
+        /// it that the AI read, so a change it reads is kept only when its words are his (<see cref="UrfFacts.Quoted"/>).
+        /// </summary>
+        public IReadOnlyList<string>? ClientWords { get; set; }
 
         public bool HasBookingWork => work is not null;
 
@@ -1317,7 +1332,7 @@ public sealed class HazemResponder(
 
         /// <summary>TASK 20 (v1.84): what the AI read of the Urfi case this turn, the latest per field (nothing with understanding off).</summary>
         private UrfFacts Said => !understanding || (answering ?? (plan.CaseSaidOn ? WordsRead : null))?.Call?.Answer is not { } a ? UrfFacts.None
-            : plan.CaseSaidOn ? UrfFacts.Of(a.CaseSaid)
+            : plan.CaseSaidOn ? UrfFacts.Of(UrfFacts.Quoted(a.CaseSaid, ClientWords))
             : UrfFacts.Fields(a.UrfWifePast, a.UrfGuardian, a.UrfWitnesses, a.UrfHusbandAge, a.UrfWifeAge); // off: v1.81's fields
 
         /// <summary>
@@ -1331,7 +1346,7 @@ public sealed class HazemResponder(
         private bool AnswerAsked()
         {
             var said = Said;
-            if (!urfOn || !MayBook || !plan.CaseSaidOn || !plan.CaseAnswersOn || said.Asked is not { } asked)
+            if (!urfOn || !MayBook || !plan.CaseSaidOn || !plan.CaseAnswersOn || said.Questions.Count == 0)
             {
                 return false;
             }
@@ -1378,42 +1393,52 @@ public sealed class HazemResponder(
                 }
             }
 
-            if (UrfRules.Try(c, asked) is not { } answer)
+            // v1.87: every question he asked is answered, in his order; the guardian's «هو هيحضر معاكم وموافق؟» last, with its buttons
+            var answers = said.Questions.Select(q => UrfRules.Try(c, q)).OfType<UrfAskAnswer>().ToList();
+            if (answers.Count == 0)
             {
                 return false;
             }
 
             var waiting = c.State == UrfCase.Collecting && c == Urf ? c.Step : null;
-            switch (answer.What)
+            var closed = false;
+            foreach (var answer in answers.Where(x => x.What != UrfAskAnswer.GuardianCan))
             {
-                case UrfAskAnswer.GuardianCan:
-                    plan.Ask(TextKeys.UrfGuardianCan, new ReplyChoices(InteractivePayload.Buttons,
-                    [
-                        new ReplyChoice(UrfAnswer.Id(UrfStep.Guardian, answer.Value!), TextKeys.BtnYes),
-                        new ReplyChoice(UrfAnswer.Id(UrfStep.Guardian, UrfAnswer.GuardianNo), TextKeys.BtnNo),
-                    ]), Fill: new Dictionary<string, string> { ["guardian"] = UrfCase.GuardianName(answer.Value) });
-                    return true;
-                case UrfAskAnswer.GuardianCannot:
-                    plan.Say(TextKeys.UrfGuardianCannot, Fill: new Dictionary<string, string> { ["who"] = HisWord(answer.Value) });
-                    break;
-                // v1.86 (Ahmed Amin's chat: «هو لازم حد يجي معاها من اهلها؟» got the closing «نعتذر لحضرتك… لو محتاج أي خدمة تانية»
-                // while his case was open): with the case still open the rule is said as an answer, and the question waiting
-                // comes again; only a refused or a held case keeps the policy said whole
-                case UrfAskAnswer.GuardianNone when waiting is not null && plan.GuardianNeededOn:
-                    plan.Say(TextKeys.UrfGuardianNeeded);
-                    break;
-                case UrfAskAnswer.GuardianNone:
-                    plan.Say(TextKeys.UrfGuardianClosed); // the policy, said whole; nothing closes, it is a question
-                    return true;
-                case UrfAskAnswer.AgeCannot:
-                    plan.Say(TextKeys.UrfAgeCannot);
-                    break;
-                default:
-                    plan.Say(TextKeys.UrfOptionCan, Fill: new Dictionary<string, string> { ["option"] = answer.Value! });
-                    break;
+                switch (answer.What)
+                {
+                    case UrfAskAnswer.GuardianCannot:
+                        plan.Say(TextKeys.UrfGuardianCannot, Fill: new Dictionary<string, string> { ["who"] = HisWord(answer.Value) });
+                        break;
+                    // v1.86 (Ahmed Amin's chat: «هو لازم حد يجي معاها من اهلها؟» got the closing «نعتذر لحضرتك… لو محتاج أي خدمة تانية»
+                    // while his case was open): with the case still open the rule is said as an answer, and the question waiting
+                    // comes again; only a refused or a held case keeps the policy said whole
+                    case UrfAskAnswer.GuardianNone when waiting is not null && plan.GuardianNeededOn:
+                        plan.Say(TextKeys.UrfGuardianNeeded);
+                        break;
+                    case UrfAskAnswer.GuardianNone:
+                        plan.Say(TextKeys.UrfGuardianClosed); // the policy, said whole; nothing closes, it is a question
+                        closed = true;
+                        break;
+                    case UrfAskAnswer.AgeCannot:
+                        plan.Say(TextKeys.UrfAgeCannot);
+                        break;
+                    default:
+                        plan.Say(TextKeys.UrfOptionCan, Fill: new Dictionary<string, string> { ["option"] = answer.Value! });
+                        break;
+                }
             }
 
-            if (waiting is not null)
+            if (answers.FirstOrDefault(x => x.What == UrfAskAnswer.GuardianCan) is { } can)
+            {
+                plan.Ask(TextKeys.UrfGuardianCan, new ReplyChoices(InteractivePayload.Buttons,
+                [
+                    new ReplyChoice(UrfAnswer.Id(UrfStep.Guardian, can.Value!), TextKeys.BtnYes),
+                    new ReplyChoice(UrfAnswer.Id(UrfStep.Guardian, UrfAnswer.GuardianNo), TextKeys.BtnNo),
+                ]), Fill: new Dictionary<string, string> { ["guardian"] = UrfCase.GuardianName(can.Value) });
+                return true;
+            }
+
+            if (waiting is not null && !closed)
             {
                 AskUrf(waiting); // the question waiting, plainly (never «علشان نكمّل…»: he was just answered)
             }
@@ -1648,6 +1673,15 @@ public sealed class HazemResponder(
                 case UrfStep.WifePast:
                     plan.Ask(TextKeys.UrfAskWifePast, new ReplyChoices(InteractivePayload.Buttons,
                         [Btn("first", TextKeys.BtnUrfFirst), Btn("divorced", TextKeys.BtnUrfDivorced), Btn("widow", TextKeys.BtnUrfWidow)]));
+                    break;
+                // v1.87 (Ahmed Amin's chat: «اخو العروسه مش هيجي» got the question with «الأخ» in it again): asked without the
+                // guardians he said will not come, in the owner's words for the second time
+                case UrfStep.Guardian when Urf is { } u && u.Out.Count > 0 && plan.GuardianOtherOn:
+                    var left = new[] { "father", "brother", "uncle" }.Where(g => !u.Out.Contains(g)).ToList();
+                    plan.Ask(TextKeys.UrfAskGuardianOther, new ReplyChoices(InteractivePayload.List,
+                        [.. left.Select(g => Btn(g, g switch { "father" => TextKeys.BtnUrfFather, "brother" => TextKeys.BtnUrfBrother, _ => TextKeys.BtnUrfUncle })),
+                            Btn("none", TextKeys.BtnUrfNoGuardian)], TextKeys.BtnUrfGuardianList),
+                        Fill: new Dictionary<string, string> { ["options"] = string.Join("، ولا ", left.Select(UrfCase.GuardianName)) });
                     break;
                 case UrfStep.Guardian:
                     plan.Ask(TextKeys.UrfAskGuardian, new ReplyChoices(InteractivePayload.List,
@@ -3710,6 +3744,9 @@ public sealed class HazemResponder(
 
         /// <summary>v1.86: «أيوه، لو دي أول جوازة للزوجة لازم يكون معاها حد من أهلها موافق…» is approved and active.</summary>
         public bool GuardianNeededOn { get; set; }
+
+        /// <summary>v1.87: «طيب، مين تاني من أهل الزوجة موجود وموافق: {{options}}؟» is approved and active.</summary>
+        public bool GuardianOtherOn { get; set; }
 
         /// <summary>v1.84: hazem.urf_case_said with understanding v2: the Urfi case as one list (off: exactly as v1.81).</summary>
         public bool CaseSaidOn { get; set; }

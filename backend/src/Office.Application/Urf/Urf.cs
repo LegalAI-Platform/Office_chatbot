@@ -15,7 +15,7 @@ public sealed record UrfCase(
     Guid Id, Guid PersonId, string Kind, string State, string? Step,
     int? HusbandAge = null, int? WifeAge = null, string? WifePast = null, string? Guardian = null, string? Witnesses = null,
     bool? HasCopy = null, bool? Agreed = null, bool? Children = null, int AgeTries = 0, Guid? AppointmentId = null,
-    string? PolicyVersion = null)
+    string? PolicyVersion = null, string? GuardianOut = null)
 {
     public const string Marriage = "marriage";
     public const string Divorce = "divorce";
@@ -42,6 +42,20 @@ public sealed record UrfCase(
 
     /// <summary>v1.68 (the owner): the guardian is asked, and comes, only when it is her first marriage.</summary>
     public bool NeedsGuardian => IsMarriage && WifePast == "first";
+
+    /// <summary>
+    /// v1.87 (Ahmed Amin's chat: «اخو العروسه مش هيجي» brought the guardian question back with «الأخ» in it): the guardians he said
+    /// will not come or do not agree, kept with the case, so the guardian question is asked without them. Named again as the
+    /// guardian («لا خلاص اخوها جاي»), one leaves this list.
+    /// </summary>
+    public IReadOnlyList<string> Out => GuardianOut is { Length: > 0 } g ? g.Split(',') : [];
+
+    /// <summary>v1.87: the list as it is kept (comma-separated, no repeats; null for none).</summary>
+    public static string? OutOf(IEnumerable<string> guardians)
+    {
+        var kept = guardians.Where(g => g is "father" or "brother" or "uncle").Distinct().ToList();
+        return kept.Count == 0 ? null : string.Join(',', kept);
+    }
 
     /// <summary>B-11.5: what to send, from the answers. v1.68: one paper for a divorce or a khul, the death certificate for a widow.</summary>
     public string Documents()
@@ -199,7 +213,7 @@ public static class UrfRules
             (UrfStep.WifePast, "first" or "divorced" or "khul" or "widow") => Advance(c with { WifePast = a.Value }),
             (UrfStep.Guardian, "none") => (c with { Guardian = "none", State = UrfCase.RejectedGuardian, Step = null, PolicyVersion = PolicyVersion },
                 UrfNext.RejectGuardian),
-            (UrfStep.Guardian, "father" or "brother" or "uncle") => Advance(c with { Guardian = a.Value }),
+            (UrfStep.Guardian, "father" or "brother" or "uncle") => Advance(c with { Guardian = a.Value, GuardianOut = UrfCase.OutOf(c.Out.Except([a.Value])) }),
             (UrfStep.Witnesses, "office" or "own") => (c with { Witnesses = a.Value, State = UrfCase.DocumentsPending, Step = null }, UrfNext.Book),
             (UrfStep.HasCopy, "yes") => Advance(c with { HasCopy = true }),
             (UrfStep.HasCopy, "no") => (Redirect(c with { HasCopy = false }), UrfNext.Redirect),
@@ -230,7 +244,8 @@ public static class UrfRules
 
     /// <summary>TASK 20 (v1.84): the same check for what the AI read this turn.</summary>
     public static bool ChangesBooked(UrfCase c, UrfFacts f) =>
-        ChangesBooked(c, f.WifePast, f.Guardian, f.Witnesses, f.HusbandAge, f.WifeAge, f.Withdrawn);
+        ChangesBooked(c, f.WifePast, f.Guardian, f.Witnesses, f.HusbandAge, f.WifeAge,
+            c.Guardian is { } g && f.NotComing.Contains(g) ? [.. f.Withdrawn, UrfStep.Guardian] : f.Withdrawn); // v1.87: the guardian will not come
 
     /// <summary>v1.74: what the step means for the reply: the next question, the price and times, or the refusal.</summary>
     public static UrfNext NextOf(UrfCase c) => c.State switch
@@ -354,20 +369,26 @@ public static class UrfRules
     /// unknown again, so its question comes back; only «none» refuses. <paramref name="withdrawn"/> holds those fields.
     /// </summary>
     public static UrfCase ApplyFacts(UrfCase c, string? wifePast, string? guardian, string? witnesses, int? husbandAge = null, int? wifeAge = null,
-        IReadOnlyCollection<string>? withdrawn = null)
+        IReadOnlyCollection<string>? withdrawn = null, IReadOnlyCollection<string>? notComing = null)
     {
         static string? Only(string? v, params string[] allowed) => v is not null && allowed.Contains(v) ? v : null;
         var past = c.IsMarriage ? Only(wifePast, "first", "divorced", "khul", "widow") : null;
         var guard = c.IsMarriage ? Only(guardian, "father", "brother", "uncle", "none") : null;
         var wit = Only(witnesses, "office", "own");
         var ages = c.IsMarriage ? Ages(husbandAge, wifeAge) : null;
-        bool Took(string field) => withdrawn?.Contains(field) == true;
+        // v1.87: who will not come is kept (one named as the guardian leaves the list); the guardian he had is then taken back,
+        // and when none of the three is left it is «nobody of her family» (B-11), as if he said it
+        var outNow = c.IsMarriage ? c.Out.Concat(notComing ?? []).Where(g => g != guard).Distinct().ToList() : [];
+        bool Took(string field) => withdrawn?.Contains(field) == true
+                                   || field == UrfStep.Guardian && c.Guardian is { } had && notComing?.Contains(had) == true;
         if (c.State == UrfCase.Collecting || c.State == UrfCase.DocumentsPending && c.AppointmentId is null)
         {
+            var kept = guard ?? (Took(UrfStep.Guardian) ? null : c.Guardian);
             var now = c with
             {
                 WifePast = past ?? (Took(UrfStep.WifePast) ? null : c.WifePast),
-                Guardian = guard ?? (Took(UrfStep.Guardian) ? null : c.Guardian),
+                Guardian = kept is null && outNow.Count >= 3 ? "none" : kept,
+                GuardianOut = UrfCase.OutOf(outNow),
                 Witnesses = wit ?? (Took(UrfStep.Witnesses) ? null : c.Witnesses),
                 HusbandAge = ages?.Item1 ?? (Took(UrfStep.Ages) ? null : c.HusbandAge),
                 WifeAge = ages?.Item2 ?? (Took(UrfStep.Ages) ? null : c.WifeAge),
@@ -385,6 +406,7 @@ public static class UrfRules
             {
                 Id = Guid.NewGuid(), State = UrfCase.Collecting, Step = null, PolicyVersion = null,
                 WifePast = past ?? c.WifePast, Guardian = guard is "none" ? null : guard, Witnesses = c.Witnesses ?? wit,
+                GuardianOut = UrfCase.OutOf(outNow),
             };
             return NextStep(again) is { } next
                 ? again with { Step = next }
@@ -396,7 +418,7 @@ public static class UrfRules
 
     /// <summary>TASK 20 (v1.84): <see cref="ApplyFacts(UrfCase, string?, string?, string?, int?, int?, IReadOnlyCollection{string}?)"/> for what the AI read.</summary>
     public static UrfCase ApplyFacts(UrfCase c, UrfFacts f) =>
-        ApplyFacts(c, f.WifePast, f.Guardian, f.Witnesses, f.HusbandAge, f.WifeAge, f.Withdrawn);
+        ApplyFacts(c, f.WifePast, f.Guardian, f.Witnesses, f.HusbandAge, f.WifeAge, f.Withdrawn, f.NotComing);
 
     /// <summary>
     /// TASK 20 (v1.84, the owner: «عايز حلول عامه»): a question about one answer («ينفع ابوها؟»، «ينفع أجيب الشهود؟»، «لو مطلقة ينفع؟»،
@@ -607,6 +629,9 @@ public static class UrfKind
 
     /// <summary>He takes an answer back, saying nothing in its place («اخوها مش هيجي»).</summary>
     public const string Withdrawn = "withdrawn";
+
+    /// <summary>v1.87: a guardian he says will not come or does not agree («اخو العروسه مش هيجي»), kept so he is not offered again.</summary>
+    public const string NotComing = "not_coming";
 }
 
 /// <summary>
@@ -614,19 +639,48 @@ public static class UrfKind
 /// <see cref="UrfStep"/>; <see cref="Value"/> one of that field's values («other»: a relative outside the allowed ones); the ages
 /// come as two numbers; <see cref="Word"/> is his own word for an «other» relative («خالها»), used only when it is in his message.
 /// </summary>
-public sealed record UrfSaid(string Field, string Kind, string? Value = null, int? HusbandAge = null, int? WifeAge = null, string? Word = null);
+/// v1.87: <see cref="Quote"/> is his own words that say it, copied by the AI; the item is kept only when they are in his messages
+/// (<see cref="UrfFacts.Quoted"/>), so the AI never changes an answer he did not speak of. Null only from callers without it.
+public sealed record UrfSaid(string Field, string Kind, string? Value = null, int? HusbandAge = null, int? WifeAge = null, string? Word = null,
+    string? Quote = null);
 
 /// <summary>
 /// TASK 20 (v1.84): what the turn's items say, the LATEST per field (2.1 of TASK 20): its stated answers, the fields he took
 /// back, and the question he asked when that is the latest he said of its field.
 /// </summary>
 public sealed record UrfFacts(
-    string? WifePast, string? Guardian, string? Witnesses, int? HusbandAge, int? WifeAge, IReadOnlyCollection<string> Withdrawn, UrfSaid? Asked)
+    string? WifePast, string? Guardian, string? Witnesses, int? HusbandAge, int? WifeAge, IReadOnlyCollection<string> Withdrawn, UrfSaid? Asked,
+    IReadOnlyCollection<string>? Out = null, IReadOnlyList<UrfSaid>? AskedAll = null)
 {
     public static readonly UrfFacts None = new(null, null, null, null, null, [], null);
 
+    /// <summary>v1.87: the guardians he said will not come.</summary>
+    public IReadOnlyCollection<string> NotComing => Out ?? [];
+
+    /// <summary>v1.87: every question he asked about his case, in his order (none is dropped by what he says around it).</summary>
+    public IReadOnlyList<UrfSaid> Questions => AskedAll ?? (Asked is { } a ? [a] : []);
+
     public bool Any => WifePast is not null || Guardian is not null || Witnesses is not null || HusbandAge is not null || WifeAge is not null
-                       || Withdrawn.Count > 0;
+                       || Withdrawn.Count > 0 || NotComing.Count > 0;
+
+    /// <summary>
+    /// v1.87 (the owner: the AI may change an answer he did not speak of): only the items whose words are in his own messages (this one
+    /// and the ones before it in the chat, for «منا قولتلك»), compared without spelling marks. An item with no words (callers that do
+    /// not carry them) is kept as before.
+    /// </summary>
+    public static IReadOnlyList<UrfSaid>? Quoted(IReadOnlyList<UrfSaid>? items, IReadOnlyList<string>? his)
+    {
+        if (items is null || his is null)
+        {
+            return items;
+        }
+
+        var texts = his.Select(Squeeze).ToList();
+        return items.Where(i => i.Quote is null || Squeeze(i.Quote) is { Length: > 1 } q && texts.Any(t => t.Contains(q, StringComparison.Ordinal))).ToList();
+    }
+
+    private static string Squeeze(string text) => string.Join(' ', Office.Application.Understanding.Courtesy.Normalize(
+        NumberWords.ToDigits(text)).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 
     /// <summary>v1.84: hazem.urf_case_said off: v1.81's fields one by one (only stated answers; nothing asked or taken back).</summary>
     public static UrfFacts Fields(string? wifePast, string? guardian, string? witnesses, int? husbandAge, int? wifeAge) =>
@@ -639,17 +693,24 @@ public sealed record UrfFacts(
             return None;
         }
 
+        // v1.87 (Ahmed Amin's chat: «ينفع اخلي الشهود من المكتب الشهود عندي مش هيجوا» lost the question to the answer taken back
+        // after it): the AI gives what this message CHANGES, per field (a later one of a field wins); a question is answered
+        // whatever is said around it, unless he then SAYS that field's answer («ينفع ابوها؟… خلاص ابوها جاي»)
         var latest = new Dictionary<string, UrfSaid>();
-        foreach (var i in items.Where(i => i.Kind is UrfKind.Said or UrfKind.Asked or UrfKind.Withdrawn))
+        foreach (var i in items.Where(i => i.Kind is UrfKind.Said or UrfKind.Withdrawn))
         {
-            latest[i.Field] = i; // the later one of a field wins
+            latest[i.Field] = i;
         }
 
         string? Said(string field) => latest.TryGetValue(field, out var i) && i.Kind == UrfKind.Said ? i.Value : null;
         var ages = latest.TryGetValue(UrfStep.Ages, out var a) && a.Kind == UrfKind.Said ? a : null;
-        var asked = items.LastOrDefault(i => i.Kind == UrfKind.Asked && latest[i.Field] == i);
+        var asked = items.Select((i, n) => (i, n))
+            .Where(x => x.i.Kind == UrfKind.Asked && !items.Skip(x.n + 1).Any(s => s.Kind == UrfKind.Said && s.Field == x.i.Field))
+            .Select(x => x.i).ToList();
+        var notComing = items.Where(i => i.Kind == UrfKind.NotComing && i.Field == UrfStep.Guardian && i.Value is "father" or "brother" or "uncle")
+            .Select(i => i.Value!).Distinct().ToList();
         return new UrfFacts(Said(UrfStep.WifePast), Said(UrfStep.Guardian), Said(UrfStep.Witnesses), ages?.HusbandAge, ages?.WifeAge,
-            latest.Values.Where(i => i.Kind == UrfKind.Withdrawn).Select(i => i.Field).ToList(), asked);
+            latest.Values.Where(i => i.Kind == UrfKind.Withdrawn).Select(i => i.Field).ToList(), asked.LastOrDefault(), notComing, asked);
     }
 }
 

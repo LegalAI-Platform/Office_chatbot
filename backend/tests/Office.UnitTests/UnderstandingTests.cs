@@ -248,7 +248,7 @@ public sealed class UnderstandingTests
             [UnderstandingV2.SwitchKey] = "true", [Office.Application.Urf.UrfCaseSaid.SwitchKey] = "true",
         });
         Assert.Equal("classify-v27", OpenAiIntentClassifier.VersionFor(off));
-        Assert.Equal("classify-v31", OpenAiIntentClassifier.VersionFor(on));
+        Assert.Equal("classify-v32", OpenAiIntentClassifier.VersionFor(on));
         Assert.Equal(TimeSpan.FromSeconds(15), OpenAiIntentClassifier.BudgetFor(OpenAiIntentClassifier.DefaultBudget, off));
         Assert.Equal(TimeSpan.FromSeconds(30), OpenAiIntentClassifier.BudgetFor(OpenAiIntentClassifier.DefaultBudget, on));
         Assert.Contains("urf_guardian", ((System.Text.Json.Nodes.JsonArray)OpenAiIntentClassifier.SchemaFor(off)["required"]!).Select(n => (string)n!));
@@ -283,7 +283,7 @@ public sealed class UnderstandingTests
         Assert.Equal(3, raw!.CaseSaid!.Count);
         var facts = Office.Application.Urf.UrfFacts.Of(raw.CaseSaid);
         Assert.Equal(("father", (string?)null, 30, 25), (facts.Asked?.Value, facts.Guardian, facts.HusbandAge, facts.WifeAge));
-        Assert.Empty(facts.Withdrawn); // the later question about the father is the latest of the guardian
+        Assert.Equal([Office.Application.Urf.UrfStep.Guardian], facts.Withdrawn); // v1.87: the brother taken back AND the father asked: both kept
     }
 
     [Fact]
