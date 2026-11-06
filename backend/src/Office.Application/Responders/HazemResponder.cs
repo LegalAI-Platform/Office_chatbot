@@ -235,6 +235,7 @@ public sealed class HazemResponder(
         plan.PhoneCallOn = Active(TextKeys.AskCallAppPhone) && Active(TextKeys.BtnAppPhone) && Active(TextKeys.BtnAppsList);
         plan.UrgentButtonOn = Active(TextKeys.BtnBookUrgent);
         plan.CaseAnswersOn = new[] { TextKeys.UrfGuardianCan, TextKeys.UrfOptionCan, TextKeys.UrfGuardianCannot, TextKeys.UrfAgeCannot, TextKeys.UrfGuardianClosed, TextKeys.BtnYes, TextKeys.BtnNo }.All(Active); // v1.84
+        plan.GuardianNeededOn = Active(TextKeys.UrfGuardianNeeded); // v1.86
         // v1.84 (TASK 20): the switch; off is the Urfi case exactly as v1.81
         plan.CaseSaidOn = settings.Flag(UnderstandingV2.SwitchKey) && settings.Flag(UrfCaseSaid.SwitchKey);
         // TASK 12 (B-18): the reminders run whenever their texts are approved, the booking from WhatsApp on or off.
@@ -1394,6 +1395,12 @@ public sealed class HazemResponder(
                     return true;
                 case UrfAskAnswer.GuardianCannot:
                     plan.Say(TextKeys.UrfGuardianCannot, Fill: new Dictionary<string, string> { ["who"] = HisWord(answer.Value) });
+                    break;
+                // v1.86 (Ahmed Amin's chat: «هو لازم حد يجي معاها من اهلها؟» got the closing «نعتذر لحضرتك… لو محتاج أي خدمة تانية»
+                // while his case was open): with the case still open the rule is said as an answer, and the question waiting
+                // comes again; only a refused or a held case keeps the policy said whole
+                case UrfAskAnswer.GuardianNone when waiting is not null && plan.GuardianNeededOn:
+                    plan.Say(TextKeys.UrfGuardianNeeded);
                     break;
                 case UrfAskAnswer.GuardianNone:
                     plan.Say(TextKeys.UrfGuardianClosed); // the policy, said whole; nothing closes, it is a question
@@ -3700,6 +3707,9 @@ public sealed class HazemResponder(
 
         /// <summary>v1.84: the answers to a question about the Urfi case («أيوه… ينفع»، «للأسف…») and their two buttons are approved.</summary>
         public bool CaseAnswersOn { get; set; }
+
+        /// <summary>v1.86: «أيوه، لو دي أول جوازة للزوجة لازم يكون معاها حد من أهلها موافق…» is approved and active.</summary>
+        public bool GuardianNeededOn { get; set; }
 
         /// <summary>v1.84: hazem.urf_case_said with understanding v2: the Urfi case as one list (off: exactly as v1.81).</summary>
         public bool CaseSaidOn { get; set; }
