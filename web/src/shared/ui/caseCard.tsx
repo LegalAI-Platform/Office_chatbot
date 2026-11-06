@@ -1,8 +1,9 @@
 // One shape for every record the office works on (a receipt, a service order, an Urfi case), idea from PR #14 in
 // the panel's own colors: a color edge for its state, the person and what it is, the facts in small boxes, the
 // client's files, notes, and the actions in a band at the bottom. Learn one page and the others read the same.
-import { Children, type ReactNode } from "react";
+import { Children, useState, type ReactNode } from "react";
 import { toast } from "./feedback";
+import { FileViewer } from "./FileViewer";
 import { Icon, type IconName } from "./Icon";
 import type { Tone } from "./ui";
 
@@ -88,22 +89,29 @@ export function Facts({ items }: { items: [string, ReactNode][] }) {
   );
 }
 
-/** The client's files (opened by the API for whoever may see them; every opening is recorded). */
-export function Files({ label, count, href, word, icon = "document" }: {
-  label: string; count: number; href: (i: number) => string; word: string; icon?: IconName;
+/**
+ * The client's files (opened by the API for whoever may see them; every opening is recorded). v1.81: each opens in the glass
+ * viewer inside the panel (FileViewer), like a receipt, not a bare tab.
+ */
+export function Files({ label, count, href, word, icon = "document", details }: {
+  label: string; count: number; href: (i: number) => string; word: string; icon?: IconName; details?: [string, ReactNode][];
 }) {
+  const [open, setOpen] = useState<number | null>(null);
   if (count === 0) return null;
   return (
-    <ul className="flex flex-wrap gap-2 px-5 pt-3" aria-label={label}>
-      {Array.from({ length: count }, (_, i) => (
-        <li key={i}>
-          <a href={href(i)} target="_blank" rel="noopener noreferrer"
-            className="inline-flex min-h-10 items-center gap-1.5 rounded-[var(--radius-control)] border border-line px-3 text-sm hover:border-gold-line">
-            <Icon name={icon} className="size-4" />{word}{count > 1 ? ` ${i + 1}` : ""}
-          </a>
-        </li>
-      ))}
-    </ul>
+    <>
+      <ul className="flex flex-wrap gap-2 px-5 pt-3" aria-label={label}>
+        {Array.from({ length: count }, (_, i) => (
+          <li key={i}>
+            <button type="button" onClick={() => setOpen(i)}
+              className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-gold-line bg-gold-tint/70 px-4 text-sm font-semibold text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.6)] transition hover:bg-gold-tint">
+              <Icon name={icon} className="size-4" />{word}{count > 1 ? ` ${i + 1}` : ""}
+            </button>
+          </li>
+        ))}
+      </ul>
+      {open !== null ? <FileViewer title={label} count={count} href={href} index={open} onIndex={setOpen} onClose={() => setOpen(null)} details={details} /> : null}
+    </>
   );
 }
 
