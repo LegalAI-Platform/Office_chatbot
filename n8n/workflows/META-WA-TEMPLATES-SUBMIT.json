@@ -13,7 +13,7 @@
         0
       ],
       "parameters": {
-        "content": "## META-WA-TEMPLATES-SUBMIT (run by hand)\nSyncs first, then submits only the M-03 templates (DECISIONS v1.4, 10) (n8n/templates/whatsapp-templates.json) that Meta does not have yet. Never resubmits or deletes.\nRegenerate this workflow if the templates file changes.",
+        "content": "## META-WA-TEMPLATES-SUBMIT (run by hand)\nSyncs first, then submits only the M-03 templates (DECISIONS v1.4, 10) (n8n/templates/whatsapp-templates.json) that Meta does not have yet. Never resubmits or deletes.\nRegenerate this workflow if the templates file changes.\nA new WhatsApp account has no templates yet: «Sync first» still passes one empty item on (2026-11-08), so the submit goes on.",
         "height": 220,
         "width": 520
       }
@@ -58,7 +58,8 @@
         "options": {
           "waitForSubWorkflow": true
         }
-      }
+      },
+      "alwaysOutputData": true
     },
     {
       "id": "bff567d9-e342-5478-80fd-74797e498292",
