@@ -248,11 +248,13 @@ public sealed class UnderstandingTests
             [UnderstandingV2.SwitchKey] = "true", [Office.Application.Urf.UrfCaseSaid.SwitchKey] = "true",
         });
         Assert.Equal("classify-v27", OpenAiIntentClassifier.VersionFor(off));
-        Assert.Equal("classify-v32", OpenAiIntentClassifier.VersionFor(on));
+        Assert.Equal("classify-v33", OpenAiIntentClassifier.VersionFor(on));
         Assert.Equal(TimeSpan.FromSeconds(15), OpenAiIntentClassifier.BudgetFor(OpenAiIntentClassifier.DefaultBudget, off));
         Assert.Equal(TimeSpan.FromSeconds(30), OpenAiIntentClassifier.BudgetFor(OpenAiIntentClassifier.DefaultBudget, on));
         Assert.Contains("urf_guardian", ((System.Text.Json.Nodes.JsonArray)OpenAiIntentClassifier.SchemaFor(off)["required"]!).Select(n => (string)n!));
         Assert.Contains("case_said", ((System.Text.Json.Nodes.JsonArray)OpenAiIntentClassifier.SchemaFor(on)["required"]!).Select(n => (string)n!));
+        Assert.Contains("asks", ((System.Text.Json.Nodes.JsonArray)OpenAiIntentClassifier.SchemaFor(on)["required"]!).Select(n => (string)n!)); // v1.90
+        Assert.DoesNotContain("asks", ((System.Text.Json.Nodes.JsonArray)OpenAiIntentClassifier.SchemaFor(off)["required"]!).Select(n => (string)n!));
         // understanding v2 off: the switch alone changes nothing
         var alone = new HazemSettings(new Dictionary<string, string> { [Office.Application.Urf.UrfCaseSaid.SwitchKey] = "true" });
         Assert.Equal(OpenAiIntentClassifier.PromptVersion, OpenAiIntentClassifier.VersionFor(alone));
