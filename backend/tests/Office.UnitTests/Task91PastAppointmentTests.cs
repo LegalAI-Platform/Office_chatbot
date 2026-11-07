@@ -42,7 +42,7 @@ public sealed partial class BookingFlowTests
         var d = await Say(WhenWasIt);
         Assert.Equal([TextKeys.FreeAnswer], Keys(d));
         Assert.Contains("آخر ميعاد ليه", _writer.Last!.Facts);
-        Assert.Contains("وعدّى خلاص، ومفيش ميعاد جاي", _writer.Last.Facts); // never «قبل الميعاد»
+        Assert.Contains("وعدّى خلاص، ومالوش ميعاد تاني محجوز", _writer.Last.Facts); // never «قبل الميعاد»; v1.92: never read as «no free times»
     }
 
     [Fact]
