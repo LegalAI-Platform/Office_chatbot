@@ -128,6 +128,13 @@ public sealed class RatingStore(HazemDbContext db) : IRatingStore, IIntakeHistor
                                   WHERE t.wa_id = {waId} AND EXISTS (SELECT 1 FROM hazem.turn_replies x WHERE x.turn_id = t.turn_id)
                                   ORDER BY t.created_at DESC LIMIT 3)
             """).ToListAsync(ct);
-        return new SituationFacts(a, o, keys, waiting) { UrgentOffered = urgentOffered, RecentReplyKeys = recent };
+        // v1.91: his last appointment that has passed, for the AI and the writer
+        var month = n.AddDays(-30);
+        var past = await db.Appointments.AsNoTracking()
+            .Where(x => x.PersonId == personId && x.EndsAt <= n && x.StartsAt > month
+                        && (x.State == AppointmentInfo.Confirmed || x.State == AppointmentInfo.Completed || x.State == AppointmentInfo.NoShow))
+            .OrderByDescending(x => x.StartsAt)
+            .Select(x => new PastAppointment(x.Service, x.StartsAt)).FirstOrDefaultAsync(ct);
+        return new SituationFacts(a, o, keys, waiting) { UrgentOffered = urgentOffered, RecentReplyKeys = recent, Last = past };
     }
 }

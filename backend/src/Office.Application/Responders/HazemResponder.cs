@@ -222,6 +222,7 @@ public sealed class HazemResponder(
         Check(state.Conversation.ClientWroteAt(now)); // B-12: 12 hours after the staff
         Classification? classification = null;
         IReadOnlyList<string>? lastReplyKeys = null; // v1.66: what Hazem said last turn (with understanding v2 on), for the writer
+        string? pastWords = null; // v1.91: his appointment that passed, for the writer (with the switch on)
         UrfCase? urfToSave = null; // TASK 18: saved with the turn, after the person and the intake (a first message may open it)
         var texts = await approvedTexts.GetActiveAsync(settings, ct);
         var bookingSettings = BookingSettings.From(settings);
@@ -292,6 +293,9 @@ public sealed class HazemResponder(
             // v1.52 (phase 1): understanding v2 (the whole chat, his stance, the other questions); off is Hazem exactly as before
             var understanding = settings.Flag(UnderstandingV2.SwitchKey);
             lastReplyKeys = understanding ? situation.Facts.LastReplyKeys : null;
+            pastWords = PastSaid(situation, settings) is { } passed
+                ? passed + (situation.Kind == SituationKind.None ? "، ومفيش ميعاد جاي" : "")
+                : null;
             var flow = new Flow(turn, state, list, null, plan, settings.Flag(HandoffEnabledKey), bookingOn ? bookingSettings : null, servicesOn,
                 urfOn, urfOpen, ageRefusal: ageRefusal, urgentOn: urgentOn, situation: situation, understanding: understanding);
             var freeText = false;
@@ -450,7 +454,17 @@ public sealed class HazemResponder(
                 }
                 else
                 {
-                    flow = new Flow(turn, state, list, row.AsClassification, plan, settings.Flag(HandoffEnabledKey),
+                    // v1.91 (Ahmed Amin's chat: «عايز اتجوز عرفي» under the services list took its row «جواز أو طلاق عرفي» and got
+                    // «تحت أمرك، قولّي المطلوب»): words that pick a row are read as the AI read them when it knew more than the row
+                    // says (a marriage, not «marriage or divorce»). Switch off: as v1.81.
+                    var asRow = row.AsClassification;
+                    if (plan.CaseSaidOn && asRow is { Service: Service.UrfUnclear }
+                        && flow.WordsRead is { Service: Service.UrfMarriage or Service.UrfDivorce } read)
+                    {
+                        asRow = asRow with { Service = read.Service };
+                    }
+
+                    flow = new Flow(turn, state, list, asRow, plan, settings.Flag(HandoffEnabledKey),
                         bookingOn ? bookingSettings : null, servicesOn, urfOn, urfOpen, null, ageRefusal, returning, urgentOn, situation, understanding);
                     flow.Respond(firstContact);
                 }
@@ -614,6 +628,7 @@ public sealed class HazemResponder(
                 .Append(settings.Flag(UnderstandingV2.SwitchKey) && Playbook(texts) is { Length: > 0 } playbook
                     ? "دليل التعامل:\n" + prices.Fill(playbook)
                     : null)
+                .Append(pastWords is null ? null : "عن العميل: " + pastWords + ".") // v1.91: never «قبل الميعاد» once it passed
                 .Where(t => t is not null));
             var rewritten = await Conversational.RewriteAsync(composed, writer, chat, turn, Salutation.Call(state.Person), settings, ct,
                 facts, state.Person.NameGender, reviewer, lastReplyKeys);
@@ -667,6 +682,12 @@ public sealed class HazemResponder(
             SituationKind.Order => "طلب خدمة مكتوبة شغال",
             _ => "مفيش حاجة مفتوحة",
         };
+        if (PastSaid(situation, settings) is { } past)
+        {
+            open += "؛ " + past; // v1.91: the appointment that passed, so «كان امتي؟» and «ميعاد تاني» are read with it
+        }
+
+
         // v1.47 (B-32): the choices still waiting, for the one his words pick (and now, for a day or a time he asks for)
         var waiting = situation.Facts.Waiting is { Count: > 0 } w ? TypedChoice.Titles(w) : null;
         var local = TimeZoneInfo.ConvertTime(clock.GetUtcNow(), OfficeHours.Cairo);
@@ -679,6 +700,15 @@ public sealed class HazemResponder(
         return (AiContext.Build(message, lines.LastOrDefault(l => !l.FromClient)?.Text, lines.LastOrDefault(l => l.FromClient)?.Text, open,
             waiting, today, earlier), [message, .. lines.Where(l => l.FromClient).Select(l => l.Text)]);
     }
+
+    /// <summary>
+    /// v1.91: his last appointment that has passed, in words, with the switch on (understanding v2 and hazem.urf_case_said);
+    /// null otherwise. Off: as v1.81.
+    /// </summary>
+    private string? PastSaid(ClientSituation situation, HazemSettings settings) =>
+        settings.Flag(UnderstandingV2.SwitchKey) && settings.Flag(UrfCaseSaid.SwitchKey) && situation.Facts.Last is { } last
+            ? last.Words(clock.GetUtcNow())
+            : null;
 
     /// <summary>v1.53 (phase 3): «دليل التعامل», its approved parts in order (never sent).</summary>
     private static string Playbook(IReadOnlyDictionary<string, ApprovedText> texts) => string.Join("\n",
@@ -2463,6 +2493,13 @@ public sealed class HazemResponder(
                     }
 
                     break;
+                case Intent.RescheduleOrCancel when MayBook && understanding && plan.CaseSaidOn && urfOn && situation.Kind == SituationKind.None
+                                                    && situation.Facts.Last is not null
+                                                    && urfOpen?.FirstOrDefault(u => u.State == UrfCase.DocumentsPending) is { } waitingCase:
+                    // v1.91 (Ahmed Amin's chat: «كان ليا ميعاد انهارده 10 الصبح وعايز اخد ميعاد تاني» went to the office): his time
+                    // passed and his Urfi request is still open with every answer: its free times again, as when it was first done
+                    StartUrf(waitingCase.Kind);
+                    break;
                 case Intent.RescheduleOrCancel when MayBook:
                     work = new ShowExisting(null); // B-15: the client's booking, with «change» and «cancel»
                     break;
@@ -2482,6 +2519,11 @@ public sealed class HazemResponder(
                     break;
                 case Intent.TellProblem:
                     plan.Say(TextKeys.ServicesTell); // v1.39: as the «أحكي مشكلتي» button
+                    break;
+                case Intent.MyStatus when understanding && plan.CaseSaidOn && situation.Facts.Last is not null:
+                    // v1.91 (Ahmed Amin's chat: «هو الميعاد كان امتي» after it passed got the welcome): his appointment that passed
+                    // is in the facts; the writer answers what he asked from them («كان النهارده الساعة 10:15 ص»)
+                    plan.Say(TextKeys.FreeAnswer, TextKeys.Unclear);
                     break;
                 case Intent.MyStatus:
                     // v1.39: «فاكرني؟» with nothing open (an open item was answered in Respond): his name when he gave one,
