@@ -27,6 +27,14 @@ public enum SituationKind
 /// </summary>
 public sealed record OpenAppointment(string Service, string State, DateTimeOffset Start, DateTimeOffset? HoldUntil, bool Reviewed = true);
 
+/// <summary>v1.91: an appointment whose time has passed (confirmed, completed or not attended), as the AI and the writer read it.</summary>
+public sealed record PastAppointment(string Service, DateTimeOffset Start)
+{
+    /// <summary>«آخر ميعاد: جواز عرفي، النهارده الساعة 10:15 ص، وعدّى خلاص» (no upcoming one is implied: that is said apart).</summary>
+    public string Words(DateTimeOffset now) =>
+        $"آخر ميعاد ليه: {(BookingService.ByCode(Service) ?? BookingService.PhoneVideo).Name}، {BookingWords.Day(Start, now)} الساعة {BookingWords.Time(Start)}، وعدّى خلاص";
+}
+
 /// <summary>A written service order not delivered yet (S-07: collecting, awaiting_price, awaiting_payment, in_progress).</summary>
 public sealed record OpenOrder(string Kind, string State);
 
@@ -46,6 +54,12 @@ public sealed record SituationFacts(OpenAppointment? Appointment, OpenOrder? Ord
     /// value once is not answered the same way again two messages later.
     /// </summary>
     public IReadOnlyList<string>? RecentReplyKeys { get; init; }
+
+    /// <summary>
+    /// v1.91 (Ahmed Amin's chat: «هو الميعاد كان امتي» after his time had passed got the welcome, and «السلام عليكم» got «قبل
+    /// الميعاد»): his last appointment that has passed (the last 30 days), so what he has with the office is read whole.
+    /// </summary>
+    public PastAppointment? Last { get; init; }
 
     public static SituationFacts Empty { get; } = new(null, null, []);
 }

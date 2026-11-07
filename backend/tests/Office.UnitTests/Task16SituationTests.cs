@@ -275,6 +275,10 @@ public sealed partial class BookingFlowTests
                 lastReplies.TryGetValue(waId, out var k) ? k : [], lastChoices.GetValueOrDefault(waId))
             {
                 RecentReplyKeys = recent.TryGetValue(waId, out var r) ? r.TakeLast(3).SelectMany(x => x).ToList() : null,
+                // v1.91: his last appointment that has passed (the last 30 days)
+                Last = booking.Appointments.Where(x => x.PersonId == personId && x.End <= now && x.Start > now.AddDays(-30)
+                                                       && x.State is AppointmentInfo.Confirmed or AppointmentInfo.Completed or AppointmentInfo.NoShow)
+                    .OrderByDescending(x => x.Start).Select(x => new PastAppointment(x.Service, x.Start)).FirstOrDefault(),
             });
         }
     }
