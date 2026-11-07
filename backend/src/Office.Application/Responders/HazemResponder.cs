@@ -294,7 +294,7 @@ public sealed class HazemResponder(
             var understanding = settings.Flag(UnderstandingV2.SwitchKey);
             lastReplyKeys = understanding ? situation.Facts.LastReplyKeys : null;
             pastWords = PastSaid(situation, settings) is { } passed
-                ? passed + (situation.Kind == SituationKind.None ? "، ومفيش ميعاد جاي" : "")
+                ? passed + (situation.Kind == SituationKind.None ? "، ومالوش ميعاد تاني محجوز" : "")
                 : null;
             var flow = new Flow(turn, state, list, null, plan, settings.Flag(HandoffEnabledKey), bookingOn ? bookingSettings : null, servicesOn,
                 urfOn, urfOpen, ageRefusal: ageRefusal, urgentOn: urgentOn, situation: situation, understanding: understanding);
@@ -628,7 +628,7 @@ public sealed class HazemResponder(
                 .Append(settings.Flag(UnderstandingV2.SwitchKey) && Playbook(texts) is { Length: > 0 } playbook
                     ? "دليل التعامل:\n" + prices.Fill(playbook)
                     : null)
-                .Append(pastWords is null ? null : "عن العميل: " + pastWords + ".") // v1.91: never «قبل الميعاد» once it passed
+                .Append(pastWords is null ? null : "عن العميل (متتكلمش عنه غير لو سأل عن ميعاده): " + pastWords + ".") // v1.91: never «قبل الميعاد» once it passed; v1.92: only when he asks
                 .Where(t => t is not null));
             var rewritten = await Conversational.RewriteAsync(composed, writer, chat, turn, Salutation.Call(state.Person), settings, ct,
                 facts, state.Person.NameGender, reviewer, lastReplyKeys);
