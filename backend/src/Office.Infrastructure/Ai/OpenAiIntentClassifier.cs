@@ -26,7 +26,7 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
     public const string PromptVersionV2 = "classify-v27";
 
     /// <summary>TASK 20 (v1.84): the prompt while hazem.urf_case_said is on too (the Urfi case as one list).</summary>
-    public const string PromptVersionCaseSaid = "classify-v32";
+    public const string PromptVersionCaseSaid = "classify-v33";
     public const string StubEnabledKey = "ai.stub_enabled";
     public const string StubBaseUrlKey = "ai.stub_base_url";
 
@@ -199,7 +199,9 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
                 // v1.79: how he wants the call (the latest he said)
                 StringOrNull(o["call_app"]),
                 // TASK 20 (v1.84): everything he says about his Urfi case, said / asked / taken back, in his order
-                CaseSaid(o["case_said"])), null);
+                CaseSaid(o["case_said"]),
+                // v1.90: whether he asks something in this message
+                o["asks"] is JsonValue q && q.GetValueKind() is JsonValueKind.True or JsonValueKind.False ? q.GetValue<bool>() : null), null);
         }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException)
         {
@@ -274,7 +276,7 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
             ["additionalProperties"] = false,
             ["required"] = new JsonArray("analysis", "subject", "scope", "intent", "service", "consultation_mode", "full_name", "confidence",
                 "matter_type", "matter_subtype", "sender_role", "info_topic", "courtesy", "name_gender", "picked", "asked_time", "time_exact",
-                "stance", "also_asked", "file_is", "meanings", "call_app", "case_said"),
+                "stance", "also_asked", "file_is", "meanings", "call_app", "case_said", "asks"),
             // v1.24: subject and scope come first, so the model names what the turn is about before it picks an
             // intent. The subject is a few words for that only: it is never read, kept or logged.
             ["properties"] = new JsonObject
@@ -336,6 +338,8 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
                         },
                     },
                 },
+                // v1.90: whether this message asks something (a question nothing else answers gets «later», never «again»)
+                ["asks"] = new JsonObject { ["type"] = "boolean" },
             },
         };
         return caseSaid ? schema : AsV181(schema);
@@ -345,6 +349,9 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
     /// v1.84: the schema exactly as v1.81 (hazem.urf_case_said off): the Urfi fields one by one, after also_asked, in v1.81's order,
     /// and no case_said.
     /// </summary>
+    /// <summary>The fields only the schema with hazem.urf_case_said on has (v1.84 case_said, v1.90 asks).</summary>
+    private static string[] CaseSaidOnly => ["case_said", "asks"]; // a property: Schema is built before the static fields below it
+
     private static JsonObject AsV181(JsonObject schema)
     {
         var urf = new (string Name, JsonObject Field)[]
@@ -357,7 +364,7 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
         };
         var properties = new JsonObject();
         var required = new JsonArray();
-        foreach (var (name, field) in ((JsonObject)schema["properties"]!).Where(p => p.Key != "case_said").ToList())
+        foreach (var (name, field) in ((JsonObject)schema["properties"]!).Where(p => !CaseSaidOnly.Contains(p.Key)).ToList())
         {
             properties[name] = field!.DeepClone();
             if (name == "also_asked")
@@ -369,7 +376,7 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
             }
         }
 
-        foreach (var name in ((JsonArray)schema["required"]!).Select(n => (string)n!).Where(n => n != "case_said"))
+        foreach (var name in ((JsonArray)schema["required"]!).Select(n => (string)n!).Where(n => !CaseSaidOnly.Contains(n)))
         {
             required.Add(name);
             if (name == "also_asked")

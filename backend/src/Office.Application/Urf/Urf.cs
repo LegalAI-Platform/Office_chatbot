@@ -450,6 +450,10 @@ public static class UrfRules
                 return new UrfAskAnswer(UrfAskAnswer.GuardianCannot, asked.Word);
             case UrfStep.WifePast when asked.Value is "first" or "divorced" or "khul" or "widow":
                 return Of(Settle(open with { WifePast = asked.Value }), asked);
+            // v1.90 (Ahmed Amin's chat: «لازم يكون في شهود؟ ولا ممكن نعمل العقد بينا إحنا الاتنين بس؟»): the contract always has two
+            // witnesses, the office's or his: the office's rule, said as an answer (never a legal opinion), nothing changes
+            case UrfStep.Witnesses when asked.Value == "none":
+                return new UrfAskAnswer(UrfAskAnswer.WitnessesNeeded, null);
             case UrfStep.Witnesses when asked.Value is "own" or "office":
                 return Of(Settle(open with { Witnesses = asked.Value }), asked);
             case UrfStep.Ages when asked.HusbandAge is not null || asked.WifeAge is not null:
@@ -550,6 +554,47 @@ public static class UrfAges
 
         return numbers is [var h, var w] && h is >= 1 and <= 120 && w is >= 1 and <= 120 ? (h, w) : null;
     }
+
+    /// <summary>
+    /// v1.90 (Ahmed Amin's chat: «77و90» and «طب هو لازم يكون في شهود؟» in one turn: the code took the ages and threw the question
+    /// away): the message is the two ages and nothing else, so the code may read it without the AI. Nothing may be left once the
+    /// numbers, the words naming the husband or the wife, the words for «age / years» and the «و» between them are taken out. Any
+    /// other word goes to the AI, which reads the ages in it too (a word missing here only costs one AI call, never an answer).
+    /// </summary>
+    public static bool IsOnly(string? text)
+    {
+        if (Parse(text) is null)
+        {
+            return false;
+        }
+
+        var normalized = $" {Courtesy.Normalize(text!)} ";
+        foreach (var both in BothWords)
+        {
+            normalized = normalized.Replace(both, " ", StringComparison.Ordinal);
+        }
+
+        var words = new System.Text.StringBuilder();
+        foreach (var ch in normalized)
+        {
+            words.Append(char.IsLetter(ch) ? ch : ' ');
+        }
+
+        foreach (var raw in words.ToString().Split(' ', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var w = raw.Length > 1 && raw[0] == 'و' ? raw[1..] : raw;
+            if (raw != "و" && RoleOf(raw) is null && !AgeWords.Contains(w) && !AgeWords.Contains(raw))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>v1.90: the words for «age / years» around the two numbers (normalized).</summary>
+    private static readonly HashSet<string> AgeWords = new(StringComparer.Ordinal)
+        { "سن", "السن", "سنه", "سنين", "سنوات", "عام", "عمر", "عمره", "عمرها", "عمري", "عنده", "عندها", "years", "year", "and" };
 
     /// <summary>On the normalized text (Courtesy.Normalize), with the spaces around.</summary>
     private static readonly string[] BothWords = [" الاتنين ", " الاثنين ", " التنين ", " كلهم ", " كل واحد ", " زي بعض ", " نفس السن ", " both "];
@@ -731,6 +776,9 @@ public sealed record UrfAskAnswer(string What, string? Value)
 
     /// <summary>«للأسف لأ، سياسة المكتب إن الزوج والزوجة يكون سنهم 18 سنة أو أكتر.», then the question waiting.</summary>
     public const string AgeCannot = "age_cannot";
+
+    /// <summary>v1.90: «لازم يكون في شهود؟ ولا العقد بينا بس؟»: «أيوه، العقد عندنا لازم يكون فيه شاهدين…», then the question waiting.</summary>
+    public const string WitnessesNeeded = "witnesses_needed";
 }
 
 /// <summary>

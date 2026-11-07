@@ -96,6 +96,9 @@ public sealed class HazemResponder(
 
     private static bool IsOffer(string key) => OfferKeys.Contains(key);
 
+    /// <summary>v1.90: a greeting opens a reply; it answers nothing he asked («السلام عليكم، لازم شهود؟»).</summary>
+    private static bool IsGreeting(string key) => key.StartsWith("greet_", StringComparison.Ordinal);
+
     private static readonly HashSet<string> RepeatWatched =
     [
         TextKeys.Greeting, TextKeys.Greeting2, TextKeys.Greeting3, TextKeys.Unclear, TextKeys.ConsultationOffer, TextKeys.CaseOffer, TextKeys.ConsultationOfferUrgentDay, TextKeys.ConsultationOfferUrgentNight,
@@ -236,6 +239,8 @@ public sealed class HazemResponder(
         plan.UrgentButtonOn = Active(TextKeys.BtnBookUrgent);
         plan.CaseAnswersOn = new[] { TextKeys.UrfGuardianCan, TextKeys.UrfOptionCan, TextKeys.UrfGuardianCannot, TextKeys.UrfAgeCannot, TextKeys.UrfGuardianClosed, TextKeys.BtnYes, TextKeys.BtnNo }.All(Active); // v1.84
         plan.GuardianNeededOn = Active(TextKeys.UrfGuardianNeeded); // v1.86
+        plan.WitnessesNeededOn = Active(TextKeys.UrfWitnessesNeeded); // v1.90
+        plan.QuestionLaterOn = Active(TextKeys.UrfQuestionLater); // v1.90
         plan.GuardianOtherOn = Active(TextKeys.UrfAskGuardianOther); // v1.87
         // v1.84 (TASK 20): the switch; off is the Urfi case exactly as v1.81
         plan.CaseSaidOn = settings.Flag(UnderstandingV2.SwitchKey) && settings.Flag(UrfCaseSaid.SwitchKey);
@@ -362,10 +367,18 @@ public sealed class HazemResponder(
             // with a number are read as the ages: «عايز أكلم موظف» or «بكام؟» go to the AI as any message.
             var urfButton = choice is null ? UrfAnswerIn(turn) : null;
             var urfAnswer = urfButton is not null && urfCase is { State: UrfCase.Collecting } && flow.MayBook ? urfButton : null;
-            var urfAges = choice is null && urfButton is null && urfCase is { State: UrfCase.Collecting, Step: UrfStep.Ages } && flow.MayBook
-                          && FileIn(turn) is null && AiInput.Build(turn) is { } typed && (typed.Any(char.IsDigit) || understanding && NumberWords.Any(typed))
+            var agesTyped = choice is null && urfButton is null && urfCase is { State: UrfCase.Collecting, Step: UrfStep.Ages } && flow.MayBook
+                            && FileIn(turn) is null && AiInput.Build(turn) is { } typed && (typed.Any(char.IsDigit) || understanding && NumberWords.Any(typed))
+                ? typed
+                : null;
+            var agesDigits = agesTyped is null ? null : NumberWords.ToDigits(agesTyped);
+            // v1.90 (Ahmed Amin's chat: «77و90» with «طب هو لازم يكون في شهود؟» in one turn: the ages were taken, the question thrown
+            // away): with hazem.urf_case_said on, the code reads the ages alone only when the message IS the ages; any more words go
+            // to the AI, which reads the ages in them as well (as v1.85 for typed words that pick a button)
+            var agesWithMore = agesDigits is not null && understanding && plan.CaseSaidOn && UrfAges.Parse(agesDigits) is not null && !UrfAges.IsOnly(agesDigits);
+            var urfAges = agesTyped is not null && !agesWithMore
                           // v1.84 (TASK 20): a QUESTION that is not the two ages («لو هي 17 سنة ينفع؟») is read by the AI, as any question
-                          && !(understanding && plan.CaseSaidOn && UrfAges.Parse(NumberWords.ToDigits(typed)) is null && typed.TrimEnd() is [.., '؟' or '?']);
+                          && !(understanding && plan.CaseSaidOn && UrfAges.Parse(agesDigits) is null && agesTyped.TrimEnd() is [.., '؟' or '?']);
             // TASK 09 / 10 (B-05, B-16, T-09): a file from the client never reaches the AI, nor any word sent with it:
             // a receipt (an image) for what waits for one, the documents of a service order, or «send an image».
             ReceiptOutcome? receipt = null;
@@ -528,7 +541,14 @@ public sealed class HazemResponder(
                         plan.Say(greet); // first, so it opens Hazem's answer
                     }
 
-                    flow.Respond(firstContact);
+                    if (agesWithMore && classification is null or { IsFallback: true })
+                    {
+                        flow.RespondToUrf(null); // v1.90: the AI could not read them: the ages the code found, as before
+                    }
+                    else
+                    {
+                        flow.Respond(firstContact);
+                    }
                 }
             }
 
@@ -959,6 +979,31 @@ public sealed class HazemResponder(
         /// <summary>v1.35 (B-09): what waits for the name on the urgent path (not a time: the first free moment once it comes).</summary>
         private const string UrgentPick = "urgent";
 
+        /// <summary>
+        /// v1.90 (the same gap as the Urfi questions: his question is not a wrong answer): a QUESTION asked while his picked time
+        /// waits for his name or number («هدفع ازاي؟»، «الاستشارة أونلاين؟») is answered, and the time keeps waiting: the same ask
+        /// comes back plainly after the answer (not counted as one more ask), with no offer pushed over the time he picked. Only a
+        /// question about the office, the price or the law (another request still lets the time go, as before). Switch off: as v1.81.
+        /// </summary>
+        private bool AnsweredKeepingPick(string pickId, string ask)
+        {
+            if (!plan.CaseSaidOn || !AsksNow || c is null || pickId == UrgentPick
+                || c.Intent is not (Intent.LegalQuestion or Intent.OfficeInfo or Intent.PriceQuestion))
+            {
+                return false;
+            }
+
+            var pending = Intake.Pending;
+            AnswerTurn();
+            plan.Steps.RemoveAll(s => IsOffer(s.Key));
+            if (work is null && Intake.Pending == pending)
+            {
+                plan.Say(ask);
+            }
+
+            return true;
+        }
+
         /// <summary>v1.32 (B-02): a time picked before the name: the name is asked, the time waits for it (no hold yet).</summary>
         private BookingWork? AskNameFor(string pickId)
         {
@@ -1001,6 +1046,11 @@ public sealed class HazemResponder(
             else if (c.Intent == Intent.ProvideName || c.IsFallback)
             {
                 name = NameGuess.TryRead(PlainText(), out var typed) ? typed : null;
+            }
+
+            if (name is null && AnsweredKeepingPick(pickId, TextKeys.AskNameBooking))
+            {
+                return;
             }
 
             if (name is null && IsRequest(c.Intent))
@@ -1070,6 +1120,11 @@ public sealed class HazemResponder(
             {
                 Intake.TakePending();
                 work = HoldPick(pickId);
+                return;
+            }
+
+            if (AnsweredKeepingPick(pickId, TextKeys.AskPhone))
+            {
                 return;
             }
 
@@ -1331,6 +1386,9 @@ public sealed class HazemResponder(
         }
 
         /// <summary>TASK 20 (v1.84): what the AI read of the Urfi case this turn, the latest per field (nothing with understanding off).</summary>
+        /// <summary>v1.90 (hazem.urf_case_said on): the AI read that this message asks something (off: never, as v1.81).</summary>
+        private bool AsksNow => understanding && plan.CaseSaidOn && (answering ?? WordsRead ?? c)?.Call?.Answer?.Asks == true;
+
         private UrfFacts Said => !understanding || (answering ?? (plan.CaseSaidOn ? WordsRead : null))?.Call?.Answer is not { } a ? UrfFacts.None
             : plan.CaseSaidOn ? UrfFacts.Of(UrfFacts.Quoted(a.CaseSaid, ClientWords))
             : UrfFacts.Fields(a.UrfWifePast, a.UrfGuardian, a.UrfWitnesses, a.UrfHusbandAge, a.UrfWifeAge); // off: v1.81's fields
@@ -1421,6 +1479,11 @@ public sealed class HazemResponder(
                         break;
                     case UrfAskAnswer.AgeCannot:
                         plan.Say(TextKeys.UrfAgeCannot);
+                        break;
+                    // v1.90 (Ahmed Amin's chat: «لازم يكون في شهود؟ ولا ممكن نعمل العقد بينا إحنا الاتنين بس؟» asked three times):
+                    // the office's rule, then the question waiting; the text not approved yet: «المستشار هيوضح…» as before
+                    case UrfAskAnswer.WitnessesNeeded:
+                        plan.Say(plan.WitnessesNeededOn ? TextKeys.UrfWitnessesNeeded : TextKeys.UrfQuestionLater);
                         break;
                     default:
                         plan.Say(TextKeys.UrfOptionCan, Fill: new Dictionary<string, string> { ["option"] = answer.Value! });
@@ -1600,8 +1663,18 @@ public sealed class HazemResponder(
             // v1.89 (the v1.88 replay: «بكام؟» then «منا قولتلك اول جوازه» reached the office): after an answer to what he asked
             // in this same reply, the question waiting comes back as it is, never counted as sent again (the reply is not the
             // same); «علشان نكمّل…» and the office stay for the messages that leave it unanswered. Switch off: as v1.81.
-            if (next == UrfNext.Ask && plan.CaseSaidOn && plan.Steps.Count > 0)
+            if (next == UrfNext.Ask && plan.CaseSaidOn && plan.Steps.Any(s => !IsGreeting(s.Key)))
             {
+                AskUrf(c.Step);
+                return;
+            }
+
+            // v1.90 (Ahmed Amin's chat: «لازم يكون في شهود؟…» under the ages question got «اكتبلي السن بالأرقام»): he ASKED something
+            // and nothing answered it. He did not fail to answer, so never «again» and never the office: «المستشار هيوضح النقطة دي
+            // لحضرتك في الميعاد.», then the question waiting as it is (an answered question, v1.89). The AI says he asks (asks).
+            if (next == UrfNext.Ask && AsksNow && plan.QuestionLaterOn)
+            {
+                plan.Say(TextKeys.UrfQuestionLater);
                 AskUrf(c.Step);
                 return;
             }
@@ -2801,6 +2874,16 @@ public sealed class HazemResponder(
             }
 
             plan.Steps.RemoveAll(s => IsOffer(s.Key));
+            var next = waiting.Kind == 'v' ? (BookingWork)new AskCallApp() : new OfferTimes(waiting.Service!, null, TextKeys.BookingChooseSlot, null, App: waiting.App);
+            // v1.90 (the same gap as v1.89 for the Urfi questions): his question under the times WAS answered in this reply («هو
+            // الأستاذ هيقدر يرفع قضية نفقة؟»), so the step comes back as it is: never «علشان نكمّل الحجز…», never counted as a
+            // repeat (a second question is not the office's). Only words that answered nothing keep v1.47. Switch off: as v1.81.
+            if (plan.CaseSaidOn && plan.Steps.Any(s => Answers(s.Key)))
+            {
+                work = next;
+                return;
+            }
+
             if (situation.RepliedLast(TextKeys.BookingStepAgain))
             {
                 HandToOffice(TextKeys.UnclearAgain, PendingTask.UnclearMessage);
@@ -2808,8 +2891,12 @@ public sealed class HazemResponder(
             }
 
             plan.Say(TextKeys.BookingStepAgain);
-            work = waiting.Kind == 'v' ? new AskCallApp() : new OfferTimes(waiting.Service!, null, TextKeys.BookingChooseSlot, null, App: waiting.App);
+            work = next;
         }
+
+        /// <summary>v1.90: a step of the reply that answers what he said (not a greeting, not «مش واضح»).</summary>
+        private static bool Answers(string key) =>
+            !IsGreeting(key) && key is not (TextKeys.Unclear or TextKeys.UnclearAgain or TextKeys.BookingStepAgain or TextKeys.HandoffWaiting);
 
         private void Offer(bool askTopic = true)
         {
@@ -3768,6 +3855,12 @@ public sealed class HazemResponder(
 
         /// <summary>v1.86: «أيوه، لو دي أول جوازة للزوجة لازم يكون معاها حد من أهلها موافق…» is approved and active.</summary>
         public bool GuardianNeededOn { get; set; }
+
+        /// <summary>v1.90: «أيوه، العقد عندنا لازم يكون فيه شاهدين…» is approved and active.</summary>
+        public bool WitnessesNeededOn { get; set; }
+
+        /// <summary>v1.90: «المستشار هيوضح النقطة دي لحضرتك في الميعاد.» is approved and active.</summary>
+        public bool QuestionLaterOn { get; set; }
 
         /// <summary>v1.87: «طيب، مين تاني من أهل الزوجة موجود وموافق: {{options}}؟» is approved and active.</summary>
         public bool GuardianOtherOn { get; set; }
