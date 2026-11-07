@@ -2657,6 +2657,41 @@ public sealed class HazemResponder(
         /// </summary>
         private void AnswerOffice(InfoTopic? topic, bool existingClient = false)
         {
+            // v1.94 (the v1.93 replay: «هو انا بكلم حد حقيقي دلوقتي؟» under the ages question got who Hazem is with the welcome's
+            // buttons, and the ages question never came back): a question about Hazem or the office in the middle of the Urfi
+            // questions is answered as any other question there: its answer, then the question waiting (nothing sold after it).
+            // Switch off: as v1.81.
+            if (plan.CaseSaidOn && urfOn && Urf is { State: UrfCase.Collecting } && UrfInChat)
+            {
+                if (topic == InfoTopic.Assistant)
+                {
+                    plan.Say(TextKeys.AboutHazem);
+                }
+                else if (topic == InfoTopic.ServiceCheck)
+                {
+                    plan.Say(TextKeys.ServiceCheck);
+                    plan.Task(PendingTask.ServiceQuestion);
+                }
+                else if (OfficeText(topic) is var (said, needed))
+                {
+                    if (needed.All(n => office?.GetValueOrDefault(n) is { Length: > 0 }))
+                    {
+                        plan.Say(said, Fill: office);
+                    }
+                    else
+                    {
+                        plan.Task(PendingTask.OfficeInfoMissing);
+                    }
+                }
+
+                if (!paused)
+                {
+                    AfterUrf(UrfNext.Ask);
+                }
+
+                return;
+            }
+
             // v1.22: who Hazem is (alone), and whether the office does one specific thing (the office answers: a task,
             // never a guess). Neither depends on a matter, so no offer after them.
             if (topic == InfoTopic.Assistant)
