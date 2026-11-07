@@ -342,7 +342,7 @@ public static class Conversational
         [TextKeys.Greeting] = "answer his greeting and ask how you can help",
         [TextKeys.Greeting2] = "answer his greeting and ask how you can help",
         [TextKeys.Greeting3] = "answer his greeting and ask how you can help",
-        [TextKeys.Welcome] = "introduce yourself as the office's digital assistant and ask whether he wants to see the office's services or tell his matter (two buttons follow your sentence)",
+        [TextKeys.Welcome] = "introduce yourself as Hazem from the office (v1.93: never say you are a digital assistant or an assistant unless he asks who or what you are, and never claim to be a person) and ask whether he wants to see the office's services or tell his matter (two buttons follow your sentence)",
         [TextKeys.WelcomeChoose] = "ask whether he wants to see the office's services or tell his matter (two buttons follow your sentence)",
         [TextKeys.WelcomeBack] = "welcome him back by the first name given",
         [TextKeys.SituationUrgent] = "remind him he has a paid urgent consultation and when the lawyer will call",

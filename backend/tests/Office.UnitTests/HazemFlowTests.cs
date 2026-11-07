@@ -19,7 +19,7 @@ public sealed class HazemFlowTests
     /// </summary>
     public static readonly IReadOnlyDictionary<string, string> Approved = new Dictionary<string, string>
     {
-        [TextKeys.Welcome] = "أنا حازم، المساعد الرقمي لمكتب المستشار سعد فتحي سعد للمحاماة.\nحضرتك تحب تعرف خدمات المكتب، ولا تحكيلي محتاج إيه وأساعدك؟",
+        [TextKeys.Welcome] = "أنا حازم من مكتب المستشار سعد فتحي سعد للمحاماة.\nحضرتك تحب تعرف خدمات المكتب، ولا تحكيلي محتاج إيه وأساعدك؟",
         [TextKeys.WelcomeChoose] = "حضرتك تحب تعرف خدمات المكتب، ولا تحكيلي محتاج إيه وأساعدك؟",
         [TextKeys.AskNameBooking] = "تمام، ممكن اسم حضرتك عشان أسجّل الميعاد؟",
         [TextKeys.ConsultationOffer] = "المستشار يقدر يشوف الموضوع مع حضرتك في استشارة: بالتليفون بـ500 أو في المكتب بـ1,000.",
