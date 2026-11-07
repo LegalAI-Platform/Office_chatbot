@@ -14,8 +14,8 @@ namespace Office.IntegrationTests;
 public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
 {
     private const string Client = "201000000071";
-    // v1.32 (B-01.1): the welcome with its two buttons, no name question (0034)
-    private const string Welcome = "أنا حازم، المساعد الرقمي لمكتب المستشار سعد فتحي سعد للمحاماة.\nحضرتك تحب تعرف خدمات المكتب، ولا تحكيلي محتاج إيه وأساعدك؟";
+    // v1.32 (B-01.1): the welcome with its two buttons, no name question (0034); v1.93: without «المساعد الرقمي» (0071)
+    private const string Welcome = "أنا حازم من مكتب المستشار سعد فتحي سعد للمحاماة.\nحضرتك تحب تعرف خدمات المكتب، ولا تحكيلي محتاج إيه وأساعدك؟";
     private const string Offer = "المستشار يقدر يشوف الموضوع مع حضرتك في استشارة: بالتليفون بـ500 أو في المكتب بـ1,000.";
     private const string AskTopic = "ولو تحب، قولّي باختصار الموضوع عن إيه عشان المستشار يبقى عارفه.";
     private ApiFactory _factory = null!;
@@ -297,7 +297,8 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
                         + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.84.md"), Ct) // v1.84: urf_option_can, urf_guardian_cannot, urf_age_cannot
                         + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.86.md"), Ct) // v1.86: urf_guardian_needed
                         + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.87.md"), Ct) // v1.87: urf_ask_guardian_other
-                        + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.90.md"), Ct); // v1.90: urf_witnesses_needed
+                        + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.90.md"), Ct) // v1.90: urf_witnesses_needed
+                        + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.93.md"), Ct); // v1.93: the welcome without «المساعد الرقمي»
         decisions = decisions.Replace("\r\n", "\n", StringComparison.Ordinal); // a Windows checkout (core.autocrlf) has CRLF; the texts have \n
         await using var c = new NpgsqlConnection(db.ApiConnectionString);
         await c.OpenAsync(Ct);
