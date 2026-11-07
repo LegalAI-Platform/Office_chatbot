@@ -452,5 +452,15 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal(2, (int)r["by_staff"]!.AsArray().Single(s => (string)s!["staff"]! == "ياسمين")!["assigned"]!);
         Assert.Equal(HttpStatusCode.BadRequest, (await lawyer.GetAsync("/api/panel/reports?month=2026-13", Ct)).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await (await SignIn("karim")).GetAsync("/api/panel/reports", Ct)).StatusCode);
+
+        // the owner (2026-11-07): a day, a range or a year too, and the money of the last 12 months
+        var today = DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(2)).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+        var day = (await lawyer.GetFromJsonAsync<JsonNode>($"/api/panel/reports?from={today}&to={today}", Ct))!;
+        Assert.Equal((today, 2), ((string)day["month"]!, (int)day["new_clients"]!)); // both clients came today
+        Assert.Equal(HttpStatusCode.BadRequest, (await lawyer.GetAsync("/api/panel/reports?from=2026-11-07&to=2026-11-01", Ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await lawyer.GetAsync("/api/panel/reports?from=2025-01-01&to=2026-11-07", Ct)).StatusCode); // over a year
+        var trend = (await lawyer.GetFromJsonAsync<JsonNode>("/api/panel/reports/trend", Ct))!["months"]!.AsArray();
+        Assert.Equal(12, trend.Count);
+        Assert.Equal(today[..7], (string)trend[^1]!["month"]!); // up to this month
     }
 }

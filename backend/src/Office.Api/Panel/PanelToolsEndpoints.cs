@@ -135,9 +135,23 @@ public static partial class PanelToolsEndpoints
         });
 
         // ---------- reports ----------
-        panel.MapGet("/reports", async (string? month, PanelTools tools, TimeProvider clock, CancellationToken ct) =>
+        panel.MapGet("/reports", async (string? month, string? from, string? to, PanelTools tools, TimeProvider clock, CancellationToken ct) =>
         {
             var now = TimeZoneInfo.ConvertTime(clock.GetUtcNow(), Office.Domain.Tasks.OfficeHours.Cairo);
+            // the owner (2026-11-07): a day, a range or a year too: «from» and «to» (YYYY-MM-DD, both included, up to 366 days)
+            if (from is { Length: > 0 } || to is { Length: > 0 })
+            {
+                var fmt = System.Globalization.CultureInfo.InvariantCulture;
+                if (!DateOnly.TryParseExact(from, "yyyy-MM-dd", fmt, System.Globalization.DateTimeStyles.None, out var f)
+                    || !DateOnly.TryParseExact(to ?? from, "yyyy-MM-dd", fmt, System.Globalization.DateTimeStyles.None, out var t)
+                    || f.Year < 2024 || t < f || t.DayNumber - f.DayNumber > 365)
+                {
+                    return Results.BadRequest(new { error = "invalid_range" });
+                }
+
+                return Results.Ok(await tools.ReportAsync(f, t, f == t ? f.ToString("yyyy-MM-dd", fmt) : $"{f:yyyy-MM-dd}..{t:yyyy-MM-dd}", ct));
+            }
+
             int year = now.Year, m = now.Month;
             if (month is { Length: > 0 })
             {
@@ -150,6 +164,13 @@ public static partial class PanelToolsEndpoints
             }
 
             return Results.Ok(await tools.ReportAsync(year, m, ct));
+        }).RequireAuthorization(PanelAuth.Policy(Permissions.ReportsView));
+
+        // «الشهور»: what came each month, the last 12 months up to this one
+        panel.MapGet("/reports/trend", async (PanelTools tools, TimeProvider clock, CancellationToken ct) =>
+        {
+            var now = TimeZoneInfo.ConvertTime(clock.GetUtcNow(), Office.Domain.Tasks.OfficeHours.Cairo);
+            return Results.Ok(new { months = await tools.TrendAsync(now.Year, now.Month, 12, ct) });
         }).RequireAuthorization(PanelAuth.Policy(Permissions.ReportsView));
 
         // v1.58 (the owner: «المحادثة صرفت قد إيه من الكريدت؟»): the AI cost by conversation, and one conversation's messages

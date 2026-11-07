@@ -220,6 +220,13 @@ export interface ReportRow {
   count: number;
 }
 
+/** «الشهور»: one month's money that came, and its paid bookings. */
+export interface TrendRow {
+  month: string;
+  received: number;
+  booked: number;
+}
+
 /** One service of the month: paid bookings (or priced orders), the ones done, what came, the price (null: priced one by one). */
 export interface ServiceReportRow {
   key: string;

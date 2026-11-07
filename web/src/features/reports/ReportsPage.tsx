@@ -1,7 +1,7 @@
 import { Fragment, useId, useState, type ReactNode } from "react";
 import { queryOptions, useQuery, type QueryClient } from "@tanstack/react-query";
 import { api, errorMessage } from "../../shared/api/client";
-import type { AiCostReport, AiCostTurn, FreeAnswerRow, MonthReport, RatingReport, ReportRow, ReviewRow, ServiceReportRow, WrittenSummary } from "../../shared/api/types";
+import type { AiCostReport, AiCostTurn, FreeAnswerRow, MonthReport, RatingReport, ReportRow, ReviewRow, ServiceReportRow, TrendRow, WrittenSummary } from "../../shared/api/types";
 import { APPOINTMENT_STATES, BOOKING_SERVICES, label, SERVICE_KINDS, SOURCES, TASK_TYPES, CLIENT_TYPES, matterLabel } from "../../shared/lib/labels";
 import { Icon, type IconName } from "../../shared/ui/Icon";
 import { ErrorState, Loading } from "../../shared/ui/ui";
@@ -20,6 +20,36 @@ function thisMonth(): string {
  */
 const reportQuery = (month: string) => queryOptions({ queryKey: ["report", month], queryFn: () => api<MonthReport>("GET", `/reports?month=${month}`) });
 
+/** «Today» in Cairo, as YYYY-MM-DD. */
+function today(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Cairo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+}
+
+/** The owner (2026-11-07, «باليوم ولا بالسنة»): the report for a month, a day, a range of days or a year. */
+type Span = "month" | "day" | "range" | "year";
+
+const SPANS: { value: Span; label: string; icon: IconName }[] = [
+  { value: "month", label: "شهر", icon: "calendar" },
+  { value: "day", label: "يوم", icon: "clock" },
+  { value: "range", label: "من يوم ليوم", icon: "trend-up" },
+  { value: "year", label: "سنة", icon: "reports" },
+];
+
+/** The days a span asks for («from» and «to», both included); null for a month (it has its own query). */
+function daysOf(span: Span, day: string, from: string, to: string, year: string): [string, string] | null {
+  if (span === "day") return [day, day];
+  if (span === "range") return from <= to ? [from, to] : [to, from];
+  if (span === "year") return [`${year}-01-01`, year === today().slice(0, 4) ? today() : `${year}-12-31`];
+  return null;
+}
+
+const rangeQuery = (from: string, to: string) => queryOptions({
+  queryKey: ["report", from, to],
+  queryFn: () => api<MonthReport>("GET", `/reports?from=${from}&to=${to}`),
+});
+
+const trendQuery = queryOptions({ queryKey: ["report-trend"], queryFn: () => api<{ months: TrendRow[] }>("GET", "/reports/trend") });
+
 /** This month's report (what the page opens on), fetched while the pointer is still on the link (idea from PR #14). */
 export function prefetchData(qc: QueryClient) {
   void qc.prefetchQuery(reportQuery(thisMonth()));
@@ -31,7 +61,13 @@ export function prefetchData(qc: QueryClient) {
  */
 export function ReportsPage() {
   const [month, setMonth] = useState(thisMonth);
-  const report = useQuery(reportQuery(month));
+  const [span, setSpan] = useState<Span>("month");
+  const [day, setDay] = useState(today);
+  const [from, setFrom] = useState(() => `${today().slice(0, 8)}01`);
+  const [to, setTo] = useState(today);
+  const [year, setYear] = useState(() => today().slice(0, 4));
+  const days = daysOf(span, day, from, to, year);
+  const report = useQuery(days ? rangeQuery(days[0], days[1]) : reportQuery(month));
   const r = report.data;
   const pct = (a: number, b: number) => (b === 0 ? "—" : `${Math.round((a / b) * 100)}%`);
 
@@ -51,14 +87,26 @@ export function ReportsPage() {
             </span>
             <h1 className="text-[26px] leading-tight font-bold">التقارير</h1>
           </div>
-          <label className="grid gap-1.5 text-sm">
-            <span className="flex items-center gap-1.5 text-[12.5px] font-bold text-gold-ink">
-              <Icon name="calendar" className="size-4" />
-              الشهر
-            </span>
-            <input type="month" className="tabular min-h-11 rounded-full border border-line/60 bg-card/60 px-4 text-ink shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)] focus:border-gold" value={month} min="2024-01" max={thisMonth()}
-              onChange={(e) => { const v = e.target.value; if (v >= "2024-01" && v <= thisMonth()) setMonth(v); }} />
-          </label>
+          <div className="grid gap-2">
+            <Spans value={span} onChange={setSpan} />
+            <div className="flex flex-wrap items-end gap-2">
+              {span === "month" ? <Field label="الشهر"><input type="month" className={INPUT} value={month} min="2024-01" max={thisMonth()}
+                onChange={(e) => { const v = e.target.value; if (v >= "2024-01" && v <= thisMonth()) setMonth(v); }} /></Field> : null}
+              {span === "day" ? <Field label="اليوم"><input type="date" className={INPUT} value={day} min="2024-01-01" max={today()}
+                onChange={(e) => { const v = e.target.value; if (v >= "2024-01-01" && v <= today()) setDay(v); }} /></Field> : null}
+              {span === "range" ? (
+                <>
+                  <Field label="من"><input type="date" className={INPUT} value={from} min="2024-01-01" max={today()}
+                    onChange={(e) => { const v = e.target.value; if (v >= "2024-01-01" && v <= today()) setFrom(v); }} /></Field>
+                  <Field label="لحد"><input type="date" className={INPUT} value={to} min="2024-01-01" max={today()}
+                    onChange={(e) => { const v = e.target.value; if (v >= "2024-01-01" && v <= today()) setTo(v); }} /></Field>
+                </>
+              ) : null}
+              {span === "year" ? <Field label="السنة"><select className={INPUT} value={year} onChange={(e) => setYear(e.target.value)}>
+                {Array.from({ length: parseInt(today().slice(0, 4), 10) - 2023 }, (_, i) => String(parseInt(today().slice(0, 4), 10) - i)).map((y) => <option key={y} value={y}>{y}</option>)}
+              </select></Field> : null}
+            </div>
+          </div>
         </div>
       </header>
 
@@ -95,6 +143,7 @@ export function ReportsPage() {
               </div>
             </div>
             <ByService rows={r.by_service ?? []} />
+            <Months />
             <Note>«في وقتها» = خلصت قبل الميعاد المطلوب. الفلوس = اللي المكتب علّم إنه وصل فعلًا لحجوزات الشهر.</Note>
             <Note>«اتحجز» = اتأكد بالدفع (خلص، أو لسه جاي، أو ماحضرش). الخدمات المكتوبة: الطلب اللي اتسعّر، و«خلص» = اتسلّم.</Note>
           </Group>
@@ -102,7 +151,7 @@ export function ReportsPage() {
           {r.ratings ? <Ratings ratings={r.ratings} /> : null}
           <Review rows={r.review ?? []} />
           <FreeAnswers rows={r.free_answers ?? []} written={r.written} />
-          <AiCost month={month} />
+          {span === "month" ? <AiCost month={month} /> : null}
         </>
       ) : null}
     </div>
@@ -235,6 +284,7 @@ function Staff({ rows }: { rows: MonthReport["by_staff"] }) {
 /** The owner's «جاله كام مكالمة وكل مكالمة سعرها كام»: each service, its price, how many were booked and done, and its money. */
 function ByService({ rows }: { rows: ServiceReportRow[] }) {
   const money = (n: number) => n.toLocaleString("en-US");
+  const max = Math.max(1, ...rows.map((s) => s.received));
   return (
     <GlassCard icon="calendar" title="حسب الخدمة">
       {rows.length === 0 ? <Blank>مفيش حجوزات الشهر ده.</Blank> : (
@@ -247,7 +297,7 @@ function ByService({ rows }: { rows: ServiceReportRow[] }) {
                   <td className="px-2 py-2 font-semibold">{label(RATED_SERVICES, s.key)}</td>
                   <td className="tabular px-2">{s.price === null ? "حسب الطلب" : money(s.price)}</td>
                   <td className="tabular px-2">{s.booked}</td><td className="tabular px-2">{s.completed}</td>
-                  <td className="tabular px-2 font-bold">{money(s.received)}</td>
+                  <td className="px-2 py-1.5"><span className="tabular block font-bold">{money(s.received)}</span><Bar share={s.received / max} /></td>
                 </tr>
               ))}
             </tbody>
@@ -255,6 +305,66 @@ function ByService({ rows }: { rows: ServiceReportRow[] }) {
         </div>
       )}
     </GlassCard>
+  );
+}
+
+/**
+ * «الفلوس اللي وصلت كل شهر»: the last 12 months, one bar a month on one baseline (one series: no legend, the title names it).
+ * Each bar says its month, its money and its bookings on hover and to a screen reader; the month's name is under it.
+ */
+function Months() {
+  const trend = useQuery(trendQuery);
+  const rows = trend.data?.months ?? [];
+  const max = Math.max(1, ...rows.map((m) => m.received));
+  const name = (m: string) => new Intl.DateTimeFormat("ar-EG", { month: "short", timeZone: "UTC" }).format(new Date(`${m}-15T00:00:00Z`));
+  const said = (m: TrendRow) => `${name(m.month)} ${m.month.slice(0, 4)}: ${m.received.toLocaleString("en-US")} جنيه، ${m.booked} حجز`;
+  return (
+    <GlassCard icon="trend-up" title="الفلوس اللي وصلت كل شهر">
+      {trend.isPending ? <Loading /> : trend.isError ? <ErrorState message={errorMessage(trend.error)} onRetry={() => void trend.refetch()} /> : (
+        <ol className="grid h-44 grid-cols-12 items-end gap-1.5" aria-label="آخر 12 شهر">
+          {rows.map((m) => (
+            <li key={m.month} className="group relative flex h-full min-w-0 flex-col items-center justify-end gap-1" title={said(m)}>
+              <span className="sr-only">{said(m)}</span>
+              <span aria-hidden className="tabular text-[10.5px] font-bold text-ink-soft opacity-0 transition group-hover:opacity-100 motion-reduce:transition-none">
+                {m.received >= 1000 ? `${Math.round(m.received / 100) / 10}k` : m.received}
+              </span>
+              <span aria-hidden className="block w-full max-w-7 rounded-t-[4px] bg-gradient-to-t from-[#a87a48] to-[#dcb98c]"
+                style={{ height: `${m.received === 0 ? 0 : Math.max((m.received / max) * 100, 3)}%` }} />
+              <span aria-hidden className="block h-px w-full bg-line" />
+              <span aria-hidden className="truncate text-[10.5px] text-ink-soft">{name(m.month)}</span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </GlassCard>
+  );
+}
+
+/** «مدة التقرير»: glass pills, as the booking page's (features never import each other). */
+function Spans({ value, onChange }: { value: Span; onChange: (v: Span) => void }) {
+  return (
+    <div className="flex min-w-0 flex-wrap gap-1 rounded-[20px] border border-line/60 bg-card/45 p-1 shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)]" role="group" aria-label="مدة التقرير">
+      {SPANS.map((o) => (
+        <button key={o.value} type="button" aria-pressed={value === o.value} onClick={() => onChange(o.value)}
+          className={`flex grow items-center justify-center gap-1.5 whitespace-nowrap rounded-[16px] min-h-8 px-2.5 text-[12.5px] transition motion-reduce:transition-none ${value === o.value
+            ? "btn-gold font-bold shadow-[inset_0_1px_0_rgb(255_255_255/0.4),0_6px_14px_-6px_rgb(140_98_58/0.8)]"
+            : "text-ink hover:bg-card/80"}`}>
+          <Icon name={o.icon} className="size-3.5" />
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+const INPUT = "tabular min-h-11 rounded-full border border-line/60 bg-card/60 px-4 text-ink shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)] focus:border-gold";
+
+function Field({ label: name, children }: { label: string; children: ReactNode }) {
+  return (
+    <label className="grid gap-1.5 text-sm">
+      <span className="flex items-center gap-1.5 text-[12.5px] font-bold text-gold-ink"><Icon name="calendar" className="size-4" />{name}</span>
+      {children}
+    </label>
   );
 }
 
