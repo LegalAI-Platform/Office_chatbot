@@ -26,6 +26,14 @@ public sealed record ReportRow(string Key, int Count);
 public sealed record StaffReportRow(string Staff, int Assigned, int Done, int OnTime);
 
 /// <summary>
+/// The owner's request (2026-11-07, «جاله كام مكالمة وكل مكالمة سعرها كام»): one service of the month. <see cref="Booked"/> its
+/// appointments or orders paid for (confirmed, completed, not attended; an order priced), <see cref="Completed"/> the ones done
+/// (completed; an order delivered), <see cref="Received"/> what came and was not given back, <see cref="Price"/> the price it was
+/// booked at (null for the written services, priced one by one).
+/// </summary>
+public sealed record ServiceReportRow(string Key, int Booked, int Completed, int Received, int? Price);
+
+/// <summary>
 /// TASK 09: <see cref="ByBooking"/> the month's appointments by state (S-03, the holds that ran out too);
 /// the money of those appointments as the office marked it: <see cref="Received"/> what came and was not given back,
 /// <see cref="Missing"/> what is still missing on «ناقص», and <see cref="Refunded"/> what was given back this month.
@@ -37,6 +45,9 @@ public sealed record MonthReport(string Month, int Tasks, int Done, int DoneOnTi
 {
     /// <summary>v1.39 (TASK 16, 3.4): «محادثات محتاجة مراجعة», the month's turns flagged by the system.</summary>
     public IReadOnlyList<ReviewRow> Review { get; init; } = [];
+
+    /// <summary>«حسب الخدمة»: each service's bookings, the ones done, and its money this month.</summary>
+    public IReadOnlyList<ServiceReportRow> ByService { get; init; } = [];
 
     /// <summary>v1.53 (B-34, layer 6): «ردود حازم الحرة», each free answer of the month, sent or refused and why.</summary>
     public IReadOnlyList<FreeAnswerRow> FreeAnswers { get; init; } = [];
@@ -338,7 +349,7 @@ public sealed partial class PanelTools(HazemDbContext db, ListImporter importer,
                               where a.StartsAt >= start && a.StartsAt < end
                               select new
                               {
-                                  a.State, Payment = p == null ? null : p.State, Due = p == null ? 0 : p.AmountDue,
+                                  a.Id, a.Service, a.Amount, a.State, Payment = p == null ? null : p.State, Due = p == null ? 0 : p.AmountDue,
                                   Came = p == null ? null : p.AmountReceived, GaveBack = p != null && p.State == "refunded" ? p.RefundDue : null,
                               })
             .ToListAsync(ct);
@@ -346,7 +357,7 @@ public sealed partial class PanelTools(HazemDbContext db, ListImporter importer,
         var orders = await (from o in db.ServiceOrders.AsNoTracking()
                             join p in db.Payments.AsNoTracking() on (Guid?)o.Id equals p.ServiceOrderId
                             where o.PricedAt >= start && o.PricedAt < end
-                            select new { Payment = p.State, Due = p.AmountDue, Came = p.AmountReceived, GaveBack = p.State == "refunded" ? p.RefundDue : null })
+                            select new { o.Id, o.Kind, o.State, Payment = p.State, Due = p.AmountDue, Came = p.AmountReceived, GaveBack = p.State == "refunded" ? p.RefundDue : null })
             .ToListAsync(ct);
         var refunded = await db.Payments.AsNoTracking().Where(p => p.State == "refunded" && p.RefundedAt >= start && p.RefundedAt < end)
             .SumAsync(p => p.RefundDue ?? 0, ct);
@@ -388,6 +399,17 @@ public sealed partial class PanelTools(HazemDbContext db, ListImporter importer,
                     .Select(r => new LowRatingRow(r.AnsweredAt!.Value, r.Service, r.NameRaw)).ToList()))
         {
             Review = await ReviewAsync(start, end, ct),
+            // the money of every booking counts (one cancelled and refunded too), so the rows add up to «وصل»
+            ByService = bookings.GroupBy(b => b.Service)
+                .Select(g => new ServiceReportRow(g.Key, g.Where(b => b.State is "confirmed" or "completed" or "no_show").Select(b => b.Id).Distinct().Count(),
+                    g.Where(b => b.State == "completed").Select(b => b.Id).Distinct().Count(),
+                    g.Sum(b => (b.Came ?? 0) - (b.GaveBack ?? 0)), g.Max(b => b.Amount)))
+                .Concat(orders.GroupBy(o => o.Kind)
+                    .Select(g => new ServiceReportRow(g.Key, g.Select(o => o.Id).Distinct().Count(),
+                        g.Where(o => o.State == "delivered").Select(o => o.Id).Distinct().Count(),
+                        g.Sum(o => (o.Came ?? 0) - (o.GaveBack ?? 0)), null)))
+                .Where(r => r.Booked > 0 || r.Received != 0)
+                .OrderByDescending(r => r.Received).ThenByDescending(r => r.Booked).ToList(),
             FreeAnswers = await FreeAnswersAsync(start, end, ct),
             Written = await WrittenAsync(start, end, ct),
             AiCost = await AiCostSummaryAsync(start, end, ct),

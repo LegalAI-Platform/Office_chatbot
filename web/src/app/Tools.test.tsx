@@ -165,6 +165,27 @@ describe("TASK 07c tools", () => {
     expect(within(ratings).getByText("—")).toBeTruthy();
   });
 
+  it("shows each service's price, its bookings, the ones done and its money", async () => {
+    serve({
+      "GET /auth/me": { body: lawyer },
+      "GET /reports": { body: { month: "2026-11", tasks: 0, done: 0, done_on_time: 0, late: 0, by_type: [], by_staff: [], new_clients: 0, by_source: [], by_matter: [], by_client_type: [], by_booking: [], received: 9500, missing: 0, refunded: 0,
+        ratings: { sent: 0, answered: 0, by_service: [], low: [] },
+        by_service: [{ key: "urf_marriage_office", booked: 1, completed: 1, received: 5000, price: 5000 },
+          { key: "consultation_phone_video", booked: 6, completed: 4, received: 3000, price: 500 },
+          { key: "document_review", booked: 1, completed: 0, received: 1500, price: null }] } },
+    });
+    renderAt("/reports");
+    const card = await screen.findByRole("region", { name: "حسب الخدمة" });
+    const rows = within(card).getAllByRole("row").slice(1);
+    expect(rows[0]!.textContent).toContain("عقد عرفي (شهود المكتب)");
+    expect(rows[0]!.textContent).toContain("5,000");
+    expect(rows[1]!.textContent).toContain("تليفون أو فيديو");
+    expect(rows[1]!.textContent).toContain("500");
+    expect(rows[1]!.textContent).toContain("3,000");
+    expect(rows[2]!.textContent).toContain("مراجعة عقد");
+    expect(rows[2]!.textContent).toContain("حسب الطلب"); // a written service is priced one by one
+  });
+
   it("will not save a text longer than its limit", async () => {
     const calls = serve({
       "GET /auth/me": { body: lawyer },

@@ -1,7 +1,7 @@
 import { Fragment, useId, useState, type ReactNode } from "react";
 import { queryOptions, useQuery, type QueryClient } from "@tanstack/react-query";
 import { api, errorMessage } from "../../shared/api/client";
-import type { AiCostReport, AiCostTurn, FreeAnswerRow, MonthReport, RatingReport, ReportRow, ReviewRow, WrittenSummary } from "../../shared/api/types";
+import type { AiCostReport, AiCostTurn, FreeAnswerRow, MonthReport, RatingReport, ReportRow, ReviewRow, ServiceReportRow, WrittenSummary } from "../../shared/api/types";
 import { APPOINTMENT_STATES, BOOKING_SERVICES, label, SERVICE_KINDS, SOURCES, TASK_TYPES, CLIENT_TYPES, matterLabel } from "../../shared/lib/labels";
 import { Icon, type IconName } from "../../shared/ui/Icon";
 import { ErrorState, Loading } from "../../shared/ui/ui";
@@ -94,7 +94,9 @@ export function ReportsPage() {
                 <Number icon="refresh" tone="grey" title="اترد (جنيه)" value={r.refunded} />
               </div>
             </div>
+            <ByService rows={r.by_service ?? []} />
             <Note>«في وقتها» = خلصت قبل الميعاد المطلوب. الفلوس = اللي المكتب علّم إنه وصل فعلًا لحجوزات الشهر.</Note>
+            <Note>«اتحجز» = اتأكد بالدفع (خلص، أو لسه جاي، أو ماحضرش). الخدمات المكتوبة: الطلب اللي اتسعّر، و«خلص» = اتسلّم.</Note>
           </Group>
 
           {r.ratings ? <Ratings ratings={r.ratings} /> : null}
@@ -220,6 +222,32 @@ function Staff({ rows }: { rows: MonthReport["by_staff"] }) {
               {rows.map((s) => (
                 <tr key={s.staff} className="transition hover:bg-card/60">
                   <td className="px-2 py-2 font-semibold">{s.staff || "مش متعيّنة"}</td><td className="tabular px-2">{s.assigned}</td><td className="tabular px-2">{s.done}</td><td className="tabular px-2">{s.on_time}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </GlassCard>
+  );
+}
+
+/** The owner's «جاله كام مكالمة وكل مكالمة سعرها كام»: each service, its price, how many were booked and done, and its money. */
+function ByService({ rows }: { rows: ServiceReportRow[] }) {
+  const money = (n: number) => n.toLocaleString("en-US");
+  return (
+    <GlassCard icon="calendar" title="حسب الخدمة">
+      {rows.length === 0 ? <Blank>مفيش حجوزات الشهر ده.</Blank> : (
+        <div className="soft-scroll overflow-x-auto">
+          <table className="w-full min-w-[24rem] text-[13.5px]">
+            <thead><tr className="border-b border-line/70"><th className={TH}>الخدمة</th><th className={TH}>السعر</th><th className={TH}>اتحجز</th><th className={TH}>خلص</th><th className={TH}>وصل (جنيه)</th></tr></thead>
+            <tbody className="divide-y divide-line/60">
+              {rows.map((s) => (
+                <tr key={s.key} className="transition hover:bg-card/60">
+                  <td className="px-2 py-2 font-semibold">{label(RATED_SERVICES, s.key)}</td>
+                  <td className="tabular px-2">{s.price === null ? "حسب الطلب" : money(s.price)}</td>
+                  <td className="tabular px-2">{s.booked}</td><td className="tabular px-2">{s.completed}</td>
+                  <td className="tabular px-2 font-bold">{money(s.received)}</td>
                 </tr>
               ))}
             </tbody>
