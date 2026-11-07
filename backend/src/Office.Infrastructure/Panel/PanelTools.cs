@@ -26,6 +26,17 @@ public sealed record ReportRow(string Key, int Count);
 public sealed record StaffReportRow(string Staff, int Assigned, int Done, int OnTime);
 
 /// <summary>
+/// The owner's request (2026-11-07, «جاله كام مكالمة وكل مكالمة سعرها كام»): one service of the month. <see cref="Booked"/> its
+/// appointments or orders paid for (confirmed, completed, not attended; an order priced), <see cref="Completed"/> the ones done
+/// (completed; an order delivered), <see cref="Received"/> what came and was not given back, <see cref="Price"/> the price it was
+/// booked at (null for the written services, priced one by one).
+/// </summary>
+/// <summary>One month of «الشهور»: what came, and the bookings paid for.</summary>
+public sealed record TrendRow(string Month, int Received, int Booked);
+
+public sealed record ServiceReportRow(string Key, int Booked, int Completed, int Received, int? Price);
+
+/// <summary>
 /// TASK 09: <see cref="ByBooking"/> the month's appointments by state (S-03, the holds that ran out too);
 /// the money of those appointments as the office marked it: <see cref="Received"/> what came and was not given back,
 /// <see cref="Missing"/> what is still missing on «ناقص», and <see cref="Refunded"/> what was given back this month.
@@ -37,6 +48,9 @@ public sealed record MonthReport(string Month, int Tasks, int Done, int DoneOnTi
 {
     /// <summary>v1.39 (TASK 16, 3.4): «محادثات محتاجة مراجعة», the month's turns flagged by the system.</summary>
     public IReadOnlyList<ReviewRow> Review { get; init; } = [];
+
+    /// <summary>«حسب الخدمة»: each service's bookings, the ones done, and its money this month.</summary>
+    public IReadOnlyList<ServiceReportRow> ByService { get; init; } = [];
 
     /// <summary>v1.53 (B-34, layer 6): «ردود حازم الحرة», each free answer of the month, sent or refused and why.</summary>
     public IReadOnlyList<FreeAnswerRow> FreeAnswers { get; init; } = [];
@@ -300,12 +314,27 @@ public sealed partial class PanelTools(HazemDbContext db, ListImporter importer,
     /// One Cairo month: tasks by type and by staff member (done, and done before their due time),
     /// and new clients by source (B-13), topic (B-25) and kind. «On time» = finished before due_at.
     /// </summary>
-    public async Task<MonthReport> ReportAsync(int year, int month, CancellationToken ct)
+    public Task<MonthReport> ReportAsync(int year, int month, CancellationToken ct)
     {
-        var cairo = Domain.Tasks.OfficeHours.Cairo;
-        var start = new DateTimeOffset(new DateTime(year, month, 1), cairo.GetUtcOffset(new DateTime(year, month, 1))).ToUniversalTime();
-        var nextLocal = new DateTime(year, month, 1).AddMonths(1);
-        var end = new DateTimeOffset(nextLocal, cairo.GetUtcOffset(nextLocal)).ToUniversalTime();
+        var first = new DateOnly(year, month, 1);
+        return ReportAsync(first, first.AddMonths(1).AddDays(-1), $"{year:D4}-{month:D2}", ct);
+    }
+
+    /// <summary>Midnight of a Cairo day, in UTC.</summary>
+    public static DateTimeOffset CairoMidnight(DateOnly day)
+    {
+        var local = day.ToDateTime(TimeOnly.MinValue);
+        return new DateTimeOffset(local, Domain.Tasks.OfficeHours.Cairo.GetUtcOffset(local)).ToUniversalTime();
+    }
+
+    /// <summary>
+    /// The owner (2026-11-07, «باليوم ولا بالسنة»): the same report for any days, from <paramref name="from"/> to <paramref name="to"/>
+    /// (Cairo, both included): one day, a range, a month or a year. <paramref name="label"/> is what <see cref="MonthReport.Month"/> says.
+    /// </summary>
+    public async Task<MonthReport> ReportAsync(DateOnly from, DateOnly to, string label, CancellationToken ct)
+    {
+        var start = CairoMidnight(from);
+        var end = CairoMidnight(to.AddDays(1));
 
         var tasks = await (from t in db.StaffTasks.AsNoTracking()
                            join s in db.Staff.AsNoTracking() on t.StaffId equals s.Id into ss
@@ -338,7 +367,7 @@ public sealed partial class PanelTools(HazemDbContext db, ListImporter importer,
                               where a.StartsAt >= start && a.StartsAt < end
                               select new
                               {
-                                  a.State, Payment = p == null ? null : p.State, Due = p == null ? 0 : p.AmountDue,
+                                  a.Id, a.Service, a.Amount, a.State, Payment = p == null ? null : p.State, Due = p == null ? 0 : p.AmountDue,
                                   Came = p == null ? null : p.AmountReceived, GaveBack = p != null && p.State == "refunded" ? p.RefundDue : null,
                               })
             .ToListAsync(ct);
@@ -346,7 +375,7 @@ public sealed partial class PanelTools(HazemDbContext db, ListImporter importer,
         var orders = await (from o in db.ServiceOrders.AsNoTracking()
                             join p in db.Payments.AsNoTracking() on (Guid?)o.Id equals p.ServiceOrderId
                             where o.PricedAt >= start && o.PricedAt < end
-                            select new { Payment = p.State, Due = p.AmountDue, Came = p.AmountReceived, GaveBack = p.State == "refunded" ? p.RefundDue : null })
+                            select new { o.Id, o.Kind, o.State, Payment = p.State, Due = p.AmountDue, Came = p.AmountReceived, GaveBack = p.State == "refunded" ? p.RefundDue : null })
             .ToListAsync(ct);
         var refunded = await db.Payments.AsNoTracking().Where(p => p.State == "refunded" && p.RefundedAt >= start && p.RefundedAt < end)
             .SumAsync(p => p.RefundDue ?? 0, ct);
@@ -359,7 +388,7 @@ public sealed partial class PanelTools(HazemDbContext db, ListImporter importer,
         static double Average(IEnumerable<short?> scores) => Math.Round(scores.Average(s => (double)s!.Value), 1);
 
         return new MonthReport(
-            $"{year:D4}-{month:D2}",
+            label,
             tasks.Count,
             tasks.Count(t => t.State == "done"),
             tasks.Count(t => OnTime(t.State, t.DueAt, t.UpdatedAt)),
@@ -388,10 +417,51 @@ public sealed partial class PanelTools(HazemDbContext db, ListImporter importer,
                     .Select(r => new LowRatingRow(r.AnsweredAt!.Value, r.Service, r.NameRaw)).ToList()))
         {
             Review = await ReviewAsync(start, end, ct),
+            // the money of every booking counts (one cancelled and refunded too), so the rows add up to «وصل»
+            ByService = bookings.GroupBy(b => b.Service)
+                .Select(g => new ServiceReportRow(g.Key, g.Where(b => b.State is "confirmed" or "completed" or "no_show").Select(b => b.Id).Distinct().Count(),
+                    g.Where(b => b.State == "completed").Select(b => b.Id).Distinct().Count(),
+                    g.Sum(b => (b.Came ?? 0) - (b.GaveBack ?? 0)), g.Max(b => b.Amount)))
+                .Concat(orders.GroupBy(o => o.Kind)
+                    .Select(g => new ServiceReportRow(g.Key, g.Select(o => o.Id).Distinct().Count(),
+                        g.Where(o => o.State == "delivered").Select(o => o.Id).Distinct().Count(),
+                        g.Sum(o => (o.Came ?? 0) - (o.GaveBack ?? 0)), null)))
+                .Where(r => r.Booked > 0 || r.Received != 0)
+                .OrderByDescending(r => r.Received).ThenByDescending(r => r.Booked).ToList(),
             FreeAnswers = await FreeAnswersAsync(start, end, ct),
             Written = await WrittenAsync(start, end, ct),
             AiCost = await AiCostSummaryAsync(start, end, ct),
         };
+    }
+
+    /// <summary>
+    /// «الشهور»: what came (and was not given back) and the paid bookings of each of the last <paramref name="months"/> months,
+    /// counted as the month's report counts them (a booking in its appointment's month, an order in the month it was priced).
+    /// </summary>
+    public async Task<IReadOnlyList<TrendRow>> TrendAsync(int thisYear, int thisMonth, int months, CancellationToken ct)
+    {
+        var firstMonth = new DateOnly(thisYear, thisMonth, 1).AddMonths(1 - months);
+        var start = CairoMidnight(firstMonth);
+        var end = CairoMidnight(new DateOnly(thisYear, thisMonth, 1).AddMonths(1));
+        var cairo = Domain.Tasks.OfficeHours.Cairo;
+        string MonthOf(DateTimeOffset at) => TimeZoneInfo.ConvertTime(at, cairo).ToString("yyyy-MM", System.Globalization.CultureInfo.InvariantCulture);
+
+        var bookings = await (from a in db.Appointments.AsNoTracking()
+                              join p in db.Payments.AsNoTracking() on (Guid?)a.Id equals p.AppointmentId into pays
+                              from p in pays.DefaultIfEmpty()
+                              where a.StartsAt >= start && a.StartsAt < end
+                              select new { a.Id, a.StartsAt, a.State, Came = p == null ? null : p.AmountReceived,
+                                  GaveBack = p != null && p.State == "refunded" ? p.RefundDue : null }).ToListAsync(ct);
+        var orders = await (from o in db.ServiceOrders.AsNoTracking()
+                            join p in db.Payments.AsNoTracking() on (Guid?)o.Id equals p.ServiceOrderId
+                            where o.PricedAt >= start && o.PricedAt < end
+                            select new { o.PricedAt, Came = p.AmountReceived, GaveBack = p.State == "refunded" ? p.RefundDue : null }).ToListAsync(ct);
+        return Enumerable.Range(0, months).Select(i => firstMonth.AddMonths(i).ToString("yyyy-MM", System.Globalization.CultureInfo.InvariantCulture))
+            .Select(m => new TrendRow(m,
+                bookings.Where(b => MonthOf(b.StartsAt) == m).Sum(b => (b.Came ?? 0) - (b.GaveBack ?? 0))
+                    + orders.Where(o => MonthOf(o.PricedAt!.Value) == m).Sum(o => (o.Came ?? 0) - (o.GaveBack ?? 0)),
+                bookings.Where(b => MonthOf(b.StartsAt) == m && b.State is "confirmed" or "completed" or "no_show").Select(b => b.Id).Distinct().Count()))
+            .ToList();
     }
 
     public const int ReviewMax = 100;

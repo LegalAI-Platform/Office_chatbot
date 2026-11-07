@@ -220,6 +220,22 @@ export interface ReportRow {
   count: number;
 }
 
+/** «الشهور»: one month's money that came, and its paid bookings. */
+export interface TrendRow {
+  month: string;
+  received: number;
+  booked: number;
+}
+
+/** One service of the month: paid bookings (or priced orders), the ones done, what came, the price (null: priced one by one). */
+export interface ServiceReportRow {
+  key: string;
+  booked: number;
+  completed: number;
+  received: number;
+  price: number | null;
+}
+
 export interface MonthReport {
   month: string;
   tasks: number;
@@ -238,6 +254,8 @@ export interface MonthReport {
   refunded: number;
   /** v1.31 (B-26) «تقييمات العملاء»: the ratings sent in the month and their answers. */
   ratings: RatingReport;
+  /** «حسب الخدمة»: each service's bookings (or orders), the ones done, its money and its price. */
+  by_service?: ServiceReportRow[];
   /** v1.39 (TASK 16) «محادثات محتاجة مراجعة»: the month's conversations the system flagged. */
   review?: ReviewRow[];
   /** v1.53 (B-34) «ردود حازم الحرة»: each free answer of the month, sent or refused and why. */

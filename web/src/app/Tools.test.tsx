@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Me } from "../shared/api/types";
@@ -16,11 +16,11 @@ const emptyDash = { urgent: 0, overdue: 0, unassigned: 0, active: 0, urgent_by_d
 type Answer = { status?: number; body?: unknown };
 
 function serve(table: Record<string, Answer>) {
-  const calls: { method: string; path: string; body: unknown }[] = [];
+  const calls: { method: string; path: string; url: string; body: unknown }[] = [];
   vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
     const path = String(url).replace("/api/panel", "").split("?")[0]!;
     const method = init?.method ?? "GET";
-    calls.push({ method, path, body: init?.body ? JSON.parse(String(init.body)) : undefined });
+    calls.push({ method, path, url: String(url), body: init?.body ? JSON.parse(String(init.body)) : undefined });
     if (path === "/auth/csrf") return Response.json({ token: "t" });
     const a = table[`${method} ${path}`] ?? (path === "/dashboard" ? { body: emptyDash } : path === "/alerts" ? { body: { unread: 0, items: [] } } : { status: 404, body: { error: "not_found" } });
     const status = a.status ?? 200;
@@ -163,6 +163,44 @@ describe("TASK 07c tools", () => {
     renderAt("/reports");
     const ratings = await screen.findByRole("region", { name: "تقييمات العملاء" });
     expect(within(ratings).getByText("—")).toBeTruthy();
+  });
+
+  it("shows each service's price, its bookings, the ones done and its money", async () => {
+    serve({
+      "GET /auth/me": { body: lawyer },
+      "GET /reports": { body: { month: "2026-11", tasks: 0, done: 0, done_on_time: 0, late: 0, by_type: [], by_staff: [], new_clients: 0, by_source: [], by_matter: [], by_client_type: [], by_booking: [], received: 9500, missing: 0, refunded: 0,
+        ratings: { sent: 0, answered: 0, by_service: [], low: [] },
+        by_service: [{ key: "urf_marriage_office", booked: 1, completed: 1, received: 5000, price: 5000 },
+          { key: "consultation_phone_video", booked: 6, completed: 4, received: 3000, price: 500 },
+          { key: "document_review", booked: 1, completed: 0, received: 1500, price: null }] } },
+    });
+    renderAt("/reports");
+    const card = await screen.findByRole("region", { name: "حسب الخدمة" });
+    const rows = within(card).getAllByRole("row").slice(1);
+    expect(rows[0]!.textContent).toContain("عقد عرفي (شهود المكتب)");
+    expect(rows[0]!.textContent).toContain("5,000");
+    expect(rows[1]!.textContent).toContain("تليفون أو فيديو");
+    expect(rows[1]!.textContent).toContain("500");
+    expect(rows[1]!.textContent).toContain("3,000");
+    expect(rows[2]!.textContent).toContain("مراجعة عقد");
+    expect(rows[2]!.textContent).toContain("حسب الطلب"); // a written service is priced one by one
+  });
+
+  it("asks for one day, a range or a year, and shows the money of the last 12 months", async () => {
+    const empty = { tasks: 0, done: 0, done_on_time: 0, late: 0, by_type: [], by_staff: [], new_clients: 0, by_source: [], by_matter: [], by_client_type: [], by_booking: [], received: 0, missing: 0, refunded: 0,
+      ratings: { sent: 0, answered: 0, by_service: [], low: [] } };
+    const calls = serve({
+      "GET /auth/me": { body: lawyer },
+      "GET /reports": { body: { month: "2026-11", ...empty } },
+      "GET /reports/trend": { body: { months: Array.from({ length: 12 }, (_, i) => ({ month: `2026-${String(i + 1).padStart(2, "0")}`, received: i === 10 ? 9500 : 0, booked: i === 10 ? 7 : 0 })) } },
+    });
+    renderAt("/reports");
+    const months = await screen.findByRole("region", { name: "الفلوس اللي وصلت كل شهر" });
+    expect(await within(months).findByText(/2026: 9,500 جنيه، 7 حجز/)).toBeTruthy(); // November, said to a screen reader too
+    fireEvent.click(screen.getByRole("button", { name: "يوم" }));
+    await waitFor(() => expect(calls.some((c) => c.path === "/reports" && /from=\d{4}-\d{2}-\d{2}&to=\d{4}-\d{2}-\d{2}/.test(c.url))).toBe(true));
+    fireEvent.click(screen.getByRole("button", { name: "سنة" }));
+    await waitFor(() => expect(calls.some((c) => /from=\d{4}-01-01/.test(c.url))).toBe(true));
   });
 
   it("will not save a text longer than its limit", async () => {
