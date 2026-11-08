@@ -65,6 +65,9 @@ check "office_api cannot CREATE TABLE in schema hazem" \
   expect_fail psql_as office_api "$OFFICE_API_PASSWORD" office -c 'CREATE TABLE hazem.__hc_probe(x int)'
 check "office_api cannot read the WhatsApp tables (schema app)" \
   expect_fail psql_as office_api "$OFFICE_API_PASSWORD" office -c 'SELECT 1 FROM app.wa_inbound_messages LIMIT 1'
+# 0072: a client's words go to Chatwoot the moment they come, through one function (never a table of schema app)
+check "office_api reads a client's new words only through app.wa_inbound_early (0072)" \
+  psql_as office_api "$OFFICE_API_PASSWORD" office -c "SELECT count(*) FROM app.wa_inbound_early(now() - interval '1 minute', 1)"
 check "office_app (n8n) cannot read the API tables (schema hazem)" \
   expect_fail psql_as office_app "$OFFICE_APP_PASSWORD" office -c 'SELECT 1 FROM hazem.turns LIMIT 1'
 check "office_api cannot connect to n8n" \

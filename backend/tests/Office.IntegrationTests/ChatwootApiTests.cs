@@ -30,7 +30,8 @@ public sealed class ChatwootApiTests(TestDatabase db) : IAsyncLifetime
         await db.ExecAsync("""
             TRUNCATE hazem.panel_audit; DELETE FROM hazem.panel_users;
             TRUNCATE hazem.turns, hazem.ai_usage, hazem.generated_replies, hazem.send_results, hazem.turn_replies, hazem.classifications, hazem.panel_alerts, hazem.panel_alert_reads, hazem.staff_tasks, hazem.list_entries;
-            TRUNCATE hazem.chatwoot_threads, hazem.chatwoot_turns, hazem.chatwoot_replies;
+            TRUNCATE hazem.chatwoot_threads, hazem.chatwoot_turns, hazem.chatwoot_replies, hazem.chatwoot_inbound;
+            DELETE FROM app.wa_inbound_messages WHERE wamid LIKE 'wamid.CW-%';
             DELETE FROM hazem.staff; DELETE FROM hazem.intakes; DELETE FROM hazem.conversations; DELETE FROM hazem.persons;
             UPDATE hazem.settings SET value = to_char((now() - interval '1 minute') AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
              WHERE key = 'chatwoot.mirror_since';
@@ -140,6 +141,28 @@ public sealed class ChatwootApiTests(TestDatabase db) : IAsyncLifetime
         await Turn(Text("شكراً"));
         await Sync();
         Assert.Single(_factory.Chatwoot.Calls, c => c.Method == "POST" && c.Path.EndsWith("/conversations", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The owner (2026-11-08, «الشات ووت ريل تايم»): his words reach Chatwoot the moment n8n stores them, before Hazem answers; the
+    /// turn then adds Hazem's answer and never posts his words a second time.
+    /// </summary>
+    [Fact]
+    public async Task A_clients_words_reach_chatwoot_before_his_turn_is_answered_and_only_once()
+    {
+        var wamid = $"wamid.CW-{++_n}";
+        await db.ExecAsync("INSERT INTO app.wa_inbound_messages (wamid, wa_id, contact_name, phone_number_id, message_type, sent_at, raw) VALUES ('"
+                           + wamid + "', '" + Client + "', 'عميل', 'test', 'text', now(), '{\"text\": {\"body\": \"عايز اتجوز عرفي\"}}'::jsonb)");
+        Assert.Equal(0, await Sync()); // no turn yet
+        var early = _factory.Chatwoot.Messages(await Conversation());
+        Assert.Equal(("incoming", "عايز اتجوز عرفي"), ((string)Assert.Single(early)["message_type"]!, (string)early[0]["content"]!));
+        Assert.Equal(0, await Sync()); // once
+
+        var actions = await Turn(new JsonObject { ["wamid"] = wamid, ["type"] = "text", ["text"] = "عايز اتجوز عرفي" });
+        Assert.Equal(1, await Sync());
+        var said = _factory.Chatwoot.Messages(await Conversation());
+        Assert.Single(said, m => (string)m["message_type"]! == "incoming"); // not posted again with its turn
+        Assert.Equal(actions.Count, said.Count(m => (string)m["message_type"]! == "outgoing"));
     }
 
     [Fact]

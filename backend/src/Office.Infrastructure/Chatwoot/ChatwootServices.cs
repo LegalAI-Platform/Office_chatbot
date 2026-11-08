@@ -304,11 +304,57 @@ public sealed class ChatwootStore(HazemDbContext db, TimeProvider clock) : IChat
                           orderby t.CreatedAt
                           select new { t, Attempts = s == null ? 0 : s.Attempts, Posted = s == null ? 0 : s.Posted })
             .Take(limit).ToListAsync(ct);
-        return rows.Select(r => new PendingTurn(r.t.TurnId, r.t.WaId, r.t.ContactName,
+        var turns = rows.Select(r => new PendingTurn(r.t.TurnId, r.t.WaId, r.t.ContactName,
             JsonSerializer.Deserialize<List<IncomingMessage>>(r.t.Messages, HazemJson.Options) ?? [],
             JsonSerializer.Deserialize<List<OutboundAction>>(r.t.Actions, HazemJson.Options) ?? [],
             r.Attempts, r.Posted)).ToList();
+        // the client's messages already in Chatwoot from the moment they came: the turn posts Hazem's answer only
+        var wamids = turns.SelectMany(t => t.Messages.Select(m => m.Wamid)).Distinct().ToList();
+        if (wamids.Count == 0)
+        {
+            return turns;
+        }
+
+        var early = (await db.Database.SqlQuery<string>($"""
+            SELECT wamid AS "Value" FROM hazem.chatwoot_inbound WHERE wamid = ANY({wamids.ToArray()})
+            """).ToListAsync(ct)).ToHashSet(StringComparer.Ordinal);
+        return early.Count == 0 ? turns
+            : turns.Select(t => t with { Early = t.Messages.Select(m => m.Wamid).Where(early.Contains).ToHashSet(StringComparer.Ordinal) }).ToList();
     }
+
+    /// <summary>A row of app.wa_inbound_early (the words only).</summary>
+    private sealed record EarlyRow(string Wamid, string WaId, string? ContactName, string Kind, string? Body);
+
+    public async Task<IReadOnlyList<EarlyMessage>> EarlyMessagesAsync(int limit, CancellationToken ct)
+    {
+        var setting = await db.Settings.AsNoTracking().Where(s => s.Key == MirrorSinceKey).Select(s => s.Value).FirstOrDefaultAsync(ct);
+        if (!DateTimeOffset.TryParse(setting, System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AssumeUniversal, out var since))
+        {
+            return [];
+        }
+
+        // not in Chatwoot yet, and its turn not stored yet (a stored turn posts its own messages)
+        var rows = await db.Database.SqlQuery<EarlyRow>($"""
+            SELECT e.wamid AS "Wamid", e.wa_id AS "WaId", e.contact_name AS "ContactName", e.kind AS "Kind", e.body AS "Body"
+              FROM app.wa_inbound_early({since}, {limit}) e
+             WHERE e.body IS NOT NULL AND btrim(e.body) <> ''
+               AND NOT EXISTS (SELECT 1 FROM hazem.chatwoot_inbound c WHERE c.wamid = e.wamid)
+               AND NOT EXISTS (SELECT 1 FROM hazem.turns t WHERE t.wa_id = e.wa_id
+                                  AND t.messages @> jsonb_build_array(jsonb_build_object('wamid', e.wamid)))
+            """).ToListAsync(ct);
+        return rows.Select(r => new EarlyMessage(r.WaId, r.ContactName, r.Kind switch
+        {
+            "interactive" => new IncomingMessage(r.Wamid, MessageType.Interactive, null, null, null, Interactive: new Interactive(null, null, r.Body)),
+            "button" => new IncomingMessage(r.Wamid, MessageType.Button, null, null, null, Button: new Button(null, r.Body)),
+            _ => new IncomingMessage(r.Wamid, MessageType.Text, r.Body, null, null),
+        })).ToList();
+    }
+
+    public Task MarkEarlyAsync(string wamid, string waId, CancellationToken ct) =>
+        db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO hazem.chatwoot_inbound (wamid, wa_id) VALUES ({wamid}, {waId}) ON CONFLICT (wamid) DO NOTHING
+            """, ct);
 
     public Task MarkTurnAsync(string turnId, bool done, int attempts, int posted, DateTimeOffset? nextAt, string? error, CancellationToken ct) =>
         db.Database.ExecuteSqlInterpolatedAsync($"""

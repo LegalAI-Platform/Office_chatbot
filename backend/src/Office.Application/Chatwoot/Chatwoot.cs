@@ -14,8 +14,15 @@ public sealed record ChatwootThread(string WaId, long ContactId, string SourceId
 
 /// <summary>A turn still to copy (hazem.turns, from chatwoot.mirror_since on).</summary>
 /// <summary><paramref name="Posted"/>: how many of its messages reached Chatwoot already (a retry resumes there).</summary>
+/// <summary><paramref name="Early"/>: the client's messages already in Chatwoot from the moment they came (not posted again).</summary>
 public sealed record PendingTurn(string TurnId, string WaId, string? ContactName, IReadOnlyList<IncomingMessage> Messages,
-    IReadOnlyList<OutboundAction> Actions, int Attempts, int Posted);
+    IReadOnlyList<OutboundAction> Actions, int Attempts, int Posted, IReadOnlySet<string>? Early = null);
+
+/// <summary>
+/// The owner (2026-11-08, «الشات ووت ريل تايم»): a client's message just stored, its turn not answered yet, shown in Chatwoot at once
+/// (his words only: a text or a press; a file or a voice waits for its turn).
+/// </summary>
+public sealed record EarlyMessage(string WaId, string? ContactName, IncomingMessage Message);
 
 /// <summary>Chatwoot's HTTP APIs: the account's (as «حازم (النظام)») and the platform's (accounts of the staff).</summary>
 public interface IChatwootApi
@@ -73,6 +80,12 @@ public interface IChatwootStore
 
     Task MarkTurnAsync(string turnId, bool done, int attempts, int posted, DateTimeOffset? nextAt, string? error, CancellationToken ct);
 
+    /// <summary>The clients' messages of the last minutes not in Chatwoot yet and whose turn is not done, oldest first.</summary>
+    Task<IReadOnlyList<EarlyMessage>> EarlyMessagesAsync(int limit, CancellationToken ct) => Task.FromResult<IReadOnlyList<EarlyMessage>>([]);
+
+    /// <summary>This message is in Chatwoot: its turn will not post it again.</summary>
+    Task MarkEarlyAsync(string wamid, string waId, CancellationToken ct) => Task.CompletedTask;
+
     /// <summary>False if this message was seen before (a webhook delivered twice).</summary>
     Task<bool> ClaimReplyAsync(long messageId, long conversationId, string waId, long? userId, CancellationToken ct);
 
@@ -97,6 +110,28 @@ public sealed class ChatwootMirror(IChatwootApi api, IChatwootStore store, TimeP
 
         var done = 0;
         var failedClients = new HashSet<string>(StringComparer.Ordinal);
+        // The client's words first, the moment they are stored: the staff see them while Hazem is still answering. One that fails
+        // here is left to its turn (posted with Hazem's answer, as before).
+        foreach (var early in await store.EarlyMessagesAsync(Batch, ct))
+        {
+            if (failedClients.Contains(early.WaId))
+            {
+                continue;
+            }
+
+            try
+            {
+                var thread = await ThreadAsync(early.WaId, early.ContactName, ct);
+                await api.PostAsync(thread.ConversationId, ChatwootText.Client(early.Message), ChatwootPost.Incoming, ct);
+                await store.MarkEarlyAsync(early.Message.Wamid, early.WaId, ct);
+            }
+            catch (Exception) when (!ct.IsCancellationRequested)
+            {
+                failedClients.Add(early.WaId);
+            }
+        }
+
+        failedClients.Clear();
         foreach (var turn in await store.PendingTurnsAsync(Batch, ct))
         {
             // One client's turns stay in order: after a failure, that client's later turns wait.
@@ -135,7 +170,7 @@ public sealed class ChatwootMirror(IChatwootApi api, IChatwootStore store, TimeP
 
     /// <summary>What Chatwoot shows for a turn, in order: the client's messages, then Hazem's replies.</summary>
     public static IEnumerable<(string Content, ChatwootPost Kind)> Posts(PendingTurn turn) =>
-        turn.Messages.Select(m => (ChatwootText.Client(m), ChatwootPost.Incoming))
+        turn.Messages.Where(m => turn.Early?.Contains(m.Wamid) != true).Select(m => (ChatwootText.Client(m), ChatwootPost.Incoming))
             .Concat(turn.Actions.Select(ChatwootText.Hazem).OfType<string>().Select(t => (t, ChatwootPost.Outgoing)));
 
     /// <summary>The client's conversation in Chatwoot, made on the first message.</summary>
