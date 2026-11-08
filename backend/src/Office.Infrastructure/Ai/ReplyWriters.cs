@@ -18,7 +18,7 @@ namespace Office.Infrastructure.Ai;
 /// </summary>
 public static class WriterPrompt
 {
-    public const string PromptVersion = "write-v3"; // v1.48: from_facts (v1.45 write-v2: the office facts, his question first, the gender)
+    public const string PromptVersion = "write-v4"; // v1.98: never says it is an assistant unless he asks. // v1.48: from_facts (v1.45 write-v2: the office facts, his question first, the gender)
 
     /// <summary>The whole call within this time (a written reply is never worth a late answer: the approved text goes).</summary>
     public static readonly TimeSpan Budget = TimeSpan.FromSeconds(6);
