@@ -298,7 +298,8 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
                         + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.86.md"), Ct) // v1.86: urf_guardian_needed
                         + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.87.md"), Ct) // v1.87: urf_ask_guardian_other
                         + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.90.md"), Ct) // v1.90: urf_witnesses_needed
-                        + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.93.md"), Ct); // v1.93: the welcome without «المساعد الرقمي»
+                        + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.93.md"), Ct) // v1.93: the welcome without «المساعد الرقمي»
+                        + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.99.md"), Ct); // v1.99: situation_past
         decisions = decisions.Replace("\r\n", "\n", StringComparison.Ordinal); // a Windows checkout (core.autocrlf) has CRLF; the texts have \n
         await using var c = new NpgsqlConnection(db.ApiConnectionString);
         await c.OpenAsync(Ct);

@@ -32,8 +32,22 @@ public sealed record UrfCase(
     /// <summary>v1.63: collecting or waiting for a time, never held, and left alone for the fresh days (the worker closes it).</summary>
     public const string Abandoned = "abandoned";
 
+    /// <summary>
+    /// v1.99 (Ahmed Amin's chat, 2026-11-08: his contract's appointment was marked «خلص» by itself, the case went back to
+    /// picking a time, and that night «عايز اتجوز عرفي» went on with the morning's answers): its appointment was marked done,
+    /// so the contract was made and the case is closed (the worker, hazem.urf_due); a mark corrected to «ماجاش» reopens it.
+    /// </summary>
+    public const string Completed = "completed";
+
     public static UrfCase Start(Guid personId, string kind) =>
         new(Guid.NewGuid(), personId, kind, Collecting, kind == Marriage ? UrfStep.Ages : UrfStep.HasCopy);
+
+    /// <summary>v1.99: the kind of a booked Urfi service («urf_marriage_office» → marriage); null for any other service.</summary>
+    public static string? KindOf(string? service) =>
+        service is null ? null
+        : service.StartsWith("urf_marriage", StringComparison.Ordinal) ? Marriage
+        : service.StartsWith("urf_divorce", StringComparison.Ordinal) ? Divorce
+        : null;
 
     public bool IsMarriage => Kind == Marriage;
 

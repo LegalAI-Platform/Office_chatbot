@@ -13,7 +13,7 @@ import { fileUrl, urf, type Show, type UrfCase } from "./api";
 
 const TONE: Record<string, string> = {
   collecting: "grey", documents_pending: "blue", booked: "orange", approved: "green", lawyer_rejected: "grey",
-  rejected_age: "grey", rejected_guardian: "grey", redirected_consultation: "grey", abandoned: "grey",
+  rejected_age: "grey", rejected_guardian: "grey", redirected_consultation: "grey", abandoned: "grey", completed: "green",
 };
 const yesNo = (v: boolean | null) => (v == null ? "—" : v ? "أيوه" : "لأ");
 

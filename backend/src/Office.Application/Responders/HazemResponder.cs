@@ -243,6 +243,7 @@ public sealed class HazemResponder(
         plan.WitnessesNeededOn = Active(TextKeys.UrfWitnessesNeeded); // v1.90
         plan.QuestionLaterOn = Active(TextKeys.UrfQuestionLater); // v1.90
         plan.GuardianOtherOn = Active(TextKeys.UrfAskGuardianOther); // v1.87
+        plan.PastTimeOn = Active(TextKeys.SituationPast); // v1.99
         // v1.84 (TASK 20): the switch; off is the Urfi case exactly as v1.81
         plan.CaseSaidOn = settings.Flag(UnderstandingV2.SwitchKey) && settings.Flag(UrfCaseSaid.SwitchKey);
         // TASK 12 (B-18): the reminders run whenever their texts are approved, the booking from WhatsApp on or off.
@@ -293,8 +294,9 @@ public sealed class HazemResponder(
             // v1.52 (phase 1): understanding v2 (the whole chat, his stance, the other questions); off is Hazem exactly as before
             var understanding = settings.Flag(UnderstandingV2.SwitchKey);
             lastReplyKeys = understanding ? situation.Facts.LastReplyKeys : null;
-            pastWords = PastSaid(situation, settings) is { } passed
-                ? passed + (situation.Kind == SituationKind.None ? "، ومالوش ميعاد تاني محجوز" : "")
+            // v1.99: told to him («لحضرتك»): the writer copied «مفيش ميعاد تاني محجوز ليه», which reads as «why?»
+            pastWords = PastSaid(situation, settings, toHim: true) is { } passed
+                ? passed + (situation.Kind == SituationKind.None ? "، ومفيش ميعاد تاني محجوز لحضرتك" : "")
                 : null;
             // v1.97 (the owner's chat: «💬 أحكي مشكلتي» pressed with «يسطا انا بحبك» typed got «احكيلي الموضوع», his words dropped;
             // Ahmed Amin's: «خدمات المكتب» with «عايز اتجوز عرفي» got the services list): a services button pressed with words typed
@@ -723,9 +725,9 @@ public sealed class HazemResponder(
     /// v1.91: his last appointment that has passed, in words, with the switch on (understanding v2 and hazem.urf_case_said);
     /// null otherwise. Off: as v1.81.
     /// </summary>
-    private string? PastSaid(ClientSituation situation, HazemSettings settings) =>
+    private string? PastSaid(ClientSituation situation, HazemSettings settings, bool toHim = false) =>
         settings.Flag(UnderstandingV2.SwitchKey) && settings.Flag(UrfCaseSaid.SwitchKey) && situation.Facts.Last is { } last
-            ? last.Words(clock.GetUtcNow())
+            ? last.Words(clock.GetUtcNow(), toHim)
             : null;
 
     /// <summary>v1.53 (phase 3): «دليل التعامل», its approved parts in order (never sent).</summary>
@@ -2512,11 +2514,14 @@ public sealed class HazemResponder(
 
                     break;
                 case Intent.RescheduleOrCancel when MayBook && understanding && plan.CaseSaidOn && urfOn && situation.Kind == SituationKind.None
-                                                    && situation.Facts.Last is not null
-                                                    && urfOpen?.FirstOrDefault(u => u.State == UrfCase.DocumentsPending) is { } waitingCase:
+                                                    && situation.Facts.Last is { } passed
+                                                    && (urfOpen?.FirstOrDefault(u => u.State == UrfCase.DocumentsPending)?.Kind
+                                                        ?? (urfOpen is not { Count: > 0 } ? UrfCase.KindOf(passed.Service) : null)) is { } againKind:
                     // v1.91 (Ahmed Amin's chat: «كان ليا ميعاد انهارده 10 الصبح وعايز اخد ميعاد تاني» went to the office): his time
-                    // passed and his Urfi request is still open with every answer: its free times again, as when it was first done
-                    StartUrf(waitingCase.Kind);
+                    // passed and his Urfi request is still open with every answer: its free times again, as when it was first done.
+                    // v1.99: his Urfi appointment was marked done, so its case is closed: another time is a new Urfi request, from
+                    // its first question (not the office)
+                    StartUrf(againKind);
                     break;
                 case Intent.RescheduleOrCancel when MayBook:
                     work = new ShowExisting(null); // B-15: the client's booking, with «change» and «cancel»
@@ -2538,10 +2543,22 @@ public sealed class HazemResponder(
                 case Intent.TellProblem:
                     plan.Say(TextKeys.ServicesTell); // v1.39: as the «أحكي مشكلتي» button
                     break;
-                case Intent.MyStatus when understanding && plan.CaseSaidOn && situation.Facts.Last is not null:
+                case Intent.MyStatus when understanding && plan.CaseSaidOn && situation.Facts.Last is { } passed:
                     // v1.91 (Ahmed Amin's chat: «هو الميعاد كان امتي» after it passed got the welcome): his appointment that passed
-                    // is in the facts; the writer answers what he asked from them («كان النهارده الساعة 10:15 ص»)
-                    plan.Say(TextKeys.FreeAnswer, TextKeys.Unclear);
+                    // is in the facts; the writer answers what he asked from them («كان النهارده الساعة 10:15 ص»).
+                    // v1.99 (Ahmed Amin's chat, 2026-11-08: «عايز اعرف ميعاد امتي» was read right, the reviewer refused the answer
+                    // twice, and «معلش، ممكن توضّحلي أكتر» went, as if he was not understood): the approved words of that
+                    // appointment are the text the writer answers from, and what goes when it is refused («ميعاد حضرتك (…) كان
+                    // … وعدّى خلاص»). Not approved: the free answer, as v1.91.
+                    if (plan.PastTimeOn)
+                    {
+                        plan.Say(TextKeys.SituationPast, TextKeys.FreeAnswer, passed.Fill(plan.Now));
+                    }
+                    else
+                    {
+                        plan.Say(TextKeys.FreeAnswer, TextKeys.Unclear);
+                    }
+
                     break;
                 case Intent.MyStatus:
                     // v1.39: «فاكرني؟» with nothing open (an open item was answered in Respond): his name when he gave one,
@@ -3962,6 +3979,9 @@ public sealed class HazemResponder(
 
         /// <summary>v1.84: hazem.urf_case_said with understanding v2: the Urfi case as one list (off: exactly as v1.81).</summary>
         public bool CaseSaidOn { get; set; }
+
+        /// <summary>v1.99: «ميعاد حضرتك ({{service}}) كان {{day}} الساعة {{time}}، وعدّى خلاص.» is approved and active.</summary>
+        public bool PastTimeOn { get; set; }
 
         public void Say(string key, string? fallback = null, IReadOnlyDictionary<string, string>? Fill = null) =>
             Steps.Add(new ReplyStep(key, fallback, Fill));

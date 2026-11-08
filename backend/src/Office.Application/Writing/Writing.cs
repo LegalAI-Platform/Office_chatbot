@@ -131,8 +131,17 @@ public sealed record WrittenReply(string IdempotencyKey, string Purpose, string?
     /// <summary>v1.48: the sentence that went answered his question from the office facts (no task for the office then).</summary>
     public bool FromFacts { get; init; }
 
+    /// <summary>
+    /// v1.99 (Ahmed Amin's chat: an answer refused twice left nothing to see why): what the writer wrote and was refused, the
+    /// first try and its retry, each with the check that refused it. Kept with the reply, never sent.
+    /// </summary>
+    public IReadOnlyList<RefusedDraft> Refused { get; init; } = [];
+
     public const string Passed = "passed";
 }
+
+/// <summary>v1.99: one written reply that did not go, and why (the guard's or the reviewer's reason).</summary>
+public sealed record RefusedDraft(string Problem, string Text);
 
 /// <summary>
 /// v1.41 (§5): the code's check of a written sentence. Null when it may go; else why not. The facts are the approved text's:
@@ -350,6 +359,8 @@ public static class Conversational
         [TextKeys.SituationConfirmed] = "remind him his appointment is confirmed, its day and time",
         [TextKeys.SituationReview] = "remind him his appointment is held for him, its day and time; the office is reviewing his transfer and will send him the confirmation (never say it is confirmed)",
         [TextKeys.SituationAskTopic] = "invite him, if he likes, to write his matter briefly here so it reaches the lawyer before the appointment",
+        // v1.99: what he asked about the appointment that passed, from the text (its service, day and time); the text goes when refused
+        [TextKeys.SituationPast] = "answer what he asked about his appointment that passed, from the text (its service, its day and time, and that it passed); never say it is coming, confirmed or booked, nor that he came or that anything was done in it",
         [TextKeys.SituationOrder] = "tell him where his service request stands; he may ask about it here",
         [TextKeys.SituationTopic] = "tell him his matter arrived and the lawyer will see it",
         // v1.62 (the owner: «الرد كدا غلط والعميل مش هيفهم حاجه»): when he told the office something («مش هبعت المستندات دلوقتي»),
@@ -631,9 +642,20 @@ public static class Conversational
             return problem;
         }
 
+        // v1.99: every written try that was refused, kept with the reply (never sent) so the office can see why
+        var refused = new List<RefusedDraft>();
+        void KeepRefused(string? why, WriterOutcome o)
+        {
+            if (why is not null && o.Reply is { } text && text.Trim() is { Length: > 0 } draft)
+            {
+                refused.Add(new RefusedDraft(why, draft));
+            }
+        }
+
         var outcome = await writer.WriteAsync(request, settings, ct);
         Note(outcome);
         var problem = await CheckAsync(request, outcome);
+        KeepRefused(problem, outcome);
         // v1.56: refused for something the writer can change → once more with the reason fed back, then the approved words
         var retried = false;
         if (problem is not null && outcome.Reply is not null && understanding && ReplyRetry.Allows(problem))
@@ -646,6 +668,7 @@ public static class Conversational
                 retried = true;
                 outcome = second with { LatencyMs = outcome.LatencyMs + second.LatencyMs };
                 problem = await CheckAsync(again, second);
+                KeepRefused(problem, second);
             }
         }
 
@@ -654,6 +677,7 @@ public static class Conversational
             outcome.Model, retried ? outcome.PromptVersion + "+retry" : outcome.PromptVersion, outcome.LatencyMs, outcome.InputTokens, outcome.OutputTokens)
         {
             FromFacts = problem is null && outcome.FromFacts && keys.Contains(TextKeys.ServiceDetail),
+            Refused = refused,
         };
         if (problem is not null)
         {
