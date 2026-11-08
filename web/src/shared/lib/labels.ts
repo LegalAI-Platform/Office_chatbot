@@ -231,6 +231,7 @@ export const URF_STATES: Record<string, string> = {
   rejected_guardian: "اتقفل: مفيش ولي",
   redirected_consultation: "اتحوّل لاستشارة",
   abandoned: "اتقفل: سكت وما كمّلش",
+  completed: "اتقفل: الميعاد خلص", // v1.99: its appointment was marked done
 };
 
 export const URF_ANSWERS: Record<string, string> = {

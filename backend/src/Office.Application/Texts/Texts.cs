@@ -300,6 +300,7 @@ public static class TextKeys
     public const string SituationTopic = "situation_topic";         // the topic told for an open item
     public const string SituationReview = "situation_review";       // v1.45: paid, the transfer not reviewed yet
     public const string SituationAskTopic = "situation_ask_topic";  // v1.45: «لو حابب تكتب الموضوع…», once, if not told
+    public const string SituationPast = "situation_past";           // v1.99: his appointment that passed: {{service}} {{day}} {{time}}
     public const string RepeatChoice = "repeat_choice";             // the same answer again: the services or a person
     public const string BtnTalkToOffice = "btn_talk_to_office";     // «أكلم حد من المكتب»
     public const string Greeting2 = "greeting_2";                   // more wordings, taken in turn (3.6)

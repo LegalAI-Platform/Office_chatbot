@@ -57,6 +57,71 @@ public sealed class Task11ApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal("3", await db.ScalarAsync<string>("SELECT value FROM hazem.settings WHERE key = 'intake.fresh_after_days'"));
     }
 
+    /// <summary>
+    /// v1.99 (Ahmed Amin's chat: his contract's appointment was marked «خلص» by itself and the case went back to picking a
+    /// time): with hazem.urf_case_said on, a booked case whose appointment is marked done is closed with it; a time cancelled
+    /// still goes back to picking one; a mark corrected to «ماجاش» sends a closed case back, unless another case of the same
+    /// kind is already running. The switch off: as v1.81, back to picking a time.
+    /// </summary>
+    [Fact]
+    public async Task V199_a_booked_urfi_case_whose_appointment_is_done_is_closed_and_a_corrected_mark_reopens_it()
+    {
+        await db.ExecAsync("UPDATE hazem.settings SET value = 'true' WHERE key IN ('hazem.urf_case_said', 'hazem.understanding_v2')");
+        try
+        {
+            await DoneCasesAsync();
+        }
+        finally
+        {
+            await db.ExecAsync("UPDATE hazem.settings SET value = 'false' WHERE key IN ('hazem.urf_case_said', 'hazem.understanding_v2')");
+        }
+
+        // the switch off: exactly as v1.81
+        var (off, a5) = (Guid.NewGuid(), Guid.NewGuid());
+        await db.ExecAsync($"""
+            INSERT INTO hazem.persons (id, wa_id) VALUES ('{off}', '201000000185');
+            INSERT INTO hazem.appointments (id, person_id, service, starts_at, ends_at, amount, booked_turn_id, state) VALUES
+              ('{a5}', '{off}', 'urf_marriage_office', now() - interval '6 hours', now() - interval '5 hours', 5000, 't-{a5:N}', 'completed');
+            INSERT INTO hazem.urf_cases (person_id, kind, state, step, appointment_id) VALUES ('{off}', 'marriage', 'booked', NULL, '{a5}');
+            """);
+        await db.ExecAsync("SELECT hazem.urf_due()");
+        Assert.Equal("documents_pending|", await db.ScalarAsync<string>(
+            $"SELECT state || '|' || coalesce(appointment_id::text, '') FROM hazem.urf_cases WHERE person_id = '{off}'"));
+    }
+
+    private async Task DoneCasesAsync()
+    {
+        var (done, cancelled, corrected, busy) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        var (a1, a2, a3, a4) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        await db.ExecAsync($"""
+            INSERT INTO hazem.persons (id, wa_id) VALUES ('{done}', '201000000181'), ('{cancelled}', '201000000182'),
+                                                          ('{corrected}', '201000000183'), ('{busy}', '201000000184');
+            INSERT INTO hazem.appointments (id, person_id, service, starts_at, ends_at, amount, booked_turn_id, state) VALUES
+              ('{a1}', '{done}', 'urf_marriage_office', now() - interval '5 hours', now() - interval '4 hours', 5000, 't-{a1:N}', 'completed'),
+              ('{a2}', '{cancelled}', 'urf_marriage_office', now() + interval '1 day', now() + interval '25 hours', 5000, 't-{a2:N}', 'cancelled_by_client'),
+              ('{a3}', '{corrected}', 'urf_marriage_own', now() - interval '2 days', now() - interval '47 hours', 4000, 't-{a3:N}', 'no_show'),
+              ('{a4}', '{busy}', 'urf_marriage_own', now() - interval '3 days', now() - interval '71 hours', 4000, 't-{a4:N}', 'no_show');
+            INSERT INTO hazem.urf_cases (person_id, kind, state, step, appointment_id, created_at) VALUES
+              ('{done}', 'marriage', 'booked', NULL, '{a1}', now() - interval '1 day'),
+              ('{cancelled}', 'marriage', 'booked', NULL, '{a2}', now() - interval '1 day'),
+              ('{corrected}', 'marriage', 'completed', NULL, '{a3}', now() - interval '3 days'),
+              ('{busy}', 'marriage', 'completed', NULL, '{a4}', now() - interval '4 days'),
+              ('{busy}', 'marriage', 'collecting', 'ages', NULL, now() - interval '1 hour');
+            """);
+        await db.ExecAsync("SELECT hazem.urf_due()");
+        Assert.Equal($"completed|{a1}", await db.ScalarAsync<string>(
+            $"SELECT state || '|' || coalesce(appointment_id::text, '') FROM hazem.urf_cases WHERE person_id = '{done}'"));
+        Assert.Equal("documents_pending|", await db.ScalarAsync<string>(
+            $"SELECT state || '|' || coalesce(appointment_id::text, '') FROM hazem.urf_cases WHERE person_id = '{cancelled}'"));
+        Assert.Equal("documents_pending|", await db.ScalarAsync<string>(
+            $"SELECT state || '|' || coalesce(appointment_id::text, '') FROM hazem.urf_cases WHERE person_id = '{corrected}'"));
+        Assert.Equal("collecting,completed", await db.ScalarAsync<string>(
+            $"SELECT string_agg(state, ',' ORDER BY state) FROM hazem.urf_cases WHERE person_id = '{busy}'")); // one running case per kind
+        await db.ExecAsync("SELECT hazem.urf_due()"); // twice in a row changes nothing
+        Assert.Equal($"completed|{a1}", await db.ScalarAsync<string>(
+            $"SELECT state || '|' || coalesce(appointment_id::text, '') FROM hazem.urf_cases WHERE person_id = '{done}'"));
+    }
+
     public async ValueTask InitializeAsync()
     {
         await db.ExecAsync(Clean);

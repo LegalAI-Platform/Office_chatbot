@@ -118,12 +118,15 @@ public sealed class ConversationStore(HazemDbContext db) : IConversationStore
 
         if (e.Written is { } w)
         {
-            // v1.41 (TASK 17, migration 0042): the written reply (or why the approved text went instead).
+            // v1.41 (TASK 17, migration 0042): the written reply (or why the approved text went instead). v1.99 (migration 0073):
+            // the tries that were refused, with why, kept for the office (never sent).
+            var refused = w.Refused.Count == 0 ? null
+                : System.Text.Json.JsonSerializer.Serialize(w.Refused.Select(r => new { problem = r.Problem, text = r.Text }));
             await db.Database.ExecuteSqlInterpolatedAsync($"""
                 INSERT INTO hazem.generated_replies (idempotency_key, turn_id, purpose, text, guard, model, prompt_version, latency_ms,
-                                                     input_tokens, output_tokens)
+                                                     input_tokens, output_tokens, refused)
                 VALUES ({w.IdempotencyKey}, {turnId}, {w.Purpose}, {w.Text}, {w.Guard}, {w.Model}, {w.PromptVersion}, {w.LatencyMs},
-                        {w.InputTokens}, {w.OutputTokens})
+                        {w.InputTokens}, {w.OutputTokens}, CAST({refused} AS jsonb))
                 ON CONFLICT (idempotency_key) DO NOTHING
                 """, ct);
         }

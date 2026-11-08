@@ -64,12 +64,15 @@ public static class ReturningClient
     public static string? FirstName(Person person) =>
         person.Name?.Raw.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault();
 
-    /// <summary>The request's work is over (rule 1). An Urfi contract ends with its appointment completed.</summary>
+    /// <summary>
+    /// The request's work is over (rule 1). An Urfi contract ends with its appointment completed (v1.99: the case is then
+    /// closed as completed too, never sent back to picking a time).
+    /// </summary>
     private static bool Ended(RequestItem i) => i.Kind switch
     {
         RequestItem.Appointment => i.State is "completed" or "no_show" or "cancelled_by_client" or "cancelled_by_office" or "expired",
         RequestItem.Order => i.State is "delivered" or "closed",
-        RequestItem.Urf => i.State == "lawyer_rejected",
+        RequestItem.Urf => i.State is "lawyer_rejected" or "completed",
         _ => false,
     };
 

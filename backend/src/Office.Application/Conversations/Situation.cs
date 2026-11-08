@@ -30,9 +30,23 @@ public sealed record OpenAppointment(string Service, string State, DateTimeOffse
 /// <summary>v1.91: an appointment whose time has passed (confirmed, completed or not attended), as the AI and the writer read it.</summary>
 public sealed record PastAppointment(string Service, DateTimeOffset Start)
 {
-    /// <summary>«آخر ميعاد: جواز عرفي، النهارده الساعة 10:15 ص، وعدّى خلاص» (no upcoming one is implied: that is said apart).</summary>
-    public string Words(DateTimeOffset now) =>
-        $"آخر ميعاد ليه: {(BookingService.ByCode(Service) ?? BookingService.PhoneVideo).Name}، {BookingWords.Day(Start, now)} الساعة {BookingWords.Time(Start)}، وعدّى خلاص";
+    /// <summary>
+    /// «آخر ميعاد ليه: جواز عرفي، النهارده الساعة 10:15 ص، وعدّى خلاص» (no upcoming one is implied: that is said apart).
+    /// v1.99: <paramref name="toHim"/> for the writer, «آخر ميعاد لحضرتك» (it copied «ليه» into «مفيش ميعاد تاني محجوز ليه»,
+    /// which reads as «why?»); the AI that reads the message keeps the words it was tested with.
+    /// </summary>
+    public string Words(DateTimeOffset now, bool toHim = false) =>
+        $"آخر ميعاد {(toHim ? "لحضرتك" : "ليه")}: {ServiceName}، {BookingWords.Day(Start, now)} الساعة {BookingWords.Time(Start)}، وعدّى خلاص";
+
+    /// <summary>v1.99: situation_past's slots, as an open appointment's ({{service}}, {{day}}, {{time}}).</summary>
+    public IReadOnlyDictionary<string, string> Fill(DateTimeOffset now) => new Dictionary<string, string>
+    {
+        ["service"] = ServiceName,
+        ["day"] = BookingWords.Day(Start, now),
+        ["time"] = BookingWords.Time(Start),
+    };
+
+    private string ServiceName => (BookingService.ByCode(Service) ?? BookingService.PhoneVideo).Name;
 }
 
 /// <summary>A written service order not delivered yet (S-07: collecting, awaiting_price, awaiting_payment, in_progress).</summary>
