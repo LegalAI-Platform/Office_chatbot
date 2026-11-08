@@ -17,7 +17,7 @@ public static class ReminderKinds
 /// <summary>Why a reminder will never go out (hazem.appointment_reminders.skip_reason).</summary>
 public static class ReminderSkips
 {
-    public const string TooClose = "too_close"; // B-18: moved to 10:00, it would be under an hour before
+    public const string TooClose = "too_close"; // B-18: moved to 10:00 (8:00, v1.96), it would be under an hour before
     public const string Passed = "passed";      // B-18: its time had gone when the booking was confirmed (or moved)
     public const string Late = "late";          // the worker reached it too late for «بكرة» / «النهارده» or the hour before
     public const string Off = "off";            // its texts are not all approved
@@ -44,8 +44,22 @@ public static class ReminderRules
     public const int MorningHour = 10;
 
     /// <summary>
+    /// v1.96: an appointment before noon (Cairo) has its reminders from 8:00, not 10:00. A client due at 10:15 leaves
+    /// home around 9, so a reminder held to 10:00 came too late and was dropped (too_close).
+    /// </summary>
+    public const int EarlyMorningHour = 8;
+
+    /// <summary>v1.96: the appointments that start before this hour (Cairo) get <see cref="EarlyMorningHour"/>.</summary>
+    public const int EarlyAppointmentBefore = 12;
+
+    /// <summary>The first hour a reminder of an appointment at <paramref name="start"/> may go out (Cairo).</summary>
+    public static int FirstHour(DateTimeOffset start) =>
+        TimeZoneInfo.ConvertTime(start, BookingDesk.Zone).Hour < EarlyAppointmentBefore ? EarlyMorningHour : MorningHour;
+
+    /// <summary>
     /// B-18. The day before: 24 hours before; two hours before: 2 hours before, and never on the day before (its
-    /// words say «النهارده»). Between midnight and 10:00 → 10:00; that leaves under an hour → skipped; already past
+    /// words say «النهارده»). Between midnight and 10:00 → 10:00 (an appointment before noon: before 8:00 → 8:00, v1.96);
+    /// that leaves under an hour → skipped; already past
     /// when the booking is confirmed (or moved, <paramref name="now"/>) → skipped.
     /// </summary>
     public static ReminderPlan Plan(string kind, DateTimeOffset start, DateTimeOffset now)
@@ -56,12 +70,13 @@ public static class ReminderRules
         if (kind == ReminderKinds.TwoHours && day < Date(start))
         {
             day = Date(start);
-            due = BookingDesk.Instant(day); // the start's own day, at midnight: then 10:00 below
+            due = BookingDesk.Instant(day); // the start's own day, at midnight: then the first hour below
         }
 
-        if (TimeZoneInfo.ConvertTime(due, zone).Hour < MorningHour)
+        var firstHour = FirstHour(start);
+        if (TimeZoneInfo.ConvertTime(due, zone).Hour < firstHour)
         {
-            due = BookingDesk.Instant(day).AddHours(MorningHour);
+            due = BookingDesk.Instant(day).AddHours(firstHour);
         }
 
         if (start - due < Minimum)
