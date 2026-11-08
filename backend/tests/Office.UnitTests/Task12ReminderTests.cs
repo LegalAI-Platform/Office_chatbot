@@ -19,21 +19,43 @@ public sealed class ReminderRulesTests
     }
 
     [Fact]
-    public void Between_midnight_and_ten_it_waits_for_ten()
+    public void From_noon_on_nothing_changes()
     {
         var now = At(19, 12);
-        Assert.Equal(ReminderPlan.At(At(20, 10)), ReminderRules.Plan(ReminderKinds.DayBefore, At(21, 9), now));
-        Assert.Equal(ReminderPlan.At(At(21, 10)), ReminderRules.Plan(ReminderKinds.TwoHours, At(21, 11, 30), now)); // 9:30 → 10:00
-        Assert.Equal(ReminderPlan.At(At(20, 10)), ReminderRules.Plan(ReminderKinds.DayBefore, At(21, 0), now));  // a midnight appointment
+        Assert.Equal(10, ReminderRules.FirstHour(At(21, 12)));
+        Assert.Equal(8, ReminderRules.FirstHour(At(21, 11, 59)));
+        Assert.Equal(ReminderPlan.At(At(21, 10)), ReminderRules.Plan(ReminderKinds.TwoHours, At(21, 12), now));
+        Assert.Equal(ReminderPlan.At(At(20, 12)), ReminderRules.Plan(ReminderKinds.DayBefore, At(21, 12), now));
     }
 
     [Fact]
-    public void Under_an_hour_before_after_waiting_for_ten_it_is_never_sent()
+    public void Before_noon_it_waits_for_eight_not_ten()
     {
         var now = At(19, 12);
-        Assert.Equal(ReminderPlan.Skipped(ReminderSkips.TooClose), ReminderRules.Plan(ReminderKinds.TwoHours, At(21, 10, 30), now));
-        Assert.Equal(ReminderPlan.Skipped(ReminderSkips.TooClose), ReminderRules.Plan(ReminderKinds.TwoHours, At(21, 10, 59), now));
-        Assert.Equal(ReminderPlan.At(At(21, 10)), ReminderRules.Plan(ReminderKinds.TwoHours, At(21, 11), now));
+        // v1.96: the client due at 10:15 has the two-hours reminder at 8:15, not dropped after waiting for 10:00.
+        Assert.Equal(ReminderPlan.At(At(21, 8, 15)), ReminderRules.Plan(ReminderKinds.TwoHours, At(21, 10, 15), now));
+        Assert.Equal(ReminderPlan.At(At(21, 9, 30)), ReminderRules.Plan(ReminderKinds.TwoHours, At(21, 11, 30), now));
+        Assert.Equal(ReminderPlan.At(At(21, 8)), ReminderRules.Plan(ReminderKinds.TwoHours, At(21, 9, 30), now)); // 7:30 → 8:00
+        Assert.Equal(ReminderPlan.At(At(20, 9)), ReminderRules.Plan(ReminderKinds.DayBefore, At(21, 9), now));
+        Assert.Equal(ReminderPlan.At(At(20, 8)), ReminderRules.Plan(ReminderKinds.DayBefore, At(21, 0), now));  // a midnight appointment
+    }
+
+    [Fact]
+    public void The_night_booking_for_ten_fifteen_gets_its_reminder_at_eight_fifteen()
+    {
+        // The test server, 2026-11-08: booked at 2:08 at night for 10:15 the same morning.
+        var now = At(21, 2, 8);
+        Assert.Equal(ReminderPlan.Skipped(ReminderSkips.Passed), ReminderRules.Plan(ReminderKinds.DayBefore, At(21, 10, 15), now));
+        Assert.Equal(ReminderPlan.At(At(21, 8, 15)), ReminderRules.Plan(ReminderKinds.TwoHours, At(21, 10, 15), now));
+    }
+
+    [Fact]
+    public void Under_an_hour_before_after_waiting_it_is_never_sent()
+    {
+        var now = At(19, 12);
+        Assert.Equal(ReminderPlan.Skipped(ReminderSkips.TooClose), ReminderRules.Plan(ReminderKinds.TwoHours, At(21, 8, 30), now)); // 6:30 → 8:00
+        Assert.Equal(ReminderPlan.Skipped(ReminderSkips.TooClose), ReminderRules.Plan(ReminderKinds.TwoHours, At(21, 8, 59), now));
+        Assert.Equal(ReminderPlan.At(At(21, 8)), ReminderRules.Plan(ReminderKinds.TwoHours, At(21, 9), now));
         // «النهارده»: two hours before a 1:00 appointment would be 11 at night the day before: never sent.
         Assert.Equal(ReminderPlan.Skipped(ReminderSkips.TooClose), ReminderRules.Plan(ReminderKinds.TwoHours, At(21, 1), now));
     }
