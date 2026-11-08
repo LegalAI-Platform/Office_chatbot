@@ -360,11 +360,11 @@ public static class Conversational
         // v1.46: «انا تعبان» gets a word of comfort before the question, never a cold «not clear»
         // v1.55: the comfort never promises («محدش هيعرف»، «مش هيحصل»): the only thing it may say is that what he tells the office
         // stays private with the office (the reviewer refused a comfort reply that promised nobody would know)
-        [TextKeys.ServicesTell] = "ask him to tell his matter briefly (a short word of comfort first when he says he is tired, upset or in trouble: «فاهم إن الموضوع مقلقك» and that what he tells the office stays private with the office; NEVER say or hint that nobody will know, that it will not happen, or that all will be fine)",
+        [TextKeys.ServicesTell] = "ask him to tell his matter briefly (a short word of comfort first ONLY when his own words say he is tired, upset or in trouble — never assumed from a button or a kind word (v1.97): «فاهم إن الموضوع مقلقك» and that what he tells the office stays private with the office; NEVER say or hint that nobody will know, that it will not happen, or that all will be fine)",
         [TextKeys.Unclear] = "say kindly you did not understand and ask what he needs (a short word of comfort first when he sounds tired or upset; never a promise of any kind)",
         [TextKeys.RepeatChoice] = "he does not seem to get what he needs: ask kindly whether he wants the office's services or someone from the office (two buttons follow your sentence)",
         [TextKeys.AboutHazem] = "say who you are: the digital assistant of the office, not a person",
-        [TextKeys.OffTopic] = "say politely that this is outside what a law office does, and that you are here for the office's services",
+        [TextKeys.OffTopic] = "say politely that this is outside what a law office does, and that you are here for the office's services (v1.97: a kind word to you, «بحبك»، «وحشتني», is thanked warmly in a few words first, never answered with love back and never scolded)",
         [TextKeys.Thanks] = "answer his thanks warmly and briefly",
         // v1.45 (TASK 18 §3.3): the answers to his questions and the offer, so a question gets its answer, in one message
         [TextKeys.AboutLawyer] = "answer what he asked about the lawyer, from the text and the office facts (who he is; every consultation is with him himself)",
