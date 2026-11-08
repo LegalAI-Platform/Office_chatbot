@@ -336,7 +336,7 @@ public sealed class ChatwootStore(HazemDbContext db, TimeProvider clock) : IChat
 
         // not in Chatwoot yet, and its turn not stored yet (a stored turn posts its own messages)
         var rows = await db.Database.SqlQuery<EarlyRow>($"""
-            SELECT e.wamid AS "Wamid", e.wa_id AS "WaId", e.contact_name AS "ContactName", e.kind AS "Kind", e.body AS "Body"
+            SELECT e.wamid, e.wa_id, e.contact_name, e.kind, e.body
               FROM app.wa_inbound_early({since}, {limit}) e
              WHERE e.body IS NOT NULL AND btrim(e.body) <> ''
                AND NOT EXISTS (SELECT 1 FROM hazem.chatwoot_inbound c WHERE c.wamid = e.wamid)
