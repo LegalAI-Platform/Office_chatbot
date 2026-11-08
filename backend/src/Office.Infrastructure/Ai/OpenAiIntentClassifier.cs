@@ -26,7 +26,7 @@ public sealed class OpenAiIntentClassifier(HttpClient http, IOptions<HazemOption
     public const string PromptVersionV2 = "classify-v27";
 
     /// <summary>TASK 20 (v1.84): the prompt while hazem.urf_case_said is on too (the Urfi case as one list).</summary>
-    public const string PromptVersionCaseSaid = "classify-v33";
+    public const string PromptVersionCaseSaid = "classify-v34";
     public const string StubEnabledKey = "ai.stub_enabled";
     public const string StubBaseUrlKey = "ai.stub_base_url";
 

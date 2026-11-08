@@ -296,6 +296,24 @@ public sealed class HazemResponder(
             pastWords = PastSaid(situation, settings) is { } passed
                 ? passed + (situation.Kind == SituationKind.None ? "، ومالوش ميعاد تاني محجوز" : "")
                 : null;
+            // v1.97 (the owner's chat: «💬 أحكي مشكلتي» pressed with «يسطا انا بحبك» typed got «احكيلي الموضوع», his words dropped;
+            // Ahmed Amin's: «خدمات المكتب» with «عايز اتجوز عرفي» got the services list): a services button pressed with words typed
+            // in the same turn is read by the AI as what he wrote, the button's title first, so the reply follows both. Switch off:
+            // as v1.81, the button alone.
+            var pressWithWords = false;
+            if (understanding && plan.CaseSaidOn && chat is not null
+                && turn.Messages.FirstOrDefault(m => ServiceRow.Parse(m.Interactive?.Id) is not null && m.Interactive?.Title is { Length: > 0 }) is { } pressMsg
+                && turn.Messages.Any(m => m.Type == MessageType.Text && m.Interactive is null && m.Button is null && m.Text?.Any(char.IsLetter) == true))
+            {
+                turn = turn with
+                {
+                    Messages = [.. turn.Messages.Select(m => ReferenceEquals(m, pressMsg)
+                        ? m with { Type = MessageType.Text, Interactive = null, Text = pressMsg.Interactive!.Title }
+                        : m)],
+                };
+                pressWithWords = true;
+            }
+
             var flow = new Flow(turn, state, list, null, plan, settings.Flag(HandoffEnabledKey), bookingOn ? bookingSettings : null, servicesOn,
                 urfOn, urfOpen, ageRefusal: ageRefusal, urgentOn: urgentOn, situation: situation, understanding: understanding);
             var freeText = false;
@@ -304,7 +322,7 @@ public sealed class HazemResponder(
             // every press below. Anything else goes on with that reading (no second call).
             Classification? typedReading = null;
             IReadOnlyList<string>? clientWords = null; // v1.87: his own messages the AI read (the quote check)
-            if (!firstContact && chat is not null && situation.Facts.Waiting is { Count: > 0 } waiting
+            if (!firstContact && chat is not null && !pressWithWords && situation.Facts.Waiting is { Count: > 0 } waiting
                 && turn.Messages.All(m => m.Interactive is null && m.Button is null) && FileIn(turn) is null
                 && AiInput.Build(turn) is { } typedWords && !Courtesy.Read(typedWords).EndsTheChat)
             {

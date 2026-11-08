@@ -18,7 +18,10 @@ function thisMonth(): string {
  * kind). TASK 09: the month's bookings by state and their money as the office marked it. v1.31 (B-26): «تقييمات العملاء»,
  * the ratings sent in the month, their average (all and by service) and the low ones («يحتاج للتحسين»).
  */
-const reportQuery = (month: string) => queryOptions({ queryKey: ["report", month], queryFn: () => api<MonthReport>("GET", `/reports?month=${month}`) });
+/** The owner (2026-11-08): the report and the chart refresh themselves every minute, as the home page does. */
+const LIVE = 60_000;
+
+const reportQuery = (month: string) => queryOptions({ queryKey: ["report", month], queryFn: () => api<MonthReport>("GET", `/reports?month=${month}`), refetchInterval: LIVE });
 
 /** «Today» in Cairo, as YYYY-MM-DD. */
 function today(): string {
@@ -46,9 +49,10 @@ function daysOf(span: Span, day: string, from: string, to: string, year: string)
 const rangeQuery = (from: string, to: string) => queryOptions({
   queryKey: ["report", from, to],
   queryFn: () => api<MonthReport>("GET", `/reports?from=${from}&to=${to}`),
+  refetchInterval: LIVE,
 });
 
-const trendQuery = queryOptions({ queryKey: ["report-trend"], queryFn: () => api<{ months: TrendRow[] }>("GET", "/reports/trend") });
+const trendQuery = queryOptions({ queryKey: ["report-trend"], queryFn: () => api<{ months: TrendRow[] }>("GET", "/reports/trend"), refetchInterval: LIVE });
 
 /** This month's report (what the page opens on), fetched while the pointer is still on the link (idea from PR #14). */
 export function prefetchData(qc: QueryClient) {

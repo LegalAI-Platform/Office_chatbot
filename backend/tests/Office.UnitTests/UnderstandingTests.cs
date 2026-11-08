@@ -248,7 +248,7 @@ public sealed class UnderstandingTests
             [UnderstandingV2.SwitchKey] = "true", [Office.Application.Urf.UrfCaseSaid.SwitchKey] = "true",
         });
         Assert.Equal("classify-v27", OpenAiIntentClassifier.VersionFor(off));
-        Assert.Equal("classify-v33", OpenAiIntentClassifier.VersionFor(on));
+        Assert.Equal("classify-v34", OpenAiIntentClassifier.VersionFor(on));
         Assert.Equal(TimeSpan.FromSeconds(15), OpenAiIntentClassifier.BudgetFor(OpenAiIntentClassifier.DefaultBudget, off));
         Assert.Equal(TimeSpan.FromSeconds(30), OpenAiIntentClassifier.BudgetFor(OpenAiIntentClassifier.DefaultBudget, on));
         Assert.Contains("urf_guardian", ((System.Text.Json.Nodes.JsonArray)OpenAiIntentClassifier.SchemaFor(off)["required"]!).Select(n => (string)n!));
