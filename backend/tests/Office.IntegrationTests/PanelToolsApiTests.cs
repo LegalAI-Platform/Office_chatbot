@@ -32,7 +32,6 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
              WHERE key = 'alerts.since';
             """);
         _factory = new ApiFactory(db);
-        await NewUser("keeper", Permissions.Maintenance); // v1.100: Hazem's texts are the maintenance account's only
         await NewUser("boss", Permissions.Manager);
         await NewUser("lawyer", Permissions.Lawyer);
         _staffA = (await NewUser("yasmin", Permissions.Staff, "ياسمين")).StaffId!.Value;
@@ -364,6 +363,7 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
     [Fact]
     public async Task A_text_change_is_a_new_version_within_its_limit_and_an_old_one_comes_back()
     {
+        await NewUser("keeper", Permissions.Maintenance); // v1.100: Hazem's texts are the maintenance account's only
         var lawyer = await SignIn("keeper");
         await MaintenanceTwoFactor.TurnOnAsync(lawyer, Ct); // the maintenance account opens nothing without it
         var texts = (await lawyer.GetFromJsonAsync<JsonArray>("/api/panel/texts", Ct))!;
