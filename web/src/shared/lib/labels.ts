@@ -164,6 +164,7 @@ export const MATTER_SUBTYPES: Record<string, string> = {
 };
 
 export const ROLES: Record<string, string> = {
+  maintenance: "الصيانة", // v1.100
   manager: "مدير",
   lawyer: "المستشار",
   staff: "موظف",

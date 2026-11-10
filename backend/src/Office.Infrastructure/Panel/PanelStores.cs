@@ -61,7 +61,8 @@ public sealed class PanelUserStore(HazemDbContext db, TimeProvider clock) : IPan
             $"DELETE FROM hazem.panel_users WHERE id = {id} AND approval = {PanelUser.ApprovalPending}", ct);
 
     public async Task<IReadOnlyList<string>> ManagerEmailsAsync(CancellationToken ct) =>
-        await db.PanelUsers.AsNoTracking().Where(u => u.Active && u.Role == Permissions.Manager).Select(u => u.Email).ToListAsync(ct);
+        await db.PanelUsers.AsNoTracking().Where(u => u.Active && (u.Role == Permissions.Manager || u.Role == Permissions.Maintenance)) // v1.100
+            .Select(u => u.Email).ToListAsync(ct);
 
     public Task SetChatwootUserIdAsync(Guid id, long chatwootUserId, CancellationToken ct) =>
         db.Database.ExecuteSqlInterpolatedAsync(

@@ -201,25 +201,31 @@ through nginx: only Chatwoot calls it, on the Docker network, signed with `CHATW
 The code checks permissions, never role names. A role is a set of permissions, defined once in
 `Office.Application/Panel/Permissions.cs`.
 
-| Permission | manager | lawyer | staff |
-|---|---|---|---|
-| `tasks.view_own` (own tasks and unassigned ones) | ✅ | ✅ | ✅ |
-| `tasks.view_all` | ✅ | ✅ | |
-| `tasks.update` (start, done, cancel) | ✅ | ✅ | ✅ |
-| `tasks.assign` | ✅ | ✅ | |
-| `users.manage` | ✅ | | |
-| `account.self` (me, change password) | ✅ | ✅ | ✅ |
-| `lists.manage`, `texts.manage`, `reports.view` (TASK 07c) | ✅ | ✅ | |
-| `conversations.unmute` (TASK 07c) | ✅ | | |
-| `schedule.manage` (TASK 08: the booking hours, the appointments) | ✅ | ✅ | ✅ |
-| `office.manage` (TASK 08: InstaPay, the wallet, the address) | ✅ | ✅ | |
-| `payments.verify` (TASK 09, P1: a transfer is fine / partial / not received) | ✅ | ✅ | ✅ |
-| `payments.refund` (TASK 09, P2: «اتحوّل», a refund made) | ✅ | ✅ | ✅ |
-| `services.manage` (TASK 10: the orders, their documents, the delivery, closing) | ✅ | ✅ | ✅ |
-| `services.price` (TASK 10, decision b: the price of a service, the written opinion) | ✅ | ✅ | |
-| `urf.manage` (TASK 11: the Urfi cases and their documents) | ✅ | ✅ | ✅ |
-| `urf.review` (TASK 11: approve or refuse a case before the appointment) | ✅ | ✅ | |
-| `prices.manage` (TASK 06: change the price list of B-23) | ✅ | ✅ | |
+| Permission | maintenance (v1.100) | manager | lawyer | staff |
+|---|---|---|---|---|
+| `tasks.view_own` (own tasks and unassigned ones) | ✅ | ✅ | ✅ | ✅ |
+| `tasks.view_all` | ✅ | ✅ | ✅ | |
+| `tasks.update` (start, done, cancel) | ✅ | ✅ | ✅ | ✅ |
+| `tasks.assign` | ✅ | ✅ | ✅ | |
+| `users.manage` | ✅ | ✅ | | |
+| `account.self` (me, change password) | ✅ | ✅ | ✅ | ✅ |
+| `lists.manage`, `reports.view` (TASK 07c) | ✅ | ✅ | ✅ | |
+| `texts.manage` (TASK 07c; v1.100: the maintenance role's only) | ✅ | | | |
+| `conversations.unmute` (TASK 07c) | ✅ | ✅ | | |
+| `schedule.manage` (TASK 08: the booking hours, the appointments) | ✅ | ✅ | ✅ | ✅ |
+| `office.manage` (TASK 08: InstaPay, the wallet, the address) | ✅ | ✅ | ✅ | |
+| `payments.verify` (TASK 09, P1: a transfer is fine / partial / not received) | ✅ | ✅ | ✅ | ✅ |
+| `payments.refund` (TASK 09, P2: «اتحوّل», a refund made) | ✅ | ✅ | ✅ | ✅ |
+| `services.manage` (TASK 10: the orders, their documents, the delivery, closing) | ✅ | ✅ | ✅ | ✅ |
+| `services.price` (TASK 10, decision b: the price of a service, the written opinion) | ✅ | ✅ | ✅ | |
+| `urf.manage` (TASK 11: the Urfi cases and their documents) | ✅ | ✅ | ✅ | ✅ |
+| `urf.review` (TASK 11: approve or refuse a case before the appointment) | ✅ | ✅ | ✅ | |
+| `prices.manage` (TASK 06: change the price list of B-23) | ✅ | ✅ | ✅ | |
+| `testing.forget` («أدوات التجربة»; v1.100: the maintenance role's only) | ✅ | | | |
+| `maintenance.manage` (v1.100: make a maintenance account, give the role, change, disable or reset one) | ✅ | | | |
+
+v1.100: a maintenance account opens nothing until its authenticator is on (`403 two_factor_required`), and cannot turn it off
+(`409 two_factor_kept`). An office account asking for the maintenance role or touching a maintenance account gets `403 maintenance_only`.
 
 No permission → `403`. Not signed in → `401`. A task the user may not see → `404`.
 

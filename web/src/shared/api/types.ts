@@ -1,6 +1,6 @@
 // The /api/panel contract (snake_case, like the rest of the API). docs/panel-api.md.
 
-export type Role = "manager" | "lawyer" | "staff";
+export type Role = "maintenance" | "manager" | "lawyer" | "staff"; // v1.100: «الصيانة», the owner's
 
 export type Permission =
   | "tasks.view_own"
@@ -22,7 +22,8 @@ export type Permission =
   | "urf.manage"
   | "urf.review"
   | "prices.manage"
-  | "testing.forget";
+  | "testing.forget"
+  | "maintenance.manage";
 
 export interface Me {
   id: string;

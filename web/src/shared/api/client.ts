@@ -35,6 +35,8 @@ const MESSAGES: Record<string, string> = {
   username_taken: "اسم المستخدم ده موجود قبل كده.",
   email_taken: "الإيميل ده موجود قبل كده.",
   last_manager: "لازم يفضل مدير واحد على الأقل شغال.",
+  maintenance_only: "ده لحساب الصيانة بس.",
+  two_factor_kept: "حساب الصيانة لازم التحقق بخطوتين يفضل شغال عليه.",
   cannot_change_self: "ما ينفعش تعمل ده على حسابك.",
   staff_required: "اختار الموظف المرتبط بالحساب.",
   invalid_code: "الكود غلط أو انتهى. اطلب كود جديد لو محتاج.",

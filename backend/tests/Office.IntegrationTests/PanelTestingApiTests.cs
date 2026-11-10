@@ -30,9 +30,19 @@ public sealed class PanelTestingApiTests(TestDatabase db) : IAsyncLifetime
         await db.SetAsync("hazem.recipients", $"{Tester},{Other}");
         _factory = new ApiFactory(db) { ChatwootConfigured = true };
         _factory.Chatwoot.Contacts[Tester] = 501;
+        await NewUser("keeper", Permissions.Maintenance); // v1.100: «أدوات التجربة» are the maintenance account's only
         await NewUser("boss", Permissions.Manager);
         await NewUser("lawyer", Permissions.Lawyer);
         await NewUser("yasmin", Permissions.Staff);
+    }
+
+    /// <summary>The maintenance account, signed in with its authenticator on (it opens nothing without it).</summary>
+    private async Task<HttpClient> Keeper()
+    {
+        var c = await SignIn("keeper");
+        Assert.Equal(HttpStatusCode.Forbidden, (await c.GetAsync("/api/panel/testing/numbers", Ct)).StatusCode); // two_factor_required
+        await MaintenanceTwoFactor.TurnOnAsync(c, Ct);
+        return c;
     }
 
     public async ValueTask DisposeAsync()
@@ -66,9 +76,9 @@ public sealed class PanelTestingApiTests(TestDatabase db) : IAsyncLifetime
     }
 
     [Fact]
-    public async Task The_manager_sees_the_test_numbers_masked_and_forgets_one_with_its_Chatwoot_contact()
+    public async Task The_maintenance_account_sees_the_test_numbers_masked_and_forgets_one_with_its_Chatwoot_contact()
     {
-        var boss = await SignIn("boss");
+        var boss = await Keeper();
         var list = await boss.GetFromJsonAsync<JsonNode>("/api/panel/testing/numbers", Ct);
         var numbers = list!["numbers"]!.AsArray();
         Assert.Equal(2, numbers.Count);
@@ -88,14 +98,23 @@ public sealed class PanelTestingApiTests(TestDatabase db) : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Only_a_test_number_can_be_forgotten_and_only_by_the_manager_or_the_lawyer()
+    public async Task Only_a_test_number_can_be_forgotten_and_only_by_the_maintenance_account()
     {
-        var lawyer = await SignIn("lawyer");
+        var lawyer = await Keeper();
         // a client's number is not in hazem.recipients: its key matches nothing
         var r = await lawyer.PostAsJsonAsync("/api/panel/testing/forget", new { key = PanelTesting.KeyOf(Client) }, Ct);
         Assert.Equal(HttpStatusCode.NotFound, r.StatusCode);
         Assert.Equal(1, await db.ScalarAsync<long>($"SELECT count(*) FROM hazem.persons WHERE wa_id = '{Client}'"));
         Assert.Equal(HttpStatusCode.OK, (await lawyer.GetAsync("/api/panel/testing/numbers", Ct)).StatusCode);
+
+        // v1.100: no office role, the manager and the lawyer too
+        foreach (var office in new[] { "boss", "lawyer" })
+        {
+            var c = await SignIn(office);
+            Assert.Equal(HttpStatusCode.Forbidden, (await c.GetAsync("/api/panel/testing/numbers", Ct)).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden,
+                (await c.PostAsJsonAsync("/api/panel/testing/forget", new { key = PanelTesting.KeyOf(Tester) }, Ct)).StatusCode);
+        }
 
         var staff = await SignIn("yasmin");
         Assert.Equal(HttpStatusCode.Forbidden, (await staff.GetAsync("/api/panel/testing/numbers", Ct)).StatusCode);
@@ -105,11 +124,11 @@ public sealed class PanelTestingApiTests(TestDatabase db) : IAsyncLifetime
     }
 
     [Fact]
-    public async Task V134_the_lawyer_switches_the_urgent_alert_inside_the_window_and_the_staff_cannot()
+    public async Task V134_the_maintenance_account_switches_the_urgent_alert_inside_the_window_and_the_office_cannot()
     {
         try
         {
-            var lawyer = await SignIn("lawyer");
+            var lawyer = await Keeper();
             Assert.False((bool)(await lawyer.GetFromJsonAsync<JsonNode>("/api/panel/testing/urgent-window", Ct))!["on"]!); // off by default
             Assert.Equal(HttpStatusCode.BadRequest, (await lawyer.PutAsJsonAsync("/api/panel/testing/urgent-window", new { }, Ct)).StatusCode);
             Assert.Equal(HttpStatusCode.OK, (await lawyer.PutAsJsonAsync("/api/panel/testing/urgent-window", new { on = true }, Ct)).StatusCode);
@@ -119,6 +138,8 @@ public sealed class PanelTestingApiTests(TestDatabase db) : IAsyncLifetime
 
             var staff = await SignIn("yasmin");
             Assert.Equal(HttpStatusCode.Forbidden, (await staff.PutAsJsonAsync("/api/panel/testing/urgent-window", new { on = false }, Ct)).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, // v1.100: nor the lawyer
+                (await (await SignIn("lawyer")).PutAsJsonAsync("/api/panel/testing/urgent-window", new { on = false }, Ct)).StatusCode);
             Assert.Equal("true", await db.ScalarAsync<string>("SELECT value FROM hazem.settings WHERE key = 'urgent.alert_in_window'"));
         }
         finally
@@ -129,11 +150,11 @@ public sealed class PanelTestingApiTests(TestDatabase db) : IAsyncLifetime
 
     /// <summary>v1.84 (TASK 20): the switch of the Urfi case as one list, off by default (the Urfi case as v1.81), audited.</summary>
     [Fact]
-    public async Task V184_the_lawyer_switches_the_urfi_list_and_it_is_audited()
+    public async Task V184_the_maintenance_account_switches_the_urfi_list_and_it_is_audited()
     {
         try
         {
-            var lawyer = await SignIn("lawyer");
+            var lawyer = await Keeper();
             Assert.False((bool)(await lawyer.GetFromJsonAsync<JsonNode>("/api/panel/testing/urf-case-said", Ct))!["on"]!); // off by default
             Assert.Equal(HttpStatusCode.BadRequest, (await lawyer.PutAsJsonAsync("/api/panel/testing/urf-case-said", new { }, Ct)).StatusCode);
             Assert.Equal(HttpStatusCode.OK, (await lawyer.PutAsJsonAsync("/api/panel/testing/urf-case-said", new { on = true }, Ct)).StatusCode);
@@ -150,11 +171,11 @@ public sealed class PanelTestingApiTests(TestDatabase db) : IAsyncLifetime
     }
 
     [Fact]
-    public async Task V161_the_lawyer_switches_the_info_writer_and_it_is_audited()
+    public async Task V161_the_maintenance_account_switches_the_info_writer_and_it_is_audited()
     {
         try
         {
-            var lawyer = await SignIn("lawyer");
+            var lawyer = await Keeper();
             Assert.False((bool)(await lawyer.GetFromJsonAsync<JsonNode>("/api/panel/testing/info-writer", Ct))!["on"]!);
             Assert.Equal(HttpStatusCode.BadRequest, (await lawyer.PutAsJsonAsync("/api/panel/testing/info-writer", new { }, Ct)).StatusCode);
             Assert.Equal(HttpStatusCode.OK, (await lawyer.PutAsJsonAsync("/api/panel/testing/info-writer", new { on = true }, Ct)).StatusCode);
@@ -172,11 +193,11 @@ public sealed class PanelTestingApiTests(TestDatabase db) : IAsyncLifetime
 
     /// <summary>v1.52 (phase 1): the switch of understanding v2, with its audit row (the first try on the server failed on it).</summary>
     [Fact]
-    public async Task V152_the_lawyer_switches_understanding_v2_and_it_is_audited()
+    public async Task V152_the_maintenance_account_switches_understanding_v2_and_it_is_audited()
     {
         try
         {
-            var lawyer = await SignIn("lawyer");
+            var lawyer = await Keeper();
             Assert.False((bool)(await lawyer.GetFromJsonAsync<JsonNode>("/api/panel/testing/understanding", Ct))!["on"]!); // off by default
             Assert.Equal(HttpStatusCode.BadRequest, (await lawyer.PutAsJsonAsync("/api/panel/testing/understanding", new { }, Ct)).StatusCode);
             Assert.Equal(HttpStatusCode.OK, (await lawyer.PutAsJsonAsync("/api/panel/testing/understanding", new { on = true }, Ct)).StatusCode);

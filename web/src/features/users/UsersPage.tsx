@@ -1,7 +1,7 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError, errorMessage } from "../../shared/api/client";
-import { useMe } from "../../shared/api/session";
+import { can, useMe } from "../../shared/api/session";
 import type { NewUserResult, PanelUser, Role } from "../../shared/api/types";
 import { label, ROLES } from "../../shared/lib/labels";
 import { cairoWhen } from "../../shared/lib/time";
@@ -211,6 +211,7 @@ function TemporaryPassword({ name, password, username, onDone }: { name: string;
 
 function AddUser({ onCancel, onCreated }: { onCancel: () => void; onCreated: (r: NewUserResult) => void }) {
   const qc = useQueryClient();
+  const { data: me } = useMe();
   const [form, setForm] = useState({ username: "", display_name: "", email: "", role: "staff" as Role, staff_name: "" });
   const create = useMutation({
     mutationFn: () => api<NewUserResult>("POST", "/users", { ...form, staff_name: form.role === "staff" ? form.staff_name || form.display_name : null }),
@@ -258,6 +259,7 @@ function AddUser({ onCancel, onCreated }: { onCancel: () => void; onCreated: (r:
             <option value="staff">موظف: مهامه والمهام اللي مش متعيّنة</option>
             <option value="lawyer">المستشار: كل المهام، ويوزّعها</option>
             <option value="manager">مدير: كل حاجة، ومنها الحسابات</option>
+            {can(me, "maintenance.manage") ? <option value="maintenance">الصيانة: كل حاجة، ومنها نصوص حازم</option> : null}
           </select>
         </label>
         {form.role === "staff" ? (
@@ -286,6 +288,7 @@ function AddUser({ onCancel, onCreated }: { onCancel: () => void; onCreated: (r:
  */
 function PendingCard({ user }: { user: PanelUser }) {
   const qc = useQueryClient();
+  const { data: me } = useMe();
   const [role, setRole] = useState<Role>("staff");
   const [staffName, setStaffName] = useState(user.display_name);
   const [refusing, setRefusing] = useState(false);
@@ -318,6 +321,7 @@ function PendingCard({ user }: { user: PanelUser }) {
               <option value="staff">موظف: مهامه والمهام اللي مش متعيّنة</option>
               <option value="lawyer">المستشار: كل المهام، ويوزّعها</option>
               <option value="manager">مدير: كل حاجة، ومنها الحسابات</option>
+              {can(me, "maintenance.manage") ? <option value="maintenance">الصيانة: كل حاجة، ومنها نصوص حازم</option> : null}
             </select>
           </label>
           {role === "staff" ? (
@@ -361,6 +365,10 @@ function UserCard({ user, onSecret }: { user: PanelUser; onSecret: (s: { name: s
   const { data: me } = useMe();
   const qc = useQueryClient();
   const self = me?.id === user.id;
+  // v1.100: the office sees the maintenance account, never changes it (the API refuses too)
+  const maintenance = can(me, "maintenance.manage");
+  const fixed = self || (user.role === "maintenance" && !maintenance);
+  const roles: Role[] = maintenance ? ["staff", "lawyer", "manager", "maintenance"] : ["staff", "lawyer", "manager"];
   const [confirm, setConfirm] = useState<null | "disable" | "reset" | "reset-2fa">(null);
   const change = useMutation({
     mutationFn: (body: { path: string; payload?: unknown }) => api<PanelUser | { temporary_password: string }>("POST", `/users/${user.id}/${body.path}`, body.payload),
@@ -383,7 +391,7 @@ function UserCard({ user, onSecret }: { user: PanelUser; onSecret: (s: { name: s
       </div>
       <dl className="grid gap-2 sm:grid-cols-[repeat(auto-fit,minmax(9.5rem,1fr))]">
         <Detail icon="shield" term="الدور">
-          {self ? label(ROLES, user.role ?? "") : (
+          {fixed ? label(ROLES, user.role ?? "") : (
             <select aria-label={`دور ${user.display_name}`} className="min-h-9 w-full rounded-[12px] border border-line/70 bg-card/70 px-2 font-normal text-ink focus:border-gold"
               value={user.role ?? "staff"} disabled={change.isPending}
               onChange={async (e) => {
@@ -393,7 +401,7 @@ function UserCard({ user, onSecret }: { user: PanelUser; onSecret: (s: { name: s
                   body: "هيخرج من اللوحة ويدخل تاني.", yes: "أيوه، غيّره" });
                 if (ok) change.mutate({ path: "role", payload: { role } });
               }}>
-              {(["staff", "lawyer", "manager"] as Role[]).map((r) => <option key={r} value={r}>{label(ROLES, r)}</option>)}
+              {roles.map((r) => <option key={r} value={r}>{label(ROLES, r)}</option>)}
             </select>
           )}
         </Detail>
@@ -403,7 +411,7 @@ function UserCard({ user, onSecret }: { user: PanelUser; onSecret: (s: { name: s
         </Detail>
       </dl>
 
-      {!self ? (
+      {!fixed ? (
         confirm ? (
           <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-red/30 bg-red-bg/60 p-2.5">
             <span className="text-sm">

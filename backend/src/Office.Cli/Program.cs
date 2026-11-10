@@ -47,7 +47,9 @@ using Office.Infrastructure.Lists;
 // every other account from the panel. Passwords are typed in the terminal (twice, hidden) or, for
 // scripts, read from stdin; never an argument, never printed.
 //   docker compose exec -it api dotnet /app/cli/Office.Cli.dll create-user --name owner --display "…" --email … --role manager
-//   create-user --name N --display D --email E --role manager|lawyer|staff [--staff NAME]
+//   create-user --name N --display D --email E --role maintenance|manager|lawyer|staff [--staff NAME]
+//   set-role --name N --role R            v1.100: an account's role from the server, «maintenance» too (only a maintenance
+//                                         account gives it in the panel); its sessions end
 //   reset-password --name N               a new password, typed in the terminal; unlocks, ends every session
 //   unlock-user --name N                  clears a lockout (5 wrong passwords = 15 minutes)
 //   reset-2fa --name N                    turns the authenticator off (a lost phone and no other manager, v1.9)
@@ -85,12 +87,13 @@ try
         "reset-password" => await ResetPassword(),
         "unlock-user" => await UnlockUser(),
         "reset-2fa" => await ResetTwoFactor(),
+        "set-role" => await SetRole(),
         "list-users" => await ListUsers(),
         "forget-number" => await ForgetNumber(),
         _ => new JsonObject
         {
             ["ok"] = false,
-            ["usage"] = "send-test --to WA_ID [--text TEXT] | classify-eval [--file F] [--model M] [--limit N] [--input-price USD --output-price USD] | import-lists --kind K --file CSV [--replace] | tasks-overdue | unmute --to WA_ID | create-user --name N --display D --email E --role R [--staff S] | reset-password --name N | unlock-user --name N | reset-2fa --name N | list-users | forget-number --wa NUMBER (test only)",
+            ["usage"] = "send-test --to WA_ID [--text TEXT] | classify-eval [--file F] [--model M] [--limit N] [--input-price USD --output-price USD] | import-lists --kind K --file CSV [--replace] | tasks-overdue | unmute --to WA_ID | create-user --name N --display D --email E --role R [--staff S] | reset-password --name N | unlock-user --name N | reset-2fa --name N | set-role --name N --role R | list-users | forget-number --wa NUMBER (test only)",
         },
     };
 
@@ -564,6 +567,14 @@ async Task<JsonNode> ResetTwoFactor()
     var user = await FindUser(sp.GetRequiredService<PanelAccounts>());
     var r = await sp.GetRequiredService<PanelTwoFactor>().ResetAsync(null, user.Id, ct);
     return new JsonObject { ["ok"] = r.Outcome == PanelOutcome.Ok, ["user"] = user.Username, ["error"] = r.Error };
+}
+
+async Task<JsonNode> SetRole()
+{
+    var name = Option("--name") ?? throw new ArgumentException("--name <user name> is required");
+    var role = Option("--role") ?? throw new ArgumentException("--role maintenance|manager|lawyer|staff is required");
+    var r = await sp.GetRequiredService<PanelAccounts>().SetRoleFromTerminalAsync(name, role, ct);
+    return new JsonObject { ["ok"] = r.Outcome == PanelOutcome.Ok, ["user"] = name, ["role"] = role, ["error"] = r.Error };
 }
 
 async Task<JsonNode> ListUsers()
