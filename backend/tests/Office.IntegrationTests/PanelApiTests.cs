@@ -308,6 +308,51 @@ public sealed class PanelApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal("cannot_change_self", (string?)(await demoteLast.Content.ReadFromJsonAsync<JsonNode>(Ct))!["error"]);
     }
 
+    /// <summary>
+    /// v1.100 (the owner, 2026-11-10: «محدش يبقى ليه صلاحية غير الحساب بتاع محمد عماد … حساب الصيانة»): no office role makes a
+    /// maintenance account, gives the role, or disables, demotes or takes one over (a new password, its authenticator off). A
+    /// maintenance account opens nothing before its authenticator is on, never turns it off, and gives the role itself.
+    /// </summary>
+    [Fact]
+    public async Task V1100_only_the_maintenance_account_touches_the_maintenance_role_and_it_never_works_without_its_code()
+    {
+        var keeper = await NewUser("keeper", Permissions.Maintenance);
+        var boss = await SignIn("boss");
+        var lawyerId = await db.ScalarAsync<Guid>("SELECT id FROM hazem.panel_users WHERE username = 'lawyer'");
+
+        // the manager: never the maintenance role, never the maintenance account
+        var made = await boss.PostAsJsonAsync("/api/panel/users",
+            new { username = "second", display_name = "second", email = "second@example.test", role = "maintenance" }, Ct);
+        Assert.Equal(HttpStatusCode.Forbidden, made.StatusCode);
+        Assert.Equal("maintenance_only", (string?)(await made.Content.ReadFromJsonAsync<JsonNode>(Ct))!["error"]);
+        Assert.Equal(HttpStatusCode.Forbidden, (await boss.PostAsJsonAsync($"/api/panel/users/{lawyerId}/role", new { role = "maintenance" }, Ct)).StatusCode);
+        foreach (var path in new[] { "disable", "reset-password", "reset-2fa" })
+        {
+            Assert.Equal(HttpStatusCode.Forbidden, (await boss.PostAsync($"/api/panel/users/{keeper.Id}/{path}", null, Ct)).StatusCode);
+        }
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await boss.PostAsJsonAsync($"/api/panel/users/{keeper.Id}/role", new { role = "staff" }, Ct)).StatusCode);
+        Assert.Equal("maintenance", await db.ScalarAsync<string>($"SELECT role FROM hazem.panel_users WHERE id = '{keeper.Id}'"));
+        Assert.Equal("lawyer", await db.ScalarAsync<string>($"SELECT role FROM hazem.panel_users WHERE id = '{lawyerId}'"));
+        Assert.Equal(0L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.panel_users WHERE username = 'second'"));
+
+        // the maintenance account: nothing before its authenticator is on, its password alone never opens it
+        var k = await SignIn("keeper");
+        var blocked = await k.GetAsync("/api/panel/users", Ct);
+        Assert.Equal(HttpStatusCode.Forbidden, blocked.StatusCode);
+        Assert.Equal("two_factor_required", (string?)(await blocked.Content.ReadFromJsonAsync<JsonNode>(Ct))!["error"]);
+        await MaintenanceTwoFactor.TurnOnAsync(k, Ct);
+        Assert.Equal(HttpStatusCode.OK, (await k.GetAsync("/api/panel/users", Ct)).StatusCode);
+        var off = await k.PostAsJsonAsync("/api/panel/auth/2fa/disable", new { password = Password, code = "000000" }, Ct);
+        Assert.Equal(HttpStatusCode.Conflict, off.StatusCode);
+        Assert.Equal("two_factor_kept", (string?)(await off.Content.ReadFromJsonAsync<JsonNode>(Ct))!["error"]);
+        Assert.True(await db.ScalarAsync<bool>($"SELECT totp_enabled FROM hazem.panel_users WHERE id = '{keeper.Id}'"));
+
+        // …and it gives the role itself
+        Assert.Equal(HttpStatusCode.OK, (await k.PostAsJsonAsync($"/api/panel/users/{lawyerId}/role", new { role = "maintenance" }, Ct)).StatusCode);
+        Assert.Equal("maintenance", await db.ScalarAsync<string>($"SELECT role FROM hazem.panel_users WHERE id = '{lawyerId}'"));
+    }
+
     // ---------- tasks ----------
     [Fact]
     public async Task The_home_screen_counts_urgent_and_late_tasks_the_person_may_see()

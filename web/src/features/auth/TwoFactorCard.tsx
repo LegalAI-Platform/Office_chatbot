@@ -2,7 +2,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import qrcode from "qrcode-generator";
 import { errorMessage } from "../../shared/api/client";
-import { meKey } from "../../shared/api/session";
+import { meKey, useMe } from "../../shared/api/session";
 import { Button, Card, Chip, ErrorState, Field, Loading } from "../../shared/ui/ui";
 import { newRecoveryCodes, twoFactorDisable, twoFactorEnable, twoFactorKey, twoFactorSetup, twoFactorStatus } from "./api";
 import { CodeField, Notice } from "./AuthLayout";
@@ -13,6 +13,9 @@ import { CodeField, Notice } from "./AuthLayout";
  */
 export function TwoFactorCard() {
   const qc = useQueryClient();
+  // v1.100: the maintenance account keeps it on (the API refuses «off» too)
+  const { data: me } = useMe();
+  const mustStay = me?.role === "maintenance";
   const status = useQuery({ queryKey: twoFactorKey, queryFn: twoFactorStatus });
   const [setup, setSetup] = useState<{ secret: string; uri: string } | null>(null);
   const [codes, setCodes] = useState<string[] | null>(null);
@@ -127,7 +130,7 @@ export function TwoFactorCard() {
       ) : (
         <div className="flex flex-wrap gap-2">
           <Button onClick={() => setMode("renew")}>أكواد استرجاع جديدة</Button>
-          <Button variant="ghost" onClick={() => setMode("off")}>اقفله</Button>
+          {mustStay ? null : <Button variant="ghost" onClick={() => setMode("off")}>اقفله</Button>}
         </div>
       )}
     </Card>

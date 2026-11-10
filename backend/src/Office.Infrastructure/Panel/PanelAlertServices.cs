@@ -78,7 +78,7 @@ public sealed class PanelAlertStore(HazemDbContext db) : IPanelAlertStore
 
     public async Task<IReadOnlyList<string>> ManagersAsync(CancellationToken ct) =>
         await db.PanelUsers.AsNoTracking()
-            .Where(u => u.Active && u.Approval == PanelUser.ApprovalApproved && u.Role == Permissions.Manager)
+            .Where(u => u.Active && u.Approval == PanelUser.ApprovalApproved && (u.Role == Permissions.Manager || u.Role == Permissions.Maintenance)) // v1.100
             .Select(u => u.Email).ToListAsync(ct);
 
     public async Task<IReadOnlyList<AlertToMail>> UnsentAsync(CancellationToken ct)
@@ -110,7 +110,7 @@ public sealed class PanelAlertStore(HazemDbContext db) : IPanelAlertStore
     public async Task<IReadOnlyList<string>> RecipientsAsync(Guid? staffId, CancellationToken ct) =>
         await db.PanelUsers.AsNoTracking()
             .Where(u => u.Active && u.Approval == PanelUser.ApprovalApproved
-                        && (u.Role == Permissions.Manager || u.Role == Permissions.Lawyer
+                        && (u.Role == Permissions.Manager || u.Role == Permissions.Maintenance || u.Role == Permissions.Lawyer
                             || (u.Role == Permissions.Staff && (staffId == null || u.StaffId == staffId))))
             .Select(u => u.Email).ToListAsync(ct);
 

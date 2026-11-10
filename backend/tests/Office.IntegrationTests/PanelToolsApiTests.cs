@@ -363,7 +363,9 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
     [Fact]
     public async Task A_text_change_is_a_new_version_within_its_limit_and_an_old_one_comes_back()
     {
-        var lawyer = await SignIn("lawyer");
+        await NewUser("keeper", Permissions.Maintenance); // v1.100: Hazem's texts are the maintenance account's only
+        var lawyer = await SignIn("keeper");
+        await MaintenanceTwoFactor.TurnOnAsync(lawyer, Ct); // the maintenance account opens nothing without it
         var texts = (await lawyer.GetFromJsonAsync<JsonArray>("/api/panel/texts", Ct))!;
         var t = texts.First(x => (int)x!["max_chars"]! == 300)!;
         var key = (string)t["key"]!;
@@ -390,6 +392,16 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal(author, await db.ScalarAsync<string>($"SELECT coalesce(updated_by, '-') FROM hazem.approved_texts WHERE key = '{key}' AND version = {before}"));
 
         Assert.Equal(HttpStatusCode.Forbidden, (await (await SignIn("yasmin")).GetAsync("/api/panel/texts", Ct)).StatusCode);
+        // v1.100 (the owner: «انا مش عايز المكتب يعرف يغير اي نصوص»): no office role reads or changes them, the manager too
+        foreach (var office in new[] { "boss", "lawyer" })
+        {
+            var c = await SignIn(office);
+            Assert.Equal(HttpStatusCode.Forbidden, (await c.GetAsync("/api/panel/texts", Ct)).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await c.PostAsJsonAsync($"/api/panel/texts/{key}", new { text = "تعديل من المكتب" }, Ct)).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await c.PostAsync($"/api/panel/texts/{key}/versions/{before}/activate", null, Ct)).StatusCode);
+        }
+
+        Assert.Equal(before, await db.ScalarAsync<int>($"SELECT version FROM hazem.approved_texts WHERE key = '{key}' AND active"));
     }
 
     // ---------- reports ----------

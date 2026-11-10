@@ -231,7 +231,8 @@ check "tables panel_users and panel_audit exist"   sql_equals office "SELECT cou
 check "office_readonly cannot read password hashes or security stamps"   expect_fail psql_as office_readonly "$OFFICE_READONLY_PASSWORD" office -c 'SELECT password_hash, security_stamp FROM hazem.panel_users LIMIT 1'
 check "office_app (n8n) cannot read panel accounts"   expect_fail psql_as office_app "$OFFICE_APP_PASSWORD" office -c 'SELECT 1 FROM hazem.panel_users LIMIT 1'
 check "no test account left behind (e2e-*)"   sql_equals office "SELECT count(*) FROM hazem.panel_users WHERE username LIKE 'e2e-%'" "0"
-if [[ "$(psql_super office -c "SELECT count(*) FROM hazem.panel_users WHERE active AND role = 'manager'")" == "0" ]]; then
+# v1.100: the owner's maintenance account manages accounts too
+if [[ "$(psql_super office -c "SELECT count(*) FROM hazem.panel_users WHERE active AND role IN ('manager', 'maintenance')")" == "0" ]]; then
   warn "no panel manager yet: the owner creates the first one from the terminal (docs/runbooks/panel.md)"
 fi
 

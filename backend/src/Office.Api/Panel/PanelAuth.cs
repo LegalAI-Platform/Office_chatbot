@@ -154,13 +154,15 @@ public static class PanelAuth
     /// <summary>
     /// v1.9 (T-23): an account that manages accounts (the manager) must have the authenticator on, only when
     /// Panel:ManagersNeedTwoFactor is true (PANEL_MANAGERS_NEED_2FA). v1.16: the owner made it optional for everyone,
-    /// so it is off by default. Only once PANEL_SECRET_KEY is set (it cannot be set up without it).
+    /// so it is off by default. Only once PANEL_SECRET_KEY is set (it cannot be set up without it). v1.100: the maintenance
+    /// account always (the owner: its user name and password alone never open it).
     /// </summary>
     public static bool NeedsTwoFactor(HttpContext ctx, PanelUser user) =>
         !user.TotpEnabled
-        && Permissions.Has(user.Role, Permissions.UsersManage)
         && ctx.RequestServices.GetRequiredService<IPanelCrypto>().Configured
-        && ctx.RequestServices.GetRequiredService<IConfiguration>().GetValue("Panel:ManagersNeedTwoFactor", false);
+        && (user.Role == Permissions.Maintenance
+            || (Permissions.Has(user.Role, Permissions.UsersManage)
+                && ctx.RequestServices.GetRequiredService<IConfiguration>().GetValue("Panel:ManagersNeedTwoFactor", false)));
 
     /// <summary>The account checked by the cookie handler for this request.</summary>
     public static PanelUser CurrentUser(this HttpContext ctx) =>

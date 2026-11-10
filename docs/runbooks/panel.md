@@ -22,6 +22,24 @@ Type the password twice when asked (12 characters or more; a long sentence is ea
 than a complex word). Then open the panel and sign in. From now on the manager adds every other
 account from **الحسابات** in the panel; the terminal is only for emergencies.
 
+## The maintenance account (v1.100, the owner's)
+
+«الصيانة» (`maintenance`) is the owner's account, Mohamed Emad's. It is the only role with every permission, and the only
+one that changes Hazem's texts and «دليل التعامل» (**النصوص**) or uses «أدوات التجربة». No office account (manager, lawyer,
+staff) can make one, give the role (to an account or a sign-up), disable one, change its role, give it a new password, or
+turn its authenticator off; the panel answers `maintenance_only`. Its authenticator is **always on**: without the code from
+the owner's phone the panel opens nothing but the page that turns it on, and it can never be turned off from **حسابي**.
+
+From the server only (whoever has the server can change anything, so it stays with the owner):
+
+```powershell
+docker compose exec -it api dotnet /app/cli/Office.Cli.dll set-role --name <user name> --role maintenance
+docker compose exec -it api dotnet /app/cli/Office.Cli.dll create-user --name … --display … --email … --role maintenance
+```
+
+`list-users` shows the user names. `set-role` ends the account's sessions: sign in again. A lost phone: a recovery code,
+or `reset-2fa --name <user name>` from the server, then turn it on again at the next sign-in.
+
 ## Adding a staff member (the manager, in the panel)
 
 **الحسابات → ضيف حساب**: name, user name, e-mail (Chatwoot will need it in 07b), role, and for a

@@ -2,7 +2,8 @@ namespace Office.Application.Panel;
 
 /// <summary>
 /// RBAC for the panel (DECISIONS v1.8 T-23). The code checks permissions, never role names: a
-/// role is the set of permissions below, defined here and nowhere else. No role passes every check.
+/// role is the set of permissions below, defined here and nowhere else. v1.100 (the owner): only the maintenance
+/// role, «حساب الصيانة» (Mohamed Emad's), passes every check; no office role (manager, lawyer, staff) does.
 /// </summary>
 public static class Permissions
 {
@@ -36,26 +37,36 @@ public static class Permissions
     public const string UrfManage = "urf.manage";   // TASK 11: the Urfi cases and their documents (every role)
     public const string UrfReview = "urf.review";   // TASK 11: approve or refuse a case (the lawyer and the manager)
     public const string PricesManage = "prices.manage"; // TASK 06: the price list of B-23 (the lawyer and the manager)
-    // «أدوات التجربة» (the owner, 2026-10-30): forget a test number, the manager and the lawyer, test environment only.
+    // «أدوات التجربة» (the owner, 2026-10-30): forget a test number, test environment only. v1.100: the maintenance role's only.
     public const string TestingForget = "testing.forget";
+
+    // v1.100 (the owner, 2026-11-10: «محدش يبقى ليه صلاحية غير الحساب بتاع محمد عماد … حساب الصيانة»): the maintenance accounts
+    // themselves (make one, give the role, disable it, a new password, its authenticator off) are the maintenance role's
+    // only, as Hazem's texts («النصوص» and «دليل التعامل», TextsManage) and «أدوات التجربة» (TestingForget) are. The CLI on
+    // the server can still do it (emergencies).
+    public const string MaintenanceManage = "maintenance.manage";
 
     public static IReadOnlyList<string> All { get; } =
         [TasksViewOwn, TasksViewAll, TasksUpdate, TasksAssign, UsersManage, AccountSelf, ListsManage, TextsManage, ReportsView, ConversationsUnmute,
-            ScheduleManage, OfficeManage, PaymentsVerify, PaymentsRefund, ServicesManage, ServicesPrice, UrfManage, UrfReview, PricesManage, TestingForget];
+            ScheduleManage, OfficeManage, PaymentsVerify, PaymentsRefund, ServicesManage, ServicesPrice, UrfManage, UrfReview, PricesManage, TestingForget, MaintenanceManage];
 
     public const string Manager = "manager";
     public const string Lawyer = "lawyer";
     public const string Staff = "staff";
 
-    public static IReadOnlyList<string> Roles { get; } = [Manager, Lawyer, Staff];
+    /// <summary>v1.100: «الصيانة», the owner's maintenance account: every permission, and the only one with Hazem's texts.</summary>
+    public const string Maintenance = "maintenance";
+
+    public static IReadOnlyList<string> Roles { get; } = [Maintenance, Manager, Lawyer, Staff];
 
     private static readonly Dictionary<string, string[]> ByRole = new(StringComparer.Ordinal)
     {
-        [Manager] = [TasksViewOwn, TasksViewAll, TasksUpdate, TasksAssign, UsersManage, AccountSelf, ListsManage, TextsManage, ReportsView,
-            ConversationsUnmute, ScheduleManage, OfficeManage, PaymentsVerify, PaymentsRefund, ServicesManage, ServicesPrice, UrfManage, UrfReview, PricesManage,
-            TestingForget],
-        [Lawyer] = [TasksViewOwn, TasksViewAll, TasksUpdate, TasksAssign, AccountSelf, ListsManage, TextsManage, ReportsView, ScheduleManage,
-            OfficeManage, PaymentsVerify, PaymentsRefund, ServicesManage, ServicesPrice, UrfManage, UrfReview, PricesManage, TestingForget],
+        [Maintenance] = [.. All],
+        // v1.100: without TextsManage and TestingForget (the maintenance role's)
+        [Manager] = [TasksViewOwn, TasksViewAll, TasksUpdate, TasksAssign, UsersManage, AccountSelf, ListsManage, ReportsView,
+            ConversationsUnmute, ScheduleManage, OfficeManage, PaymentsVerify, PaymentsRefund, ServicesManage, ServicesPrice, UrfManage, UrfReview, PricesManage],
+        [Lawyer] = [TasksViewOwn, TasksViewAll, TasksUpdate, TasksAssign, AccountSelf, ListsManage, ReportsView, ScheduleManage,
+            OfficeManage, PaymentsVerify, PaymentsRefund, ServicesManage, ServicesPrice, UrfManage, UrfReview, PricesManage],
         [Staff] = [TasksViewOwn, TasksUpdate, AccountSelf, ScheduleManage, PaymentsVerify, PaymentsRefund, ServicesManage, UrfManage],
     };
 

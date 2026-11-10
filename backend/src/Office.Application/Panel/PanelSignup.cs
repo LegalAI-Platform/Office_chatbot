@@ -272,6 +272,12 @@ public sealed class PanelSignup(
             return new(PanelOutcome.Invalid, Error: "invalid_role", Fields: new Dictionary<string, string> { ["role"] = "invalid" });
         }
 
+        // v1.100: a sign-up never becomes a maintenance account unless a maintenance account approves it
+        if (role == Permissions.Maintenance && !(await users.FindAsync(by, ct) is { } approver && Permissions.Has(approver.Role, Permissions.MaintenanceManage)))
+        {
+            return new(PanelOutcome.Forbidden, Error: PanelAccounts.MaintenanceOnly);
+        }
+
         user.Role = role!;
         if (role == Permissions.Staff)
         {
@@ -388,6 +394,9 @@ public sealed class PanelTwoFactor(
     public const string NotOn = "not_enabled";
     public const string NoSetup = "no_setup";
 
+    /// <summary>v1.100: the maintenance account cannot turn its authenticator off (it never works without its code).</summary>
+    public const string Required = "two_factor_kept";
+
     public sealed record Status(bool Enabled, int RecoveryCodesLeft);
 
     public sealed record Setup(string Secret, string Uri);
@@ -469,6 +478,11 @@ public sealed class PanelTwoFactor(
             return new(PanelOutcome.Conflict, Error: NotOn);
         }
 
+        if (user.Role == Permissions.Maintenance)
+        {
+            return new(PanelOutcome.Conflict, Error: Required); // v1.100: a new phone is a new setup, never «off»
+        }
+
         if (string.IsNullOrEmpty(password) || !secrets.Verify(user.PasswordHash, password).Ok)
         {
             return new(PanelOutcome.Invalid, Error: PanelAccounts.WrongCurrentPassword);
@@ -521,6 +535,12 @@ public sealed class PanelTwoFactor(
         if (user is null)
         {
             return new(PanelOutcome.NotFound);
+        }
+
+        // v1.100: nobody in the panel turns the maintenance account's authenticator off (the CLI on the server can)
+        if (user.Role == Permissions.Maintenance && !await accounts.MaintenanceAllowedAsync(by, ct))
+        {
+            return new(PanelOutcome.Forbidden, Error: PanelAccounts.MaintenanceOnly);
         }
 
         if (!user.TotpEnabled)

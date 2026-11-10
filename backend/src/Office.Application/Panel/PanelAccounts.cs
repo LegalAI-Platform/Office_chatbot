@@ -107,7 +107,8 @@ public interface IPanelSecrets
 }
 
 /// <summary>
-/// Accounts and sign-in (DECISIONS v1.8 T-23): RBAC, no super admin, no default account, lockout,
+/// Accounts and sign-in (DECISIONS v1.8 T-23): RBAC, no default account, lockout (v1.100: the maintenance role is the one
+/// that passes every check, and only a maintenance account or the CLI touches it),
 /// and every change written to hazem.panel_audit. The manager manages accounts from the panel;
 /// the CLI only creates the first manager and handles emergencies.
 /// </summary>
@@ -128,6 +129,9 @@ public sealed partial class PanelAccounts(IPanelUserStore store, IPanelSecrets s
     public const string CannotChangeSelf = "cannot_change_self";
     public const string EmailNotVerified = "email_not_verified";
     public const string PendingApproval = "pending_approval";
+
+    /// <summary>v1.100: the maintenance role or a maintenance account, asked by someone who is not one (or the CLI).</summary>
+    public const string MaintenanceOnly = "maintenance_only";
 
     [GeneratedRegex("^[a-z0-9][a-z0-9._-]{2,31}$")]
     internal static partial Regex UsernameRule();
@@ -298,6 +302,11 @@ public sealed partial class PanelAccounts(IPanelUserStore store, IPanelSecrets s
     public async Task<PanelResult<(PanelUser User, string TemporaryPassword)>> CreateAsync(
         Guid? by, NewAccount input, string? password, CancellationToken ct)
     {
+        if (input.Role == Permissions.Maintenance && !await MaintenanceAllowedAsync(by, ct))
+        {
+            return new(PanelOutcome.Forbidden, Error: MaintenanceOnly); // v1.100: only the maintenance account makes another
+        }
+
         var errors = new Dictionary<string, string>();
         var username = NormalizeUsername(input.Username);
         var email = (input.Email ?? "").Trim();
@@ -407,6 +416,11 @@ public sealed partial class PanelAccounts(IPanelUserStore store, IPanelSecrets s
                 return "invalid_role";
             }
 
+            if (role == Permissions.Maintenance && !await MaintenanceAllowedAsync(by, ct))
+            {
+                return MaintenanceOnly; // v1.100
+            }
+
             if (u.Role == Permissions.Manager && role != Permissions.Manager && u.Active && await store.ActiveManagersAsync(ct) <= 1)
             {
                 return LastManager;
@@ -445,6 +459,11 @@ public sealed partial class PanelAccounts(IPanelUserStore store, IPanelSecrets s
         if (user.Pending)
         {
             return new(PanelOutcome.Conflict, Error: PendingApproval);
+        }
+
+        if (user.Role == Permissions.Maintenance && !await MaintenanceAllowedAsync(by, ct))
+        {
+            return new(PanelOutcome.Forbidden, Error: MaintenanceOnly); // v1.100: nobody takes the maintenance account over
         }
 
         var temporary = password ?? secrets.TemporaryPassword();
@@ -495,13 +514,61 @@ public sealed partial class PanelAccounts(IPanelUserStore store, IPanelSecrets s
             return new(PanelOutcome.NotFound);
         }
 
+        // v1.100: a maintenance account is disabled, enabled or given another role by a maintenance account only
+        if (user.Role == Permissions.Maintenance && !await MaintenanceAllowedAsync(by, ct))
+        {
+            return new(PanelOutcome.Forbidden, Error: MaintenanceOnly);
+        }
+
         if (await change(user) is { } refused)
         {
-            return new(refused is LastManager or PendingApproval ? PanelOutcome.Conflict : PanelOutcome.Invalid, Error: refused);
+            return new(refused switch
+            {
+                LastManager or PendingApproval => PanelOutcome.Conflict,
+                MaintenanceOnly => PanelOutcome.Forbidden,
+                _ => PanelOutcome.Invalid,
+            }, Error: refused);
         }
 
         await store.UpdateAsync(user, ct);
         await store.AuditAsync(by, action, user.Id, detail ?? Empty, ct);
+        return PanelResult<PanelUser>.Ok(user);
+    }
+
+    /// <summary>
+    /// v1.100: the maintenance role and its accounts are touched only by a maintenance account, or by the CLI on the server
+    /// (<paramref name="by"/> null): whoever has the server can already change anything.
+    /// </summary>
+    internal async Task<bool> MaintenanceAllowedAsync(Guid? by, CancellationToken ct) =>
+        by is not { } id || (await store.FindAsync(id, ct)) is { } actor && Permissions.Has(actor.Role, Permissions.MaintenanceManage);
+
+    /// <summary>
+    /// v1.100, the CLI only (set-role): an account's role from the server, the maintenance role too (the owner's account
+    /// made «حساب الصيانة», or it back after an emergency). Its sessions end, as with a role changed in the panel.
+    /// </summary>
+    public async Task<PanelResult<PanelUser>> SetRoleFromTerminalAsync(string username, string? role, CancellationToken ct)
+    {
+        var user = await store.FindByUsernameAsync(NormalizeUsername(username), ct);
+        if (user is null)
+        {
+            return new(PanelOutcome.NotFound);
+        }
+
+        if (!Permissions.IsRole(role) || user.Pending)
+        {
+            return new(PanelOutcome.Invalid, Error: user.Pending ? PendingApproval : "invalid_role");
+        }
+
+        if (role == Permissions.Staff && user.StaffId is null)
+        {
+            user.StaffId = await store.EnsureStaffAsync(user.DisplayName, ct);
+            user.StaffName = user.DisplayName;
+        }
+
+        user.Role = role!;
+        user.SecurityStamp = secrets.NewStamp();
+        await store.UpdateAsync(user, ct);
+        await store.AuditAsync(null, "user.role", user.Id, new Dictionary<string, string?> { ["to"] = role }, ct);
         return PanelResult<PanelUser>.Ok(user);
     }
 
