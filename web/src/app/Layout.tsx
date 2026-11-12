@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router";
-import { useAlerts, useMarkAlertsRead } from "../shared/api/alerts";
+import { useAlerts, useAlertStream, useMarkAlertsRead } from "../shared/api/alerts";
+import type { PanelAlert } from "../shared/api/types";
 import { useDashboard } from "../shared/api/dashboard";
 import { avatarUrl, can, useLogout, useMe } from "../shared/api/session";
-import { ALERT_KINDS, label, ROLES, SYSTEM_WHAT, TASK_TYPES } from "../shared/lib/labels";
-import { mayAskToNotify, useAlertNotifications } from "../shared/lib/notify";
+import { ALERT_KINDS, label, ROLES } from "../shared/lib/labels";
+import { alertLine, notifyState, testNotification, useAlertNotifications } from "../shared/lib/notify";
 import { cairoLongDate, cairoTime, timeAgo } from "../shared/lib/time";
 import { Avatar } from "../shared/ui/Avatar";
 import { Icon, type IconName } from "../shared/ui/Icon";
@@ -284,12 +285,38 @@ function Bell({ late }: { late: number }) {
       document.removeEventListener("keydown", close);
     };
   }, [open]);
+  useAlertStream(); // v1.104: a new alert at once, no minute's wait
   const unread = alerts.data?.unread ?? 0;
+  // v1.104: the clients' requests come first and are what the red count counts; the system's problems (the managers')
+  // sit below them, folded, with a gold dot of their own (the owner: «الطلبات تبقى … أهم حاجة»)
+  const unreadSystem = alerts.data?.unread_system ?? 0;
+  const unreadRequests = Math.max(0, unread - unreadSystem);
   const items = alerts.data?.items ?? [];
+  const requests = items.filter((a) => a.kind !== "system");
+  const system = items.filter((a) => a.kind === "system");
   const now = new Date();
   const openTask = useCallback((id: string) => void navigate(`/tasks/${id}`), [navigate]);
-  useAlertNotifications(alerts.data?.items, unread, openTask);
-  const [ask, setAsk] = useState(mayAskToNotify);
+  useAlertNotifications(alerts.data?.items, unreadRequests, openTask);
+  const row = (a: PanelAlert) => (
+    <li key={a.id}>
+      <button type="button" onClick={() => { if (!a.read) read.mutate([a.id]); setOpen(false); if (a.task_id) navigate(`/tasks/${a.task_id}`); }}
+        className={`grid w-full gap-0.5 rounded-lg px-2.5 py-2 text-start hover:bg-muted ${a.read ? "opacity-70" : ""}`}>
+        <span className={`flex items-center gap-2 font-bold ${a.kind === "system" ? "text-[13px] text-ink-soft" : "text-sm"}`}>
+          {!a.read ? <span className={`size-2 shrink-0 rounded-full ${a.kind === "system" ? "bg-gold" : "bg-red"}`} aria-label="جديد" role="img" /> : null}
+          {label(ALERT_KINDS, a.kind)}
+          <span className="ms-auto text-[11px] font-normal text-ink-soft">{timeAgo(a.created_at, now)}</span>
+        </span>
+        <span className="truncate text-xs text-ink-soft">{alertLine(a)}</span>
+      </button>
+    </li>
+  );
+  // v1.104: Windows' notifications (shared/lib/notify): allowed once here, then a test is one click away
+  const [perm, setPerm] = useState(notifyState);
+  const allow = () =>
+    void Notification.requestPermission().then((p) => {
+      setPerm(notifyState());
+      if (p === "granted") testNotification();
+    });
 
   return (
     // a phone: the alerts open across the screen under the bar (the bell is near the screen's edge, the box went past it)
@@ -297,13 +324,15 @@ function Bell({ late }: { late: number }) {
       <button type="button" data-tour="bell" aria-expanded={open} aria-haspopup="dialog" onClick={() => setOpen((v) => !v)}
         className={`relative grid size-11 place-items-center rounded-full border text-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.4),0_2px_8px_rgb(0_0_0/0.04)] transition duration-200
           ${open ? "border-gold-line bg-card text-gold-ink" : "border-line/80 bg-card/70 hover:border-gold-line hover:bg-card hover:text-gold-ink"}`}
-        aria-label={unread > 0 ? `${unread} تنبيهات جديدة` : late > 0 ? `${late} مهام متأخرة` : "التنبيهات"}>
+        aria-label={unreadRequests > 0 ? `${unreadRequests} تنبيهات جديدة` : late > 0 ? `${late} مهام متأخرة` : unreadSystem > 0 ? "التنبيهات، وفيه مشاكل جديدة في السيستم" : "التنبيهات"}>
         <Icon name="bell" className="size-[22px]" />
-        {unread > 0 ? (
+        {unreadRequests > 0 ? (
           <>
             <span aria-hidden className="absolute -top-0.5 -right-0.5 size-[1.3rem] animate-ping rounded-full bg-red/40 motion-reduce:hidden" />
-            <span className="absolute -top-0.5 -right-0.5 grid size-[1.3rem] place-items-center rounded-full bg-gradient-to-b from-[#f05252] to-[#c81e1e] text-[11px] font-bold text-white shadow-sm ring-2 ring-card">{unread > 9 ? "9+" : unread}</span>
+            <span className="absolute -top-0.5 -right-0.5 grid size-[1.3rem] place-items-center rounded-full bg-gradient-to-b from-[#f05252] to-[#c81e1e] text-[11px] font-bold text-white shadow-sm ring-2 ring-card">{unreadRequests > 9 ? "9+" : unreadRequests}</span>
           </>
+        ) : unreadSystem > 0 ? (
+          <span aria-hidden className="absolute top-0.5 right-0.5 size-2.5 rounded-full bg-gold ring-2 ring-card" />
         ) : null}
       </button>
       {open ? (
@@ -317,33 +346,43 @@ function Bell({ late }: { late: number }) {
               </button>
             ) : null}
           </div>
-          {ask ? (
-            <button type="button" onClick={() => void Notification.requestPermission().then(() => setAsk(mayAskToNotify()))}
+          {perm === "default" ? (
+            <button type="button" onClick={allow}
               className="mx-1 flex items-center gap-2 rounded-lg border border-gold-line bg-gold-tint px-2.5 py-2 text-start text-xs font-semibold text-gold-ink hover:brightness-105">
               <Icon name="bell" className="size-4 shrink-0" />
-              شغّل إشعارات الطلبات العاجلة وإنت في تاب تاني
+              شغّل إشعارات الويندوز علشان التنبيهات توصلك وإنت في تاب تاني
             </button>
+          ) : perm === "granted" ? (
+            <button type="button" onClick={() => testNotification()}
+              className="mx-1 flex w-fit items-center gap-2 rounded-lg px-2.5 py-1.5 text-start text-xs font-semibold text-gold-ink hover:bg-muted">
+              <Icon name="bell" className="size-4 shrink-0" />
+              جرّب إشعار الويندوز
+            </button>
+          ) : perm === "denied" ? (
+            <p className="mx-1 rounded-lg bg-muted px-2.5 py-2 text-xs leading-relaxed text-ink-soft">
+              إشعارات الويندوز مقفولة للوحة. تفتحها من العلامة اللي جنب عنوان الموقع فوق، وبعدها «الإشعارات»، وبعدها «سماح».
+            </p>
           ) : null}
           {items.length === 0 ? (
             <p className="px-2 py-6 text-center text-sm text-ink-soft">مفيش تنبيهات.</p>
           ) : (
-            <ul className="grid max-h-[60vh] gap-0.5 overflow-y-auto">
-              {items.map((a) => (
-                <li key={a.id}>
-                  <button type="button" onClick={() => { if (!a.read) read.mutate([a.id]); setOpen(false); if (a.task_id) navigate(`/tasks/${a.task_id}`); }}
-                    className={`grid w-full gap-0.5 rounded-lg px-2.5 py-2 text-start hover:bg-muted ${a.read ? "opacity-70" : ""}`}>
-                    <span className="flex items-center gap-2 text-sm font-bold">
-                      {!a.read ? <span className="size-2 shrink-0 rounded-full bg-red" aria-label="جديد" role="img" /> : null}
-                      {label(ALERT_KINDS, a.kind)}
-                      <span className="ms-auto text-[11px] font-normal text-ink-soft">{timeAgo(a.created_at, now)}</span>
-                    </span>
-                    <span className="truncate text-xs text-ink-soft">
-                      {a.kind === "system" ? label(SYSTEM_WHAT, a.system_what ?? "") : `${label(TASK_TYPES, a.task_type ?? "")} · ${a.client_name ?? "رقم من غير اسم"}`}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <div className="grid max-h-[60vh] content-start gap-1.5 overflow-y-auto">
+              {requests.length ? (
+                <ul aria-label="الطلبات" className="grid gap-0.5">{requests.map(row)}</ul>
+              ) : (
+                <p className="px-2 py-3 text-center text-sm text-ink-soft">مفيش طلبات.</p>
+              )}
+              {system.length ? (
+                // folded under the requests while there are any; open when it is all there is
+                <details className="mx-1 rounded-lg border border-line/60" open={requests.length === 0}>
+                  <summary className="flex cursor-pointer items-center gap-2 px-2 py-1.5 text-xs font-semibold text-ink-soft hover:text-ink">
+                    مشاكل السيستم
+                    {unreadSystem > 0 ? <span className="rounded-full bg-gold-tint px-1.5 py-px text-[11px] text-gold-ink">{unreadSystem} جديدة</span> : null}
+                  </summary>
+                  <ul aria-label="مشاكل السيستم" className="grid gap-0.5 pb-1">{system.map(row)}</ul>
+                </details>
+              ) : null}
+            </div>
           )}
         </div>
       ) : null}

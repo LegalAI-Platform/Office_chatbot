@@ -12,6 +12,9 @@ namespace Office.Api.Panel;
 /// </summary>
 public static class PanelEndpoints
 {
+    /// <summary>v1.104: how long the bell's stream stays open, and how often it says it is still there.</summary>
+    private static readonly TimeSpan StreamFor = TimeSpan.FromMinutes(5), StreamPing = TimeSpan.FromSeconds(25);
+
     public static void MapPanelApi(this IEndpointRouteBuilder app)
     {
         var panel = app.MapGroup("/api/panel")
@@ -297,12 +300,64 @@ public static class PanelEndpoints
         // TASK 07c: the bell. Only what the person may see (their tasks and the unassigned, or all).
         work.MapGet("/alerts", async (HttpContext ctx, PanelAlerts alerts, CancellationToken ct) =>
         {
-            var (items, unread) = await alerts.ListAsync(ctx.CurrentUser().AsViewer(), ct);
+            var (items, unread, unreadSystem) = await alerts.ListAsync(ctx.CurrentUser().AsViewer(), ct);
             return Results.Ok(new
             {
                 unread,
-                items = items.Select(a => new AlertDto(a.Id, a.Kind, a.TaskId, a.TaskType, a.ClientName, a.DueAt, a.CreatedAt, a.Read, a.SystemWhat)),
+                unreadSystem, // v1.104: the bell counts the clients' requests, and shows the system's problems below them
+                items = items.Select(a => new AlertDto(a.Id, a.Kind, a.TaskId, a.TaskType, a.ClientName, a.DueAt, a.CreatedAt, a.Read, a.SystemWhat,
+                    a.PhoneLast3, a.MatterType, a.StaffName)),
             });
+        }).RequireAuthorization(PanelAuth.Policy(Permissions.TasksViewOwn));
+
+        // v1.104: the bell's live stream (the owner: «ريل تايم»). It says only that something changed (an alert made or
+        // read); each panel then asks /alerts, which keeps who sees what.
+        // - A comment every 25 s keeps nginx and Cloudflare from closing it.
+        // - It ends after 5 minutes, so the browser comes back through the session check, and at once when the API stops.
+        // - nginx (the panel's and the edge's) does not buffer it.
+        work.MapGet("/alerts/stream", async (HttpContext ctx, AlertSignal signal, IHostApplicationLifetime life, CancellationToken ct) =>
+        {
+            using var both = CancellationTokenSource.CreateLinkedTokenSource(ct, life.ApplicationStopping);
+            var stop = both.Token;
+            ctx.Response.ContentType = "text/event-stream";
+            ctx.Response.Headers.CacheControl = "no-store, no-transform";
+            ctx.Response.Headers["X-Accel-Buffering"] = "no";
+            ctx.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpResponseBodyFeature>()?.DisableBuffering();
+            var until = DateTimeOffset.UtcNow + StreamFor;
+            var seen = signal.Version;
+            try
+            {
+                await ctx.Response.WriteAsync("retry: 5000\n\n", stop);
+                await ctx.Response.Body.FlushAsync(stop);
+                while (DateTimeOffset.UtcNow < until)
+                {
+                    var next = signal.Next;
+                    var woke = signal.Version != seen;
+                    if (!woke)
+                    {
+                        using var tick = CancellationTokenSource.CreateLinkedTokenSource(stop);
+                        woke = await Task.WhenAny(next, Task.Delay(StreamPing, tick.Token)) == next;
+                        await tick.CancelAsync();
+                        stop.ThrowIfCancellationRequested();
+                    }
+
+                    if (woke)
+                    {
+                        seen = signal.Version;
+                    }
+
+                    await ctx.Response.WriteAsync(woke ? "event: alerts\ndata: new\n\n" : ": ping\n\n", stop);
+                    await ctx.Response.Body.FlushAsync(stop);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // the browser went away, or the API is stopping
+            }
+            catch (IOException)
+            {
+                // the connection broke
+            }
         }).RequireAuthorization(PanelAuth.Policy(Permissions.TasksViewOwn));
 
         work.MapPost("/alerts/read", async (AlertsReadRequest? body, HttpContext ctx, PanelAlerts alerts, CancellationToken ct) =>
@@ -494,7 +549,7 @@ public sealed record MeDto(Guid Id, string Username, string DisplayName, string 
 public sealed record StaffDto(Guid Id, string Name);
 
 public sealed record AlertDto(long Id, string Kind, Guid? TaskId, string? TaskType, string? ClientName, DateTimeOffset? DueAt,
-    DateTimeOffset CreatedAt, bool Read, string? SystemWhat);
+    DateTimeOffset CreatedAt, bool Read, string? SystemWhat, string? PhoneLast3, string? MatterType, string? StaffName);
 
 public sealed record DashboardTaskDto(Guid Id, string Type, string State, DateTimeOffset DueAt, DateTimeOffset CreatedAt,
     string? ClientName, string? StaffName, bool Late);

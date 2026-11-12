@@ -83,7 +83,8 @@ and it asks the API for nothing.
 
 | Endpoint | Permission | What |
 |---|---|---|
-| `GET /alerts` | view_own | `{ unread, items[30] }`: the alerts of tasks this person may see (overdue, urgent, a client asking for someone), newest first, with `read` |
+| `GET /alerts` | view_own | `{ unread, unread_system, items[30] }`: the alerts this person may see (overdue, urgent, a client asking for someone; a low rating and the system's for the managers), newest first, with `read`. v1.104: `unread_system` is the system alerts among `unread`. A task's alert also has `phone_last3` (never the number), `matter_type` and `staff_name` (absent: nobody yet), never the client's words |
+| `GET /alerts/stream` | view_own | v1.104: `text/event-stream`. `event: alerts` the moment alerts are made or read (it carries nothing: the page asks `/alerts`), `: ping` every 25 s, closed after 5 minutes (`retry: 5000`: the browser opens it again) and when the API stops. Not buffered by nginx (the panel's and the edge's) |
 | `POST /alerts/read` | view_own | `{ ids }` or `{ ids: null }` (all) |
 | `GET /tasks/{id}/files/{n}` | view_own (and may see the task) | the file of the task turn's n-th message, from storage (read-only key). Pictures, sound, video and PDF open in the browser; anything else downloads as `client-file-<n>.<ext>`. `Content-Security-Policy: sandbox`, never cached. Every opening → `panel_audit task.file_open` (no file name) |
 | `GET /lists?kind&q&page` | lists.manage | `{ total, items }`, 50 a page; `q` = part of the name or 3+ last digits |
@@ -97,9 +98,9 @@ and it asks the API for nothing.
 | `POST /texts/{key}/versions/{v}/activate` | texts.manage | an earlier version back |
 | `GET /reports?month=YYYY-MM` | reports.view | the month (Cairo): tasks by type and staff member, done on time, new clients by source, topic and kind |
 
-Alerts are made every minute by the api (tasks past their due time become `overdue` first) and
-e-mailed once to everyone who may see the task; the e-mail holds the task's kind, due time and a
-link, never the client's name, number or words.
+Alerts are made by the api every 10 seconds (`Alerts:IntervalSeconds`; every minute before v1.104), and the system's
+checks run once a minute. Tasks past their due time become `overdue` first. Each alert is e-mailed once to everyone
+who may see the task; the e-mail holds the task's kind, due time and a link, never the client's name, number or words.
 
 ## The booking (TASK 08, DECISIONS v1.12 B-24)
 

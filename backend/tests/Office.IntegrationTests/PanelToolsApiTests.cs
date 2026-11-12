@@ -147,6 +147,58 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal(3, (int)(await boss.GetFromJsonAsync<JsonNode>("/api/panel/alerts", Ct))!["unread"]!);
     }
 
+    // v1.104: the Windows notification says who and what without opening the panel (the owner: «ما فيهاش تفاصيل»), but
+    // never the number and never the client's words («من غير كلامه»).
+    [Fact]
+    public async Task The_bell_gives_the_number_s_last_3_digits_the_matter_and_who_has_the_task_never_the_client_s_words()
+    {
+        var mine = await NewTask("urgent_request", staff: _staffA);
+        var nobody = await NewTask("human_requested");
+        var intake = Guid.NewGuid();
+        await db.ExecAsync($"""
+            INSERT INTO hazem.intakes (id, person_id, state, matter_type) VALUES ('{intake}', '{mine}', 'handed_to_staff', 'personal_status');
+            UPDATE hazem.staff_tasks SET intake_id = '{intake}' WHERE id = '{mine}';
+            """);
+        await RunAlerts();
+
+        var bell = (await (await SignIn("yasmin")).GetFromJsonAsync<JsonNode>("/api/panel/alerts", Ct))!["items"]!.AsArray();
+        var wa = (await db.ScalarAsync<string>($"SELECT wa_id FROM hazem.persons WHERE id = '{mine}'"))!;
+        var a = bell.Single(x => (Guid?)x!["task_id"] == mine)!;
+        Assert.Equal(wa[^3..], (string)a["phone_last3"]!);
+        Assert.Equal("personal_status", (string)a["matter_type"]!);
+        Assert.Equal("ياسمين", (string)a["staff_name"]!);
+        Assert.Equal(
+            ["client_name", "created_at", "due_at", "id", "kind", "matter_type", "phone_last3", "read", "staff_name", "task_id", "task_type"],
+            a.AsObject().Select(p => p.Key).Order(StringComparer.Ordinal));
+
+        var b = bell.Single(x => (Guid?)x!["task_id"] == nobody)!;
+        Assert.Null(b["staff_name"]); // nobody has it yet
+        Assert.Null(b["matter_type"]);
+        Assert.DoesNotContain(wa, bell.ToJsonString()); // the last 3 digits only
+    }
+
+    // v1.104 (the owner: «ريل تايم»): the open bell hears a new alert at once, with no poll; only a session may listen.
+    [Fact]
+    public async Task The_bell_s_stream_says_at_once_that_alerts_were_made_and_needs_a_session()
+    {
+        Assert.Equal(HttpStatusCode.Unauthorized, (await _factory.CreateClient().GetAsync("/api/panel/alerts/stream", Ct)).StatusCode);
+
+        var yasmin = await SignIn("yasmin");
+        using var r = await yasmin.GetAsync("/api/panel/alerts/stream", HttpCompletionOption.ResponseHeadersRead, Ct);
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        Assert.Equal("text/event-stream", r.Content.Headers.ContentType?.MediaType);
+        using var wait = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        wait.CancelAfter(TimeSpan.FromSeconds(20));
+        using var body = new StreamReader(await r.Content.ReadAsStreamAsync(wait.Token));
+        Assert.Equal("retry: 5000", await body.ReadLineAsync(wait.Token));
+        Assert.Equal("", await body.ReadLineAsync(wait.Token));
+
+        await NewTask("urgent_request", staff: _staffA);
+        await RunAlerts();
+        Assert.Equal("event: alerts", await body.ReadLineAsync(wait.Token)); // no client data in it: the page asks /alerts
+        Assert.Equal("data: new", await body.ReadLineAsync(wait.Token));
+    }
+
     // ---------- TASK 13: the system's own alerts ----------
 
     [Fact]
@@ -178,6 +230,7 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
         var boss = (await (await SignIn("boss")).GetFromJsonAsync<JsonNode>("/api/panel/alerts", Ct))!;
         Assert.Equal(["n8n", "backup"], boss["items"]!.AsArray().Select(a => (string)a!["system_what"]!).Order(StringComparer.Ordinal).Reverse());
         Assert.All(boss["items"]!.AsArray(), a => Assert.Null(a!["task_id"]));
+        Assert.Equal((2, 2), ((int)boss["unread"]!, (int)boss["unread_system"]!)); // v1.104: the bell counts the requests apart
         Assert.Equal(0, (int)(await (await SignIn("lawyer")).GetFromJsonAsync<JsonNode>("/api/panel/alerts", Ct))!["unread"]!);
         Assert.Equal(0, (int)(await (await SignIn("yasmin")).GetFromJsonAsync<JsonNode>("/api/panel/alerts", Ct))!["unread"]!);
         Assert.Equal(0L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.panel_alerts WHERE kind = 'system' AND emailed_at IS NULL"));
