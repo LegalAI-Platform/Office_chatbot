@@ -9,7 +9,7 @@ screenshot must be replaced.** The nightly log scan checks that no token and no 
 | `HAZEM_OPENAI_API_KEY` | api (classification) | Make a new key at platform.openai.com → API keys, put it in `.env`, `docker compose up -d api`, then **delete the old key** on the site |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | api (the lawyer's calendar) | Google Cloud → IAM → Service accounts → the account → Keys → Add key (JSON); put it in `.env`; `up -d api`; `calendar-check`; then delete the old key there |
 | Meta's token (the n8n credential `meta-whatsapp-token`) | n8n | Meta Business → System users → generate a new token (the same permissions); in n8n: Credentials → the credential → paste; then revoke the old one |
-| `SMTP_PASSWORD` (Gmail app password) | api (no-reply mail) | myaccount.google.com → App passwords → make a new one, put it in `.env`, `up -d api`, delete the old one |
+| `SMTP_PASSWORD` (the Resend API key, since 2026-11-12) | api (no-reply mail) | resend.com → API Keys → Create API Key («Sending access», the domain only); on the server `bash deploy/set-smtp-resend.sh` asks for it (never on screen), puts it in `.env` and runs `up -d api`; then delete the old key in Resend |
 | `POSTGRES_SUPERUSER_PASSWORD`, `OFFICE_*_PASSWORD`, `N8N_DB_PASSWORD` | postgres, the services | Change the role's password in Postgres (`ALTER ROLE … PASSWORD`) and in `.env` together, then restart the services that use it |
 | `S3_*` keys | Garage | New values from `gen-secrets` in `.env`, then `docker compose run --rm tools storage-init` (it imports them) and restart api / n8n |
 | `HAZEM_API_TOKEN`, `N8N_INTERNAL_SEND_TOKEN`, `CHATWOOT_*_TOKEN` | between our services | New values from `gen-secrets`, restart api, n8n and Chatwoot (`chatwoot-setup` again for the Chatwoot ones) |

@@ -65,7 +65,8 @@ person gets an e-mail either way. A request not confirmed within a day is droppe
 
 Needs, in `.env`: `PANEL_SECRET_KEY` (`gen-secrets`) and the mail server (`SMTP_HOST`,
 `SMTP_PORT=587`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM=no-reply@…`), then
-`docker compose up -d api`. Without them the sign-up page says it is not available.
+`docker compose up -d api`. Without them the sign-up page says it is not available. On the server the mail
+server is Resend, from `no-reply@hazem-office.tech`, set by `deploy/set-smtp-resend.sh` (`server.md` §9).
 
 ## Two-step sign-in (the authenticator app, v1.9)
 
