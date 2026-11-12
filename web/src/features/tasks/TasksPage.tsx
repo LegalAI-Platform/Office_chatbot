@@ -114,7 +114,7 @@ export function TasksPage() {
       </section>
 
       {/* the state tabs, with the number of tasks of each (a phone: they slide sideways, with no grey bar under them) */}
-      <div className="liquid flex gap-1 overflow-x-auto rounded-[20px] p-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="group" aria-label="الحالة">
+      <div className="liquid flex gap-1 overflow-x-auto rounded-[20px] p-1.5 max-lg:[scrollbar-width:none] max-lg:[&::-webkit-scrollbar]:hidden" role="group" aria-label="الحالة">
         {STATES.map((s) => {
           const on = state === s.value;
           const n = counts[s.value];

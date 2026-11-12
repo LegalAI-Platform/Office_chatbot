@@ -54,7 +54,7 @@ export function ServicesPage() {
       <Intro count={list.data?.length} />
 
       <section aria-label="الفلاتر" className="liquid grid gap-2 rounded-[22px] p-4 max-sm:p-2.5 sm:p-5">
-        <div className="flex gap-1 overflow-x-auto rounded-full border border-line/60 bg-card/45 p-1 shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist" aria-label="طلبات الخدمات">
+        <div className="flex gap-1 overflow-x-auto rounded-full border border-line/60 bg-card/45 p-1 shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)] max-lg:[scrollbar-width:none] max-lg:[&::-webkit-scrollbar]:hidden" role="tablist" aria-label="طلبات الخدمات">
           {TABS.map((t) => {
             const on = t.value === show;
             return (

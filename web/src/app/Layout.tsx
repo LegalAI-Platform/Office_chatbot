@@ -168,7 +168,8 @@ function PhoneMore({ groups, settings }: { groups: { title: string; items: Item[
         // the page dims behind the sheet (the bar stays lit: this layer is under the bar's own tabs)
         <div aria-hidden className="fixed inset-0 -z-10 bg-black/45 transition-opacity duration-200 starting:opacity-0" onClick={() => setOpen(false)} />
       ) : null}
-      <button ref={button} type="button" aria-expanded={open} aria-haspopup="dialog" aria-controls="more-sheet" onClick={() => setOpen((v) => !v)}
+      {/* data-tour: the first-sign-in tour points at this button */}
+      <button ref={button} type="button" aria-expanded={open} aria-haspopup="dialog" aria-controls="more-sheet" data-tour="nav-more" onClick={() => setOpen((v) => !v)}
         className={`relative grid min-h-14 content-center justify-items-center gap-0.5 rounded-lg text-[11px] ${open || !underTab ? "text-gold" : "text-side-soft"}`}>
         <Icon name={open ? "x" : "more"} className="size-5 shrink-0 text-white" />
         المزيد
