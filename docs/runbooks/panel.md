@@ -113,7 +113,24 @@ The bell in the top bar shows the alerts a person may see: a task past its due t
 task, a client asking for someone. Each one also goes by e-mail (the no-reply sender) once, to the
 manager, the lawyer and the staff member of the task (everyone, if it is unassigned). The e-mail
 says only the kind of task and its due time, with a link to the panel. Tasks become overdue by
-themselves every minute.
+themselves (every 10 seconds since v1.104).
+
+**Since v1.104:**
+- **The clients' requests come first.** The red count counts them only. The system's problems (the managers' and
+  maintenance's; the lawyer never sees them) sit below, folded under «مشاكل السيستم» with their own count. With
+  nothing else unread, a gold dot shows on the bell instead of the count.
+- **Windows' notifications.** «شغّل إشعارات الويندوز…» in the bell asks the browser once, then «جرّب إشعار
+  الويندوز» shows a test. After that, every new alert pops up in the screen's corner while the panel is open in
+  another tab or window:
+  - the title has the kind and the client;
+  - under it: what it is about, the number's last 3 digits, its due time, and who has it;
+  - never the client's words.
+  An urgent request stays on the screen and chimes. A system problem comes after the requests, without a sound.
+  A phone's browser does not show them (no service worker).
+- **At once.** The bell keeps a stream open (`GET /api/panel/alerts/stream`), and a new alert arrives within seconds,
+  even in a tab hidden for an hour. Chrome slows a hidden tab's timers to once a minute, so the minute's check stays
+  only as the fallback.
+- **Blocked by mistake:** the browser's site settings (the icon left of the address) → Notifications → Allow.
 
 ## The office's tools (TASK 07c; the manager and the lawyer)
 

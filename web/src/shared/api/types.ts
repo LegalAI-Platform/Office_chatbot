@@ -176,10 +176,19 @@ export interface PanelAlert {
   created_at: string;
   read: boolean;
   system_what?: "backup" | "healthcheck" | "drill" | "log_scan" | "n8n";
+  /**
+   * v1.104, for the Windows notification: the number's last 3 digits (never the number), the case's matter, and who
+   * has the task (absent: nobody yet). Never what the client wrote.
+   */
+  phone_last3?: string;
+  matter_type?: string;
+  staff_name?: string;
 }
 
 export interface AlertList {
   unread: number;
+  /** v1.104: the unread system alerts among `unread` (the bell counts the clients' requests; absent: an older API). */
+  unread_system?: number;
   items: PanelAlert[];
 }
 

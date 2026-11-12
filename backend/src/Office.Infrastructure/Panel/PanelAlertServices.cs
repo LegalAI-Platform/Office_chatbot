@@ -121,18 +121,28 @@ public sealed class PanelAlertStore(HazemDbContext db) : IPanelAlertStore
                           from t in ts.DefaultIfEmpty()
                           join p in db.Persons.AsNoTracking() on t.PersonId equals p.Id into ps
                           from p in ps.DefaultIfEmpty()
+                          join s in db.Staff.AsNoTracking() on t.StaffId equals s.Id into ss
+                          from s in ss.DefaultIfEmpty()
+                          join i in db.Intakes.AsNoTracking() on t.IntakeId equals i.Id into ii
+                          from i in ii.DefaultIfEmpty()
                           orderby a.CreatedAt descending, a.Id descending
                           select new
                           {
                               a.Id, a.Kind, a.TaskId, Type = t == null ? null : t.Type, Name = p == null ? null : p.OfficeName,
                               DueAt = t == null ? (DateTimeOffset?)null : t.DueAt, a.CreatedAt, a.SystemWhat,
                               Read = db.PanelAlertReads.Any(r => r.AlertId == a.Id && r.UserId == viewer.UserId),
+                              WaId = p == null ? null : p.WaId, StaffName = s == null ? null : s.Name, Matter = i == null ? null : i.MatterType,
                           }).Take(limit).ToListAsync(ct);
-        return rows.Select(r => new PanelAlert(r.Id, r.Kind, r.TaskId, r.Type, r.Name, r.DueAt, r.CreatedAt, r.Read, r.SystemWhat)).ToList();
+        // the Windows notification's details (v1.104): the number's last 3 digits only, as the task list shows them
+        return rows.Select(r => new PanelAlert(r.Id, r.Kind, r.TaskId, r.Type, r.Name, r.DueAt, r.CreatedAt, r.Read, r.SystemWhat,
+            r.WaId is { Length: >= 3 } wa ? wa[^3..] : null, r.Matter, r.StaffName)).ToList();
     }
 
     public Task<int> UnreadAsync(Viewer viewer, CancellationToken ct) =>
         Visible(viewer).CountAsync(a => !db.PanelAlertReads.Any(r => r.AlertId == a.Id && r.UserId == viewer.UserId), ct);
+
+    public Task<int> UnreadSystemAsync(Viewer viewer, CancellationToken ct) =>
+        Visible(viewer).CountAsync(a => a.Kind == AlertKinds.System && !db.PanelAlertReads.Any(r => r.AlertId == a.Id && r.UserId == viewer.UserId), ct);
 
     public async Task MarkReadAsync(Viewer viewer, IReadOnlyList<long>? ids, CancellationToken ct)
     {
@@ -174,11 +184,15 @@ public sealed class PanelAlertStore(HazemDbContext db) : IPanelAlertStore
 }
 
 /// <summary>
-/// Every minute: tasks past their due time become overdue (S-05), new alerts are made and mailed.
-/// Off in tests (Alerts:RunWorker=false): they call the steps themselves.
+/// Every 10 seconds (Alerts:IntervalSeconds; every minute before v1.104): tasks past their due time become overdue
+/// (S-05), and new alerts are made and mailed. The open panels hear them at once (<see cref="AlertSignal"/>). The system's
+/// checks stay once a minute, because a client's request comes first (the owner, 2026-11-12). Off in tests
+/// (Alerts:RunWorker=false): they call the steps themselves.
 /// </summary>
 public sealed class AlertWorker(IServiceScopeFactory scopes, IConfiguration config, ILogger<AlertWorker> log) : BackgroundService
 {
+    private static readonly TimeSpan Minute = TimeSpan.FromMinutes(1);
+
     protected override async Task ExecuteAsync(CancellationToken stop)
     {
         if (!config.GetValue("Alerts:RunWorker", true))
@@ -187,13 +201,21 @@ public sealed class AlertWorker(IServiceScopeFactory scopes, IConfiguration conf
         }
 
         var panelUrl = config["Panel:PublicUrl"] is { Length: > 0 } u ? u : "http://127.0.0.1:8080";
+        var every = TimeSpan.FromSeconds(Math.Clamp(config.GetValue("Alerts:IntervalSeconds", 10), 1, 60));
+        DateTimeOffset systemAt = DateTimeOffset.MinValue, warnedAt = DateTimeOffset.MinValue;
         while (!stop.IsCancellationRequested)
         {
             try
             {
                 using var scope = scopes.CreateScope();
+                var system = DateTimeOffset.UtcNow - systemAt >= Minute;
+                if (system)
+                {
+                    systemAt = DateTimeOffset.UtcNow;
+                }
+
                 var overdue = await scope.ServiceProvider.GetRequiredService<Lists.TaskMaintenance>().MarkOverdueAsync(stop);
-                var (made, mailed, failed, error) = await scope.ServiceProvider.GetRequiredService<PanelAlerts>().RunAsync(panelUrl, stop);
+                var (made, mailed, failed, error) = await scope.ServiceProvider.GetRequiredService<PanelAlerts>().RunAsync(panelUrl, stop, system);
                 if (overdue + made + mailed > 0)
                 {
                     log.LogInformation("Alerts: {Overdue} task(s) overdue, {Made} alert(s), {Mailed} e-mail(s)", overdue, made, mailed);
@@ -206,12 +228,17 @@ public sealed class AlertWorker(IServiceScopeFactory scopes, IConfiguration conf
             }
             catch (Exception e) when (e is not OperationCanceledException)
             {
-                log.LogWarning("Alerts round failed: {Kind}: {Message}", e.GetType().Name, e.Message);
+                // a round every few seconds: one warning a minute at most while it keeps failing
+                if (DateTimeOffset.UtcNow - warnedAt >= Minute)
+                {
+                    warnedAt = DateTimeOffset.UtcNow;
+                    log.LogWarning("Alerts round failed: {Kind}: {Message}", e.GetType().Name, e.Message);
+                }
             }
 
             try
             {
-                await Task.Delay(TimeSpan.FromMinutes(1), stop);
+                await Task.Delay(every, stop);
             }
             catch (OperationCanceledException)
             {

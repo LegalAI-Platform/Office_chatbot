@@ -32,9 +32,14 @@ public static class SystemWhat
     public const string Ai = "ai";
 }
 
-/// <summary>An alert as the bell shows it. A system alert has no task (<see cref="SystemWhat"/> instead).</summary>
+/// <summary>
+/// An alert as the bell shows it. A system alert has no task (<see cref="SystemWhat"/> instead). v1.104, for the Windows
+/// notification: the client's number's last 3 digits (never the number), the case's matter, and who has the task (null:
+/// nobody yet). Never what the client wrote (the owner: «من غير كلامه»).
+/// </summary>
 public sealed record PanelAlert(long Id, string Kind, Guid? TaskId, string? TaskType, string? ClientName, DateTimeOffset? DueAt,
-    DateTimeOffset CreatedAt, bool Read, string? SystemWhat = null);
+    DateTimeOffset CreatedAt, bool Read, string? SystemWhat = null, string? PhoneLast3 = null, string? MatterType = null,
+    string? StaffName = null);
 
 /// <summary>An alert whose e-mail has not gone out yet.</summary>
 public sealed record AlertToMail(long Id, string Kind, Guid? TaskId, string? TaskType, DateTimeOffset? DueAt, Guid? StaffId, string? SystemWhat = null);
@@ -65,21 +70,54 @@ public interface IPanelAlertStore
 
     Task<int> UnreadAsync(Viewer viewer, CancellationToken ct);
 
+    /// <summary>v1.104: the unread system alerts among them (the bell puts the clients' requests first).</summary>
+    Task<int> UnreadSystemAsync(Viewer viewer, CancellationToken ct);
+
     /// <summary>Marks these (or, with null, every alert the viewer may see) read.</summary>
     Task MarkReadAsync(Viewer viewer, IReadOnlyList<long>? ids, CancellationToken ct);
 }
 
-public sealed class PanelAlerts(IPanelAlertStore store, IPanelMailer mailer)
+/// <summary>
+/// v1.104: wakes the open panels' alert streams the moment alerts are made or read, so the bell and Windows'
+/// notification hear at once (the owner: real time). It says only that something changed; each panel then asks for the
+/// alerts it may see.
+/// </summary>
+public sealed class AlertSignal
+{
+    private long _version;
+    private TaskCompletionSource _next = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>How many pulses so far: a stream that was busy writing still sees one it missed.</summary>
+    public long Version => Interlocked.Read(ref _version);
+
+    /// <summary>Completes at the next <see cref="Pulse"/>.</summary>
+    public Task Next => Volatile.Read(ref _next).Task;
+
+    public void Pulse()
+    {
+        Interlocked.Increment(ref _version);
+        Interlocked.Exchange(ref _next, new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)).TrySetResult();
+    }
+}
+
+public sealed class PanelAlerts(IPanelAlertStore store, IPanelMailer mailer, AlertSignal signal)
 {
     public const int Shown = 30;
 
     /// <summary>
     /// Makes the new alerts and mails the unsent ones. Returns (made, mailed, failed) and the kind of
     /// the first failure that the mailer threw (its type only: an address may be in its message).
+    /// v1.104: <paramref name="system"/> false skips the system checks (the worker runs them once a minute, the clients'
+    /// requests every few seconds).
     /// </summary>
-    public async Task<(int Made, int Mailed, int Failed, string? Error)> RunAsync(string panelUrl, CancellationToken ct)
+    public async Task<(int Made, int Mailed, int Failed, string? Error)> RunAsync(string panelUrl, CancellationToken ct, bool system = true)
     {
-        var made = await store.MakeAsync(ct) + await store.MakeSystemAsync(ct);
+        var made = await store.MakeAsync(ct) + (system ? await store.MakeSystemAsync(ct) : 0);
+        if (made > 0)
+        {
+            signal.Pulse();
+        }
+
         int mailed = 0, failed = 0;
         string? error = null;
         if (!mailer.Configured)
@@ -90,13 +128,13 @@ public sealed class PanelAlerts(IPanelAlertStore store, IPanelMailer mailer)
         await store.DropFinishedAsync(ct);
         foreach (var alert in await store.UnsentAsync(ct))
         {
-            var system = alert.Kind == AlertKinds.System;
-            var managers = system || alert.Kind == AlertKinds.Rating; // v1.31: a low rating is the managers' too
+            var isSystem = alert.Kind == AlertKinds.System;
+            var managers = isSystem || alert.Kind == AlertKinds.Rating; // v1.31: a low rating is the managers' too
             foreach (var to in managers ? await store.ManagersAsync(ct) : await store.RecipientsAsync(alert.StaffId, ct))
             {
                 try
                 {
-                    if (await mailer.SendAsync(system ? PanelMails.SystemAlert(to, alert.SystemWhat, panelUrl) : PanelMails.Alert(to, alert, panelUrl), ct))
+                    if (await mailer.SendAsync(isSystem ? PanelMails.SystemAlert(to, alert.SystemWhat, panelUrl) : PanelMails.Alert(to, alert, panelUrl), ct))
                     {
                         mailed++;
                     }
@@ -121,8 +159,13 @@ public sealed class PanelAlerts(IPanelAlertStore store, IPanelMailer mailer)
         return (made, mailed, failed, error);
     }
 
-    public async Task<(IReadOnlyList<PanelAlert> Items, int Unread)> ListAsync(Viewer viewer, CancellationToken ct) =>
-        (await store.ListAsync(viewer, Shown, ct), await store.UnreadAsync(viewer, ct));
+    public async Task<(IReadOnlyList<PanelAlert> Items, int Unread, int UnreadSystem)> ListAsync(Viewer viewer, CancellationToken ct) =>
+        (await store.ListAsync(viewer, Shown, ct), await store.UnreadAsync(viewer, ct), await store.UnreadSystemAsync(viewer, ct));
 
-    public Task MarkReadAsync(Viewer viewer, IReadOnlyList<long>? ids, CancellationToken ct) => store.MarkReadAsync(viewer, ids, ct);
+    /// <summary>Read on one device: the person's other tabs and devices hear it at once too (v1.104).</summary>
+    public async Task MarkReadAsync(Viewer viewer, IReadOnlyList<long>? ids, CancellationToken ct)
+    {
+        await store.MarkReadAsync(viewer, ids, ct);
+        signal.Pulse();
+    }
 }
