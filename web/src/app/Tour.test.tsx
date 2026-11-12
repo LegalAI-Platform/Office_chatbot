@@ -4,7 +4,7 @@ import { createMemoryRouter, RouterProvider, useLocation } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { meKey } from "../shared/api/session";
 import type { Me, Permission } from "../shared/api/types";
-import { makeQueryClient } from "./App";
+import { makeQueryClient, routes } from "./App";
 import { Tour } from "./Tour";
 import { dimPath, holeAround, place } from "./tourPlace";
 import { tourSteps } from "./tourSteps";
@@ -193,6 +193,61 @@ describe("the tour on the screen", () => {
     await act(() => router.navigate("/tasks"));
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(saved()).toBe(0);
+  });
+});
+
+describe("the tour in the whole panel (the real shell and pages)", () => {
+  function app(me: Me, path = "/") {
+    const calls: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
+      const p = String(url).replace("/api/panel", "").split("?")[0]!;
+      calls.push(`${init?.method ?? "GET"} ${p}`);
+      if (p === "/auth/me") return Response.json(me);
+      if (p === "/auth/csrf") return Response.json({ token: "t" });
+      if (p === "/account/tour-seen") return new Response(null, { status: 204 });
+      return Response.json({ error: "not_found" }, { status: 404 });
+    });
+    const router = createMemoryRouter(routes, { initialEntries: [path] });
+    const root = document.body.appendChild(document.createElement("div"));
+    root.id = "root";
+    render(<QueryClientProvider client={makeQueryClient()}><RouterProvider router={router} /></QueryClientProvider>, { container: root });
+    return { router, saved: () => calls.filter((c) => c === "POST /account/tour-seen").length };
+  }
+
+  it("opens over the home page of a new account, and every part it points at carries its anchor", async () => {
+    app(account());
+    expect(await screen.findByRole("dialog", { name: "أهلًا بيك يا ياسمين" })).toBeTruthy();
+    for (const name of ["home-kpis", "nav-tasks", "nav-appointments", "nav-chats", "nav-money", "nav-more", "bell", "search", "nav-settings", "account-menu"]) {
+      expect(document.querySelector(`[data-tour="${name}"]`), name).not.toBeNull();
+    }
+    // a staff member has no reports: neither the link nor its bubble
+    expect(document.querySelector('[data-tour="nav-reports"]')).toBeNull();
+  });
+
+  it("«اعرض الجولة تاني» in the account menu opens it from the first step, from any page, and saves nothing", async () => {
+    const { router, saved } = app(account({ tour_seen: true }), "/tasks");
+    const menu = await waitFor(() => {
+      const button = document.querySelector<HTMLElement>('[data-tour="account-menu"]');
+      expect(button).not.toBeNull();
+      return button!;
+    });
+    fireEvent.click(menu);
+    fireEvent.click(screen.getByRole("menuitem", { name: /اعرض الجولة تاني/ }));
+    expect(await screen.findByRole("dialog", { name: "أهلًا بيك يا ياسمين" })).toBeTruthy();
+    expect(router.state.location.pathname + router.state.location.search).toBe("/");
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await wait(100);
+    expect(saved()).toBe(0);
+  });
+
+  it("is in «الإعدادات» › «حسابك» too", async () => {
+    app(lawyer, "/settings");
+    const link = await screen.findByRole("link", { name: /اعرض الجولة تاني/ });
+    expect(link.getAttribute("href")).toBe("/?tour=1");
+    fireEvent.click(link);
+    expect(await screen.findByRole("dialog", { name: "أهلًا بيك يا أحمد" })).toBeTruthy();
+    expect(screen.getByText("1 من 11")).toBeTruthy();
   });
 });
 

@@ -79,7 +79,7 @@ export function HomePage() {
         {dash.isError ? <ErrorState message={errorMessage(dash.error)} onRetry={() => void dash.refetch()} /> : null}
 
         {/* the four numbers (a phone: two by two, like «المهام», so the day's cards are on the first screen too) */}
-        <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+        <div data-tour="home-kpis" className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
           <Kpi tone="gold" icon="stat_calendar_blue" title="مواعيد اليوم" value={appointments.isError ? null : todays} to="/appointments" more="عرض المواعيد" />
           <Kpi tone="sand" icon="stat_card_green" title="إيصالات تحتاج تأكيد" value={receipts.isError ? null : receipts.data?.length} to="/receipts" more="من الإيصالات" />
           <Kpi tone="copper" icon="stat_alert_yellow" title="أمور عاجلة" value={dash.data?.urgent} series={dash.data?.urgent_by_day} to="/tasks?state=urgent" more="عرض التفاصيل" />
@@ -199,12 +199,14 @@ function Sparkline({ values, stroke, className = "" }: { values?: number[] | und
  * Every card of the page as «liquid glass» (the owner: modern, clearly worked on): see-through over the page's soft
  * light, a warm glow inside, a lit top edge, and its icon in a small gold tile beside the title (and the count, if any).
  */
-function Panel({ title, icon, count, action, children, className = "", flush = false }: {
+/** `tour`: what the tour's bubble points at (app/tourSteps.ts). */
+function Panel({ title, icon, count, action, children, className = "", flush = false, tour }: {
   title: string; icon: IconName; count?: number | undefined; action?: ReactNode; children: ReactNode; className?: string; flush?: boolean;
+  tour?: string;
 }) {
   const id = useId();
   return (
-    <section aria-labelledby={id} className={`liquid relative isolate flex min-w-0 flex-col overflow-hidden rounded-[18px] ${className}`}>
+    <section aria-labelledby={id} data-tour={tour} className={`liquid relative isolate flex min-w-0 flex-col overflow-hidden rounded-[18px] ${className}`}>
       <span aria-hidden className="pointer-events-none absolute -top-16 -end-10 -z-10 size-48 rounded-full bg-gold/20 blur-3xl" />
       <span aria-hidden className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-l from-transparent via-gold/70 to-transparent" />
       <header className="flex items-center justify-between gap-2 px-3.5 pt-3.5 pb-2.5">
@@ -594,7 +596,7 @@ function MonthPanel({ now }: { now: Date }) {
       value: usdShort(r.ai_cost.total_usd), sub: r.ai_cost.conversations > 0 ? `على ${r.ai_cost.conversations} محادثة` : undefined }] : []),
   ] : [];
   return (
-    <Panel title="الشهر ده" icon="trend-up" action={<SeeAll to="/reports" />} className="min-h-0" flush>
+    <Panel title="الشهر ده" icon="trend-up" action={<SeeAll to="/reports" />} className="min-h-0" flush tour="home-month">
       {report.isPending ? <Rows n={2} /> : report.isError ? (
         <Quiet icon="top_calendar" title="أرقام الشهر مش متاحة دلوقتي">جرّب تاني بعد شوية.</Quiet>
       ) : (
