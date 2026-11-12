@@ -122,6 +122,14 @@ typed by the owner (`read -rsp`, never on screen). All its routes go to the edge
 | `chat.<domain>` | `http://edge:8081` | Chatwoot |
 | `<domain>` (no subdomain) | `http://edge:8081` | the landing page (open to everyone, not in the Egypt-only rule) |
 
+**The panel's e-mails (since 2026-11-12)** go through Resend as `no-reply@hazem-office.tech`. They were sent from a
+Gmail account before. `deploy/set-smtp-resend.sh` sets them up, and the owner types the key.
+- Resend's records in the domain's DNS, added once by its Cloudflare authorization:
+  - CNAME `send` and CNAME `rsend` (DNS only)
+  - TXT `resend._domainkey` (DKIM)
+- The owner added TXT `_dmarc` = `v=DMARC1; p=none;` by hand.
+- Receiving stays off in Resend: the domain's own MX records belong to Cloudflare Email Routing.
+
 Before `panel` and `chat` get a route, Cloudflare's free plan guards them (no card needed):
 
 - **Security → WAF → Custom rules**, a rule *«Egypt only for the panel»*: when `Hostname is in {panel.<domain>
