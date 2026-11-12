@@ -218,7 +218,8 @@ function Bell({ late }: { late: number }) {
   const [ask, setAsk] = useState(mayAskToNotify);
 
   return (
-    <div ref={box} className="relative shrink-0">
+    // a phone: the alerts open across the screen under the bar (the bell is near the screen's edge, the box went past it)
+    <div ref={box} className="relative shrink-0 max-sm:static">
       <button type="button" aria-expanded={open} aria-haspopup="dialog" onClick={() => setOpen((v) => !v)}
         className={`relative grid size-11 place-items-center rounded-full border text-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.4),0_2px_8px_rgb(0_0_0/0.04)] transition duration-200
           ${open ? "border-gold-line bg-card text-gold-ink" : "border-line/80 bg-card/70 hover:border-gold-line hover:bg-card hover:text-gold-ink"}`}
@@ -232,7 +233,8 @@ function Bell({ late }: { late: number }) {
         ) : null}
       </button>
       {open ? (
-        <div role="dialog" aria-label="التنبيهات" className="liquid liquid-strong absolute top-[calc(100%+0.5rem)] left-0 z-30 grid w-[min(22rem,calc(100vw-2rem))] gap-1 rounded-2xl p-2">
+        // a tablet: from the bell toward the inside of the screen; a phone: the bar's whole width
+        <div role="dialog" aria-label="التنبيهات" className="liquid liquid-strong absolute top-[calc(100%+0.5rem)] left-0 z-30 grid w-[min(22rem,calc(100vw-2rem))] gap-1 rounded-2xl p-2 max-lg:right-0 max-lg:left-auto max-sm:inset-x-3 max-sm:w-auto">
           <div className="flex items-center justify-between px-2 py-1">
             <span className="font-bold">التنبيهات</span>
             {unread > 0 ? (
@@ -413,8 +415,9 @@ function Search() {
       className="group/search flex min-h-[2.9rem] min-w-0 flex-1 items-center gap-2.5 rounded-full border border-line/80 bg-card/70 ps-4 pe-2 shadow-[inset_0_1px_2px_rgb(0_0_0/0.04)] transition duration-200
         hover:border-gold-line focus-within:border-gold focus-within:bg-card focus-within:shadow-[0_0_0_4px_rgb(176_133_82/0.16)] lg:max-w-[36rem]">
       <Icon name="search" className="size-[18px] shrink-0 text-ink-soft transition-colors group-focus-within/search:text-gold-ink" />
+      {/* a phone shows the start of the hint, ending in «…» */}
       <input ref={input} type="search" aria-label="بحث" placeholder="ابحث عن عميل، ميعاد، مهمة، أو رقم قضية..."
-        className="min-h-10 min-w-0 flex-1 bg-transparent text-[14px] outline-none placeholder:text-ink-soft/80" />
+        className="min-h-10 min-w-0 flex-1 bg-transparent text-[14px] outline-none placeholder:text-ink-soft/80 max-lg:text-ellipsis" />
       <button type="button" onClick={() => setPalette(true)} aria-label="اختصارات وبحث (Ctrl K)"
         className="hidden shrink-0 items-center gap-1 rounded-full px-1.5 py-1 font-sans text-[11px] font-semibold text-ink-soft transition hover:bg-card-2 sm:flex" dir="ltr">
         <kbd className="rounded-md border border-line border-b-2 bg-card px-1.5 py-0.5 font-sans">Ctrl</kbd>

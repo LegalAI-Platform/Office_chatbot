@@ -78,8 +78,8 @@ export function HomePage() {
       <div className="relative z-10 -mt-[5.5rem] flex flex-1 flex-col gap-5 px-4 lg:px-7">
         {dash.isError ? <ErrorState message={errorMessage(dash.error)} onRetry={() => void dash.refetch()} /> : null}
 
-        {/* the four numbers */}
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {/* the four numbers (a phone: two by two, like «المهام», so the day's cards are on the first screen too) */}
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
           <Kpi tone="gold" icon="stat_calendar_blue" title="مواعيد اليوم" value={appointments.isError ? null : todays} to="/appointments" more="عرض المواعيد" />
           <Kpi tone="sand" icon="stat_card_green" title="إيصالات تحتاج تأكيد" value={receipts.isError ? null : receipts.data?.length} to="/receipts" more="من الإيصالات" />
           <Kpi tone="copper" icon="stat_alert_yellow" title="أمور عاجلة" value={dash.data?.urgent} series={dash.data?.urgent_by_day} to="/tasks?state=urgent" more="عرض التفاصيل" />
@@ -134,35 +134,37 @@ function Kpi({ tone, icon, title, value, series, to, more }: {
   tone: KpiTone; icon: OwnerImage; title: string; value: number | null | undefined; series?: number[] | undefined; to: string; more: string;
 }) {
   const k = KPI[tone];
+  // a phone (half the width): the same card, smaller; the week's line waits for a wider screen
   return (
-    <section className={`relative isolate grid min-h-[8.5rem] grid-cols-[1fr_auto] overflow-hidden rounded-[24px] px-5 pt-4 pb-3 text-kpi-ink transition duration-300 hover:-translate-y-1 motion-reduce:transition-none motion-reduce:hover:translate-y-0 ${k.card}`}>
+    <section className={`relative isolate grid min-h-[8.5rem] grid-cols-[1fr_auto] overflow-hidden rounded-[24px] px-5 pt-4 pb-3 text-kpi-ink transition duration-300 hover:-translate-y-1 motion-reduce:transition-none motion-reduce:hover:translate-y-0 max-sm:min-h-0 max-sm:gap-x-2 max-sm:rounded-[20px] max-sm:px-3.5 max-sm:pt-3 max-sm:pb-2.5 ${k.card}`}>
       <div className="grid content-start">
-        <h2 className="text-[18px] leading-snug font-bold">{title}</h2>
-        <p className={`tabular text-[38px] leading-tight font-bold ${k.ink}`}>
+        {/* a phone: room for two lines, so the numbers of two cards side by side stand level */}
+        <h2 className="text-[18px] leading-snug font-bold max-sm:min-h-[2.75em] max-sm:text-[14px]">{title}</h2>
+        <p className={`tabular text-[38px] leading-tight font-bold max-sm:text-[30px] ${k.ink}`}>
           {value === null ? "—" : value === undefined ? <span className="inline-block h-9 w-7 animate-pulse rounded bg-white/70" /> : value}
         </p>
       </div>
-      <span className="grid size-16 place-items-center rounded-full border border-white/70 bg-white/45 shadow-[inset_0_1px_0_rgb(255_255_255/0.9),0_6px_16px_-8px_rgb(0_0_0/0.25)] backdrop-blur-sm">
-        <OwnerImg name={icon} className="size-12 object-contain [filter:sepia(0.85)_saturate(1.5)_hue-rotate(-12deg)]" />
+      <span className="grid size-16 place-items-center rounded-full border border-white/70 bg-white/45 shadow-[inset_0_1px_0_rgb(255_255_255/0.9),0_6px_16px_-8px_rgb(0_0_0/0.25)] backdrop-blur-sm max-sm:size-10">
+        <OwnerImg name={icon} className="size-12 object-contain [filter:sepia(0.85)_saturate(1.5)_hue-rotate(-12deg)] max-sm:size-7" />
       </span>
       <div className="col-span-2 flex items-end justify-between gap-2">
-        <Link to={to} className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap text-[14px] font-bold ${k.ink} hover:underline`}>
+        <Link to={to} className={`relative flex shrink-0 items-center gap-1.5 whitespace-nowrap text-[14px] font-bold after:absolute after:-inset-x-2 after:-inset-y-2.5 after:content-[''] max-sm:gap-1 max-sm:text-[12.5px] ${k.ink} hover:underline`}>
           {more}
-          <Icon name="back" className="size-[18px]" />
+          <Icon name="back" className="size-[18px] max-sm:size-4" />
         </Link>
-        <Sparkline values={series} stroke={k.stroke} />
+        <Sparkline values={series} stroke={k.stroke} className="max-sm:hidden" />
       </div>
     </section>
   );
 }
 
 /** The last 7 days as a soft hill, oldest on the right (RTL). A faint dashed line when there is no data yet. */
-function Sparkline({ values, stroke }: { values?: number[] | undefined; stroke: string }) {
+function Sparkline({ values, stroke, className = "" }: { values?: number[] | undefined; stroke: string; className?: string }) {
   const id = useId().replace(/:/g, "");
   const w = 130, h = 40, pad = 4;
   if (!values || values.length < 2) {
     return (
-      <svg viewBox={`0 0 ${w} ${h}`} className="h-10 w-20 min-w-0 2xl:w-32" aria-hidden>
+      <svg viewBox={`0 0 ${w} ${h}`} className={`h-10 w-20 min-w-0 2xl:w-32 ${className}`} aria-hidden>
         <path d={`M4 ${h - 8} H${w - 4}`} stroke={stroke} strokeOpacity="0.35" strokeDasharray="3 4" strokeWidth="1.6" fill="none" />
       </svg>
     );
@@ -178,7 +180,7 @@ function Sparkline({ values, stroke }: { values?: number[] | undefined; stroke: 
   }
   const area = `${d} L${pts.at(-1)![0]} ${h} L${pts[0]![0]} ${h} Z`;
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="h-10 w-20 min-w-0 2xl:w-32" role="img" aria-label={`آخر 7 أيام: ${[...values].join("، ")}`}>
+    <svg viewBox={`0 0 ${w} ${h}`} className={`h-10 w-20 min-w-0 2xl:w-32 ${className}`} role="img" aria-label={`آخر 7 أيام: ${[...values].join("، ")}`}>
       <defs>
         <linearGradient id={`f${id}`} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor={stroke} stopOpacity="0.25" />
@@ -278,11 +280,13 @@ function CalendarPanel({ now, items }: { now: Date; items?: Appointment[] | unde
         ))}
       </ol>
       <div className="flex flex-1 flex-col">
-        <h3 className="px-4 pb-2 text-[14px] font-bold">مواعيد اليوم{items ? ` (${items.length})` : ""}</h3>
+        {/* a phone (one column): «مواعيد اليوم» comes right under this card with the payments too, so the list is not
+            said twice */}
+        <h3 className="px-4 pb-2 text-[14px] font-bold max-md:hidden">مواعيد اليوم{items ? ` (${items.length})` : ""}</h3>
         {!items?.length ? (
-          <p className="px-4 pt-1 pb-3 text-[13px] text-ink-soft">{items ? "مفيش مواعيد النهارده." : "…"}</p>
+          <p className="px-4 pt-1 pb-3 text-[13px] text-ink-soft max-md:hidden">{items ? "مفيش مواعيد النهارده." : "…"}</p>
         ) : (
-          <ul className={`${LIST} gap-1.5 pb-0`}>
+          <ul className={`${LIST} gap-1.5 pb-0 max-md:hidden`}>
             {items.map((a) => {
               const k = kindOf(a);
               return (

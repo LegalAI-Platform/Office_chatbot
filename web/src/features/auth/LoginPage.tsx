@@ -99,7 +99,8 @@ export function LoginPage() {
         <div className="grid gap-1.5">
           <Field label="كلمة السر" name="password" type="password" autoComplete="current-password" dir="ltr" required
             value={password} onChange={(e) => setPassword(e.target.value)} />
-          <Link to="/forgot-password" className="justify-self-start text-xs font-semibold text-gold-ink hover:underline">
+          {/* the same small link, with a finger-sized area around it */}
+          <Link to="/forgot-password" className="relative justify-self-start text-xs font-semibold text-gold-ink after:absolute after:-inset-x-1 after:-inset-y-2 after:content-[''] hover:underline">
             نسيت كلمة السر؟
           </Link>
         </div>

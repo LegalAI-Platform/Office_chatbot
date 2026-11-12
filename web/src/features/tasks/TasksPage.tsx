@@ -101,7 +101,7 @@ export function TasksPage() {
         }}>
           <Icon name="search" className="pointer-events-none absolute inset-y-0 start-3.5 my-auto size-[18px] text-ink-soft" />
           <input key={q ?? ""} name="q" type="search" defaultValue={q ?? ""} placeholder="ابحث في المهام (اسم العميل أو آخر أرقام رقمه)..." aria-label="ابحث في المهام"
-            className="min-h-10 w-full rounded-full border border-line/60 bg-card/60 ps-10 pe-4 text-[14px] shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)] outline-none focus:border-gold-line" />
+            className="min-h-10 w-full rounded-full border max-lg:text-ellipsis border-line/60 bg-card/60 ps-10 pe-4 text-[14px] shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)] outline-none focus:border-gold-line" />
         </form>
         <label className="relative">
           <span className="sr-only">مين</span>
@@ -113,8 +113,8 @@ export function TasksPage() {
         </label>
       </section>
 
-      {/* the state tabs, with the number of tasks of each */}
-      <div className="liquid flex gap-1 overflow-x-auto rounded-[20px] p-1.5" role="group" aria-label="الحالة">
+      {/* the state tabs, with the number of tasks of each (a phone: they slide sideways, with no grey bar under them) */}
+      <div className="liquid flex gap-1 overflow-x-auto rounded-[20px] p-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="group" aria-label="الحالة">
         {STATES.map((s) => {
           const on = state === s.value;
           const n = counts[s.value];
@@ -236,12 +236,13 @@ function TaskRow({ task: t }: { task: TaskListItem }) {
   // the list's filters and page go along, for the task's «رجوع لكل المهام»
   const { search } = useLocation();
   return (
+    // a phone: two values side by side too (what they need on its own line), so a task is half as tall
     <Link to={`/tasks/${t.id}`} state={{ from: search }}
-      className={`group relative grid items-center gap-x-5 gap-y-3 overflow-hidden rounded-[18px] border border-line/60 bg-card/60 py-3.5 ps-5 pe-4 shadow-[inset_0_1px_0_rgb(255_255_255/0.45),0_6px_18px_-12px_rgb(60_44_20/0.35)] backdrop-blur-md transition hover:-translate-y-px hover:bg-card/85 hover:shadow-[0_14px_30px_-14px_rgb(60_44_20/0.4)] motion-reduce:transition-none motion-reduce:hover:translate-y-0 sm:grid-cols-2 ${COLUMNS} ${look.ring}`}>
+      className={`group relative grid items-center gap-x-5 gap-y-3 overflow-hidden rounded-[18px] border border-line/60 bg-card/60 py-3.5 ps-5 pe-4 shadow-[inset_0_1px_0_rgb(255_255_255/0.45),0_6px_18px_-12px_rgb(60_44_20/0.35)] backdrop-blur-md transition hover:-translate-y-px hover:bg-card/85 hover:shadow-[0_14px_30px_-14px_rgb(60_44_20/0.4)] motion-reduce:transition-none motion-reduce:hover:translate-y-0 max-sm:grid-cols-2 max-sm:gap-x-3 max-sm:gap-y-2.5 sm:grid-cols-2 ${COLUMNS} ${look.ring}`}>
       <span aria-hidden className={`absolute inset-y-3 start-0 w-1 rounded-e-full ${look.bar}`} />
 
       {/* what they need */}
-      <Cell term="المهمة">
+      <Cell term="المهمة" className="max-sm:col-span-2">
         <span className="font-bold">{label(TASK_TYPES, t.type)}</span>
         {t.matter_type ? (
           <span className="ms-2 inline-block rounded-full border border-line/70 bg-card/70 px-2 py-0.5 align-middle text-[11.5px] font-normal text-ink-soft">{matterLabel(t.matter_type)}</span>
@@ -276,7 +277,7 @@ function TaskRow({ task: t }: { task: TaskListItem }) {
       </Cell>
 
       {/* where it stands */}
-      <span className="flex items-center justify-between gap-3 sm:col-span-2 xl:col-span-2 xl:grid xl:grid-cols-[7rem_2.25rem]">
+      <span className="flex items-center justify-between gap-3 max-sm:col-span-2 sm:col-span-2 xl:col-span-2 xl:grid xl:grid-cols-[7rem_2.25rem]">
         <Chip tone={t.state}>{label(TASK_STATES, t.state)}</Chip>
         <span aria-hidden className="grid size-8 shrink-0 place-items-center rounded-full border border-line/60 bg-card/70 text-ink-soft transition group-hover:border-gold-line group-hover:bg-gold-tint group-hover:text-gold-ink">
           <Icon name="chevron-start" className="size-4 transition group-hover:-translate-x-0.5" />
@@ -287,9 +288,9 @@ function TaskRow({ task: t }: { task: TaskListItem }) {
 }
 
 /** A value of a row. On a wide screen the table's head names it; on a smaller one it names itself above. */
-function Cell({ term, children }: { term: string; children: ReactNode }) {
+function Cell({ term, children, className = "" }: { term: string; children: ReactNode; className?: string }) {
   return (
-    <span className="grid min-w-0 gap-0.5">
+    <span className={`grid min-w-0 gap-0.5 ${className}`}>
       <span className="text-[11.5px] text-ink-soft xl:hidden">{term}</span>
       <span className="min-w-0 text-[13.5px] leading-snug">{children}</span>
     </span>

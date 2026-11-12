@@ -53,13 +53,13 @@ export function ServicesPage() {
 
       <Intro count={list.data?.length} />
 
-      <section aria-label="الفلاتر" className="liquid grid gap-2 rounded-[22px] p-4 sm:p-5">
-        <div className="flex gap-1 overflow-x-auto rounded-full border border-line/60 bg-card/45 p-1 shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)]" role="tablist" aria-label="طلبات الخدمات">
+      <section aria-label="الفلاتر" className="liquid grid gap-2 rounded-[22px] p-4 max-sm:p-2.5 sm:p-5">
+        <div className="flex gap-1 overflow-x-auto rounded-full border border-line/60 bg-card/45 p-1 shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist" aria-label="طلبات الخدمات">
           {TABS.map((t) => {
             const on = t.value === show;
             return (
               <button key={t.value} type="button" role="tab" aria-selected={on} onClick={() => setShow(t.value)}
-                className={`flex min-h-9 shrink-0 grow items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-3.5 text-[13.5px] transition ${on
+                className={`flex min-h-9 shrink-0 grow items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-3.5 text-[13.5px] transition max-sm:gap-1 max-sm:px-2.5 max-sm:text-[13px] ${on
                   ? "btn-gold font-bold shadow-[inset_0_1px_0_rgb(255_255_255/0.4),0_6px_14px_-6px_rgb(140_98_58/0.8)]"
                   : "text-ink hover:bg-card/80"}`}>
                 <Icon name={t.icon} className="size-4" />
