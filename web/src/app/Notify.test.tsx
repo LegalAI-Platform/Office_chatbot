@@ -87,6 +87,16 @@ describe("v1.104 Windows notifications", () => {
     expect(made).toEqual([expect.objectContaining({ title: "طلب عاجل · سارة", body: "تنبيه أمان\nعلى: منى", stay: true })]);
   });
 
+  // v1.105 (the owner: «اجابته لازم موظف يتدخل ليه فيها … الحاجات دي انا عايزها تيجي في النوتيفيكيشن»)
+  it("any other task Hazem opened for the office: «عميل محتاج موظف», and the line under it says why", () => {
+    away();
+    const { next } = watch([]);
+    next([alert({ id: 6, kind: "task_new", task_type: "existing_client_message", client_name: "محمد عماد", phone_last3: "589" })]);
+    expect(made).toEqual([expect.objectContaining({
+      title: "عميل محتاج موظف · محمد عماد", body: "موكل حالي بيسأل عن موضوعه · موبايله آخره 589\nمش متعينة لحد", stay: false,
+    })]);
+  });
+
   it("nothing while the person looks at the panel, before it is allowed, for a read alert, or on a phone", () => {
     const focus = vi.spyOn(document, "hasFocus").mockReturnValue(true);
     const { next } = watch([]);

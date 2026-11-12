@@ -121,7 +121,7 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
         var late = await NewTask("service_request", staff: _staffB, due: "-5 minutes");
 
         var (made, _) = await RunAlerts();
-        Assert.Equal(3, made);
+        Assert.Equal(4, made); // v1.105: the late one is new too (task_new, never mailed)
         Assert.Equal((0, 0), await RunAlerts()); // once
         Assert.Equal("overdue", await db.ScalarAsync<string>($"SELECT state FROM hazem.staff_tasks WHERE id = '{late}'"));
 
@@ -144,7 +144,37 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
         await yasmin.PostAsJsonAsync("/api/panel/alerts/read", new { ids = (long[]?)null }, Ct);
         Assert.Equal(0, (int)(await yasmin.GetFromJsonAsync<JsonNode>("/api/panel/alerts", Ct))!["unread"]!);
         var boss = await SignIn("boss");
-        Assert.Equal(3, (int)(await boss.GetFromJsonAsync<JsonNode>("/api/panel/alerts", Ct))!["unread"]!);
+        Assert.Equal(4, (int)(await boss.GetFromJsonAsync<JsonNode>("/api/panel/alerts", Ct))!["unread"]!);
+    }
+
+    // v1.105 (the owner: «العميل … اجابته لازم موظف يتدخل ليه فيها … الحاجات دي انا عايزها تيجي في النوتيفيكيشن … نشوف
+    // حل عام»): every task Hazem opens for the office alerts at once, whatever its type; never by e-mail.
+    [Fact]
+    public async Task Every_new_task_Hazem_opens_alerts_at_once_whatever_its_type_with_no_email_and_no_backlog()
+    {
+        var asking = await NewTask("existing_client_message", staff: _staffA);
+        var complaint = await NewTask("complaint");
+        var urgent = await NewTask("urgent_request", staff: _staffA);
+        var before = await NewTask("service_request");
+        await db.ExecAsync($"UPDATE hazem.staff_tasks SET created_at = now() - interval '20 minutes' WHERE id = '{before}'");
+
+        await RunAlerts();
+        async Task<string> Kinds(Guid task) =>
+            (await db.ScalarAsync<string>($"SELECT coalesce(string_agg(kind, ',' ORDER BY kind), '') FROM hazem.panel_alerts WHERE task_id = '{task}'"))!;
+        Assert.Equal("task_new", await Kinds(asking));
+        Assert.Equal("task_new", await Kinds(complaint));
+        Assert.Equal("task_urgent", await Kinds(urgent)); // its own alert already says it
+        Assert.Equal("", await Kinds(before)); // older than 10 minutes: a deploy brings no backlog
+
+        // the bell and Windows only: no e-mail for a client's message
+        Assert.DoesNotContain(_factory.Mail.Sent, m => m.Text.Contains(asking.ToString(), StringComparison.Ordinal) || m.Text.Contains(complaint.ToString(), StringComparison.Ordinal));
+        Assert.Equal(0L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.panel_alerts WHERE kind = 'task_new' AND emailed_at IS NOT NULL"));
+
+        // yasmin hears hers and the unassigned one
+        var bell = (await (await SignIn("yasmin")).GetFromJsonAsync<JsonNode>("/api/panel/alerts", Ct))!["items"]!.AsArray();
+        Assert.Equal(
+            [(asking, "task_new"), (complaint, "task_new"), (urgent, "task_urgent")],
+            bell.Select(a => ((Guid)a!["task_id"]!, (string)a["kind"]!)).OrderBy(x => x.Item2, StringComparer.Ordinal).ThenBy(x => x.Item1 == asking ? 0 : 1).ToList());
     }
 
     // v1.104: the Windows notification says who and what without opening the panel (the owner: «ما فيهاش تفاصيل»), but

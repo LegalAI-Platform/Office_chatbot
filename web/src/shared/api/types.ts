@@ -163,7 +163,8 @@ export interface Dashboard {
 
 // ---------- TASK 07c ----------
 
-export type AlertKind = "task_overdue" | "task_urgent" | "task_human" | "task_rating" | "system";
+/** v1.105: `task_new`, any other task Hazem opened for the office (a client's answer needs someone). */
+export type AlertKind = "task_overdue" | "task_urgent" | "task_human" | "task_rating" | "system" | "task_new";
 
 /** TASK 13: a system alert (the managers only) has no task: `system_what` says what failed. */
 export interface PanelAlert {

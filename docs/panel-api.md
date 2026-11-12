@@ -83,7 +83,7 @@ and it asks the API for nothing.
 
 | Endpoint | Permission | What |
 |---|---|---|
-| `GET /alerts` | view_own | `{ unread, unread_system, items[30] }`: the alerts this person may see (overdue, urgent, a client asking for someone; a low rating and the system's for the managers), newest first, with `read`. v1.104: `unread_system` is the system alerts among `unread`. A task's alert also has `phone_last3` (never the number), `matter_type` and `staff_name` (absent: nobody yet), never the client's words |
+| `GET /alerts` | view_own | `{ unread, unread_system, items[30] }`: the alerts this person may see (overdue, urgent, a client asking for someone, and since v1.105 `task_new`: any other task Hazem opened for the office; a low rating and the system's for the managers), newest first, with `read`. v1.104: `unread_system` is the system alerts among `unread`. A task's alert also has `phone_last3` (never the number), `matter_type` and `staff_name` (absent: nobody yet), never the client's words |
 | `GET /alerts/stream` | view_own | v1.104: `text/event-stream`. `event: alerts` the moment alerts are made or read (it carries nothing: the page asks `/alerts`), `: ping` every 25 s, closed after 5 minutes (`retry: 5000`: the browser opens it again) and when the API stops. Not buffered by nginx (the panel's and the edge's) |
 | `POST /alerts/read` | view_own | `{ ids }` or `{ ids: null }` (all) |
 | `GET /tasks/{id}/files/{n}` | view_own (and may see the task) | the file of the task turn's n-th message, from storage (read-only key). Pictures, sound, video and PDF open in the browser; anything else downloads as `client-file-<n>.<ext>`. `Content-Security-Policy: sandbox`, never cached. Every opening → `panel_audit task.file_open` (no file name) |
@@ -100,7 +100,7 @@ and it asks the API for nothing.
 
 Alerts are made by the api every 10 seconds (`Alerts:IntervalSeconds`; every minute before v1.104), and the system's
 checks run once a minute. Tasks past their due time become `overdue` first. Each alert is e-mailed once to everyone
-who may see the task; the e-mail holds the task's kind, due time and a link, never the client's name, number or words.
+who may see the task (but a `task_new`, which stays in the bell and Windows, v1.105); the e-mail holds the task's kind, due time and a link, never the client's name, number or words. A `task_new` is made only for a task of the last 10 minutes, so a deploy brings no backlog.
 
 ## The booking (TASK 08, DECISIONS v1.12 B-24)
 

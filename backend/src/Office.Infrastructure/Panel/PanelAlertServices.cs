@@ -17,6 +17,11 @@ public sealed class PanelAlertStore(HazemDbContext db) : IPanelAlertStore
 {
     private static readonly string[] Urgent = ["urgent_request", "safety_alert", "urgent_call_failed", "urgent_call_unanswered"]; // 1.33 (B-09)
 
+    /// <summary>The types whose own alert already says a new task came (urgent, a client asking for someone, a low rating).</summary>
+    private static readonly string[] OwnAlert = [.. Urgent, "human_requested", "rating_low"];
+
+    // v1.105: every other new task makes a «task_new» alert, whatever its type (a general rule, not a list). Only a task
+    // of the last 10 minutes: a deploy never floods the bell with the old ones.
     public Task<int> MakeAsync(CancellationToken ct) => db.Database.ExecuteSqlInterpolatedAsync($"""
         INSERT INTO hazem.panel_alerts (kind, task_id)
         SELECT k.kind, t.id
@@ -25,7 +30,9 @@ public sealed class PanelAlertStore(HazemDbContext db) : IPanelAlertStore
             (CASE WHEN t.state = 'overdue' THEN {AlertKinds.Overdue} END),
             (CASE WHEN t.type = ANY({Urgent}) AND t.state NOT IN ('done', 'cancelled') THEN {AlertKinds.Urgent} END),
             (CASE WHEN t.type = 'human_requested' AND t.state NOT IN ('done', 'cancelled') THEN {AlertKinds.Human} END),
-            (CASE WHEN t.type = 'rating_low' AND t.state NOT IN ('done', 'cancelled') THEN {AlertKinds.Rating} END)) AS k(kind)
+            (CASE WHEN t.type = 'rating_low' AND t.state NOT IN ('done', 'cancelled') THEN {AlertKinds.Rating} END),
+            (CASE WHEN t.type <> ALL({OwnAlert}) AND t.state NOT IN ('done', 'cancelled') AND t.created_at >= now() - interval '10 minutes'
+                  THEN {AlertKinds.New} END)) AS k(kind)
          WHERE k.kind IS NOT NULL
            AND t.created_at >= (SELECT value::timestamptz FROM hazem.settings WHERE key = 'alerts.since')
         ON CONFLICT (kind, task_id) DO NOTHING
@@ -86,6 +93,7 @@ public sealed class PanelAlertStore(HazemDbContext db) : IPanelAlertStore
         var tasks = await (from a in db.PanelAlerts.AsNoTracking()
                            join t in db.StaffTasks.AsNoTracking() on a.TaskId equals (Guid?)t.Id
                            where a.EmailedAt == null && a.CreatedAt > DateTimeOffset.UtcNow.AddDays(-1)
+                                 && a.Kind != AlertKinds.New // v1.105: the bell and Windows only, an e-mail for every client's message would flood
                                  && (a.Kind == AlertKinds.Overdue ? t.State == "overdue" : t.State != "done" && t.State != "cancelled")
                            orderby a.Id
                            select new AlertToMail(a.Id, a.Kind, a.TaskId, t.Type, t.DueAt, t.StaffId, null)).ToListAsync(ct);

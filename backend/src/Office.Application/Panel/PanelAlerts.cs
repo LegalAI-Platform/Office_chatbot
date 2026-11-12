@@ -4,6 +4,7 @@ namespace Office.Application.Panel;
 // (B-09) or a client asking for a person (B-12) makes one alert. The panel's bell shows it to whoever
 // may see that task; an e-mail from the no-reply sender tells them once. No client's words, name or
 // number ever goes into an e-mail: the kind of task, its due time and a link to the panel.
+// v1.105: every other new task makes a «task_new» alert too (the bell and Windows, no e-mail).
 
 public static class AlertKinds
 {
@@ -16,6 +17,12 @@ public static class AlertKinds
 
     /// <summary>TASK 13 (v1.18): a nightly job failed, or n8n workflows failed in an hour. No task; the managers only.</summary>
     public const string System = "system";
+
+    /// <summary>
+    /// v1.105 (migration 0076): any other task Hazem opened for the office, whatever its type: a client's answer needs
+    /// someone (the owner: «نشوف حل عام»). Whoever may see the task hears at once, in the bell and Windows; no e-mail.
+    /// </summary>
+    public const string New = "task_new";
 }
 
 /// <summary>What a system alert is about (hazem.panel_alerts.system_what).</summary>

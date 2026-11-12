@@ -110,7 +110,8 @@ disabled or demoted.
 ## Alerts (TASK 07c)
 
 The bell in the top bar shows the alerts a person may see: a task past its due time, an urgent
-task, a client asking for someone. Each one also goes by e-mail (the no-reply sender) once, to the
+task, a client asking for someone, and since v1.105 any other task Hazem opened for the office («عميل محتاج موظف»,
+the line under it says why; no e-mail). Each one also goes by e-mail (the no-reply sender) once, to the
 manager, the lawyer and the staff member of the task (everyone, if it is unassigned). The e-mail
 says only the kind of task and its due time, with a link to the panel. Tasks become overdue by
 themselves (every 10 seconds since v1.104).
