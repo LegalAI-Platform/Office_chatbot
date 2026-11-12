@@ -199,6 +199,8 @@ export const ALERT_KINDS: Record<string, string> = {
   task_human: "عميل عايز يكلم حد",
   task_rating: "تقييم ضعيف من عميل",
   system: "مشكلة في السيستم",
+  // v1.105: any other task Hazem opened for the office; the line under it says why (its type)
+  task_new: "عميل محتاج موظف",
 };
 
 /** TASK 13: what a system alert is about. */
