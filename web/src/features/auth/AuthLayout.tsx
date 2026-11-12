@@ -3,29 +3,39 @@ import { OwnerImg } from "../../shared/ui/Owner";
 import { ThemePicker } from "../../shared/ui/ThemePicker";
 import { Field } from "../../shared/ui/ui";
 
-/** The pages before a session (sign-in, sign-up, a forgotten password): the office's black panel and a card, with «فاتح / غامق». */
+/**
+ * The pages before a session (sign-in, sign-up, a forgotten password): the office's black panel and a card, with «فاتح / غامق».
+ * A phone (and a tablet): a short black band over the form, «فاتح / غامق» in the band's corner, and the card right under
+ * the band (the keyboard comes up from the foot of the screen). A computer: the two halves, as they were.
+ */
 export function AuthLayout({ title, subtitle, children }: { title: string; subtitle?: ReactNode; children: ReactNode }) {
   return (
-    <main className="grid min-h-dvh lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+    <main className="grid min-h-dvh max-lg:grid-rows-[auto_minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
       {/* the office's black panel with the seal (on a phone: a band over the form) */}
-      <section className="relative grid place-items-center overflow-hidden bg-side px-6 py-10 text-center text-side-ink lg:min-h-dvh">
-        <OwnerImg name="sidebar_art" className="fade-all pointer-events-none absolute bottom-0 left-0 w-56 opacity-80 lg:w-80" />
-        <div className="relative grid justify-items-center gap-3">
-          <OwnerImg name="logo_emblem" className="size-28 lg:size-36" />
-          <p className="text-xl font-bold lg:text-2xl">مكتب سعد فتحي سعد</p>
+      <section className="relative grid place-items-center overflow-hidden bg-side px-6 pt-[calc(env(safe-area-inset-top,0px)+2.25rem)] pb-7 text-center text-side-ink lg:min-h-dvh lg:py-10">
+        <OwnerImg name="sidebar_art" className="fade-all pointer-events-none absolute bottom-0 left-0 w-44 opacity-80 lg:w-80" />
+        {/* a phone: the look in the band's corner, out of the form's way (the owner, 2026-11-12); on the plain black side,
+            away from the scales, and under the phone's own status bar when the panel is opened from the home screen */}
+        <div className="absolute start-3 top-[calc(env(safe-area-inset-top,0px)+0.75rem)] z-10 lg:hidden">
+          <ThemePicker label="الشكل" onDark />
+        </div>
+        <div className="relative grid justify-items-center gap-2 lg:gap-3">
+          <OwnerImg name="logo_emblem" className="size-20 lg:size-36" />
+          <p className="text-lg font-bold lg:text-2xl">مكتب سعد فتحي سعد</p>
           <p className="text-sm text-side-soft">للمحاماة والاستشارات القانونية</p>
         </div>
       </section>
 
-      <div className="relative isolate grid place-items-center overflow-hidden px-4 pt-20 pb-10 lg:py-10">
+      <div className="relative isolate grid place-items-center overflow-hidden px-4 pt-6 pb-10 max-lg:content-start lg:py-10">
         {/* the soft light the glass card shows through (the page's gold and warm sand) */}
         <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
           <span className="absolute -top-16 end-[8%] size-[24rem] rounded-full bg-gold/35 blur-[90px]" />
           <span className="absolute -bottom-20 start-[6%] size-[22rem] rounded-full bg-[#d9b48a]/45 blur-[90px]" />
           <span className="absolute top-1/3 start-[40%] size-[14rem] rounded-full bg-blue/10 blur-[80px]" />
         </div>
-        {/* the look before signing in too (the same choice as inside, kept in the browser) */}
-        <ThemePicker label="الشكل" className="absolute top-4 end-4 w-44" />
+        {/* a computer: the look before signing in too (the same choice as inside, kept in the browser), over the card.
+            Its own `relative` wins over `absolute`, so it sits in the grid above the card; top/end only nudge it. */}
+        <ThemePicker label="الشكل" className="absolute top-4 end-4 w-44 max-lg:hidden" />
         <div className="liquid grid w-full max-w-sm gap-5 rounded-[var(--radius-sheet)] p-6 lg:p-8">
           <div className="grid gap-1">
             <h1 className="text-2xl">{title}</h1>

@@ -61,7 +61,8 @@ export function BookingPage() {
   return (
     <div className="relative isolate grid gap-5 pb-4">
       <Glow />
-      <header className="grid items-center gap-3 lg:grid-cols-[auto_minmax(0,1fr)_auto]">
+      {/* a phone: the title and «إعدادات المواعيد» on one line, whether Hazem books under them */}
+      <header className="grid items-center gap-3 max-lg:grid-cols-[minmax(0,1fr)_auto] lg:grid-cols-[auto_minmax(0,1fr)_auto]">
         <TitleTile icon="calendar">المواعيد</TitleTile>
         <Status />
         {mayChange || can(me, "office.manage") ? (
@@ -86,7 +87,7 @@ export function BookingPage() {
 /** Whether Hazem books from WhatsApp now, and what is missing if not. */
 function Status() {
   const s = useQuery(settingsQuery);
-  if (!s.data) return <span />;
+  if (!s.data) return <span className="max-lg:col-span-2 max-lg:row-start-2" />;
   const missing = [
     !s.data.calendar_key && "مفتاح Google Calendar (صاحب المشروع بيحطه في .env)",
     !s.data.calendar_id && "إيميل كالندر المستشار (في «الحجز من واتساب»)",
@@ -94,7 +95,7 @@ function Status() {
   ].filter(Boolean);
   const ok = s.data.enabled && missing.length === 0;
   return (
-    <p role="status" className={`flex w-fit items-start gap-2 rounded-[16px] border px-3.5 py-2 text-[13px] leading-relaxed lg:justify-self-center ${ok ? "border-green/30 bg-green-bg text-green-ink" : "border-orange/30 bg-orange-bg text-orange-ink"}`}>
+    <p role="status" className={`flex w-fit items-start gap-2 rounded-[16px] border px-3.5 py-2 text-[13px] leading-relaxed max-lg:col-span-2 max-lg:row-start-2 lg:justify-self-center ${ok ? "border-green/30 bg-green-bg text-green-ink" : "border-orange/30 bg-orange-bg text-orange-ink"}`}>
       <Icon name={ok ? "check-circle" : "alert-circle"} className="mt-0.5 size-4 shrink-0" />
       <span>
         {s.data.enabled ? "حازم بيحجز من واتساب." : "الحجز من واتساب مقفول: حازم بيعرض الاستشارة من غير مواعيد."}

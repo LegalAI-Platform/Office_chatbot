@@ -69,8 +69,9 @@ export function Phone({ wa }: { wa: string }) {
   return (
     <span className="inline-flex items-center gap-1.5">
       <span dir="ltr" className="tabular">+{wa}</span>
+      {/* the same small word, with a finger-sized area around it (a phone) */}
       <button type="button" onClick={() => void copy(`+${wa}`)} aria-label={`انسخ الرقم +${wa}`}
-        className="rounded px-1 text-[12.5px] font-semibold text-gold-ink hover:underline">انسخ</button>
+        className="relative rounded px-1 text-[12.5px] font-semibold text-gold-ink after:absolute after:-inset-x-1 after:-inset-y-2.5 after:content-[''] hover:underline">انسخ</button>
     </span>
   );
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { Link, NavLink, Outlet, useNavigate } from "react-router";
+import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router";
 import { useAlerts, useMarkAlertsRead } from "../shared/api/alerts";
 import { useDashboard } from "../shared/api/dashboard";
 import { avatarUrl, can, useLogout, useMe } from "../shared/api/session";
@@ -58,7 +58,12 @@ export function Layout() {
   const items = [home, ...groups.flatMap((g) => g.items), settings];
   // Speed (idea from PR #14): every page's file once the browser is idle, so a click never waits.
   useEffect(() => { prefetchAll(items.map((i) => i.to)); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const phoneTabs = items.filter((i) => ["/", "/tasks", "/appointments", "/chats", "/settings"].includes(i.to));
+  // a phone: four tabs, then «المزيد» with the side bar's other pages and «الإعدادات» (the owner, 2026-11-12: «طلبات الخدمات»
+  // and «حالات العرفي» had no way in on a phone)
+  const phoneTabs = items.filter((i) => PHONE_TABS.includes(i.to));
+  const moreGroups = shownGroups
+    .map((g) => ({ ...g, items: g.items.filter((i) => !PHONE_TABS.includes(i.to)) }))
+    .filter((g) => g.items.length > 0);
   const prefetch = usePrefetch();
 
   return (
@@ -125,9 +130,73 @@ export function Layout() {
               {i.dot ? <span className="absolute top-2 left-[calc(50%-14px)] size-2 rounded-full bg-red" aria-hidden /> : null}
             </NavLink>
           ))}
+          <PhoneMore groups={moreGroups} settings={settings} />
         </nav>
       </div>
     </div>
+  );
+}
+
+const PHONE_TABS = ["/", "/tasks", "/appointments", "/chats"];
+
+/**
+ * «المزيد», the phone tab bar's last tab: the side bar's other pages in a black sheet over the bar, the same pills and the
+ * same headings, «الإعدادات» alone at the foot. A link, Esc, or a tap outside closes it; it is lit on any page of its own.
+ */
+function PhoneMore({ groups, settings }: { groups: { title: string; items: Item[] }[]; settings: Item }) {
+  const [open, setOpen] = useState(false);
+  const { pathname } = useLocation();
+  const button = useRef<HTMLButtonElement>(null);
+  const sheet = useRef<HTMLDivElement>(null);
+  const underTab = PHONE_TABS.some((p) => (p === "/" ? pathname === "/" : pathname === p || pathname.startsWith(`${p}/`)));
+  useEffect(() => setOpen(false), [pathname]);
+  useEffect(() => {
+    if (!open) return;
+    sheet.current?.focus();
+    const close = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setOpen(false);
+      button.current?.focus();
+    };
+    document.addEventListener("keydown", close);
+    return () => document.removeEventListener("keydown", close);
+  }, [open]);
+
+  return (
+    <>
+      {open ? (
+        // the page dims behind the sheet (the bar stays lit: this layer is under the bar's own tabs)
+        <div aria-hidden className="fixed inset-0 -z-10 bg-black/45 transition-opacity duration-200 starting:opacity-0" onClick={() => setOpen(false)} />
+      ) : null}
+      {/* data-tour: the first-sign-in tour points at this button */}
+      <button ref={button} type="button" aria-expanded={open} aria-haspopup="dialog" aria-controls="more-sheet" data-tour="nav-more" onClick={() => setOpen((v) => !v)}
+        className={`relative grid min-h-14 content-center justify-items-center gap-0.5 rounded-lg text-[11px] ${open || !underTab ? "text-gold" : "text-side-soft"}`}>
+        <Icon name={open ? "x" : "more"} className="size-5 shrink-0 text-white" />
+        المزيد
+      </button>
+      {open ? (
+        <div id="more-sheet" ref={sheet} role="dialog" aria-label="باقي الصفحات" tabIndex={-1}
+          onClick={(e) => { if ((e.target as HTMLElement).closest("a")) setOpen(false); }}
+          className="soft-scroll absolute inset-x-0 bottom-full max-h-[70dvh] overflow-y-auto rounded-t-[22px] border-t border-white/10 bg-side px-3 pt-2 pb-3 text-side-ink shadow-[0_-18px_40px_-12px_rgb(0_0_0/0.6)] outline-none transition duration-200 ease-out starting:translate-y-4 starting:opacity-0">
+          <span aria-hidden className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-l from-transparent via-gold/55 to-transparent" />
+          <span aria-hidden className="mx-auto mb-1.5 block h-1 w-10 rounded-full bg-white/20" />
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-1">
+            {groups.map((g) => (
+              <section key={g.title} aria-label={g.title} className="mt-1.5 grid grid-cols-[minmax(0,1fr)] gap-1 first:mt-0">
+                <h2 className="flex items-center gap-2 px-3 pb-0.5 text-[11.5px] font-semibold tracking-wide text-gold/85">
+                  {g.title}
+                  <span aria-hidden className="h-px flex-1 bg-gradient-to-l from-gold/40 to-transparent" />
+                </h2>
+                {g.items.map((i) => <SideLink key={i.to} item={i} />)}
+              </section>
+            ))}
+            <div className="mt-2 rounded-[16px] border border-white/10 bg-white/[0.04] p-1 shadow-[inset_0_1px_0_rgb(255_255_255/0.08)]">
+              <SideLink item={settings} />
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -218,7 +287,8 @@ function Bell({ late }: { late: number }) {
   const [ask, setAsk] = useState(mayAskToNotify);
 
   return (
-    <div ref={box} className="relative shrink-0">
+    // a phone: the alerts open across the screen under the bar (the bell is near the screen's edge, the box went past it)
+    <div ref={box} className="relative shrink-0 max-sm:static">
       <button type="button" aria-expanded={open} aria-haspopup="dialog" onClick={() => setOpen((v) => !v)}
         className={`relative grid size-11 place-items-center rounded-full border text-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.4),0_2px_8px_rgb(0_0_0/0.04)] transition duration-200
           ${open ? "border-gold-line bg-card text-gold-ink" : "border-line/80 bg-card/70 hover:border-gold-line hover:bg-card hover:text-gold-ink"}`}
@@ -232,7 +302,8 @@ function Bell({ late }: { late: number }) {
         ) : null}
       </button>
       {open ? (
-        <div role="dialog" aria-label="التنبيهات" className="liquid liquid-strong absolute top-[calc(100%+0.5rem)] left-0 z-30 grid w-[min(22rem,calc(100vw-2rem))] gap-1 rounded-2xl p-2">
+        // a tablet: from the bell toward the inside of the screen; a phone: the bar's whole width
+        <div role="dialog" aria-label="التنبيهات" className="liquid liquid-strong absolute top-[calc(100%+0.5rem)] left-0 z-30 grid w-[min(22rem,calc(100vw-2rem))] gap-1 rounded-2xl p-2 max-lg:right-0 max-lg:left-auto max-sm:inset-x-3 max-sm:w-auto">
           <div className="flex items-center justify-between px-2 py-1">
             <span className="font-bold">التنبيهات</span>
             {unread > 0 ? (
@@ -413,8 +484,9 @@ function Search() {
       className="group/search flex min-h-[2.9rem] min-w-0 flex-1 items-center gap-2.5 rounded-full border border-line/80 bg-card/70 ps-4 pe-2 shadow-[inset_0_1px_2px_rgb(0_0_0/0.04)] transition duration-200
         hover:border-gold-line focus-within:border-gold focus-within:bg-card focus-within:shadow-[0_0_0_4px_rgb(176_133_82/0.16)] lg:max-w-[36rem]">
       <Icon name="search" className="size-[18px] shrink-0 text-ink-soft transition-colors group-focus-within/search:text-gold-ink" />
+      {/* a phone shows the start of the hint, ending in «…» */}
       <input ref={input} type="search" aria-label="بحث" placeholder="ابحث عن عميل، ميعاد، مهمة، أو رقم قضية..."
-        className="min-h-10 min-w-0 flex-1 bg-transparent text-[14px] outline-none placeholder:text-ink-soft/80" />
+        className="min-h-10 min-w-0 flex-1 bg-transparent text-[14px] outline-none placeholder:text-ink-soft/80 max-lg:text-ellipsis" />
       <button type="button" onClick={() => setPalette(true)} aria-label="اختصارات وبحث (Ctrl K)"
         className="hidden shrink-0 items-center gap-1 rounded-full px-1.5 py-1 font-sans text-[11px] font-semibold text-ink-soft transition hover:bg-card-2 sm:flex" dir="ltr">
         <kbd className="rounded-md border border-line border-b-2 bg-card px-1.5 py-0.5 font-sans">Ctrl</kbd>
