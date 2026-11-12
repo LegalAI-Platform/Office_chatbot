@@ -418,6 +418,55 @@
   .tabular {
     font-variant-numeric: tabular-nums;
   }
+  /* The tour (v1.102, app/Tour.tsx): the dim around what a bubble explains, a gold ring on it, and the bubble itself,
+     solid like the menus (nothing behind it crosses its words) with the same soft gold light at its top. */
+  .tour-dim {
+    fill: rgb(12 10 6 / 0.6);
+  }
+  .tour-ring {
+    pointer-events: none;
+    box-shadow:
+      0 0 0 2px var(--gold),
+      0 0 0 6px color-mix(in oklab, var(--gold) 26%, transparent),
+      0 0 28px 6px color-mix(in oklab, var(--gold) 40%, transparent);
+  }
+  .tour-card {
+    background:
+      linear-gradient(180deg, color-mix(in oklab, var(--gold-tint) 55%, transparent), transparent 42%),
+      var(--card);
+    border: 1px solid color-mix(in oklab, var(--gold-line) 70%, transparent);
+    box-shadow: 0 24px 48px -18px rgb(0 0 0 / 0.55), 0 2px 8px rgb(0 0 0 / 0.08);
+  }
+  /* the little point toward what is lit: a turned square on the bubble's edge, its outer sides bordered */
+  .tour-arrow {
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    transform: rotate(45deg);
+    background: var(--card);
+    border: 1px solid color-mix(in oklab, var(--gold-line) 70%, transparent);
+  }
+  .tour-arrow[data-side="below"] {
+    top: -7px;
+    border-right: 0;
+    border-bottom: 0;
+    background: color-mix(in oklab, var(--gold-tint) 55%, var(--card));
+  }
+  .tour-arrow[data-side="above"] {
+    bottom: -7px;
+    border-left: 0;
+    border-top: 0;
+  }
+  .tour-arrow[data-side="left"] {
+    right: -7px;
+    border-left: 0;
+    border-bottom: 0;
+  }
+  .tour-arrow[data-side="right"] {
+    left: -7px;
+    border-right: 0;
+    border-top: 0;
+  }
 }
 
 /* The theme switch (shared/lib/theme.ts): the browser's own cross-fade is off, the new look grows as a circle instead. */

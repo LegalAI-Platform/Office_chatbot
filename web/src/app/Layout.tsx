@@ -11,10 +11,12 @@ import { Icon, type IconName } from "../shared/ui/Icon";
 import { ConfirmHost, Toaster } from "../shared/ui/feedback";
 import { CommandPalette } from "./CommandPalette";
 import { prefetchAll, usePrefetch } from "./lazyPages";
+import { Tour } from "./Tour";
+import { TOUR_REPLAY } from "./tourSteps";
 import { OwnerImg, type OwnerImage } from "../shared/ui/Owner";
 import { ThemePicker } from "../shared/ui/ThemePicker";
 
-type Item = { to: string; text: string; short: string; icon: OwnerImage | "home" | "chat" | "receipt" | "document"; dot?: boolean; badge?: number; end?: boolean };
+type Item = { to: string; text: string; short: string; icon: OwnerImage | "home" | "chat" | "receipt" | "document"; dot?: boolean; badge?: number; end?: boolean; tour?: string };
 
 /**
  * The shell of the owner's mockups («الرئيسية», light and dark): the black side bar with the seal,
@@ -26,20 +28,22 @@ export function Layout() {
   const late = dash?.overdue ?? 0;
 
   const home: Item = { to: "/", text: "الرئيسية", short: "الرئيسية", icon: "home", end: true };
-  const settings: Item = { to: "/settings", text: "الإعدادات", short: "الإعدادات", icon: "nav_settings" };
+  const settings: Item = { to: "/settings", text: "الإعدادات", short: "الإعدادات", icon: "nav_settings", tour: "nav-settings" };
   // The side bar in sections, like the owner's second mockup; «الإعدادات» sits alone at the bottom.
-  const groups: { title: string; items: Item[] }[] = [
+  // tour: what the tour's bubbles point at (app/tourSteps.ts), on the side bar and on the phone's tab bar alike
+  const groups: { title: string; items: Item[]; tour?: string }[] = [
     {
       title: "الشغل اليومي",
       items: [
-        { to: "/tasks", text: "الطلبات / المهام", short: "المهام", icon: "nav_tasks", dot: late > 0 },
-        { to: "/appointments", text: "المواعيد", short: "المواعيد", icon: "nav_appointments" },
-        { to: "/chats", text: "المحادثات", short: "المحادثات", icon: "chat" },
+        { to: "/tasks", text: "الطلبات / المهام", short: "المهام", icon: "nav_tasks", dot: late > 0, tour: "nav-tasks" },
+        { to: "/appointments", text: "المواعيد", short: "المواعيد", icon: "nav_appointments", tour: "nav-appointments" },
+        { to: "/chats", text: "المحادثات", short: "المحادثات", icon: "chat", tour: "nav-chats" },
         { to: "/clients", text: "الشركات / العملاء", short: "العملاء", icon: "nav_clients" },
       ],
     },
     {
       title: "الفلوس والخدمات",
+      tour: "nav-money",
       items: [
         { to: "/receipts", text: "الإيصالات والمدفوعات", short: "الإيصالات", icon: "receipt" },
         { to: "/services", text: "طلبات الخدمات", short: "الخدمات", icon: "document" },
@@ -47,7 +51,7 @@ export function Layout() {
         { to: "/documents", text: "المستندات", short: "المستندات", icon: "nav_documents" },
       ],
     },
-    { title: "الإدارة", items: [{ to: "/reports", text: "التقارير", short: "التقارير", icon: "nav_reports" }] },
+    { title: "الإدارة", items: [{ to: "/reports", text: "التقارير", short: "التقارير", icon: "nav_reports", tour: "nav-reports" }] },
   ];
   // TASK 07c: the reports are for the manager and the lawyer; the others never see the entry
   // (nor the «الإدارة» heading, left empty without it).
@@ -88,7 +92,7 @@ export function Layout() {
           <div className="soft-scroll grid min-h-0 grid-cols-[minmax(0,1fr)] content-start gap-1 overflow-x-hidden overflow-y-auto px-0.5">
             <SideLink item={home} />
             {shownGroups.map((g) => (
-              <section key={g.title} aria-label={g.title} className="mt-2.5 grid grid-cols-[minmax(0,1fr)] gap-1">
+              <section key={g.title} aria-label={g.title} data-tour={g.tour} className="mt-2.5 grid grid-cols-[minmax(0,1fr)] gap-1">
                 <h2 className="flex items-center gap-2 px-3 pb-0.5 text-[11.5px] font-semibold tracking-wide text-gold/85 [text-shadow:0_1px_3px_rgb(0_0_0/0.8)]">
                   {g.title}
                   <span aria-hidden className="h-px flex-1 bg-gradient-to-l from-gold/40 to-transparent" />
@@ -117,13 +121,14 @@ export function Layout() {
           <Outlet />
         </main>
         <Toaster />
+        <Tour />
         <ConfirmHost />
 
         {/* phone: the tab bar */}
         <nav aria-label="التنقل" className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-5 border-t border-side-line bg-side px-1 pt-1 text-side-ink lg:hidden"
           style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 0.25rem)" }}>
           {phoneTabs.map((i) => (
-            <NavLink key={i.to} to={i.to} end={i.end} onFocus={() => prefetch(i.to)} onTouchStart={() => prefetch(i.to)}
+            <NavLink key={i.to} to={i.to} end={i.end} data-tour={i.tour} onFocus={() => prefetch(i.to)} onTouchStart={() => prefetch(i.to)}
               className={({ isActive }) => `relative grid min-h-14 content-center justify-items-center gap-0.5 rounded-lg text-[11px] ${isActive ? "text-gold" : "text-side-soft"}`}>
               <NavIcon icon={i.icon} small />
               {i.short}
@@ -203,7 +208,7 @@ function PhoneMore({ groups, settings }: { groups: { title: string; items: Item[
 function SideLink({ item: i }: { item: Item }) {
   const prefetch = usePrefetch();
   return (
-    <NavLink to={i.to} end={i.end} onMouseEnter={() => prefetch(i.to)} onFocus={() => prefetch(i.to)}
+    <NavLink to={i.to} end={i.end} data-tour={i.tour} onMouseEnter={() => prefetch(i.to)} onFocus={() => prefetch(i.to)}
       className={({ isActive }) => `group relative flex min-h-[2.85rem] items-center gap-2.5 whitespace-nowrap rounded-[14px] border ps-1.5 pe-2.5 text-[14.5px] transition ${isActive
         ? "nav-active border-[#d6b088]/40 font-bold"
         : "border-transparent text-side-ink hover:border-white/10 hover:bg-white/[0.06] hover:shadow-[inset_0_1px_0_rgb(255_255_255/0.08)] hover:backdrop-blur-md"}`}>
@@ -289,7 +294,7 @@ function Bell({ late }: { late: number }) {
   return (
     // a phone: the alerts open across the screen under the bar (the bell is near the screen's edge, the box went past it)
     <div ref={box} className="relative shrink-0 max-sm:static">
-      <button type="button" aria-expanded={open} aria-haspopup="dialog" onClick={() => setOpen((v) => !v)}
+      <button type="button" data-tour="bell" aria-expanded={open} aria-haspopup="dialog" onClick={() => setOpen((v) => !v)}
         className={`relative grid size-11 place-items-center rounded-full border text-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.4),0_2px_8px_rgb(0_0_0/0.04)] transition duration-200
           ${open ? "border-gold-line bg-card text-gold-ink" : "border-line/80 bg-card/70 hover:border-gold-line hover:bg-card hover:text-gold-ink"}`}
         aria-label={unread > 0 ? `${unread} تنبيهات جديدة` : late > 0 ? `${late} مهام متأخرة` : "التنبيهات"}>
@@ -392,7 +397,7 @@ function UserMenu() {
   return (
     // ms-auto: toward the far end of the bar (the left, in Arabic), with some room before the edge
     <div ref={box} className="relative ms-auto shrink-0 lg:me-24 2xl:me-40">
-      <button type="button" aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen((v) => !v)}
+      <button type="button" data-tour="account-menu" aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen((v) => !v)}
         className={`group flex items-center gap-2.5 rounded-full border py-1 ps-1 pe-1 shadow-[0_1px_2px_rgb(0_0_0/0.04)] transition duration-200 sm:pe-3
           focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold
           ${open ? "border-gold-line bg-card shadow-[0_6px_18px_rgb(0_0_0/0.08)]" : "border-line bg-card hover:border-gold-line hover:shadow-[0_4px_14px_rgb(0_0_0/0.07)]"}`}>
@@ -422,6 +427,7 @@ function UserMenu() {
           <Row icon="account" hint="بياناتك وصورتك" onClick={() => go("/account")}>حسابي</Row>
           <Row icon="key" hint="غيّرها كل فترة" onClick={() => go("/change-password")}>تغيير كلمة السر</Row>
           {can(me, "users.manage") ? <Row icon="users" hint="حسابات المكتب وصلاحياتها" onClick={() => go("/users")}>الحسابات</Row> : null}
+          <Row icon="play" hint="جولة سريعة على اللوحة" onClick={() => go(TOUR_REPLAY)}>اعرض الجولة تاني</Row>
           <div className="mx-1 my-1 h-px bg-gradient-to-l from-transparent via-line to-transparent" aria-hidden />
           <div className="grid gap-2 px-2.5 pt-0.5 pb-1.5">
             <span className="flex items-center gap-1.5 text-[11.5px] font-semibold text-ink-soft" id="look-label">
@@ -480,7 +486,7 @@ function Search() {
     navigate(q ? `/tasks?q=${encodeURIComponent(q)}` : "/tasks");
   };
   return (
-    <form role="search" onSubmit={submit}
+    <form role="search" data-tour="search" onSubmit={submit}
       className="group/search flex min-h-[2.9rem] min-w-0 flex-1 items-center gap-2.5 rounded-full border border-line/80 bg-card/70 ps-4 pe-2 shadow-[inset_0_1px_2px_rgb(0_0_0/0.04)] transition duration-200
         hover:border-gold-line focus-within:border-gold focus-within:bg-card focus-within:shadow-[0_0_0_4px_rgb(176_133_82/0.16)] lg:max-w-[36rem]">
       <Icon name="search" className="size-[18px] shrink-0 text-ink-soft transition-colors group-focus-within/search:text-gold-ink" />

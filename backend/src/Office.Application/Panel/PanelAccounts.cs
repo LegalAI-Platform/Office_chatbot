@@ -42,6 +42,12 @@ public sealed class PanelUser
     /// <summary>When the account's photo was set (migration 0040), null without one. The photo itself is never loaded here.</summary>
     public DateTimeOffset? AvatarAt { get; init; }
 
+    /// <summary>
+    /// When the account skipped or finished the panel's tour (migration 0075, v1.102), null until then: the panel shows the
+    /// tour once, on any device, while it is null.
+    /// </summary>
+    public DateTimeOffset? TourSeenAt { get; init; }
+
     public const string ApprovalPending = "pending";
     public const string ApprovalApproved = "approved";
 
@@ -88,6 +94,9 @@ public interface IPanelUserStore
 
     /// <summary>A null <paramref name="avatar"/> removes the photo (and its time).</summary>
     Task SetAvatarAsync(Guid id, PanelAvatar? avatar, DateTimeOffset? at, CancellationToken ct);
+
+    /// <summary>The tour is seen (migration 0075); the first time is kept. False when it was already seen.</summary>
+    Task<bool> SetTourSeenAsync(Guid id, DateTimeOffset at, CancellationToken ct);
 }
 
 /// <summary>Hashing (ASP.NET Core Identity's PasswordHasher) and random secrets.</summary>
@@ -498,6 +507,18 @@ public sealed partial class PanelAccounts(IPanelUserStore store, IPanelSecrets s
     public Task<PanelUser?> FindAsync(Guid id, CancellationToken ct) => store.FindAsync(id, ct);
 
     public Task AuditAsync(Guid? by, string action, CancellationToken ct) => store.AuditAsync(by, action, by, Empty, ct);
+
+    /// <summary>
+    /// v1.102: the account skipped or finished the panel's tour, so it is not shown again on any device. Written (and audited)
+    /// the first time only; a replay from «اعرض الجولة تاني» never asks.
+    /// </summary>
+    public async Task MarkTourSeenAsync(Guid userId, CancellationToken ct)
+    {
+        if (await store.SetTourSeenAsync(userId, clock.GetUtcNow(), ct))
+        {
+            await store.AuditAsync(userId, "tour.seen", userId, Empty, ct);
+        }
+    }
 
     private async Task<PanelResult<PanelUser>> ChangeAsync(
         Guid by, Guid id, string action, Func<PanelUser, Task<string?>> change, CancellationToken ct,

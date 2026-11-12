@@ -39,6 +39,11 @@ export interface Me {
   two_factor_required: boolean;
   /** When the account's photo was set (its cache key), null without one: /users/{id}/avatar?v=… */
   avatar_at: string | null;
+  /**
+   * v1.102: the account skipped or finished the panel's tour (migration 0075); false: it opens on the home page. Absent
+   * (an API older than the panel): taken as seen.
+   */
+  tour_seen?: boolean;
 }
 
 /** The right password of an account with the authenticator on: the code comes next. */

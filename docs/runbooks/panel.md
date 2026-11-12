@@ -46,6 +46,15 @@ or `reset-2fa --name <user name>` from the server, then turn it on again at the 
 staff member the name used in the office lists. The panel shows a **temporary password once**:
 give it to the person yourself. They must change it the first time they sign in.
 
+## The tour (v1.102)
+
+The first time an account opens the panel, bubbles go over it step by step: what each part is for, and only the pages its
+role can open (10 steps for «موظف», 11 for «المستشار», «مدير» and «الصيانة»). Every account sees it once, the ones made
+before v1.102 too. «تخطّي», Esc or the last step's «تمام» ends it, and it does not come back by itself on any phone or
+computer (`hazem.panel_users.tour_seen_at`). Anyone can see it again from **اعرض الجولة تاني**: in the account menu (the
+photo at the top) or in **الإعدادات → حسابك**. On a phone, «الفلوس والخدمات» and «الإعدادات» point at «المزيد» in the
+tab bar, where those pages are (v1.101).
+
 ## Someone signs up (v1.9)
 
 Anyone can open **اعمل حساب جديد** on the sign-in page, confirm the e-mail with the six digits

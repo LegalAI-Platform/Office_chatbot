@@ -329,6 +329,8 @@ public sealed class PanelUserRow
     public DateTimeOffset CreatedAt { get; set; }
     /// <summary>Migration 0040; the photo's bytes are not mapped (PanelUserStore.AvatarAsync reads them).</summary>
     public DateTimeOffset? AvatarAt { get; set; }
+    /// <summary>Migration 0075 (v1.102): when the account skipped or finished the panel's tour.</summary>
+    public DateTimeOffset? TourSeenAt { get; set; }
 }
 
 public sealed class PanelCodeRow

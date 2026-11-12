@@ -605,6 +605,40 @@ public sealed class PanelApiTests(TestDatabase db) : IAsyncLifetime
         Assert.False(await db.ScalarAsync<bool>("SELECT has_column_privilege('office_readonly', 'hazem.panel_users', 'avatar', 'SELECT')"));
     }
 
+    // ---------- the panel's tour (migration 0075, v1.102) ----------
+
+    [Fact]
+    public async Task Every_account_starts_without_the_tour_and_once_seen_it_stays_seen_on_every_device()
+    {
+        var yasmin = await SignIn("yasmin");
+        var me = (await yasmin.GetFromJsonAsync<JsonNode>("/api/panel/auth/me", Ct))!;
+        Assert.False((bool)me["tour_seen"]!);
+        var id = (string)me["id"]!;
+
+        Assert.Equal(HttpStatusCode.NoContent, (await yasmin.PostAsync("/api/panel/account/tour-seen", null, Ct)).StatusCode);
+        Assert.True((bool)(await yasmin.GetFromJsonAsync<JsonNode>("/api/panel/auth/me", Ct))!["tour_seen"]!);
+        var first = await db.ScalarAsync<string>($"SELECT tour_seen_at::text FROM hazem.panel_users WHERE id = '{id}'");
+
+        // another phone or computer (its own sign-in) knows it too; seen again keeps the first time and audits once
+        var phone = await SignIn("yasmin");
+        Assert.True((bool)(await phone.GetFromJsonAsync<JsonNode>("/api/panel/auth/me", Ct))!["tour_seen"]!);
+        Assert.Equal(HttpStatusCode.NoContent, (await phone.PostAsync("/api/panel/account/tour-seen", null, Ct)).StatusCode);
+        Assert.Equal(first, await db.ScalarAsync<string>($"SELECT tour_seen_at::text FROM hazem.panel_users WHERE id = '{id}'"));
+        Assert.Equal(1L, await db.ScalarAsync<long>($"SELECT count(*) FROM hazem.panel_audit WHERE action = 'tour.seen' AND user_id = '{id}' AND target_id = '{id}'"));
+
+        // only the account's own: the others still have it to see
+        Assert.False((bool)(await (await SignIn("lawyer")).GetFromJsonAsync<JsonNode>("/api/panel/auth/me", Ct))!["tour_seen"]!);
+        Assert.Equal(1L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.panel_users WHERE tour_seen_at IS NOT NULL"));
+
+        // without a session, or without the antiforgery token: nothing
+        Assert.Equal(HttpStatusCode.Unauthorized, (await _factory.CreateClient().PostAsync("/api/panel/account/tour-seen", null, Ct)).StatusCode);
+        var noToken = await SignIn("karim");
+        noToken.DefaultRequestHeaders.Remove("X-CSRF-TOKEN");
+        Assert.Equal(HttpStatusCode.BadRequest, (await noToken.PostAsync("/api/panel/account/tour-seen", null, Ct)).StatusCode);
+        Assert.False((bool)(await noToken.GetFromJsonAsync<JsonNode>("/api/panel/auth/me", Ct))!["tour_seen"]!);
+        Assert.True(await db.ScalarAsync<bool>("SELECT has_column_privilege('office_readonly', 'hazem.panel_users', 'tour_seen_at', 'SELECT')"));
+    }
+
     [Fact]
     public async Task Readonly_cannot_read_password_hashes_and_office_app_cannot_read_accounts()
     {

@@ -133,6 +133,10 @@ public sealed class PanelUserStore(HazemDbContext db, TimeProvider clock) : IPan
              WHERE id = {id}
             """, ct);
 
+    public async Task<bool> SetTourSeenAsync(Guid id, DateTimeOffset at, CancellationToken ct) =>
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE hazem.panel_users SET tour_seen_at = {at.ToUniversalTime()} WHERE id = {id} AND tour_seen_at IS NULL", ct) > 0;
+
     /// <summary>Filter first, then the staff name: EF translates this shape.</summary>
     private async Task<List<PanelUser>> LoadAsync(System.Linq.Expressions.Expression<Func<PanelUserRow, bool>> filter, CancellationToken ct)
     {
@@ -169,6 +173,7 @@ public sealed class PanelUserStore(HazemDbContext db, TimeProvider clock) : IPan
         CreatedAt = r.CreatedAt,
         ChatwootUserId = r.ChatwootUserId,
         AvatarAt = r.AvatarAt,
+        TourSeenAt = r.TourSeenAt,
     };
 }
 
