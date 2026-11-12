@@ -203,6 +203,13 @@ public static class PanelEndpoints
             return Results.NoContent();
         });
 
+        // v1.102 (migration 0075): the account skipped or finished the panel's tour; /auth/me says tour_seen from now on.
+        account.MapPost("/tour-seen", async (HttpContext ctx, PanelAccounts accounts, CancellationToken ct) =>
+        {
+            await accounts.MarkTourSeenAsync(ctx.CurrentUser().Id, ct);
+            return Results.NoContent();
+        });
+
         // Anyone signed in sees anyone's photo (the lists show them). The address carries ?v=<avatar_at>,
         // so a day in the browser's own cache never shows an old photo.
         work.MapGet("/users/{id:guid}/avatar", async (Guid id, HttpContext ctx, PanelAvatars avatars, CancellationToken ct) =>
@@ -358,7 +365,7 @@ public static class PanelEndpoints
 
     private static MeDto Me(PanelUser u, HttpContext ctx) =>
         new(u.Id, u.Username, u.DisplayName, u.Email, u.Role, Permissions.Of(u.Role), u.MustChangePassword, u.TotpEnabled,
-            PanelAuth.NeedsTwoFactor(ctx, u), u.AvatarAt);
+            PanelAuth.NeedsTwoFactor(ctx, u), u.AvatarAt, u.TourSeenAt is not null);
 
     /// <summary>At most <paramref name="max"/> bytes of the body: a longer one is cut there (and then refused as too large).</summary>
     private static async Task<byte[]> ReadUpTo(Stream body, int max, CancellationToken ct)
@@ -476,9 +483,13 @@ public sealed record AlertsReadRequest(IReadOnlyList<long>? Ids);
 
 // ---------- responses ----------
 
-/// <summary><see cref="AvatarAt"/>: null without a photo; the panel builds /users/{id}/avatar?v=… from it.</summary>
+/// <summary>
+/// <see cref="AvatarAt"/>: null without a photo; the panel builds /users/{id}/avatar?v=… from it. <see cref="TourSeen"/> (v1.102):
+/// the account skipped or finished the panel's tour; until then the panel shows it.
+/// </summary>
 public sealed record MeDto(Guid Id, string Username, string DisplayName, string Email, string Role,
-    IReadOnlyList<string> Permissions, bool MustChangePassword, bool TwoFactor, bool TwoFactorRequired, DateTimeOffset? AvatarAt);
+    IReadOnlyList<string> Permissions, bool MustChangePassword, bool TwoFactor, bool TwoFactorRequired, DateTimeOffset? AvatarAt,
+    bool TourSeen);
 
 public sealed record StaffDto(Guid Id, string Name);
 

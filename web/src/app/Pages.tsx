@@ -2,6 +2,7 @@ import { Link } from "react-router";
 import { can, useMe } from "../shared/api/session";
 import { OwnerImg } from "../shared/ui/Owner";
 import { Icon, type IconName } from "../shared/ui/Icon";
+import { TOUR_REPLAY } from "./tourSteps";
 
 /** The soft light the glass shows through, behind a page. */
 function Glow() {
@@ -65,6 +66,8 @@ export function SettingsPage() {
   const mine: Row[] = [
     { to: "/account", icon: "account", title: "حسابي", text: "اسمك وإيميلك ودورك في المكتب.", show: true },
     { to: "/change-password", icon: "key", title: "تغيير كلمة السر", text: "كلمة سر جديدة، وكل الأجهزة التانية بتخرج.", show: true },
+    // v1.102: the tour again, from its first step (app/Tour.tsx)
+    { to: TOUR_REPLAY, icon: "play", title: "اعرض الجولة تاني", text: "جولة سريعة تعرّفك على اللوحة خطوة بخطوة.", show: true },
   ];
   const office: Row[] = [
     { to: "/users", icon: "users", title: "الحسابات", text: "زوّد موظف، اقفل حساب، أو اعمل كلمة سر مؤقتة.", show: can(me, "users.manage") },
