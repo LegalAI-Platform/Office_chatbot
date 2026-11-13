@@ -301,8 +301,6 @@ public sealed class StaffTaskRow
     public DateTimeOffset DueAt { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
-    public Guid? AppointmentId { get; set; }            // v1.108 (0077): the booking it belongs to
-    public DateTimeOffset? EscalatedAt { get; set; }     // v1.108: an urgent call nobody took in time, now the staff's
 }
 
 public sealed class PanelUserRow
@@ -491,7 +489,6 @@ public sealed class AppointmentRow
     public DateTimeOffset? UrgentAckedAt { get; set; }     // «التحويل تمام، هكلمه» pressed
     public DateTimeOffset? UrgentEscalatedAt { get; set; } // that alert not decided in time: the manager
     public DateTimeOffset? UrgentWaitingAt { get; set; }   // urgent_waiting told the client (once per call)
-    public DateTimeOffset? UrgentAlertFailedAt { get; set; } // v1.108 (0077): the lawyer's WhatsApp alert could not go
 }
 
 /// <summary>hazem.service_ratings (0033, v1.31, B-26).</summary>

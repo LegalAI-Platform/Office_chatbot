@@ -47,18 +47,9 @@ public sealed record ClientWord(string Type, string? Text, string? Caption, stri
 public sealed record TaskRecord(
     Guid Id, string Type, string State, DateTimeOffset DueAt, DateTimeOffset CreatedAt, StaffRef? Staff,
     string? ClientName, string WaId, string? ClientType, string? Source, string? ConversationState,
-    string? MatterType, string? MatterSubtype, IReadOnlyList<ClientWord> ClientWords,
-    TaskBooking? Booking = null, DateTimeOffset? EscalatedAt = null);
+    string? MatterType, string? MatterSubtype, IReadOnlyList<ClientWord> ClientWords);
 
-/// <summary>
-/// v1.108 (0077): the booking a task belongs to, as the task's page shows it: the service, its time and state, the payment's
-/// state, and for an urgent call whether the lawyer's WhatsApp alert went and whether «هكلمه» was pressed.
-/// </summary>
-public sealed record TaskBooking(Guid Id, string Service, DateTimeOffset StartsAt, string State, string? PaymentState,
-    DateTimeOffset? UrgentAlertedAt, DateTimeOffset? UrgentAlertFailedAt, DateTimeOffset? UrgentAckedAt);
-
-/// <summary><paramref name="UrgentAck"/> (v1.108): «هكلمه» on an urgent call's task, from the panel.</summary>
-public sealed record TaskAbilities(bool Start, bool Done, bool Cancel, bool Assign, bool UrgentAck = false);
+public sealed record TaskAbilities(bool Start, bool Done, bool Cancel, bool Assign);
 
 public sealed record TaskView(TaskRecord Task, TaskAbilities Can);
 
@@ -131,43 +122,11 @@ public sealed record PanelResult<T>(
 /// as the staff, whatever the person's role. A staff member never learns that a task they may not
 /// see exists (not found, not forbidden).
 /// </summary>
-public sealed class PanelTasks(IPanelTaskStore store, TimeProvider clock, Booking.IUrgentCalls urgent)
+public sealed class PanelTasks(IPanelTaskStore store, TimeProvider clock)
 {
     public const string ActionStart = "start";
     public const string ActionDone = "done";
     public const string ActionCancel = "cancel";
-
-    /// <summary>
-    /// v1.108 (the owner: «مليون حاجة بتحصل»): «هكلمه» from the panel, on an urgent call's task. The same decision as the
-    /// WhatsApp button (the client hears «المستشار شاف طلب حضرتك…», and the call is not escalated), for a lawyer who is not
-    /// on WhatsApp.
-    /// </summary>
-    public async Task<PanelResult<TaskView>> UrgentAckAsync(Viewer viewer, Guid id, CancellationToken ct)
-    {
-        var task = await store.GetAsync(id, ct);
-        if (task is null || !MaySee(viewer, task))
-        {
-            return new(PanelOutcome.NotFound);
-        }
-
-        if (!viewer.Can(Permissions.UrgentAck))
-        {
-            return new(PanelOutcome.Forbidden);
-        }
-
-        if (!View(viewer, task).Can.UrgentAck || task.Booking is not { } booking)
-        {
-            return new(PanelOutcome.Conflict, Error: "nothing_to_decide");
-        }
-
-        if (!await urgent.AckAsync(booking.Id, ct))
-        {
-            return new(PanelOutcome.Conflict, Error: "changed_meanwhile");
-        }
-
-        await store.AuditAsync(viewer.UserId, "task.urgent_ack", id, new Dictionary<string, string?> { ["booking"] = booking.Id.ToString() }, ct);
-        return await GetAsync(viewer, id, ct);
-    }
 
     public async Task<PanelResult<TaskList>> ListAsync(Viewer viewer, TaskQuery query, CancellationToken ct)
     {
@@ -345,11 +304,8 @@ public sealed class PanelTasks(IPanelTaskStore store, TimeProvider clock, Bookin
         var from = StateName.Parse<StaffTaskState>(task.State);
         bool Allowed(StaffTaskState to) =>
             viewer.Can(Permissions.TasksUpdate) && StaffTask.Machine.Check(from, to, Actor.Staff).IsOk;
-        // v1.108: an unfinished urgent call's task whose booking is still to come and nobody pressed «هكلمه» yet
-        var ack = viewer.Can(Permissions.UrgentAck) && task.Type == "urgent_request" && Unfinished.Contains(task.State)
-                  && task.Booking is { Service: "consultation_urgent", State: "confirmed", UrgentAckedAt: null };
         return new TaskView(task, new TaskAbilities(
             Allowed(StaffTaskState.InProgress), Allowed(StaffTaskState.Done), Allowed(StaffTaskState.Cancelled),
-            viewer.Can(Permissions.TasksAssign), ack));
+            viewer.Can(Permissions.TasksAssign)));
     }
 }

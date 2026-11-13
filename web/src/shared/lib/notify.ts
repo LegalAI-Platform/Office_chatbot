@@ -14,8 +14,7 @@ import { cairoWhen } from "./time";
 
 const TITLE = "لوحة حازم";
 // the alert worth a sound: a client's urgent request (urgent_request, safety_alert). v1.104: a system failure no more.
-// v1.108: an urgent call the lawyer did not answer, too (the client is waiting on the phone). These stay on the screen.
-const LOUD = new Set(["task_urgent", "task_escalated"]);
+const LOUD = new Set(["task_urgent"]);
 /** The office's seal beside the words (the landing page's, v1.103). */
 const ICON = "/landing/img/logo.png";
 /** More new alerts at once than this: these, then one notification that says how many more. */
@@ -38,9 +37,7 @@ export const alertLine = (a: PanelAlert): string =>
     : `${label(TASK_TYPES, a.task_type ?? "")} · ${a.client_name ?? "رقم من غير اسم"}`;
 
 /** The task kind each alert's title already names. */
-const SAME_AS_TITLE: Record<string, string> = {
-  task_urgent: "urgent_request", task_human: "human_requested", task_rating: "rating_low", task_escalated: "urgent_request",
-};
+const SAME_AS_TITLE: Record<string, string> = { task_urgent: "urgent_request", task_human: "human_requested", task_rating: "rating_low" };
 
 /** A line that reads right to left in Windows' own notification, whatever the computer's language. */
 const rtl = (s: string) => `‏${s}‏`;
@@ -114,8 +111,8 @@ function chime() {
  * - Each new unread alert, of any kind, becomes a notification while the person is away from the panel.
  *   - The clients' requests come before the system's problems.
  *   - Clicking a task's notification opens the task.
- *   - An urgent request's stays on the screen until it is closed (v1.108: and an unanswered urgent call's).
- * - These also chime.
+ *   - An urgent request's stays on the screen until it is closed.
+ * - An urgent request also chimes.
  * `unread` is the tab title's count: the requests only.
  */
 export function useAlertNotifications(items: PanelAlert[] | undefined, unread: number, open: (taskId: string) => void) {
@@ -142,7 +139,7 @@ export function useAlertNotifications(items: PanelAlert[] | undefined, unread: n
     for (const a of fresh.slice(0, AT_ONCE)) {
       const task = a.task_id;
       show(rtl(alertTitle(a)), alertDetails(a).map(rtl).join("\n"), `hazem-alert-${a.id}`, {
-        stay: LOUD.has(a.kind),
+        stay: a.kind === "task_urgent",
         onClick: task ? () => open(task) : undefined,
       });
     }

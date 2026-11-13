@@ -45,8 +45,7 @@ export function useStaff(enabled: boolean) {
   return useQuery({ queryKey: ["staff"], queryFn: () => api<StaffRef[]>("GET", "/staff"), enabled, staleTime: 300_000 });
 }
 
-/** v1.108: `urgent-ack`, «هكلمه» on a paid urgent call: the client hears the lawyer saw it, and it is never escalated. */
-export type TaskAction = "start" | "done" | "cancel" | "urgent-ack";
+export type TaskAction = "start" | "done" | "cancel";
 
 export function useTaskAction(id: string) {
   const qc = useQueryClient();

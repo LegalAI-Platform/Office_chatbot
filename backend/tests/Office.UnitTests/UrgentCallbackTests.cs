@@ -370,7 +370,5 @@ public sealed partial class BookingFlowTests
             Presses.Add((press, presserWaId));
             return Task.FromResult(Presses.Count(p => p.Press == press) == 1);
         }
-
-        public Task<bool> AckAsync(Guid appointmentId, CancellationToken ct) => Task.FromResult(false);
     }
 }
