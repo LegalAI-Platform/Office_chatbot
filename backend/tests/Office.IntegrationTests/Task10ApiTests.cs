@@ -256,7 +256,10 @@ public sealed class Task10ApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal(("send_text", "📄 مراجعة العقد بتاع حضرتك جاهز ✅"), ((string?)told["type"], (string?)told["text"])); // after the call: words, no file
 
         var month = DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(2)).ToString("yyyy-MM", System.Globalization.CultureInfo.InvariantCulture);
-        var report = (await lawyer.GetFromJsonAsync<JsonNode>($"/api/panel/reports?month={month}", Ct))!;
+        // v1.106: the reports are the maintenance account's only (its authenticator on, at the app's clock)
+        var keeper = await SignIn("keeper", Permissions.Maintenance);
+        await MaintenanceTwoFactor.TurnOnAsync(keeper, Ct, new FixedClock(Now));
+        var report = (await keeper.GetFromJsonAsync<JsonNode>($"/api/panel/reports?month={month}", Ct))!;
         Assert.Equal(1500, (int)report["received"]!); // the report counts it
         // «حسب الخدمة»: the order priced and delivered, its money, no single price for a written service
         var row = report["by_service"]!.AsArray().Single(r => (string?)r!["key"] == "document_review")!;

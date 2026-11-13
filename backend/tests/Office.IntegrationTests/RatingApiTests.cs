@@ -290,15 +290,17 @@ public sealed class RatingApiTests(TestDatabase db) : IAsyncLifetime
         await Ratings();
         await Press(RatingButtons.Id(await db.ScalarAsync<Guid>("SELECT id FROM hazem.service_ratings"), 2));
 
-        using var lawyer = await SignIn("nour", Permissions.Lawyer); // signed in now: the clock moved hours since «saad» did
-        var r = (await lawyer.GetFromJsonAsync<JsonNode>("/api/panel/reports?month=2026-11", Ct))!["ratings"]!;
+        // signed in now: the clock moved hours since «saad» did; v1.106: the reports are the maintenance account's only
+        using var keeper = await SignIn("nour", Permissions.Maintenance);
+        await MaintenanceTwoFactor.TurnOnAsync(keeper, Ct, _clock);
+        var r = (await keeper.GetFromJsonAsync<JsonNode>("/api/panel/reports?month=2026-11", Ct))!["ratings"]!;
         Assert.Equal((1, 1, 2.0), ((int)r["sent"]!, (int)r["answered"]!, (double)r["average"]!));
         var service = Assert.Single(r["by_service"]!.AsArray())!;
         Assert.Equal(("consultation_phone_video", 1, 2.0), ((string)service["key"]!, (int)service["count"]!, (double)service["average"]!));
         var low = Assert.Single(r["low"]!.AsArray())!;
         Assert.Equal(("consultation_phone_video", "محمد أحمد علي حسن"), ((string)low["service"]!, (string)low["client_name"]!));
 
-        var october = (await lawyer.GetFromJsonAsync<JsonNode>("/api/panel/reports?month=2026-10", Ct))!["ratings"]!;
+        var october = (await keeper.GetFromJsonAsync<JsonNode>("/api/panel/reports?month=2026-10", Ct))!["ratings"]!;
         Assert.Equal((0, 0), ((int)october["sent"]!, (int)october["answered"]!));
         Assert.Null(october["average"]);
         Assert.NotEqual(Guid.Empty, id);
