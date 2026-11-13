@@ -51,16 +51,9 @@ public static class Permissions
     // the server can still do it (emergencies).
     public const string MaintenanceManage = "maintenance.manage";
 
-    /// <summary>
-    /// v1.108 (the owner: «مليون حاجة بتحصل»): «هكلمه» on an urgent call's task from the panel, as the WhatsApp button (the
-    /// lawyer and the manager).
-    /// </summary>
-    public const string UrgentAck = "urgent.ack";
-
     public static IReadOnlyList<string> All { get; } =
         [TasksViewOwn, TasksViewAll, TasksUpdate, TasksAssign, UsersManage, AccountSelf, ListsManage, TextsManage, ReportsView, ConversationsUnmute,
-            ScheduleManage, OfficeManage, PaymentsVerify, PaymentsRefund, ServicesManage, ServicesPrice, UrfManage, UrfReview, PricesManage, TestingForget, MaintenanceManage,
-            UrgentAck];
+            ScheduleManage, OfficeManage, PaymentsVerify, PaymentsRefund, ServicesManage, ServicesPrice, UrfManage, UrfReview, PricesManage, TestingForget, MaintenanceManage];
 
     public const string Manager = "manager";
     public const string Lawyer = "lawyer";
@@ -76,10 +69,9 @@ public static class Permissions
         [Maintenance] = [.. All],
         // v1.100: without TextsManage and TestingForget (the maintenance role's); v1.106: and without ReportsView
         [Manager] = [TasksViewOwn, TasksViewAll, TasksUpdate, TasksAssign, UsersManage, AccountSelf, ListsManage,
-            ConversationsUnmute, ScheduleManage, OfficeManage, PaymentsVerify, PaymentsRefund, ServicesManage, ServicesPrice, UrfManage, UrfReview, PricesManage,
-            UrgentAck],
+            ConversationsUnmute, ScheduleManage, OfficeManage, PaymentsVerify, PaymentsRefund, ServicesManage, ServicesPrice, UrfManage, UrfReview, PricesManage],
         [Lawyer] = [TasksViewOwn, TasksViewAll, TasksUpdate, TasksAssign, AccountSelf, ListsManage, ScheduleManage,
-            OfficeManage, PaymentsVerify, PaymentsRefund, ServicesManage, ServicesPrice, UrfManage, UrfReview, PricesManage, UrgentAck],
+            OfficeManage, PaymentsVerify, PaymentsRefund, ServicesManage, ServicesPrice, UrfManage, UrfReview, PricesManage],
         [Staff] = [TasksViewOwn, TasksUpdate, AccountSelf, ScheduleManage, PaymentsVerify, PaymentsRefund, ServicesManage, UrfManage],
     };
 

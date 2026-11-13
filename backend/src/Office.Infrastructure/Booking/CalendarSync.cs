@@ -156,7 +156,7 @@ public sealed class CalendarSync(HazemDbContext db, GoogleCalendar google, ISett
             }
 
             await store.AddTaskAsync(a.PersonId, $"booking:{a.Id:N}:conflict:{a.StartsAt.ToUnixTimeSeconds()}", PendingTask.CalendarConflict,
-                OfficeHours.DueAt(now), ct, a.Id);
+                OfficeHours.DueAt(now), ct);
             await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE hazem.appointments SET conflict_noted_at = now() WHERE id = {a.Id}", ct);
             found++;
         }

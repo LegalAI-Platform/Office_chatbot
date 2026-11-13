@@ -23,8 +23,7 @@ export type Permission =
   | "urf.review"
   | "prices.manage"
   | "testing.forget"
-  | "maintenance.manage"
-  | "urgent.ack"; // v1.108: «هكلمه» on an urgent call's task (the lawyer and the manager)
+  | "maintenance.manage";
 
 export interface Me {
   id: string;
@@ -113,25 +112,7 @@ export interface TaskDetail {
   matter_type?: string;
   matter_subtype?: string;
   client_words: ClientWord[];
-  /** v1.108: `urgent_ack`, «هكلمه» on a paid urgent call nobody answered yet (absent: an older API). */
-  can: { start: boolean; done: boolean; cancel: boolean; assign: boolean; urgent_ack?: boolean };
-  /** v1.108: the booking the task is about (absent: a task of no booking). */
-  booking?: TaskBooking;
-  /** v1.108: the lawyer did not answer the urgent call in time, so it came to the office's staff. */
-  escalated_at?: string;
-}
-
-/** v1.108 (the owner: «مليون حاجة بتحصل»): one booking's facts on its task, so nothing else needs to say them. */
-export interface TaskBooking {
-  id: string;
-  service: string;
-  starts_at: string;
-  state: string;
-  payment_state?: string;
-  /** an urgent call's: its WhatsApp alert reached the lawyer, did not reach him, he pressed «هكلمه» */
-  urgent_alerted: boolean;
-  urgent_alert_failed: boolean;
-  urgent_acked: boolean;
+  can: { start: boolean; done: boolean; cancel: boolean; assign: boolean };
 }
 
 export interface PanelUser {
@@ -182,11 +163,8 @@ export interface Dashboard {
 
 // ---------- TASK 07c ----------
 
-/**
- * v1.105: `task_new`, any other task Hazem opened for the office (a client's answer needs someone). v1.108: `task_escalated`,
- * an urgent call the lawyer did not answer in time (the office's staff).
- */
-export type AlertKind = "task_overdue" | "task_urgent" | "task_human" | "task_rating" | "system" | "task_new" | "task_escalated";
+/** v1.105: `task_new`, any other task Hazem opened for the office (a client's answer needs someone). */
+export type AlertKind = "task_overdue" | "task_urgent" | "task_human" | "task_rating" | "system" | "task_new";
 
 /** TASK 13: a system alert (the managers only) has no task: `system_what` says what failed. */
 export interface PanelAlert {

@@ -28,8 +28,7 @@ export const TASK_TYPES: Record<string, string> = {
   reminder_failed: "تذكير ما وصلش: فكّر العميل بالتليفون",
   office_info_missing: "عميل سأل عن المكتب ومعلومته مش مكتوبة: اكتب العنوان والخريطة وأرقام الدفع (إعدادات المواعيد ← بيانات المكتب والدفع) أو أيام الاستشارات",
   service_question: "عميل عنده سؤال عن خدمة (بنعملها ولا لأ، أو تفاصيلها): رد عليه",
-  // v1.108: opened as soon as the receipt waits, due before the appointment, and done by itself once it is reviewed
-  payment_review_due: "إيصال محتاج مراجعة: راجعه (الإيصالات والمدفوعات)",
+  payment_review_due: "الميعاد قرّب والتحويل لسه ما اتراجعش: راجعه دلوقتي (الإيصالات والمدفوعات)",
   appointment_unmarked: "ميعاد عدّى ومحدش علّمه، والتحويل لسه ما اتراجعش: راجعه وعلّم الميعاد (المواعيد)",
   rating_low: "عميل قيّم الخدمة «يحتاج للتحسين»: كلّمه (سببه في كلام العميل لو كتبه)",
   urgent_call_failed: "تنبيه الاستشارة العاجلة ما وصلش للمستشار: كلّمه أو كلّم العميل دلوقتي (رقم المستشار في إعدادات المواعيد ← بيانات المكتب والدفع)",
@@ -202,8 +201,6 @@ export const ALERT_KINDS: Record<string, string> = {
   system: "مشكلة في السيستم",
   // v1.105: any other task Hazem opened for the office; the line under it says why (its type)
   task_new: "عميل محتاج موظف",
-  // v1.108: the lawyer did not answer a paid urgent call in time; the staff call the client
-  task_escalated: "طلب عاجل محدش مسكه",
 };
 
 /** TASK 13: what a system alert is about. */

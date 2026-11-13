@@ -79,11 +79,11 @@ public sealed class UrgentNotices(HazemDbContext db, BookingStore store, ISettin
 
             var ok = rules.LawyerWhatsApp.Length > 0
                      && await AlertOneAsync(rules, rules.LawyerWhatsApp, $"urgent:{a.Receipt:N}:lawyer", a.Id, active, ct);
-            // v1.108 (the owner: «مليون حاجة بتحصل»): the call has one task, linked to its booking here. An alert that could
-            // not go (no lawyer's number, a refused send) is said on that task, never a task of its own.
-            await store.UrgentTaskAsync(a.Id, a.PersonId, OfficeHours.DueAt(now), ct);
-            await db.Database.ExecuteSqlInterpolatedAsync(
-                $"UPDATE hazem.appointments SET urgent_alert_failed_at = {(ok ? null : now)} WHERE id = {a.Id}", ct);
+            if (!ok)
+            {
+                // B-09.6: until Meta approves the template, or without the lawyer's number: the panel's bell (and e-mail) only.
+                await store.AddTaskAsync(a.PersonId, $"urgent:{a.Receipt:N}:lawyer", PendingTask.UrgentCallFailed, now, ct);
+            }
         }
 
         return due.Count;
@@ -99,9 +99,6 @@ public sealed class UrgentNotices(HazemDbContext db, BookingStore store, ISettin
                          where a.Service == BookingService.Urgent.Code && a.State == AppointmentInfo.Confirmed
                                && a.UrgentAlertedAt != null && a.UrgentAlertedAt <= late && a.UrgentEscalatedAt == null
                                && r.UrgentDecision == null
-                               // v1.108: somebody already closed the call's task in the panel: nobody is waiting
-                               && !db.StaffTasks.Any(t => t.AppointmentId == a.Id && t.Type == PendingTask.UrgentRequest
-                                                          && (t.State == "done" || t.State == "cancelled"))
                          orderby a.UrgentAlertedAt
                          select new { a.Id, a.PersonId, Receipt = r.Id, p.WaId, a.UrgentWaitingAt }).Take(Batch).ToListAsync(ct);
         foreach (var a in due)
@@ -115,10 +112,10 @@ public sealed class UrgentNotices(HazemDbContext db, BookingStore store, ISettin
                 continue;
             }
 
-            // The manager's WhatsApp, when written. v1.108: refused, it opens no task (the staff hear it in the panel below).
-            if (rules.ManagerWhatsApp.Length > 0)
+            if (rules.ManagerWhatsApp.Length > 0
+                && !await AlertOneAsync(rules, rules.ManagerWhatsApp, $"urgent:{a.Receipt:N}:manager", a.Id, active, ct))
             {
-                await AlertOneAsync(rules, rules.ManagerWhatsApp, $"urgent:{a.Receipt:N}:manager", a.Id, active, ct);
+                await store.AddTaskAsync(a.PersonId, $"urgent:{a.Receipt:N}:manager", PendingTask.UrgentCallFailed, now, ct);
             }
 
             if (a.UrgentWaitingAt is null)
@@ -128,47 +125,25 @@ public sealed class UrgentNotices(HazemDbContext db, BookingStore store, ISettin
                 var key = $"urgent:{a.Id:N}:waiting";
                 if (!await notices.SendAsync(a.WaId, key, Requester, new ReplyStep(TextKeys.UrgentWaiting), active, ct))
                 {
-                    await store.AddTaskAsync(a.PersonId, key, PendingTask.BookingMessageFailed, OfficeHours.DueAt(now), ct, a.Id);
+                    await store.AddTaskAsync(a.PersonId, key, PendingTask.BookingMessageFailed, now, ct);
                 }
             }
 
-            // v1.108 (the owner: «الموظف»): not a new task. The call's own task goes to the staff, and they get one alert.
-            var task = await store.UrgentTaskAsync(a.Id, a.PersonId, OfficeHours.DueAt(now), ct);
-            await db.Database.ExecuteSqlInterpolatedAsync($"""
-                UPDATE hazem.staff_tasks SET escalated_at = {now}
-                 WHERE id = {task} AND escalated_at IS NULL AND state IN ('open', 'in_progress', 'overdue')
-                """, ct);
+            await store.AddTaskAsync(a.PersonId, $"urgent:{a.Receipt:N}:unanswered", PendingTask.UrgentCallUnanswered, now, ct);
         }
 
         return due.Count;
     }
 
-    public async Task<bool> AckAsync(Guid appointmentId, CancellationToken ct)
-    {
-        var receipt = await (from r in db.PaymentReceipts.AsNoTracking()
-                             join p in db.Payments.AsNoTracking() on r.PaymentId equals p.Id
-                             join a in db.Appointments.AsNoTracking() on p.AppointmentId equals (Guid?)a.Id
-                             where a.Id == appointmentId && a.Service == BookingService.Urgent.Code
-                             orderby r.ReceivedAt descending, r.Id descending
-                             select new { r.Id, r.UrgentDecision }).FirstOrDefaultAsync(ct);
-        return receipt is { UrgentDecision: null } && await DecideAsync(new UrgentPress(UrgentPress.Ok, receipt.Id), null, null, ct);
-    }
-
     public async Task<bool> PressAsync(UrgentPress press, string presserWaId, string turnId, CancellationToken ct)
     {
+        var now = clock.GetUtcNow().ToUniversalTime();
         if (press.Kind == UrgentPress.See)
         {
             await ShowLatestAsync(press.Id, presserWaId, turnId, ct);
             return false;
         }
 
-        return await DecideAsync(press, presserWaId, turnId, ct);
-    }
-
-    /// <summary>«ok» or «bad» on a receipt, from WhatsApp (a presser) or the panel (no presser: a stale press is just false).</summary>
-    private async Task<bool> DecideAsync(UrgentPress press, string? presserWaId, string? turnId, CancellationToken ct)
-    {
-        var now = clock.GetUtcNow().ToUniversalTime();
         var decision = press.Kind == UrgentPress.Ok ? Ok : Bad;
         // The first decision on the call's latest receipt wins: a receipt already decided, or no longer the latest (a new one
         // came after «فيه مشكلة»), is left as it is. Two presses at once: the second finds the decision already there.
@@ -193,11 +168,7 @@ public sealed class UrgentNotices(HazemDbContext db, BookingStore store, ISettin
         if (!decided)
         {
             // Stale: nothing to the client; the presser gets the receipt still waiting for him, if there is a newer one.
-            if (presserWaId is not null && turnId is not null)
-            {
-                await ShowLatestAsync(call.Id, presserWaId, turnId, ct);
-            }
-
+            await ShowLatestAsync(call.Id, presserWaId, turnId, ct);
             return false;
         }
 
@@ -209,7 +180,7 @@ public sealed class UrgentNotices(HazemDbContext db, BookingStore store, ISettin
             var seen = $"urgent:{press.Id:N}:seen";
             if (!await notices.SendAsync(call.WaId, seen, Requester, new ReplyStep(TextKeys.UrgentSeen), active, ct))
             {
-                await store.AddTaskAsync(call.PersonId, seen, PendingTask.BookingMessageFailed, OfficeHours.DueAt(now), ct, call.Id);
+                await store.AddTaskAsync(call.PersonId, seen, PendingTask.BookingMessageFailed, now, ct);
             }
 
             return true;
@@ -225,11 +196,10 @@ public sealed class UrgentNotices(HazemDbContext db, BookingStore store, ISettin
         var fill = new Dictionary<string, string> { ["day"] = BookingWords.Day(call.StartsAt, now), ["time"] = BookingWords.Time(call.StartsAt) };
         if (!await notices.SendAsync(call.WaId, key, Requester, new ReplyStep(TextKeys.PaymentNotReceived, null, fill), active, ct))
         {
-            await store.AddTaskAsync(call.PersonId, $"{key}:notice", PendingTask.BookingMessageFailed, OfficeHours.DueAt(now), ct, call.Id);
+            await store.AddTaskAsync(call.PersonId, $"{key}:notice", PendingTask.BookingMessageFailed, now, ct);
         }
 
-        // v1.108: due by the office's hours like any task, never born late
-        await store.AddTaskAsync(call.PersonId, key, PendingTask.PaymentReviewDue, OfficeHours.DueAt(now), ct, call.Id);
+        await store.AddTaskAsync(call.PersonId, key, PendingTask.PaymentReviewDue, now, ct);
         return true;
     }
 
@@ -250,23 +220,25 @@ public sealed class UrgentNotices(HazemDbContext db, BookingStore store, ISettin
             return;
         }
 
+        var now = clock.GetUtcNow();
         var active = await texts.GetActiveAsync(ct);
         var fill = await FillAsync(appointmentId, ct);
         var document = receipt.Bucket == S3Deliverables.Bucket && deliverables.Configured
             ? new DocumentPayload(deliverables.ReadLink(receipt.Key), receipt.Mime == "image/png" ? "صورة التحويل.png" : "صورة التحويل.jpg")
             : null;
-        // One press, one pair of messages (a second press of «شوف التحويل» sends them again: its own turn's keys). v1.108: a
-        // receipt that could not be shown opens no task: the presser can press again, and the call's own task is still there.
-        if (document is not null
-            && await notices.SendAsync(presserWaId, $"urgent:{turnId}:receipt", Requester, new ReplyStep(TextKeys.UrgentAlert, null, fill),
-                active, ct, document))
+        // One press, one pair of messages (a second press of «شوف التحويل» sends them again: its own turn's keys).
+        var sent = document is not null
+                   && await notices.SendAsync(presserWaId, $"urgent:{turnId}:receipt", Requester, new ReplyStep(TextKeys.UrgentAlert, null, fill),
+                       active, ct, document)
+                   && await notices.SendAsync(presserWaId, $"urgent:{turnId}:decide", Requester, new ReplyStep(TextKeys.UrgentAlert, null, fill,
+                       new ReplyChoices(InteractivePayload.Buttons,
+                       [
+                           new ReplyChoice(UrgentButtons.Ok(receipt.Id), TextKeys.BtnUrgentOk),
+                           new ReplyChoice(UrgentButtons.Bad(receipt.Id), TextKeys.BtnUrgentBad),
+                       ])), active, ct);
+        if (!sent)
         {
-            await notices.SendAsync(presserWaId, $"urgent:{turnId}:decide", Requester, new ReplyStep(TextKeys.UrgentAlert, null, fill,
-                new ReplyChoices(InteractivePayload.Buttons,
-                [
-                    new ReplyChoice(UrgentButtons.Ok(receipt.Id), TextKeys.BtnUrgentOk),
-                    new ReplyChoice(UrgentButtons.Bad(receipt.Id), TextKeys.BtnUrgentBad),
-                ])), active, ct);
+            await store.AddTaskAsync(receipt.PersonId, $"urgent:{receipt.Id:N}:receipt", PendingTask.UrgentCallFailed, now, ct);
         }
     }
 

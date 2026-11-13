@@ -2,10 +2,8 @@ import { useId, useState, type ReactNode } from "react";
 import { Link, useLocation, useParams } from "react-router";
 import { openChatwoot } from "../../shared/api/chatwoot";
 import { errorMessage } from "../../shared/api/client";
-import type { ClientWord, TaskBooking, TaskDetail } from "../../shared/api/types";
-import {
-  APPOINTMENT_STATES, BOOKING_SERVICES, CLIENT_TYPES, label, matterLabel, MEDIA_TYPES, PAYMENT_STATES, SOURCES, TASK_STATES, TASK_TYPES,
-} from "../../shared/lib/labels";
+import type { ClientWord, TaskDetail } from "../../shared/api/types";
+import { CLIENT_TYPES, label, matterLabel, MEDIA_TYPES, SOURCES, TASK_STATES, TASK_TYPES } from "../../shared/lib/labels";
 import { cairoWhen } from "../../shared/lib/time";
 import { phoneOf } from "../../shared/ui/caseCard";
 import { Icon, type IconName } from "../../shared/ui/Icon";
@@ -82,17 +80,13 @@ function Detail({ task }: { task: TaskDetail }) {
       </header>
 
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(19rem,1fr)]">
-        {/* v1.108: the booking first, with the client's words: the side column stays short enough to stay on the screen */}
-        <div className="grid min-w-0 content-start gap-5">
-          {task.booking ? <Booking booking={task.booking} open={open} /> : null}
-          <Section icon="message" title="كلام العميل" count={task.client_words.length}>
-            <p className="rounded-[12px] border border-line/60 bg-card/50 px-3 py-2 text-[12.5px] leading-relaxed text-ink-soft">
-              نوع الموضوع: <strong className="text-ink">{matterLabel(task.matter_type, task.matter_subtype)}</strong>. ده
-              تصنيف حازم، فاقرا كلام العميل نفسه قبل ما تعتمد عليه.
-            </p>
-            <ClientWords taskId={task.id} words={task.client_words} />
-          </Section>
-        </div>
+        <Section icon="message" title="كلام العميل" count={task.client_words.length}>
+          <p className="rounded-[12px] border border-line/60 bg-card/50 px-3 py-2 text-[12.5px] leading-relaxed text-ink-soft">
+            نوع الموضوع: <strong className="text-ink">{matterLabel(task.matter_type, task.matter_subtype)}</strong>. ده
+            تصنيف حازم، فاقرا كلام العميل نفسه قبل ما تعتمد عليه.
+          </p>
+          <ClientWords taskId={task.id} words={task.client_words} />
+        </Section>
 
         <div className="grid content-start gap-5 lg:sticky lg:top-4">
           <Actions task={task} />
@@ -185,58 +179,8 @@ function ClientWords({ taskId, words }: { taskId: string; words: ClientWord[] })
   );
 }
 
-/**
- * v1.108 (the owner: «مليون حاجة بتحصل»): the booking the task is about, in one place: what, when, its state and its payment,
- * and for an urgent call whether its alert reached the lawyer. No other task says these.
- */
-function Booking({ booking, open }: { booking: TaskBooking; open: boolean }) {
-  return (
-    <Section icon="calendar" title="الحجز">
-      <dl className="grid gap-1.5 sm:grid-cols-2">
-        <Row icon="document" term="الخدمة">{label(BOOKING_SERVICES, booking.service)}</Row>
-        <Row icon="clock" term="الميعاد"><span className="tabular">{cairoWhen(booking.starts_at)}</span></Row>
-        <Row icon="check-circle" term="الحالة">{label(APPOINTMENT_STATES, booking.state)}</Row>
-        <Row icon="receipt" term="الدفع">{label(PAYMENT_STATES, booking.payment_state) || "—"}</Row>
-      </dl>
-      {booking.service === "consultation_urgent" ? <UrgentNote booking={booking} open={open} /> : null}
-    </Section>
-  );
-}
-
-/** An urgent call's alert to the lawyer: answered, did not go, or sent and waiting. */
-function UrgentNote({ booking, open }: { booking: TaskBooking; open: boolean }) {
-  if (booking.urgent_acked) {
-    return <Note tone="good" icon="check-circle">المستشار داس «هكلمه»، والعميل عرف إنه هيكلمه دلوقتي.</Note>;
-  }
-  if (!open) return null;
-  if (booking.urgent_alert_failed) {
-    return (
-      <Note tone="warn" icon="alert">
-        تنبيه الواتساب ما وصلش للمستشار: كلّمه أو كلّم العميل دلوقتي. رقم المستشار في إعدادات المواعيد ← بيانات المكتب والدفع.
-      </Note>
-    );
-  }
-  return booking.urgent_alerted ? <Note tone="info" icon="clock">اتبعت للمستشار على واتساب، ولسه ما ردّش.</Note> : null;
-}
-
-const NOTE_TONES = {
-  good: "bg-green-bg text-green-ink",
-  warn: "bg-orange-bg text-orange-ink",
-  bad: "border border-red-ink/30 bg-red-bg text-red-ink",
-  info: "bg-blue-bg text-blue-ink",
-} as const;
-
-function Note({ tone, icon, children }: { tone: keyof typeof NOTE_TONES; icon: IconName; children: ReactNode }) {
-  return (
-    <p className={`flex items-start gap-2 rounded-[12px] px-3 py-2.5 text-[13px] ${NOTE_TONES[tone]}`}>
-      <Icon name={icon} className="mt-0.5 size-4 shrink-0" />
-      <span>{children}</span>
-    </p>
-  );
-}
-
 // «إلغاء المهمة» is apart, at the bottom behind a «متأكد؟»
-const ACTIONS: { action: Exclude<TaskAction, "cancel" | "urgent-ack">; text: string }[] = [
+const ACTIONS: { action: Exclude<TaskAction, "cancel">; text: string }[] = [
   { action: "start", text: "هاشتغل عليها" },
   { action: "done", text: "خلصت" },
 ];
@@ -249,11 +193,8 @@ function Actions({ task }: { task: TaskDetail }) {
   const [chat, setChat] = useState<{ busy: boolean; error?: unknown }>({ busy: false });
   const main = ACTIONS.filter((a) => task.can[a.action]);
   const cancel = task.can.cancel;
-  const ack = !!task.can.urgent_ack;
-  const ackNote = useId();
-  // «خلصت» is the step after «هاشتغل عليها»: while both show, only the first is gold. v1.108: «هكلمه» comes before both.
-  const first = ack ? "urgent-ack" : main[0]?.action;
-  const open = task.state !== "done" && task.state !== "cancelled";
+  // «خلصت» is the step after «هاشتغل عليها»: while both show, only the first is gold
+  const first = main[0]?.action;
 
   return (
     <Section icon="play" title="المهمة">
@@ -263,23 +204,6 @@ function Actions({ task }: { task: TaskDetail }) {
         </Row>
         <Row icon="clock" term="اتفتحت"><span className="tabular">{cairoWhen(task.created_at)}</span></Row>
       </dl>
-
-      {task.escalated_at && open ? (
-        <Note tone="bad" icon="alert-circle">
-          المستشار ما ردّش على الطلب العاجل في وقته، فجه للموظفين ({cairoWhen(task.escalated_at)}): كلّم العميل دلوقتي، أو كلّم المستشار.
-        </Note>
-      ) : null}
-
-      {ack ? (
-        <div className="grid gap-1">
-          <Button variant="primary" busy={act.isPending && act.variables === "urgent-ack"} aria-describedby={ackNote}
-            className="min-h-12 w-full text-[15px]" onClick={() => { assign.reset(); act.mutate("urgent-ack"); }}>
-            <Icon name="phone" className="size-4" />
-            هكلمه
-          </Button>
-          <p id={ackNote} className="text-xs text-ink-soft">زي زرار «هكلمه» في واتساب: العميل بيوصله إن المستشار شاف طلبه وهيكلمه دلوقتي، والطلب ما بيروحش للموظفين.</p>
-        </div>
-      ) : null}
 
       {main.length > 0 ? (
         <div className="grid gap-2">
@@ -291,7 +215,7 @@ function Actions({ task }: { task: TaskDetail }) {
             </Button>
           ))}
         </div>
-      ) : ack ? null : (
+      ) : (
         <p className="flex items-start gap-2 rounded-[12px] bg-green-bg px-3 py-2.5 text-[13px] text-green-ink">
           <Icon name="check-circle" className="mt-0.5 size-4 shrink-0" />
           {task.state === "done" ? "المهمة دي خلصت. مفيش حاجة تانية تتعمل فيها." : task.state === "cancelled" ? "المهمة دي اتلغت. مفيش حاجة تتعمل فيها." : "مفيش حاجة تقدر تعملها في المهمة دي من حسابك."}

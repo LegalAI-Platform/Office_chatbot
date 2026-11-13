@@ -111,27 +111,10 @@ disabled or demoted.
 
 The bell in the top bar shows the alerts a person may see: a task past its due time, an urgent
 task, a client asking for someone, and since v1.105 any other task Hazem opened for the office («عميل محتاج موظف»,
-the line under it says why). Tasks become overdue by themselves (every 3 seconds since v1.106; every 10 from v1.104).
-
-**Since v1.108, whose turn it is only** (the owner: «لو عميل جه وحجز بتلاقي فيه مليون حاجه بتحصل ومليون مكان يتبعت فيه»):
-- **One audience per alert**, in the bell and the e-mail:
-  - a task someone holds: that person only;
-  - the lawyer's work nobody holds (an urgent request, a safety alert, a service to price, an Urfi case to review): the lawyer;
-  - any other task nobody holds: the staff;
-  - a low rating and the system's problems: the manager and the maintenance account.
-- **E-mail only for the urgent and the late** («للعاجل والمتأخر بس، وللشخص المسؤول بس»): «طلب عاجل», «طلب عاجل محدش
-  مسكه», «مهمة اتأخرت» and the system's problems, once, to that audience only (the no-reply sender). The e-mail says only
-  the kind of task and its due time, with a link to the panel. The others stay in the bell and Windows.
-- **A paid urgent call has one task** («طلب عاجل»), linked to its booking:
-  - its page says whether the WhatsApp alert reached the lawyer, did not reach him, or he pressed «هكلمه»;
-  - the lawyer (or the manager) can press **«هكلمه»** on that page too: the client hears the lawyer saw it, and nothing
-    escalates;
-  - not answered in time: the same task turns red («المستشار ما ردّش … فجه للموظفين») and the staff get «طلب عاجل محدش
-    مسكه», with a sound, staying on the screen, and an e-mail. No new task.
-- **Every task of a booking shows the booking** (service, time, its state and the payment) in «الحجز» on its page.
-- **No task is born late:** a booking's message that did not go, a receipt to review again and an unmarked appointment
-  are due an hour later in office hours (10:00 to 23:00 Cairo), or at 10:00 the next morning. «إيصال محتاج مراجعة»
-  opens as soon as a receipt waits, is due before the appointment, and is done by itself once the receipt is reviewed.
+the line under it says why; no e-mail). Each one also goes by e-mail (the no-reply sender) once, to the
+manager, the lawyer and the staff member of the task (everyone, if it is unassigned). The e-mail
+says only the kind of task and its due time, with a link to the panel. Tasks become overdue by
+themselves (every 3 seconds since v1.106; every 10 from v1.104).
 
 **Since v1.104:**
 - **The clients' requests come first.** The red count counts them only. The system's problems (the managers' and
@@ -143,8 +126,7 @@ the line under it says why). Tasks become overdue by themselves (every 3 seconds
   - the title has the kind and the client;
   - under it: what it is about, the number's last 3 digits, its due time, and who has it;
   - never the client's words.
-  An urgent request (and since v1.108 an urgent call nobody answered) stays on the screen and chimes. A system problem
-  comes after the requests, without a sound.
+  An urgent request stays on the screen and chimes. A system problem comes after the requests, without a sound.
   A phone's browser does not show them (no service worker).
 - **At once.** The bell keeps a stream open (`GET /api/panel/alerts/stream`), and a new alert arrives within seconds,
   even in a tab hidden for an hour. Chrome slows a hidden tab's timers to once a minute, so the minute's check stays

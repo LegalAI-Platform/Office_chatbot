@@ -164,10 +164,4 @@ public static class UrgentButtons
 public interface IUrgentCalls
 {
     Task<bool> PressAsync(UrgentPress press, string presserWaId, string turnId, CancellationToken ct);
-
-    /// <summary>
-    /// v1.108: «هكلمه» from the panel (the lawyer may not be on WhatsApp): the same decision as the WhatsApp button, on the
-    /// call's latest receipt. False when there is nothing left to decide.
-    /// </summary>
-    Task<bool> AckAsync(Guid appointmentId, CancellationToken ct);
 }

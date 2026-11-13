@@ -133,7 +133,7 @@ public sealed class ReminderNotices(HazemDbContext db, BookingStore store, ISett
                 continue;
             }
 
-            await store.AddTaskAsync(r.PersonId, key, PendingTask.ReminderFailed, OfficeHours.DueAt(now), ct, r.AppointmentId);
+            await store.AddTaskAsync(r.PersonId, key, PendingTask.ReminderFailed, OfficeHours.DueAt(now), ct);
             await db.Database.ExecuteSqlInterpolatedAsync($"""
                 UPDATE hazem.appointment_reminders SET state = 'failed', error_code = {Code(error)}
                  WHERE id = {r.Id} AND state = 'sending'
