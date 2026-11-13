@@ -310,12 +310,16 @@ public static class PanelEndpoints
             });
         }).RequireAuthorization(PanelAuth.Policy(Permissions.TasksViewOwn));
 
-        // v1.104: the bell's live stream (the owner: «ريل تايم»). It says only that something changed (an alert made or
-        // read); each panel then asks /alerts, which keeps who sees what.
+        // v1.104: the bell's live stream (the owner: «ريل تايم»). It says only that something changed; each panel then asks
+        // again, which keeps who sees what:
+        // - `event: alerts`: an alert was made or read (the page asks /alerts);
+        // - `event: data` (v1.106): the areas of the office's data that changed, by name (`data: tasks,payments`), never a
+        //   row; the pages on the screen that show them ask again.
         // - A comment every 25 s keeps nginx and Cloudflare from closing it.
         // - It ends after 5 minutes, so the browser comes back through the session check, and at once when the API stops.
         // - nginx (the panel's and the edge's) does not buffer it.
-        work.MapGet("/alerts/stream", async (HttpContext ctx, AlertSignal signal, IHostApplicationLifetime life, CancellationToken ct) =>
+        work.MapGet("/alerts/stream", async (HttpContext ctx, AlertSignal alertSignal, DataSignal dataSignal, IHostApplicationLifetime life,
+            CancellationToken ct) =>
         {
             using var both = CancellationTokenSource.CreateLinkedTokenSource(ct, life.ApplicationStopping);
             var stop = both.Token;
@@ -324,29 +328,29 @@ public static class PanelEndpoints
             ctx.Response.Headers["X-Accel-Buffering"] = "no";
             ctx.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpResponseBodyFeature>()?.DisableBuffering();
             var until = DateTimeOffset.UtcNow + StreamFor;
-            var seen = signal.Version;
+            var (seenAlerts, seenData) = (alertSignal.Version, dataSignal.Version);
             try
             {
                 await ctx.Response.WriteAsync("retry: 5000\n\n", stop);
                 await ctx.Response.Body.FlushAsync(stop);
                 while (DateTimeOffset.UtcNow < until)
                 {
-                    var next = signal.Next;
-                    var woke = signal.Version != seen;
-                    if (!woke)
+                    // the next pulses first, then the versions: a pulse in between is never missed
+                    var (nextAlerts, nextData) = (alertSignal.Next, dataSignal.Next);
+                    if (alertSignal.Version == seenAlerts && dataSignal.Version == seenData)
                     {
                         using var tick = CancellationTokenSource.CreateLinkedTokenSource(stop);
-                        woke = await Task.WhenAny(next, Task.Delay(StreamPing, tick.Token)) == next;
+                        await Task.WhenAny(nextAlerts, nextData, Task.Delay(StreamPing, tick.Token));
                         await tick.CancelAsync();
                         stop.ThrowIfCancellationRequested();
                     }
 
-                    if (woke)
-                    {
-                        seen = signal.Version;
-                    }
-
-                    await ctx.Response.WriteAsync(woke ? "event: alerts\ndata: new\n\n" : ": ping\n\n", stop);
+                    var (alerts, data) = (alertSignal.Version, dataSignal.Version);
+                    IReadOnlyList<string> areas = data != seenData ? dataSignal.ChangedSince(seenData) : [];
+                    var said = (alerts != seenAlerts ? "event: alerts\ndata: new\n\n" : "")
+                        + (areas.Count > 0 ? $"event: data\ndata: {string.Join(',', areas)}\n\n" : "");
+                    (seenAlerts, seenData) = (alerts, data);
+                    await ctx.Response.WriteAsync(said.Length > 0 ? said : ": ping\n\n", stop);
                     await ctx.Response.Body.FlushAsync(stop);
                 }
             }

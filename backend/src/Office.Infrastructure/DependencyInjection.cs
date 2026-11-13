@@ -112,6 +112,7 @@ public static class DependencyInjection
         services.AddScoped<Application.Panel.IPanelAlertStore, Panel.PanelAlertStore>();
         services.AddScoped<Application.Panel.PanelAlerts>();
         services.AddSingleton<Application.Panel.AlertSignal>(); // v1.104: wakes the bell's live stream
+        services.AddSingleton<Application.Panel.DataSignal>(); // v1.106: wakes the same stream when the home's data changed
         services.AddScoped<Panel.PanelTools>();
         services.AddScoped<Panel.PanelTesting>();
         services.AddScoped<Panel.PanelPrices>(); // TASK 06

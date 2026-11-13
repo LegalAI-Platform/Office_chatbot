@@ -152,6 +152,45 @@ public sealed class PanelAlertStore(HazemDbContext db) : IPanelAlertStore
     public Task<int> UnreadSystemAsync(Viewer viewer, CancellationToken ct) =>
         Visible(viewer).CountAsync(a => a.Kind == AlertKinds.System && !db.PanelAlertReads.Any(r => r.AlertId == a.Id && r.UserId == viewer.UserId), ct);
 
+    /// <summary>
+    /// v1.106: the areas of the office's data the panel shows, and the rows each one is read from. The panel's
+    /// shared/api/alerts.ts says which pages each area asks again: a new area goes in both.
+    /// A row's xmin is the transaction that wrote its current version: an insert or an update gives it a new one and a
+    /// removal drops one, so an area's count and sum of xmin move with any change, from the panel, Hazem, n8n or a job.
+    /// </summary>
+    private static readonly (string Area, string[] Parts)[] DataAreas =
+    [
+        ("tasks", [Rows("staff_tasks")]),
+        ("appointments", [Rows("appointments")]),
+        ("payments", [Rows("payments"), Rows("payment_receipts")]),
+        ("services", [Rows("service_orders"), Rows("service_files"), Rows("service_ratings")]),
+        ("urf", [Rows("urf_cases"), Rows("urf_files")]),
+        // a client's own row changes with his messages (his WhatsApp name): only a new client counts there
+        ("clients", [Count("persons"), Rows("intakes")]),
+        ("ai", [Count("ai_usage")]), // only ever added to
+        ("lists", [Rows("list_entries")]),
+        ("muted", [Rows("conversations", "state = 'muted'")]),
+        ("texts", [Rows("approved_texts")]),
+        ("settings", [Rows("settings")]), // the prices, the booking's settings and the office's data
+        ("booking", [Rows("booking_weekly_hours"), Rows("booking_exceptions"), Rows("booking_changes")]),
+        ("users", [Rows("panel_users"), Rows("staff")]),
+    ];
+
+    private static readonly string DataStampSql = "SELECT concat_ws(';', "
+        + string.Join(", ", DataAreas.Select(a => $"'{a.Area}=' || concat_ws(',', {string.Join(", ", a.Parts)})"))
+        + ") AS \"Value\"";
+
+    private static string Rows(string table, string? where = null) =>
+        $"(SELECT count(*)::text || ':' || coalesce(sum(xmin::text::bigint), 0)::text FROM hazem.{table}{(where is null ? "" : " WHERE " + where)})";
+
+    private static string Count(string table) => $"(SELECT count(*)::text FROM hazem.{table})";
+
+    public async Task<IReadOnlyDictionary<string, string>> DataStampsAsync(CancellationToken ct)
+    {
+        var line = await db.Database.SqlQueryRaw<string>(DataStampSql).SingleAsync(ct);
+        return line.Split(';').Select(a => a.Split('=', 2)).ToDictionary(a => a[0], a => a[1], StringComparer.Ordinal);
+    }
+
     public async Task MarkReadAsync(Viewer viewer, IReadOnlyList<long>? ids, CancellationToken ct)
     {
         var visible = Visible(viewer);
@@ -192,9 +231,10 @@ public sealed class PanelAlertStore(HazemDbContext db) : IPanelAlertStore
 }
 
 /// <summary>
-/// Every 10 seconds (Alerts:IntervalSeconds; every minute before v1.104): tasks past their due time become overdue
+/// Every 3 seconds (Alerts:IntervalSeconds; every 10 from v1.104 to v1.105, every minute before): tasks past their due time become overdue
 /// (S-05), and new alerts are made and mailed. The open panels hear them at once (<see cref="AlertSignal"/>). The system's
-/// checks stay once a minute, because a client's request comes first (the owner, 2026-11-12). Off in tests
+/// checks stay once a minute, because a client's request comes first (the owner, 2026-11-12). v1.106: every round also
+/// looks which areas of the office's data changed, and wakes the open panels the same way (<see cref="DataSignal"/>). Off in tests
 /// (Alerts:RunWorker=false): they call the steps themselves.
 /// </summary>
 public sealed class AlertWorker(IServiceScopeFactory scopes, IConfiguration config, ILogger<AlertWorker> log) : BackgroundService
@@ -209,7 +249,8 @@ public sealed class AlertWorker(IServiceScopeFactory scopes, IConfiguration conf
         }
 
         var panelUrl = config["Panel:PublicUrl"] is { Length: > 0 } u ? u : "http://127.0.0.1:8080";
-        var every = TimeSpan.FromSeconds(Math.Clamp(config.GetValue("Alerts:IntervalSeconds", 10), 1, 60));
+        // v1.106 (the owner: «خليها 3 ثواني»): every 3 seconds, so the bell and every open page hear within 3
+        var every = TimeSpan.FromSeconds(Math.Clamp(config.GetValue("Alerts:IntervalSeconds", 3), 1, 60));
         DateTimeOffset systemAt = DateTimeOffset.MinValue, warnedAt = DateTimeOffset.MinValue;
         while (!stop.IsCancellationRequested)
         {
@@ -223,7 +264,9 @@ public sealed class AlertWorker(IServiceScopeFactory scopes, IConfiguration conf
                 }
 
                 var overdue = await scope.ServiceProvider.GetRequiredService<Lists.TaskMaintenance>().MarkOverdueAsync(stop);
-                var (made, mailed, failed, error) = await scope.ServiceProvider.GetRequiredService<PanelAlerts>().RunAsync(panelUrl, stop, system);
+                var alerts = scope.ServiceProvider.GetRequiredService<PanelAlerts>();
+                await alerts.WatchDataAsync(stop); // v1.106: before the e-mails, which may take a while
+                var (made, mailed, failed, error) = await alerts.RunAsync(panelUrl, stop, system);
                 if (overdue + made + mailed > 0)
                 {
                     log.LogInformation("Alerts: {Overdue} task(s) overdue, {Made} alert(s), {Mailed} e-mail(s)", overdue, made, mailed);

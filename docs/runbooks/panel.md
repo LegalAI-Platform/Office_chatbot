@@ -114,7 +114,7 @@ task, a client asking for someone, and since v1.105 any other task Hazem opened 
 the line under it says why; no e-mail). Each one also goes by e-mail (the no-reply sender) once, to the
 manager, the lawyer and the staff member of the task (everyone, if it is unassigned). The e-mail
 says only the kind of task and its due time, with a link to the panel. Tasks become overdue by
-themselves (every 10 seconds since v1.104).
+themselves (every 3 seconds since v1.106; every 10 from v1.104).
 
 **Since v1.104:**
 - **The clients' requests come first.** The red count counts them only. The system's problems (the managers' and
@@ -131,6 +131,14 @@ themselves (every 10 seconds since v1.104).
 - **At once.** The bell keeps a stream open (`GET /api/panel/alerts/stream`), and a new alert arrives within seconds,
   even in a tab hidden for an hour. Chrome slows a hidden tab's timers to once a minute, so the minute's check stays
   only as the fallback.
+- **Every page at once (v1.106).** The same stream also names the areas of the office's data that changed (the api
+  looks every 3 seconds, whoever changed them: the panel, Hazem, n8n or a job). Every page on the screen that shows
+  them asks again:
+  - the home, with the side bar's late dot;
+  - the tasks, appointments, receipts, services, urf and reports pages;
+  - the settings pages: the lists, the muted conversations, the texts, the prices, the booking and the accounts.
+  Whoever starts, finishes, cancels or assigns a task sees the home's numbers change at once. The pages that asked
+  every minute still do, as the fallback. Not in it: the chats (Chatwoot has its own) and the testing tools.
 - **Blocked by mistake:** the browser's site settings (the icon left of the address) → Notifications → Allow.
 
 ## The office's tools (TASK 07c; the manager and the lawyer)
