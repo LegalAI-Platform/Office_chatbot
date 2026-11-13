@@ -27,6 +27,61 @@ public static class AlertKinds
     /// someone (the owner: «نشوف حل عام»). Whoever may see the task hears at once, in the bell and Windows; no e-mail.
     /// </summary>
     public const string New = "task_new";
+
+    /// <summary>
+    /// v1.108 (migration 0077, the owner: «الموظف»): an urgent call nobody took in time. Its own task reached the staff,
+    /// instead of a new «urgent_call_unanswered» task. Like an urgent request: Windows keeps it on the screen, with a sound.
+    /// </summary>
+    public const string Escalated = "task_escalated";
+
+    /// <summary>v1.108 (the owner: «الإيميل للعاجل والمتأخر بس»): the kinds that are also e-mailed. The others are the bell's only.</summary>
+    public static readonly IReadOnlyList<string> Mailed = [Urgent, Escalated, Overdue, System];
+}
+
+/// <summary>
+/// v1.108 (the owner: «التنبيه يروح للي عليه الدور بس»): whose job an alert is. It is not a permission: the maintenance
+/// account may open everything, yet the office's daily alerts are not its job.
+/// <list type="bullet">
+/// <item>A task someone holds: that person only.</item>
+/// <item><see cref="Lawyer"/>: an urgent call (until it is escalated), pricing a service, an Urfi case's review.</item>
+/// <item><see cref="Office"/>: the staff. Everything else Hazem opens, and an urgent call nobody took in time.</item>
+/// <item><see cref="Managers"/>: the system's problems and a low rating (the manager and the maintenance account).</item>
+/// </list>
+/// </summary>
+public static class AlertAudience
+{
+    public const string Lawyer = "lawyer";
+    public const string Office = "office";
+    public const string Managers = "managers";
+
+    /// <summary>The task types that are the lawyer's while nobody holds them and they are not escalated.</summary>
+    public static readonly IReadOnlyList<string> LawyerWork =
+        ["urgent_request", "safety_alert", "urgent_call_failed", "urgent_call_unanswered", "service_pricing", "urf_review"];
+
+    public const string RatingType = "rating_low";
+
+    /// <summary>The audience a signed-in role belongs to.</summary>
+    public static string Of(string role) => role switch
+    {
+        Permissions.Lawyer => Lawyer,
+        Permissions.Staff => Office,
+        _ => Managers, // the manager and the maintenance account
+    };
+
+    /// <summary>The roles whose accounts get an audience's e-mails.</summary>
+    public static IReadOnlyList<string> Roles(string audience) => audience switch
+    {
+        Lawyer => [Permissions.Lawyer],
+        Office => [Permissions.Staff],
+        _ => [Permissions.Manager, Permissions.Maintenance],
+    };
+
+    /// <summary>Whose job an unheld alert is (a held task's alerts are its holder's, but a rating's and the system's).</summary>
+    public static string For(string kind, string? taskType, bool escalated) =>
+        kind == AlertKinds.System || kind == AlertKinds.Rating || taskType == RatingType ? Managers
+        : kind == AlertKinds.Escalated || escalated ? Office
+        : taskType is not null && LawyerWork.Contains(taskType) ? Lawyer
+        : Office;
 }
 
 /// <summary>What a system alert is about (hazem.panel_alerts.system_what).</summary>
@@ -52,8 +107,9 @@ public sealed record PanelAlert(long Id, string Kind, Guid? TaskId, string? Task
     DateTimeOffset CreatedAt, bool Read, string? SystemWhat = null, string? PhoneLast3 = null, string? MatterType = null,
     string? StaffName = null);
 
-/// <summary>An alert whose e-mail has not gone out yet.</summary>
-public sealed record AlertToMail(long Id, string Kind, Guid? TaskId, string? TaskType, DateTimeOffset? DueAt, Guid? StaffId, string? SystemWhat = null);
+/// <summary>An alert whose e-mail has not gone out yet. v1.108: <paramref name="Escalated"/>, its urgent task reached the staff.</summary>
+public sealed record AlertToMail(long Id, string Kind, Guid? TaskId, string? TaskType, DateTimeOffset? DueAt, Guid? StaffId, string? SystemWhat = null,
+    bool Escalated = false);
 
 public interface IPanelAlertStore
 {
@@ -63,10 +119,10 @@ public interface IPanelAlertStore
     /// <summary>TASK 13: an alert for every failed nightly job, and one for every hour n8n workflows failed in.</summary>
     Task<int> MakeSystemAsync(CancellationToken ct);
 
-    /// <summary>The e-mail of every active manager (a system alert is theirs only).</summary>
-    Task<IReadOnlyList<string>> ManagersAsync(CancellationToken ct);
-
-    /// <summary>Not e-mailed yet, from the last day only (an old backlog is never mailed in a burst).</summary>
+    /// <summary>
+    /// Not e-mailed yet, from the last day only (an old backlog is never mailed in a burst). v1.108: the kinds in
+    /// <see cref="AlertKinds.Mailed"/> only.
+    /// </summary>
     Task<IReadOnlyList<AlertToMail>> UnsentAsync(CancellationToken ct);
 
     Task MarkEmailedAsync(long id, CancellationToken ct);
@@ -74,8 +130,11 @@ public interface IPanelAlertStore
     /// <summary>Alerts whose task was finished before the e-mail: marked as handled, never mailed.</summary>
     Task<int> DropFinishedAsync(CancellationToken ct);
 
-    /// <summary>The e-mail of every active account that may see a task with this staff member (null: unassigned).</summary>
-    Task<IReadOnlyList<string>> RecipientsAsync(Guid? staffId, CancellationToken ct);
+    /// <summary>
+    /// v1.108: the e-mail of every active account whose job the alert is: the task's holder, else its
+    /// <see cref="AlertAudience"/>.
+    /// </summary>
+    Task<IReadOnlyList<string>> RecipientsAsync(AlertToMail alert, CancellationToken ct);
 
     Task<IReadOnlyList<PanelAlert>> ListAsync(Viewer viewer, int limit, CancellationToken ct);
 
@@ -191,8 +250,8 @@ public sealed class PanelAlerts(IPanelAlertStore store, IPanelMailer mailer, Ale
         foreach (var alert in await store.UnsentAsync(ct))
         {
             var isSystem = alert.Kind == AlertKinds.System;
-            var managers = isSystem || alert.Kind == AlertKinds.Rating; // v1.31: a low rating is the managers' too
-            foreach (var to in managers ? await store.ManagersAsync(ct) : await store.RecipientsAsync(alert.StaffId, ct))
+            // v1.108: only whose job it is (the holder, else its audience), never everyone who may see the task
+            foreach (var to in await store.RecipientsAsync(alert, ct))
             {
                 try
                 {

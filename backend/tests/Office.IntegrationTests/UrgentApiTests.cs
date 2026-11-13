@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
+using Office.Application.Panel;
 using Office.Infrastructure.Booking;
 
 namespace Office.IntegrationTests;
@@ -118,6 +119,31 @@ public sealed class UrgentApiTests(TestDatabase db) : IAsyncLifetime
         return await scope.ServiceProvider.GetRequiredService<UrgentNotices>().RunAsync(Ct);
     }
 
+    private const string Password = "a long test password 1";
+
+    /// <summary>v1.108: a panel account of that role, signed in.</summary>
+    private async Task<HttpClient> SignIn(string name, string role, string? staff = null)
+    {
+        using (var scope = _factory.Services.CreateScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<PanelAccounts>().CreateAsync(null,
+                new PanelAccounts.NewAccount(name, name, $"{name}@example.test", role, staff), Password, Ct);
+        }
+
+        var c = _factory.CreateClient();
+        await Csrf(c);
+        Assert.Equal(HttpStatusCode.OK, (await c.PostAsJsonAsync("/api/panel/auth/login", new { username = name, password = Password }, Ct)).StatusCode);
+        await Csrf(c);
+        return c;
+    }
+
+    private static async Task Csrf(HttpClient c)
+    {
+        var body = await c.GetFromJsonAsync<JsonNode>("/api/panel/auth/csrf", Ct);
+        c.DefaultRequestHeaders.Remove("X-CSRF-TOKEN");
+        c.DefaultRequestHeaders.Add("X-CSRF-TOKEN", (string)body!["token"]!);
+    }
+
     private List<JsonNode> SentSince(int from) => _factory.N8n.Requests.Skip(from).Select(r => JsonNode.Parse(r.Body)!).ToList();
 
     private Task<Guid> LatestReceipt(Guid call) => db.ScalarAsync<Guid>($"""
@@ -229,7 +255,7 @@ public sealed class UrgentApiTests(TestDatabase db) : IAsyncLifetime
     }
 
     [Fact]
-    public async Task No_decision_in_time_goes_to_the_manager_the_client_hears_urgent_waiting_once_and_the_managers_get_an_urgent_task()
+    public async Task No_decision_in_time_goes_to_the_manager_the_client_hears_urgent_waiting_once_and_the_call_s_own_task_reaches_the_staff()
     {
         var call = await Paid();
         await Worker();
@@ -243,14 +269,17 @@ public sealed class UrgentApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal(2, sent.Count);
         IsAlert(sent[0], Manager, call);
         Assert.Equal((Client, "بنتواصل مع المستشار دلوقتي، وهيكلم حضرتك."), ((string)sent[1]["wa_id"]!, (string)sent[1]["text"]!));
-        Assert.Equal(1L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.staff_tasks WHERE type = 'urgent_call_unanswered'"));
+        // v1.108 (the owner: «الموظف»): no new task. The call's own task reached the staff, and they get one alert.
+        Assert.Equal(0L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.staff_tasks WHERE type = 'urgent_call_unanswered'"));
+        Assert.Equal(1L, await db.ScalarAsync<long>(
+            $"SELECT count(*) FROM hazem.staff_tasks WHERE type = 'urgent_request' AND appointment_id = '{call}' AND escalated_at IS NOT NULL"));
         using (var scope = _factory.Services.CreateScope())
         {
             await scope.ServiceProvider.GetRequiredService<Office.Application.Panel.IPanelAlertStore>().MakeAsync(Ct);
         }
 
-        Assert.Equal("task_urgent", await db.ScalarAsync<string>(
-            "SELECT a.kind FROM hazem.panel_alerts a JOIN hazem.staff_tasks t ON t.id = a.task_id WHERE t.type = 'urgent_call_unanswered'"));
+        Assert.Equal(1L, await db.ScalarAsync<long>(
+            $"SELECT count(*) FROM hazem.panel_alerts a JOIN hazem.staff_tasks t ON t.id = a.task_id WHERE t.appointment_id = '{call}' AND a.kind = 'task_escalated'"));
 
         _clock.Advance(TimeSpan.FromMinutes(20));
         before = _factory.N8n.Requests.Count;
@@ -263,30 +292,62 @@ public sealed class UrgentApiTests(TestDatabase db) : IAsyncLifetime
         Assert.All(SentSince(before), s => Assert.Equal(Manager, (string)s["wa_id"]!));
     }
 
+    // v1.108 (the owner: «مليون حاجة بتحصل»): the lawyer may press «هكلمه» in the panel too, on the call's own task (he may
+    // not be on WhatsApp): the client hears urgent_seen, and nothing escalates. Once; the staff may not.
     [Fact]
-    public async Task Without_the_lawyer_s_number_or_with_the_template_refused_the_office_gets_an_urgent_task_once()
+    public async Task V1108_the_lawyer_presses_the_call_back_in_the_panel_and_the_call_is_never_escalated()
+    {
+        var call = await Paid();
+        await Worker(); // the alert, and the call's one task linked to its booking
+        var task = await db.ScalarAsync<Guid>($"SELECT id FROM hazem.staff_tasks WHERE type = 'urgent_request' AND appointment_id = '{call}'");
+        var lawyer = await SignIn("saad", Permissions.Lawyer);
+        var detail = (await lawyer.GetFromJsonAsync<JsonNode>($"/api/panel/tasks/{task}", Ct))!;
+        Assert.True((bool)detail["can"]!["urgent_ack"]!);
+        Assert.Equal(("consultation_urgent", "confirmed", false), ((string)detail["booking"]!["service"]!, (string)detail["booking"]!["state"]!,
+            (bool)detail["booking"]!["urgent_acked"]!));
+
+        var before = _factory.N8n.Requests.Count;
+        var r = await lawyer.PostAsync($"/api/panel/tasks/{task}/urgent-ack", null, Ct);
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        Assert.Equal("المستشار شاف طلب حضرتك، وهيكلمك دلوقتي.", (string)Assert.Single(SentSince(before))["text"]!);
+        Assert.False((bool)(await r.Content.ReadFromJsonAsync<JsonNode>(Ct))!["can"]!["urgent_ack"]!);
+        Assert.Equal(HttpStatusCode.Conflict, (await lawyer.PostAsync($"/api/panel/tasks/{task}/urgent-ack", null, Ct)).StatusCode); // once
+
+        _clock.Advance(TimeSpan.FromMinutes(11));
+        Assert.Equal(0, await Worker()); // decided: nobody is waiting
+        Assert.Equal(0L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.staff_tasks WHERE escalated_at IS NOT NULL"));
+        var staff = await SignIn("yasmin", Permissions.Staff, "ياسمين");
+        Assert.Equal(HttpStatusCode.Forbidden, (await staff.PostAsync($"/api/panel/tasks/{task}/urgent-ack", null, Ct)).StatusCode);
+    }
+
+    // v1.108 (the owner: «مليون حاجة بتحصل»): an alert that could not go opens no task of its own. The call keeps its one
+    // task, linked to the booking, and the booking says the alert did not go (the task's page shows it).
+    [Fact]
+    public async Task Without_the_lawyer_s_number_the_call_s_one_task_says_the_alert_did_not_go_with_no_new_task()
     {
         await db.SetAsync("office.lawyer_whatsapp", "");
-        await Paid();
+        var call = await Paid();
         var before = _factory.N8n.Requests.Count;
         Assert.Equal(1, await Worker());
         Assert.Empty(SentSince(before)); // nothing to send to
-        Assert.Equal(1L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.staff_tasks WHERE type = 'urgent_call_failed'"));
+        Assert.Equal(0L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.staff_tasks WHERE type = 'urgent_call_failed'"));
+        Assert.True(await db.ScalarAsync<bool>($"SELECT urgent_alert_failed_at IS NOT NULL FROM hazem.appointments WHERE id = '{call}'"));
         Assert.Equal(0, await Worker()); // never a retry in a loop
-        Assert.Equal(1L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.staff_tasks WHERE type = 'urgent_call_failed'"));
+        Assert.Equal(1L, await db.ScalarAsync<long>($"SELECT count(*) FROM hazem.staff_tasks WHERE type = 'urgent_request' AND appointment_id = '{call}'"));
     }
 
     [Fact]
-    public async Task The_template_refused_by_meta_is_an_urgent_task()
+    public async Task The_template_refused_by_meta_is_said_on_the_call_s_task()
     {
-        await Paid();
+        var call = await Paid();
         _factory.N8n.Responder = _ => new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent(new JsonObject { ["ok"] = false, ["status"] = "failed", ["error_code"] = "TEMPLATE_NOT_APPROVED" }.ToJsonString(),
                 Encoding.UTF8, "application/json"),
         };
         Assert.Equal(1, await Worker());
-        Assert.Equal(1L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.staff_tasks WHERE type = 'urgent_call_failed'"));
+        Assert.Equal(0L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.staff_tasks WHERE type = 'urgent_call_failed'"));
+        Assert.True(await db.ScalarAsync<bool>($"SELECT urgent_alert_failed_at IS NOT NULL FROM hazem.appointments WHERE id = '{call}'"));
     }
 
     [Fact]

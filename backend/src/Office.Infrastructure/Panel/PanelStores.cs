@@ -280,9 +280,18 @@ public sealed class PanelTaskStore(HazemDbContext db, TimeProvider clock) : IPan
         var intake = t.IntakeId is { } iid ? await db.Intakes.AsNoTracking().FirstOrDefaultAsync(i => i.Id == iid, ct) : null;
         var staff = t.StaffId is { } sid ? await db.Staff.AsNoTracking().FirstOrDefaultAsync(s => s.Id == sid, ct) : null;
         var turn = await db.Turns.AsNoTracking().FirstOrDefaultAsync(x => x.TurnId == t.TurnId, ct);
+        // v1.108: the booking it belongs to (0077)
+        var booking = t.AppointmentId is { } aid
+            ? await (from a in db.Appointments.AsNoTracking()
+                     join p in db.Payments.AsNoTracking() on (Guid?)a.Id equals p.AppointmentId into ps
+                     from p in ps.DefaultIfEmpty()
+                     where a.Id == aid
+                     select new TaskBooking(a.Id, a.Service, a.StartsAt, a.State, p == null ? null : p.State,
+                         a.UrgentAlertedAt, a.UrgentAlertFailedAt, a.UrgentAckedAt)).FirstOrDefaultAsync(ct)
+            : null;
         return new TaskRecord(t.Id, t.Type, t.State, t.DueAt, t.CreatedAt, staff is null ? null : new StaffRef(staff.Id, staff.Name),
             person.OfficeName, person.WaId, intake?.ClientType, person.Source, conversation?.State,
-            intake?.MatterType, intake?.MatterSubtype, turn is null ? [] : ClientWords(turn.Messages));
+            intake?.MatterType, intake?.MatterSubtype, turn is null ? [] : ClientWords(turn.Messages), booking, t.EscalatedAt);
     }
 
     public async Task<ClientFileRef?> FileAsync(Guid taskId, int index, CancellationToken ct)

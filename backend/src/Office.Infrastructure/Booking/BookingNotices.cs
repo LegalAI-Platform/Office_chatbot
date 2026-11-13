@@ -74,13 +74,13 @@ public sealed class BookingNotices(HazemDbContext db, BookingStore store, Bookin
             var told = await notices.SendAsync(x.WaId, $"booking:{a.Id:N}:{Short(kind)}", Requester, step, active, ct);
             if (!told)
             {
-                await store.AddTaskAsync(a.PersonId, $"booking:{a.Id:N}:{Short(kind)}", PendingTask.BookingMessageFailed, OfficeHours.DueAt(now), ct);
+                await store.AddTaskAsync(a.PersonId, $"booking:{a.Id:N}:{Short(kind)}", PendingTask.BookingMessageFailed, OfficeHours.DueAt(now), ct, a.Id);
             }
 
             if (kind == "office_cancelled" && !bookingOn)
             {
                 // The client cannot pick a new time from WhatsApp: the staff arrange it or the refund.
-                await store.AddTaskAsync(a.PersonId, $"booking:{a.Id:N}:office", PendingTask.OfficeCancelled, OfficeHours.DueAt(now), ct);
+                await store.AddTaskAsync(a.PersonId, $"booking:{a.Id:N}:office", PendingTask.OfficeCancelled, OfficeHours.DueAt(now), ct, a.Id);
             }
 
             await db.Database.ExecuteSqlInterpolatedAsync(
@@ -110,7 +110,7 @@ public sealed class BookingNotices(HazemDbContext db, BookingStore store, Bookin
             var told = await notices.SendAsync(x.WaId, id, Requester, new ReplyStep(key, null, fill), active, ct);
             if (!told)
             {
-                await store.AddTaskAsync(a.PersonId, id, PendingTask.BookingMessageFailed, OfficeHours.DueAt(now), ct);
+                await store.AddTaskAsync(a.PersonId, id, PendingTask.BookingMessageFailed, OfficeHours.DueAt(now), ct, a.Id);
             }
 
             await db.Database.ExecuteSqlInterpolatedAsync(
@@ -174,28 +174,41 @@ public sealed class BookingNotices(HazemDbContext db, BookingStore store, Bookin
     }
 
     /// <summary>
-    /// 1.25 (B-08): a confirmed appointment starting soon whose transfer is still waiting for its review. v1.38: not an urgent
-    /// call while the call-back runs (v1.33): the lawyer checks its transfer himself before he calls; the panel's review stays
-    /// for the accounts, without a task.
+    /// 1.25 (B-08): a confirmed appointment whose transfer is waiting for its review. v1.38: not an urgent call while the
+    /// call-back runs (v1.33): the lawyer checks its transfer himself before he calls; the panel's review stays for the
+    /// accounts, without a task.
+    /// v1.108 (the owner: «مليون حاجة بتحصل»): the review task opens as soon as the receipt waits, so the staff hear it once,
+    /// then. It is due booking.review_alert_minutes before the appointment (never less than 10 minutes from now: no task is
+    /// born late), and it closes by itself once the transfer is reviewed, whoever reviewed it.
     /// </summary>
     private async Task AlertUnreviewedAsync(CancellationToken ct)
     {
         var now = clock.GetUtcNow();
         var settings = await settingsReader.GetAsync(ct);
         var minutes = int.TryParse(settings.Get(BookingSettings.ReviewAlertKey), out var m) && m > 0 ? m : BookingSettings.DefaultReviewAlertMinutes;
-        var soon = now.AddMinutes(minutes);
         var active = await texts.GetActiveAsync(settings, ct);
         var callBack = UrgentTexts.Keys.All(active.ContainsKey);
-        var late = await (from a in db.Appointments.AsNoTracking()
-                          join pay in db.Payments.AsNoTracking() on (Guid?)a.Id equals pay.AppointmentId
-                          where a.State == AppointmentInfo.Confirmed && a.StartsAt > now && a.StartsAt <= soon
-                                && (!callBack || a.Service != BookingService.Urgent.Code)
-                                && (pay.State == PaymentInfo.ProofReceived || pay.State == PaymentInfo.DuplicateSuspected)
-                          select new { a.Id, a.PersonId }).Take(Batch).ToListAsync(ct);
-        foreach (var x in late)
-        {
-            await store.AddTaskAsync(x.PersonId, $"booking:{x.Id:N}:review", PendingTask.PaymentReviewDue, now, ct);
-        }
+        var utc = now.ToUniversalTime();
+        // One task per booking (its key), in one statement however many wait.
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO hazem.staff_tasks (person_id, turn_id, type, due_at, appointment_id)
+            SELECT a.person_id, 'booking:' || replace(a.id::text, '-', '') || ':review', {PendingTask.PaymentReviewDue},
+                   GREATEST(a.starts_at - make_interval(mins => {minutes}), {utc.AddMinutes(10)}), a.id
+              FROM hazem.appointments a JOIN hazem.payments p ON p.appointment_id = a.id
+             WHERE a.state = 'confirmed' AND a.starts_at > {utc}
+               AND (NOT {callBack} OR a.service <> {BookingService.Urgent.Code})
+               AND p.state IN ('proof_received', 'duplicate_suspected')
+            ON CONFLICT (turn_id, type) DO NOTHING
+            """, ct);
+
+        // Reviewed (verified, partly, not received), refunded or the booking gone: its review task is done.
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE hazem.staff_tasks t SET state = 'done'
+              FROM hazem.appointments a LEFT JOIN hazem.payments p ON p.appointment_id = a.id
+             WHERE t.appointment_id = a.id AND t.turn_id = 'booking:' || replace(a.id::text, '-', '') || ':review'
+               AND t.state IN ('open', 'in_progress', 'overdue')
+               AND (a.state <> 'confirmed' OR p.state IS NULL OR p.state NOT IN ('proof_received', 'duplicate_suspected'))
+            """, ct);
     }
 
     /// <summary>
@@ -221,8 +234,19 @@ public sealed class BookingNotices(HazemDbContext db, BookingStore store, Bookin
                                 select new { a.Id, a.PersonId }).Take(Batch).ToListAsync(ct);
         foreach (var x in unreviewed)
         {
-            await store.AddTaskAsync(x.PersonId, $"booking:{x.Id:N}:unmarked", PendingTask.AppointmentUnmarked, now, ct);
+            // v1.108: due by the office's hours like any task, never born late
+            await store.AddTaskAsync(x.PersonId, $"booking:{x.Id:N}:unmarked", PendingTask.AppointmentUnmarked, OfficeHours.DueAt(now), ct, x.Id);
         }
+
+        // v1.108: a booking marked «خلص» / «ماحضرش», cancelled or done by itself needs nobody any more: the task that waited
+        // for that mark, and the urgent call's task, are done.
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE hazem.staff_tasks t SET state = 'done'
+              FROM hazem.appointments a
+             WHERE t.appointment_id = a.id AND a.state <> 'confirmed'
+               AND t.type IN ({PendingTask.AppointmentUnmarked}, {PendingTask.UrgentRequest})
+               AND t.state IN ('open', 'in_progress', 'overdue')
+            """, ct);
     }
 
     private static Dictionary<string, string> When(AppointmentRow a, DateTimeOffset now) => new()

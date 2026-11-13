@@ -120,8 +120,11 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
 
     // ---------- alerts ----------
 
+    // v1.108 (the owner: «التنبيه يروح للي عليه الدور بس» and «الإيميل للعاجل والمتأخر بس، وللمسؤول بس»): an alert is
+    // the job of the task's holder, else of its audience (the lawyer, the staff, the managers); only the urgent, the escalated
+    // and the overdue ones are e-mailed.
     [Fact]
-    public async Task Alerts_reach_who_may_see_the_task_once_and_the_email_has_no_client_details()
+    public async Task Alerts_reach_whose_job_they_are_once_and_only_the_urgent_and_the_late_are_emailed_without_client_details()
     {
         var urgent = await NewTask("urgent_request", staff: _staffA);
         var unassigned = await NewTask("human_requested");
@@ -132,26 +135,32 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal((0, 0), await RunAlerts()); // once
         Assert.Equal("overdue", await db.ScalarAsync<string>($"SELECT state FROM hazem.staff_tasks WHERE id = '{late}'"));
 
-        // E-mails: the urgent one to yasmin, the boss and the lawyer, never karim; nothing about the client.
-        var urgentMails = _factory.Mail.Sent.Where(m => m.Text.Contains(urgent.ToString(), StringComparison.Ordinal)).Select(m => m.To).ToList();
-        Assert.Equal(["boss@example.test", "lawyer@example.test", "yasmin@example.test"], urgentMails.Order(StringComparer.Ordinal));
+        // E-mails: the urgent one to yasmin, who holds it; the late one to karim, who holds it; nothing for the client
+        // asking for someone (the bell only); and nothing about the client in any of them.
+        string[] To(Guid task) => [.. _factory.Mail.Sent.Where(m => m.Text.Contains(task.ToString(), StringComparison.Ordinal)).Select(m => m.To).Order(StringComparer.Ordinal)];
+        Assert.Equal(["yasmin@example.test"], To(urgent));
+        Assert.Equal(["karim@example.test"], To(late));
+        Assert.Empty(To(unassigned));
         Assert.All(_factory.Mail.Sent, m =>
         {
             Assert.DoesNotContain("سارة", m.Text);
             Assert.DoesNotContain("2010", m.Text);
             Assert.DoesNotContain("البطاقة", m.Text);
         });
-        Assert.Equal(4, _factory.Mail.Sent.Count(m => m.Text.Contains(unassigned.ToString(), StringComparison.Ordinal))); // everyone
 
-        // The bell: yasmin sees hers and the unassigned one, not karim's.
+        // The bell: yasmin hears hers and the unassigned one (the staff's), not karim's.
         var yasmin = await SignIn("yasmin");
         var bell = (await yasmin.GetFromJsonAsync<JsonNode>("/api/panel/alerts", Ct))!;
         Assert.Equal(2, (int)bell["unread"]!);
         Assert.DoesNotContain(bell["items"]!.AsArray(), a => (Guid)a!["task_id"]! == late);
         await yasmin.PostAsJsonAsync("/api/panel/alerts/read", new { ids = (long[]?)null }, Ct);
         Assert.Equal(0, (int)(await yasmin.GetFromJsonAsync<JsonNode>("/api/panel/alerts", Ct))!["unread"]!);
-        var boss = await SignIn("boss");
-        Assert.Equal(4, (int)(await boss.GetFromJsonAsync<JsonNode>("/api/panel/alerts", Ct))!["unread"]!);
+        // karim: his late task's two, and the unassigned one
+        Assert.Equal(3, (int)(await (await SignIn("karim")).GetFromJsonAsync<JsonNode>("/api/panel/alerts", Ct))!["unread"]!);
+        // the boss and the lawyer: none of these is their job (the boss: the system's and a low rating; the lawyer: an
+        // urgent call nobody holds, pricing, an Urfi review)
+        Assert.Equal(0, (int)(await (await SignIn("boss")).GetFromJsonAsync<JsonNode>("/api/panel/alerts", Ct))!["unread"]!);
+        Assert.Equal(0, (int)(await (await SignIn("lawyer")).GetFromJsonAsync<JsonNode>("/api/panel/alerts", Ct))!["unread"]!);
     }
 
     // v1.105 (the owner: «العميل … اجابته لازم موظف يتدخل ليه فيها … الحاجات دي انا عايزها تيجي في النوتيفيكيشن … نشوف

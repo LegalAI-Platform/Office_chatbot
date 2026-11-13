@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Office.Application.Booking;
+using Office.Application.Conversations;
 using Office.Domain.Booking;
 using Office.Infrastructure.Persistence;
 
@@ -165,13 +166,42 @@ public sealed class BookingStore(HazemDbContext db) : IBookingStore
         return await db.Appointments.AnyAsync(a => a.Id == id && a.State == "confirmed" && a.AttendanceFor == at, ct);
     }
 
-    /// <summary>A task the booking opens outside a turn (the panel, the calendar worker). Once per key.</summary>
-    public Task AddTaskAsync(Guid personId, string key, string type, DateTimeOffset dueAt, CancellationToken ct) =>
+    /// <summary>
+    /// A task the booking opens outside a turn (the panel, the calendar worker). Once per key. v1.108: with the booking it
+    /// belongs to, when there is one (the panel shows the booking with the task).
+    /// </summary>
+    public Task AddTaskAsync(Guid personId, string key, string type, DateTimeOffset dueAt, CancellationToken ct, Guid? appointmentId = null) =>
         db.Database.ExecuteSqlInterpolatedAsync($"""
-            INSERT INTO hazem.staff_tasks (person_id, turn_id, type, due_at)
-            VALUES ({personId}, {key}, {type}, {dueAt.ToUniversalTime()})
+            INSERT INTO hazem.staff_tasks (person_id, turn_id, type, due_at, appointment_id)
+            VALUES ({personId}, {key}, {type}, {dueAt.ToUniversalTime()}, {appointmentId})
             ON CONFLICT (turn_id, type) DO NOTHING
             """, ct);
+
+    /// <summary>
+    /// v1.108: the urgent call's task, the one card of that booking. Hazem opens it when the client pays (a turn, so it does
+    /// not know the booking yet): it is linked here, or opened here when that turn could not open it.
+    /// </summary>
+    public async Task<Guid> UrgentTaskAsync(Guid appointmentId, Guid personId, DateTimeOffset dueAt, CancellationToken ct)
+    {
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE hazem.staff_tasks SET appointment_id = {appointmentId}
+             WHERE id = (SELECT id FROM hazem.staff_tasks
+                          WHERE person_id = {personId} AND type = {PendingTask.UrgentRequest} AND appointment_id IS NULL
+                            AND state IN ('open', 'in_progress', 'overdue')
+                          ORDER BY created_at DESC LIMIT 1)
+               AND NOT EXISTS (SELECT 1 FROM hazem.staff_tasks
+                                WHERE appointment_id = {appointmentId} AND type = {PendingTask.UrgentRequest})
+            """, ct);
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO hazem.staff_tasks (person_id, turn_id, type, due_at, appointment_id)
+            SELECT {personId}, {$"urgent:{appointmentId:N}:call"}, {PendingTask.UrgentRequest}, {dueAt.ToUniversalTime()}, {appointmentId}
+             WHERE NOT EXISTS (SELECT 1 FROM hazem.staff_tasks WHERE appointment_id = {appointmentId} AND type = {PendingTask.UrgentRequest})
+            ON CONFLICT (turn_id, type) DO NOTHING
+            """, ct);
+        return await db.StaffTasks.AsNoTracking()
+            .Where(t => t.AppointmentId == appointmentId && t.Type == PendingTask.UrgentRequest)
+            .OrderByDescending(t => t.CreatedAt).Select(t => t.Id).FirstAsync(ct);
+    }
 
     internal static AppointmentInfo ToInfo(AppointmentRow a) =>
         new(a.Id, a.PersonId, a.Service, a.StartsAt, a.EndsAt, a.State, a.Reschedules, a.Amount, a.MatterType, a.HoldUntil, a.CallApp);

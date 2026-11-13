@@ -141,7 +141,9 @@ public sealed class PanelPayments(HazemDbContext db, BookingStore store, TimePro
         await PanelAudit.WriteAsync(db, clock, by, "payment." + state, "payment", appointmentId, new Dictionary<string, string?>(), ct);
         if (doc.RootElement.GetProperty("refund").GetBoolean() && await PersonOfAsync(appointmentId, ct) is { } person)
         {
-            await store.AddTaskAsync(person, $"payment:{appointmentId:N}:overpaid", PendingTask.Refund, OfficeHours.DueAt(clock.GetUtcNow()), ct);
+            // v1.108: linked to its booking; a service order's payment has none (the owner is either, PersonOfAsync)
+            var booking = await db.Appointments.AsNoTracking().AnyAsync(a => a.Id == appointmentId, ct) ? appointmentId : (Guid?)null;
+            await store.AddTaskAsync(person, $"payment:{appointmentId:N}:overpaid", PendingTask.Refund, OfficeHours.DueAt(clock.GetUtcNow()), ct, booking);
         }
 
         return null;
