@@ -49,9 +49,9 @@ export function Meta({ icon, children }: { icon: IconName; children: ReactNode }
 async function copy(text: string) {
   try {
     await navigator.clipboard.writeText(text);
-    toast("الرقم اتنسخ");
+    toast("تم نسخ الرقم");
   } catch {
-    toast("مش قادرين ننسخ: انسخه بإيدك", "bad");
+    toast("تعذّر النسخ. انسخ الرقم يدويًا.", "bad");
   }
 }
 
@@ -65,7 +65,7 @@ export function phoneOf(wa: string | null | undefined): string | null {
 }
 
 export function Phone({ wa }: { wa: string }) {
-  if (!phoneOf(wa)) return <span className="text-ink-soft">من غير رقم</span>;
+  if (!phoneOf(wa)) return <span className="text-ink-soft">بلا رقم</span>;
   return (
     <span className="inline-flex items-center gap-1.5">
       <span dir="ltr" className="tabular">+{wa}</span>

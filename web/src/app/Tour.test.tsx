@@ -76,26 +76,26 @@ describe("the tour's steps (the owner's words)", () => {
 
   it("says what each role has in «الإعدادات» and in «المهام»", () => {
     expect(body(account(), "settings")).toBe("فيها حسابك، وكلمة السر، والأسعار.");
-    expect(body(lawyer, "settings")).toBe("فيها حسابك، وكلمة السر، وقوايم المكتب، والأسعار.");
-    expect(body(manager, "settings")).toBe("فيها حسابك، وكلمة السر، وحسابات المكتب، وقوايم المكتب، والأسعار.");
-    expect(body(maintenance, "settings")).toBe("فيها حسابك، وكلمة السر، وحسابات المكتب، وقوايم المكتب، ونصوص حازم وأدوات التجربة، والأسعار.");
-    expect(body(account(), "tasks")).toBe("لما عميل على واتساب يحتاج حد من المكتب، حازم بيفتح له مهمة هنا. اضغط «هاشتغل عليها»، ولما تخلّص «خلصت».");
-    expect(body(lawyer, "tasks")).toBe("لما عميل على واتساب يحتاج حد من المكتب، حازم بيفتح له مهمة هنا. وتقدر تعيّن مين يشتغل عليها.");
+    expect(body(lawyer, "settings")).toBe("فيها حسابك، وكلمة السر، وقوائم المكتب، والأسعار.");
+    expect(body(manager, "settings")).toBe("فيها حسابك، وكلمة السر، وحسابات المكتب، وقوائم المكتب، والأسعار.");
+    expect(body(maintenance, "settings")).toBe("فيها حسابك، وكلمة السر، وحسابات المكتب، وقوائم المكتب، ونصوص حازم وأدوات التجربة، والأسعار.");
+    expect(body(account(), "tasks")).toBe("عندما يحتاج عميل على واتساب إلى أحد من المكتب، يفتح له حازم مهمة هنا. اضغط «ابدأ العمل عليها»، وعند الانتهاء «تحديد كمكتملة».");
+    expect(body(lawyer, "tasks")).toBe("عندما يحتاج عميل على واتساب إلى أحد من المكتب، يفتح له حازم مهمة هنا. ويمكنك تحديد من يعمل عليها.");
   });
 
   it("greets by the first name, and says Ctrl K only where there is a keyboard", () => {
-    expect(tourSteps(maintenance)[0]!.title).toBe("أهلًا بيك يا محمد");
-    expect(tourSteps(account({ display_name: " " }))[0]!.title).toBe("أهلًا بيك");
-    expect(body(account(), "search")).toBe("دوّر في المهام باسم العميل أو بآخر أرقام موبايله.");
-    expect(body(account(), "search", true)).toBe("دوّر في المهام باسم العميل أو بآخر أرقام موبايله. وCtrl K بيفتح اختصارات لكل صفحة.");
+    expect(tourSteps(maintenance)[0]!.title).toBe("مرحبًا بك يا محمد");
+    expect(tourSteps(account({ display_name: " " }))[0]!.title).toBe("مرحبًا بك");
+    expect(body(account(), "search")).toBe("ابحث في المهام باسم العميل أو بآخر أرقام هاتفه.");
+    expect(body(account(), "search", true)).toBe("ابحث في المهام باسم العميل أو بآخر أرقام هاتفه. ويفتح Ctrl K اختصارات لكل صفحة.");
   });
 
   it("says «المزيد» only when it points at «المزيد» (a phone's tab bar)", () => {
-    const money = "الإيصالات: تتأكد إن التحويل وصل. طلبات الخدمات: عقد أو إنذار أو رأي. حالات العرفي: الورق والميعاد.";
+    const money = "الإيصالات: للتأكد من وصول التحويل. طلبات الخدمات: عقد أو إنذار أو رأي. حالات العرفي: المستندات والموعد.";
     expect(body(account(), "money", true, "nav-money")).toBe(money);
-    expect(body(account(), "money", false, "nav-more")).toBe(`${money} وتلاقيهم كلهم في «المزيد».`);
+    expect(body(account(), "money", false, "nav-more")).toBe(`${money} وتجدها جميعًا في «المزيد».`);
     expect(body(account(), "settings", true, "nav-settings")).toBe("فيها حسابك، وكلمة السر، والأسعار.");
-    expect(body(account(), "settings", false, "nav-more")).toBe("فيها حسابك، وكلمة السر، والأسعار. وعلى الموبايل هتلاقيها في آخر «المزيد».");
+    expect(body(account(), "settings", false, "nav-more")).toBe("فيها حسابك، وكلمة السر، والأسعار. وعلى الهاتف تجدها في آخر «المزيد».");
     expect(tourSteps(account()).find((s) => s.id === "settings")!.targets).toEqual(["nav-settings", "nav-more"]);
   });
 });
@@ -103,7 +103,7 @@ describe("the tour's steps (the owner's words)", () => {
 describe("the tour on the screen", () => {
   it("opens by itself on the home page, walks every step, and the end is saved once for the account", async () => {
     const { qc, root, saved } = show(account());
-    expect(await screen.findByRole("dialog", { name: "أهلًا بيك يا ياسمين" })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: "مرحبًا بك يا ياسمين" })).toBeTruthy();
     expect(screen.getByText("1 من 10")).toBeTruthy();
     expect(root.hasAttribute("inert")).toBe(true); // the panel under it cannot be clicked or reached
     expect(screen.queryByRole("button", { name: "السابق" })).toBeNull();
@@ -111,10 +111,10 @@ describe("the tour on the screen", () => {
     const titles: (string | null | undefined)[] = [];
     for (let i = 0; i < 10; i++) {
       titles.push(title());
-      fireEvent.click(screen.getByRole("button", { name: i === 0 ? "يلا نبدأ" : i === 9 ? "تمام" : "التالي" }));
+      fireEvent.click(screen.getByRole("button", { name: i === 0 ? "لنبدأ" : i === 9 ? "إنهاء" : "التالي" }));
     }
-    expect(titles).toEqual(["أهلًا بيك يا ياسمين", "أرقام النهارده", "الطلبات / المهام", "المواعيد", "المحادثات",
-      "الفلوس والخدمات", "التنبيهات", "البحث", "الإعدادات", "حسابك"]);
+    expect(titles).toEqual(["مرحبًا بك يا ياسمين", "أرقام اليوم", "الطلبات / المهام", "المواعيد", "المحادثات",
+      "المالية والخدمات", "التنبيهات", "البحث", "الإعدادات", "حسابك"]);
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(root.hasAttribute("inert")).toBe(false);
     await waitFor(() => expect(saved()).toBe(1));
@@ -124,7 +124,7 @@ describe("the tour on the screen", () => {
   it("«تخطّي» ends it at once and saves it; it does not come back by itself", async () => {
     const { saved } = show(lawyer);
     await screen.findByRole("dialog");
-    fireEvent.click(screen.getByRole("button", { name: "يلا نبدأ" }));
+    fireEvent.click(screen.getByRole("button", { name: "لنبدأ" }));
     expect(screen.getByText("2 من 10")).toBeTruthy(); // v1.106: the lawyer's tour has no reports
     fireEvent.click(screen.getByRole("button", { name: "تخطّي" }));
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -156,7 +156,7 @@ describe("the tour on the screen", () => {
     fireEvent.keyDown(document, { key: "ArrowLeft" });
     fireEvent.keyDown(document, { key: "ArrowLeft" });
     fireEvent.keyDown(document, { key: "ArrowRight" });
-    expect(title()).toBe("أرقام النهارده");
+    expect(title()).toBe("أرقام اليوم");
   });
 
   it("stays away from an account that has seen it, and from an API too old to say", async () => {
@@ -175,14 +175,14 @@ describe("the tour on the screen", () => {
     await wait(900);
     expect(screen.queryByRole("dialog")).toBeNull();
     await act(() => router.navigate("/"));
-    expect(await screen.findByRole("dialog", { name: "أهلًا بيك يا ياسمين" })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: "مرحبًا بك يا ياسمين" })).toBeTruthy();
   });
 
   it("«اعرض الجولة تاني» opens it any time from the first step, and seeing it again saves nothing", async () => {
     const { saved } = show(account({ tour_seen: true }), "/?tour=1");
-    expect(await screen.findByRole("dialog", { name: "أهلًا بيك يا ياسمين" })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: "مرحبًا بك يا ياسمين" })).toBeTruthy();
     await waitFor(() => expect(screen.getByTestId("where").textContent).toBe("/"));
-    fireEvent.click(screen.getByRole("button", { name: "يلا نبدأ" }));
+    fireEvent.click(screen.getByRole("button", { name: "لنبدأ" }));
     fireEvent.click(screen.getByRole("button", { name: "تخطّي" }));
     expect(screen.queryByRole("dialog")).toBeNull();
     await wait(100);
@@ -218,7 +218,7 @@ describe("the tour in the whole panel (the real shell and pages)", () => {
 
   it("opens over the home page of a new account, and every part it points at carries its anchor", async () => {
     app(account());
-    expect(await screen.findByRole("dialog", { name: "أهلًا بيك يا ياسمين" })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: "مرحبًا بك يا ياسمين" })).toBeTruthy();
     for (const name of ["home-kpis", "nav-tasks", "nav-appointments", "nav-chats", "nav-money", "nav-more", "bell", "search", "nav-settings", "account-menu"]) {
       expect(document.querySelector(`[data-tour="${name}"]`), name).not.toBeNull();
     }
@@ -234,8 +234,8 @@ describe("the tour in the whole panel (the real shell and pages)", () => {
       return button!;
     });
     fireEvent.click(menu);
-    fireEvent.click(screen.getByRole("menuitem", { name: /اعرض الجولة تاني/ }));
-    expect(await screen.findByRole("dialog", { name: "أهلًا بيك يا ياسمين" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("menuitem", { name: /إعادة عرض الجولة/ }));
+    expect(await screen.findByRole("dialog", { name: "مرحبًا بك يا ياسمين" })).toBeTruthy();
     expect(router.state.location.pathname + router.state.location.search).toBe("/");
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -245,10 +245,10 @@ describe("the tour in the whole panel (the real shell and pages)", () => {
 
   it("is in «الإعدادات» › «حسابك» too", async () => {
     app(lawyer, "/settings");
-    const link = await screen.findByRole("link", { name: /اعرض الجولة تاني/ });
+    const link = await screen.findByRole("link", { name: /إعادة عرض الجولة/ });
     expect(link.getAttribute("href")).toBe("/?tour=1");
     fireEvent.click(link);
-    expect(await screen.findByRole("dialog", { name: "أهلًا بيك يا أحمد" })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: "مرحبًا بك يا أحمد" })).toBeTruthy();
     expect(screen.getByText("1 من 10")).toBeTruthy(); // v1.106: the lawyer's tour has no reports
   });
 });

@@ -11,6 +11,7 @@ import { useEffect, useRef } from "react";
 import type { PanelAlert } from "../api/types";
 import { ALERT_KINDS, label, matterLabel, SYSTEM_WHAT, TASK_TYPES } from "./labels";
 import { cairoWhen } from "./time";
+import { countWords, MORE_ALERTS, NEW_THINGS } from "./group";
 
 const TITLE = "لوحة حازم";
 // the alert worth a sound: a client's urgent request (urgent_request, safety_alert). v1.104: a system failure no more.
@@ -33,8 +34,8 @@ export const notifyState = (): NotifyState => (canNotify() ? Notification.permis
 /** The line under an alert's title, as the bell shows it: the system's problem, or the task's kind and client. */
 export const alertLine = (a: PanelAlert): string =>
   a.kind === "system"
-    ? label(SYSTEM_WHAT, a.system_what) || "افتح اللوحة وشوف التنبيه."
-    : `${label(TASK_TYPES, a.task_type ?? "")} · ${a.client_name ?? "رقم من غير اسم"}`;
+    ? label(SYSTEM_WHAT, a.system_what) || "افتح اللوحة لعرض التنبيه."
+    : `${label(TASK_TYPES, a.task_type ?? "")} · ${a.client_name ?? "رقم بلا اسم"}`;
 
 /** The task kind each alert's title already names. */
 const SAME_AS_TITLE: Record<string, string> = { task_urgent: "urgent_request", task_human: "human_requested", task_rating: "rating_low" };
@@ -44,7 +45,7 @@ const rtl = (s: string) => `‏${s}‏`;
 
 /** The notification's title: the kind of alert, and the client for a task. */
 export const alertTitle = (a: PanelAlert): string =>
-  a.kind === "system" ? label(ALERT_KINDS, a.kind) : `${label(ALERT_KINDS, a.kind)} · ${a.client_name ?? "رقم من غير اسم"}`;
+  a.kind === "system" ? label(ALERT_KINDS, a.kind) : `${label(ALERT_KINDS, a.kind)} · ${a.client_name ?? "رقم بلا اسم"}`;
 
 /**
  * Under the title (v1.104, the owner: «ما فيهاش تفاصيل»): what it is about and the number's last 3 digits, then when and
@@ -54,9 +55,54 @@ export function alertDetails(a: PanelAlert, now: Date = new Date()): string[] {
   if (a.kind === "system") return [alertLine(a)];
   // the task's kind, unless the title already says it (an urgent request's, a request for someone's, a low rating's)
   const type = a.task_type && a.task_type !== SAME_AS_TITLE[a.kind] ? label(TASK_TYPES, a.task_type) : "";
-  const what = [type, a.matter_type ? matterLabel(a.matter_type) : "", a.phone_last3 ? `موبايله آخره ${a.phone_last3}` : ""];
-  const when = [a.due_at ? `ميعادها ${cairoWhen(a.due_at, now)}` : "", a.staff_name ? `على: ${a.staff_name}` : "مش متعينة لحد"];
+  const what = [type, a.matter_type ? matterLabel(a.matter_type) : "", a.phone_last3 ? `رقمه ينتهي بـ ${a.phone_last3}` : ""];
+  const when = [a.due_at ? `موعدها ${cairoWhen(a.due_at, now)}` : "", a.staff_name ? `مُسندة إلى: ${a.staff_name}` : "غير مُسندة لأحد"];
   return [what, when].map((line) => line.filter(Boolean).join(" · ")).filter(Boolean);
+}
+
+/** One Windows notification: its title, its lines, its tag, whether it stays, and the task a click opens. */
+export interface Note { title: string; body: string; tag: string; stay: boolean; task?: string }
+
+// which of a task's alerts speaks for it: the urgent one, then a client asking for someone, then the late, then the new
+const RANK: Record<string, number> = { task_urgent: 0, task_human: 1, task_rating: 2, task_overdue: 3, task_new: 4 };
+const rank = (a: PanelAlert) => RANK[a.kind] ?? 5;
+
+/**
+ * fix/alert-flood (the owner: «لو عميل جه وحجز بتلاقي فيه مليون حاجه»): the new alerts as few notifications as can say them.
+ * - A task's alerts are one notification (its «new» and its «late» together, say): the most pressing one speaks.
+ * - A client with several tasks at once (a booking: the receipt, the message that did not go…) is one notification that
+ *   names them, and opens the first.
+ * - The system's problems stay one each, after the clients'.
+ */
+export function groupAlerts(fresh: PanelAlert[]): Note[] {
+  const byTask = new Map<string, PanelAlert>();
+  const system: PanelAlert[] = [];
+  for (const a of fresh) {
+    if (!a.task_id) { system.push(a); continue; }
+    const had = byTask.get(a.task_id);
+    if (!had || rank(a) < rank(had)) byTask.set(a.task_id, a);
+  }
+  const byClient = new Map<string, PanelAlert[]>();
+  for (const a of [...byTask.values()].sort((x, y) => rank(x) - rank(y))) {
+    const key = `${a.client_name ?? ""}|${a.phone_last3 ?? a.task_id}`;
+    byClient.set(key, [...(byClient.get(key) ?? []), a]);
+  }
+  const notes: Note[] = [...byClient.values()].map((list) => {
+    const first = list[0]!;
+    if (list.length === 1) {
+      return { title: rtl(alertTitle(first)), body: alertDetails(first).map(rtl).join("\n"), tag: `hazem-alert-${first.id}`, stay: first.kind === "task_urgent", task: first.task_id ?? undefined };
+    }
+    const who = first.client_name ?? "رقم بلا اسم";
+    const what = [...new Set(list.map((a) => label(TASK_TYPES, a.task_type ?? "")).filter(Boolean))];
+    return {
+      title: rtl(`${countWords(list.length, NEW_THINGS)} · ${who}`),
+      body: [...what.map((w) => `• ${w}`), first.phone_last3 ? `رقمه ينتهي بـ ${first.phone_last3}` : ""].filter(Boolean).map(rtl).join("\n"),
+      tag: `hazem-alert-${first.id}`,
+      stay: list.some((a) => a.kind === "task_urgent"),
+      task: first.task_id ?? undefined,
+    };
+  });
+  return [...notes, ...system.map((a) => ({ title: rtl(alertTitle(a)), body: alertDetails(a).map(rtl).join("\n"), tag: `hazem-alert-${a.id}`, stay: false }))];
 }
 
 /** Not looking at the panel: another tab, another program, or the window minimised. */
@@ -79,7 +125,7 @@ function show(title: string, body: string, tag: string, opts: { stay?: boolean; 
 /** The bell's «جرّب»: one notification now, so the person sees where they come. */
 export function testNotification(): boolean {
   if (notifyState() !== "granted") return false;
-  return show("تجربة الإشعارات", "كده التنبيهات الجديدة هتوصلك هنا، حتى وإنت في تاب أو برنامج تاني.", "hazem-test");
+  return show("تجربة الإشعارات", "بهذا ستصلك التنبيهات الجديدة هنا، حتى وأنت في تبويب أو برنامج آخر.", "hazem-test");
 }
 
 /** Two soft tones; silent when the browser blocks sound before the person touched the page. */
@@ -136,14 +182,12 @@ export function useAlertNotifications(items: PanelAlert[] | undefined, unread: n
     if (!fresh.length) return;
     if (fresh.some((a) => LOUD.has(a.kind))) chime();
     if (!away() || notifyState() !== "granted") return;
-    for (const a of fresh.slice(0, AT_ONCE)) {
-      const task = a.task_id;
-      show(rtl(alertTitle(a)), alertDetails(a).map(rtl).join("\n"), `hazem-alert-${a.id}`, {
-        stay: a.kind === "task_urgent",
-        onClick: task ? () => open(task) : undefined,
-      });
+    const notes = groupAlerts(fresh);
+    for (const n of notes.slice(0, AT_ONCE)) {
+      const task = n.task;
+      show(n.title, n.body, n.tag, { stay: n.stay, onClick: task ? () => open(task) : undefined });
     }
-    const more = fresh.length - AT_ONCE;
-    if (more > 0) show(more === 1 ? "تنبيه جديد تاني" : `${more} تنبيهات جديدة تانية`, "افتح اللوحة وشوفهم في الجرس.", "hazem-alert-more");
+    const more = notes.length - AT_ONCE;
+    if (more > 0) show(countWords(more, MORE_ALERTS), "افتح اللوحة لمراجعتها في قائمة التنبيهات.", "hazem-alert-more");
   }, [items, open]);
 }

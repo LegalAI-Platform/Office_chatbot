@@ -10,13 +10,13 @@ import { booking, hhmm, TIMES, type Appointment, type Day } from "./api";
 
 // The office week starts on Saturday; the API's weekday is 0 = Sunday … 6 = Saturday.
 export const WEEK = [6, 0, 1, 2, 3, 4, 5];
-export const DAY_NAMES = ["الأحد", "الاتنين", "التلات", "الأربع", "الخميس", "الجمعة", "السبت"];
+export const DAY_NAMES = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
 export const STATUS: Record<Day["status"], { word: string; tone: string }> = {
-  open: { word: "شغال", tone: "green" },
+  open: { word: "مفتوح", tone: "green" },
   weekly_off: { word: "إجازة", tone: "grey" },
-  closed: { word: "مقفول", tone: "red" },
+  closed: { word: "مغلق", tone: "red" },
   custom_hours: { word: "ساعات مختلفة", tone: "blue" },
-  partly_closed: { word: "جزء مقفول", tone: "orange" },
+  partly_closed: { word: "مغلق جزئيًا", tone: "orange" },
 };
 export const longDay = (day: string) =>
   new Intl.DateTimeFormat("ar-EG-u-nu-latn", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(new Date(`${day}T12:00:00Z`));
@@ -97,7 +97,7 @@ export function SaveBar({ dirty = false, children }: { dirty?: boolean; children
       {dirty ? (
         <p className="flex min-w-0 flex-1 basis-60 items-center gap-1.5 text-[13px] font-semibold text-gold-ink" role="status">
           <Icon name="alert-circle" className="size-4 shrink-0" />
-          فيه تعديلات لسه ما اتحفظتش.
+          توجد تعديلات لم تُحفظ بعد.
         </p>
       ) : null}
       <div className="flex flex-wrap gap-2">{children}</div>
@@ -108,7 +108,7 @@ export function SaveBar({ dirty = false, children }: { dirty?: boolean; children
 export function TimeSelect({ value, onChange, label: aria, min = 0 }: { value: number; onChange: (m: number) => void; label: string; min?: number }) {
   return (
     <select aria-label={aria} className={`${SELECT} tabular`} value={value} onChange={(e) => onChange(Number(e.target.value))}>
-      {TIMES.filter((t) => t >= min).map((t) => <option key={t} value={t}>{t === 1440 ? "12 بالليل" : hhmm(t)}</option>)}
+      {TIMES.filter((t) => t >= min).map((t) => <option key={t} value={t}>{t === 1440 ? "12 ليلًا" : hhmm(t)}</option>)}
     </select>
   );
 }
@@ -116,15 +116,15 @@ export function TimeSelect({ value, onChange, label: aria, min = 0 }: { value: n
 /** «الحجوزات دي هتتلغي»: the office cancels and Hazem tells each client (B-22: another time or a full refund). */
 export function Confirm({ list, busy, onYes, onNo }: { list: Appointment[]; busy: boolean; onYes: () => void; onNo: () => void }) {
   return (
-    <div className="grid gap-2.5 rounded-[16px] border border-orange-ink/40 bg-orange-bg p-3.5 text-sm shadow-[inset_0_1px_0_rgb(255_255_255/0.35)]" role="alertdialog" aria-label="فيه حجوزات">
+    <div className="grid gap-2.5 rounded-[16px] border border-orange-ink/40 bg-orange-bg p-3.5 text-sm shadow-[inset_0_1px_0_rgb(255_255_255/0.35)]" role="alertdialog" aria-label="توجد حجوزات">
       <p className="flex items-start gap-2 font-semibold text-orange-ink">
         <Icon name="alert" className="mt-0.5 size-4 shrink-0" />
-        <span>التعديل ده فيه {list.length} حجز (مؤكد أو مستني الإيصال). لو كمّلت، الحجوزات دي هتتلغي وحازم هيبعت لكل عميل يختار ميعاد تاني، أو استرداد كامل لو كان دفع.</span>
+        <span>عدد الحجوزات التي يشملها هذا التعديل: {list.length} (مؤكدة أو في انتظار الإيصال). عند المتابعة ستُلغى هذه الحجوزات، وسيرسل حازم إلى كل عميل ليختار موعدًا آخر، أو استردادًا كاملًا إن كان قد دفع.</span>
       </p>
-      <ul className="grid gap-1">{list.map((a) => <li key={a.id} className="rounded-[10px] bg-card/60 px-3 py-1.5">{cairoWhen(a.start)} · {a.name ?? "من غير اسم"} · {label(BOOKING_SERVICES, a.service)}</li>)}</ul>
+      <ul className="grid gap-1">{list.map((a) => <li key={a.id} className="rounded-[10px] bg-card/60 px-3 py-1.5">{cairoWhen(a.start)} · {a.name ?? "بدون اسم"} · {label(BOOKING_SERVICES, a.service)}</li>)}</ul>
       <div className="flex flex-wrap gap-2">
-        <Button variant="danger" busy={busy} onClick={onYes}>كمّل وبلّغ العملاء</Button>
-        <Button onClick={onNo}>لأ، سيبه</Button>
+        <Button variant="danger" busy={busy} onClick={onYes}>متابعة وإبلاغ العملاء</Button>
+        <Button onClick={onNo}>لا، اتركه كما هو</Button>
       </div>
     </div>
   );
@@ -134,13 +134,13 @@ export function Confirm({ list, busy, onYes, onNo }: { list: Appointment[]; busy
 export const Told = ({ n }: { n: number }) => (
   <p className="flex items-start gap-2 rounded-[14px] border border-green/30 bg-green-bg px-3.5 py-2.5 text-sm text-green-ink" role="status">
     <Icon name="check-circle" className="mt-0.5 size-4 shrink-0" />
-    <span>اتلغى {n} حجز، وحازم هيبلّغ العملاء خلال ثواني (اللي ماتوصلوش الرسالة بتتعمله مهمة).</span>
+    <span>عدد الحجوزات الملغاة: {n}. سيُبلغ حازم العملاء خلال ثوانٍ، ومن لا تصله الرسالة تُنشأ له مهمة.</span>
   </p>
 );
 
 const FOCUSABLE = "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
 
-/** A small window over the page: labelled by its title, closes with Escape or «اقفل», keeps the focus inside, and gives it back. */
+/** A small window over the page: labelled by its title, closes with Escape or «إغلاق», keeps the focus inside, and gives it back. */
 export function Dialog({ title, onClose, children }: { title: ReactNode; onClose: () => void; children: ReactNode }) {
   const id = useId();
   const box = useRef<HTMLDivElement>(null);
@@ -166,7 +166,7 @@ export function Dialog({ title, onClose, children }: { title: ReactNode; onClose
         className="liquid menu-glass soft-scroll relative grid max-h-[calc(100dvh-2rem)] w-full max-w-lg content-start gap-4 overflow-y-auto rounded-[22px] p-4 shadow-2xl sm:p-5">
         <div className="flex items-start gap-3">
           <h2 id={id} className="flex min-w-0 flex-1 flex-wrap items-center gap-2 text-[17px] leading-snug font-bold">{title}</h2>
-          <button type="button" aria-label="اقفل" onClick={onClose}
+          <button type="button" aria-label="إغلاق" onClick={onClose}
             className="grid size-9 shrink-0 place-items-center rounded-full border border-line/60 bg-card/60 text-ink transition hover:border-gold-line hover:bg-gold-tint hover:text-gold-ink motion-reduce:transition-none">
             <Icon name="x" className="size-4" />
           </button>

@@ -60,14 +60,14 @@ describe("أدوات التجربة", () => {
     renderAt("/testing");
     const list = await screen.findByRole("list", { name: "أرقام التجربة" });
     expect(within(list).getByText("589")).toBeTruthy(); // the end of the number only
-    expect(within(list).getAllByRole("button", { name: "انسى الرقم ده" })).toHaveLength(2);
+    expect(within(list).getAllByRole("button", { name: "انسَ هذا الرقم" })).toHaveLength(2);
 
-    fireEvent.click(within(list).getAllByRole("button", { name: "انسى الرقم ده" })[0]!);
-    expect(await confirmYes()).toContain("الرقم اللي آخره 589");
-    expect(await screen.findByText("حازم نسي الرقم اللي آخره 589 ✅")).toBeTruthy();
+    fireEvent.click(within(list).getAllByRole("button", { name: "انسَ هذا الرقم" })[0]!);
+    expect(await confirmYes()).toContain("الرقم المنتهي بـ 589");
+    expect(await screen.findByText("نسي حازم الرقم المنتهي بـ 589 ✅")).toBeTruthy();
     expect(calls.filter((c) => c.path === "/testing/forget").map((c) => c.body)).toEqual([{ key: "aaaaaaaaaaaaaaaa" }]);
 
-    fireEvent.click(screen.getByRole("button", { name: "انسى كل الأرقام (2)" }));
+    fireEvent.click(screen.getByRole("button", { name: "انسَ جميع الأرقام (2)" }));
     expect(await confirmYes()).toContain("589، 471");
     await vi.waitFor(() => expect(calls.filter((c) => c.path === "/testing/forget")).toHaveLength(3));
   });
@@ -78,12 +78,12 @@ describe("أدوات التجربة", () => {
       "GET /testing/urgent-window": { body: { on: false } }, "PUT /testing/urgent-window": { body: { on: true } },
     });
     renderAt("/testing");
-    expect(await screen.findByText("تنبيه العاجل جوه الـ 24 ساعة")).toBeTruthy();
-    expect(screen.getByText("مقفول")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "شغّله" }));
-    expect(await confirmYes()).toContain("للتجربة بس");
+    expect(await screen.findByText("تنبيه العاجل ضمن نافذة الـ 24 ساعة")).toBeTruthy();
+    expect(screen.getByText("متوقف")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "تفعيل" }));
+    expect(await confirmYes()).toContain("للتجربة فقط");
     await vi.waitFor(() => expect(calls.filter((c) => c.method === "PUT").map((c) => c.body)).toEqual([{ on: true }]));
-    expect(await screen.findByText("تنبيه العاجل هيوصل رسالة عادية جوه الـ 24 ساعة ✅")).toBeTruthy();
+    expect(await screen.findByText("سيصل تنبيه العاجل رسالةً عادية ضمن نافذة الـ 24 ساعة ✅")).toBeTruthy();
   });
 
   it("v1.52: the new understanding is switched on after asking, and off is Hazem as before", async () => {
@@ -94,10 +94,10 @@ describe("أدوات التجربة", () => {
     renderAt("/testing");
     expect(await screen.findByText("الفهم الجديد (المرحلة 1)")).toBeTruthy();
     const section = screen.getByRole("region", { name: "الفهم الجديد (المرحلة 1)" });
-    fireEvent.click(within(section).getByRole("button", { name: "شغّله" }));
-    expect(await confirmYes()).toContain("تقدر تقفله في أي وقت");
+    fireEvent.click(within(section).getByRole("button", { name: "تفعيل" }));
+    expect(await confirmYes()).toContain("يمكنك إيقافه في أي وقت");
     await vi.waitFor(() => expect(calls.filter((c) => c.method === "PUT").map((c) => [c.path, c.body])).toEqual([["/testing/understanding", { on: true }]]));
-    expect(await screen.findByText("الفهم الجديد شغّال ✅")).toBeTruthy();
+    expect(await screen.findByText("تم تفعيل الفهم الجديد ✅")).toBeTruthy();
   });
 
   it("v1.61: the sentence before the address and hours is switched on after asking", async () => {
@@ -107,10 +107,10 @@ describe("أدوات التجربة", () => {
     });
     renderAt("/testing");
     const section = await screen.findByRole("region", { name: "جملة الرد على أسئلة المكتب" });
-    fireEvent.click(within(section).getByRole("button", { name: "شغّلها" }));
-    expect(await confirmYes()).toContain("زي ما هي بالحرف");
+    fireEvent.click(within(section).getByRole("button", { name: "تفعيل" }));
+    expect(await confirmYes()).toContain("كما هي حرفيًا");
     await vi.waitFor(() => expect(calls.filter((c) => c.method === "PUT").map((c) => [c.path, c.body])).toEqual([["/testing/info-writer", { on: true }]]));
-    expect(await screen.findByText("جملة الرد على أسئلة المكتب شغّالة ✅")).toBeTruthy();
+    expect(await screen.findByText("تم تفعيل جملة الرد على أسئلة المكتب ✅")).toBeTruthy();
   });
 
   it("v1.84: the new Urfi way is switched on after asking, and off is v1.81", async () => {
@@ -120,18 +120,18 @@ describe("أدوات التجربة", () => {
     });
     renderAt("/testing");
     const section = await screen.findByRole("region", { name: "طريقة العرفي الجديدة" });
-    expect(within(section).getByText("مقفولة")).toBeTruthy();
-    fireEvent.click(within(section).getByRole("button", { name: "شغّلها" }));
-    expect(await confirmYes()).toContain("تقدر تقفله في أي وقت");
+    expect(within(section).getByText("متوقفة")).toBeTruthy();
+    fireEvent.click(within(section).getByRole("button", { name: "تفعيل" }));
+    expect(await confirmYes()).toContain("يمكنك إيقافها في أي وقت");
     await vi.waitFor(() => expect(calls.filter((c) => c.method === "PUT").map((c) => [c.path, c.body])).toEqual([["/testing/urf-case-said", { on: true }]]));
-    expect(await screen.findByText("طريقة العرفي الجديدة شغّالة ✅")).toBeTruthy();
+    expect(await screen.findByText("تم تفعيل طريقة العرفي الجديدة ✅")).toBeTruthy();
   });
 
   it("says the tools are off outside the test environment", async () => {
     serve({ "GET /auth/me": { body: lawyer }, "GET /testing/numbers": { status: 404, body: { error: "not_found" } } });
     renderAt("/testing");
-    expect(await screen.findByText("الأدوات دي مقفولة")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "انسى الرقم ده" })).toBeNull();
+    expect(await screen.findByText("هذه الأدوات مُعطَّلة")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "انسَ هذا الرقم" })).toBeNull();
   });
 
   it("is in the settings for the lawyer, not for the staff", async () => {
@@ -157,16 +157,16 @@ describe("أدوات التجربة", () => {
       return real(url, init);
     });
     renderAt("/testing");
-    fireEvent.click(await screen.findByRole("button", { name: "انسى كل الأرقام (2)" }));
+    fireEvent.click(await screen.findByRole("button", { name: "انسَ جميع الأرقام (2)" }));
     await confirmYes();
-    expect(await screen.findByText("حازم نسي الرقم اللي آخره 589 ✅")).toBeTruthy();
-    expect(await screen.findByText(/حازم ما نسيش الرقم اللي آخره 471/)).toBeTruthy();
+    expect(await screen.findByText("نسي حازم الرقم المنتهي بـ 589 ✅")).toBeTruthy();
+    expect(await screen.findByText(/لم ينسَ حازم الرقم المنتهي بـ 471/)).toBeTruthy();
     await vi.waitFor(() => expect(calls.filter((c) => c.path === "/testing/numbers").length).toBeGreaterThan(1));
   });
 
   it("shows the urgent switch's load error with a retry", async () => {
     serve({ "GET /auth/me": { body: lawyer }, "GET /testing/numbers": { body: numbers }, "GET /testing/urgent-window": { status: 500, body: { error: "x" } } });
     renderAt("/testing");
-    expect(await screen.findByRole("button", { name: /جرّب تاني/ })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /حاول مرة أخرى/ })).toBeTruthy();
   });
 });

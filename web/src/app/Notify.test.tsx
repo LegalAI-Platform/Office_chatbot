@@ -60,10 +60,10 @@ describe("v1.104 Windows notifications", () => {
     next([alert({ id: 2, task_id: "t2", client_name: "دوت نت", phone_last3: "471", matter_type: "personal_status", staff_name: "منى", due_at: due }), old]);
     expect(made).toHaveLength(1);
     const n = made[0]!;
-    expect(n).toEqual(expect.objectContaining({ title: "مهمة اتأخرت · دوت نت", icon: "/landing/img/logo.png", tag: "hazem-alert-2", stay: false }));
+    expect(n).toEqual(expect.objectContaining({ title: "مهمة متأخرة · دوت نت", icon: "/landing/img/logo.png", tag: "hazem-alert-2", stay: false }));
     const [what, when] = n.body!.split("\n");
-    expect(what).toBe("شكوى · أحوال شخصية · موبايله آخره 471");
-    expect(when).toMatch(/^ميعادها (النهارده|بكرة)\s\d{1,2}:\d{2}\s[صم] · على: منى$/);
+    expect(what).toBe("شكوى · أحوال شخصية · رقمه ينتهي بـ 471");
+    expect(when).toMatch(/^موعدها (اليوم|غدًا)\s\d{1,2}:\d{2}\s[صم] · مُسندة إلى: منى$/);
     expect(n.raw.startsWith("‏") && n.raw.endsWith("‏")).toBe(true); // right to left on an English Windows too
     n.click();
     expect(open).toHaveBeenCalledWith("t2");
@@ -73,18 +73,18 @@ describe("v1.104 Windows notifications", () => {
     away();
     const { next } = watch([]);
     next([
-      alert({ id: 2, kind: "task_human", task_type: "human_requested", client_name: undefined }),
-      alert({ id: 3, kind: "task_rating", task_type: "rating_low" }),
+      alert({ id: 2, kind: "task_human", task_id: "t2", task_type: "human_requested", client_name: undefined }),
+      alert({ id: 3, kind: "task_rating", task_id: "t3", task_type: "rating_low" }),
       alert({ id: 4, kind: "system", task_id: undefined, task_type: undefined, client_name: undefined, system_what: "healthcheck" }),
     ]);
     expect(made.map((m) => [m.title, m.body])).toEqual([
-      ["عميل عايز يكلم حد · رقم من غير اسم", "مش متعينة لحد"],
-      ["تقييم ضعيف من عميل · سارة", "مش متعينة لحد"],
-      ["مشكلة في السيستم", "الفحص اليومي لقى حاجة مش شغالة"],
+      ["عميل يطلب التحدث مع موظف · رقم بلا اسم", "غير مُسندة لأحد"],
+      ["تقييم ضعيف من عميل · سارة", "غير مُسندة لأحد"],
+      ["مشكلة في النظام", "اكتشف الفحص اليومي خدمة متوقفة"],
     ]);
     made.length = 0;
     next([alert({ id: 5, kind: "task_urgent", task_type: "safety_alert", staff_name: "منى" })]);
-    expect(made).toEqual([expect.objectContaining({ title: "طلب عاجل · سارة", body: "تنبيه أمان\nعلى: منى", stay: true })]);
+    expect(made).toEqual([expect.objectContaining({ title: "طلب عاجل · سارة", body: "تنبيه أمان\nمُسندة إلى: منى", stay: true })]);
   });
 
   // v1.105 (the owner: «اجابته لازم موظف يتدخل ليه فيها … الحاجات دي انا عايزها تيجي في النوتيفيكيشن»)
@@ -93,7 +93,7 @@ describe("v1.104 Windows notifications", () => {
     const { next } = watch([]);
     next([alert({ id: 6, kind: "task_new", task_type: "existing_client_message", client_name: "محمد عماد", phone_last3: "589" })]);
     expect(made).toEqual([expect.objectContaining({
-      title: "عميل محتاج موظف · محمد عماد", body: "موكل حالي بيسأل عن موضوعه · موبايله آخره 589\nمش متعينة لحد", stay: false,
+      title: "عميل يحتاج إلى موظف · محمد عماد", body: "موكّل حالي يستفسر عن قضيته · رقمه ينتهي بـ 589\nغير مُسندة لأحد", stay: false,
     })]);
   });
 
@@ -120,11 +120,40 @@ describe("v1.104 Windows notifications", () => {
   it("many at once: three, then one that says how many more", () => {
     away();
     const { next } = watch([]);
-    next([2, 3, 4, 5, 6].map((id) => alert({ id })));
-    expect(made.map((m) => m.title)).toEqual(["مهمة اتأخرت · سارة", "مهمة اتأخرت · سارة", "مهمة اتأخرت · سارة", "2 تنبيهات جديدة تانية"]);
+    // five clients' tasks (one client's alerts would be one notification: see «one booking, one notification»)
+    const of = (id: number) => alert({ id, task_id: `t${id}`, client_name: `عميل ${id}`, phone_last3: String(100 + id) });
+    next([2, 3, 4, 5, 6].map(of));
+    expect(made.map((m) => m.title)).toEqual(["مهمة متأخرة · عميل 2", "مهمة متأخرة · عميل 3", "مهمة متأخرة · عميل 4", "تنبيهان جديدان آخران"]);
     made.length = 0;
-    next([7, 8, 9, 10].map((id) => alert({ id })));
-    expect(made.map((m) => m.title).at(-1)).toBe("تنبيه جديد تاني");
+    next([2, 3, 4, 5, 6, 7, 8, 9, 10].map(of));
+    expect(made.map((m) => m.title).at(-1)).toBe("تنبيه جديد آخر");
+  });
+
+  // fix/alert-flood (the owner: «لو عميل جه وحجز بتلاقي فيه مليون حاجه»)
+  it("one task is one notification: its «new» and its «late» together, the more pressing one speaks", () => {
+    away();
+    const { next } = watch([]);
+    next([alert({ id: 20, kind: "task_new", task_type: "payment_review_due" }), alert({ id: 21, kind: "task_overdue", task_type: "payment_review_due" })]);
+    expect(made.map((m) => m.title)).toEqual(["مهمة متأخرة · سارة"]);
+  });
+
+  it("one booking, one notification: a client's several tasks at once are named in one, and a click opens the first", () => {
+    away();
+    const { next, open } = watch([]);
+    next([
+      alert({ id: 30, kind: "task_new", task_id: "a", task_type: "payment_review_due", phone_last3: "019" }),
+      alert({ id: 31, kind: "task_new", task_id: "b", task_type: "booking_message_failed", phone_last3: "019" }),
+      alert({ id: 32, kind: "task_urgent", task_id: "c", task_type: "urgent_call_failed", phone_last3: "019" }),
+      alert({ id: 33, kind: "task_new", task_id: "d", task_type: "complaint", client_name: "منى", phone_last3: "027" }),
+    ]);
+    expect(made).toHaveLength(2);
+    const [booking, other] = made;
+    expect(booking!.title).toBe("3 عناصر جديدة · سارة");
+    expect(booking!.body).toContain("رقمه ينتهي بـ 019");
+    expect(booking!.stay).toBe(true); // one of them is urgent
+    expect(other!.title).toContain("منى");
+    booking!.click();
+    expect(open).toHaveBeenCalledWith("c"); // the urgent one first
   });
 });
 
@@ -197,8 +226,8 @@ describe("v1.104 the bell's Windows notifications", () => {
     FakeNotification.permission = "default";
     FakeNotification.requestPermission = vi.fn(async () => (FakeNotification.permission = "granted"));
     const bell = await openBell();
-    fireEvent.click(within(bell).getByRole("button", { name: "شغّل إشعارات الويندوز علشان التنبيهات توصلك وإنت في تاب تاني" }));
-    const again = await within(bell).findByRole("button", { name: "جرّب إشعار الويندوز" });
+    fireEvent.click(within(bell).getByRole("button", { name: "فعّل إشعارات ويندوز لتصلك التنبيهات وأنت في تبويب آخر" }));
+    const again = await within(bell).findByRole("button", { name: "جرّب إشعار ويندوز" });
     expect(FakeNotification.requestPermission).toHaveBeenCalledTimes(1);
     expect(made.map((m) => [m.title, m.icon])).toEqual([["تجربة الإشعارات", "/landing/img/logo.png"]]);
     fireEvent.click(again);
@@ -208,7 +237,7 @@ describe("v1.104 the bell's Windows notifications", () => {
   it("blocked in the browser: says where to allow them", async () => {
     FakeNotification.permission = "denied";
     const bell = await openBell();
-    expect(within(bell).getByText(/إشعارات الويندوز مقفولة للوحة/)).toBeTruthy();
+    expect(within(bell).getByText(/إشعارات ويندوز معطّلة لهذه اللوحة/)).toBeTruthy();
     expect(within(bell).queryByRole("button", { name: /إشعار/ })).toBeNull();
   });
 
@@ -224,24 +253,24 @@ describe("v1.104 the clients' requests first, the system's problems below", () =
     alert({ id, kind: "system", task_id: undefined, task_type: undefined, client_name: undefined, system_what: what as PanelAlert["system_what"], read });
 
   it("the red count is the requests'; the system's problems are folded under them with their own count", async () => {
-    const bell = await openBell("1 تنبيهات جديدة", {
+    const bell = await openBell("تنبيه جديد", {
       unread: 3, unread_system: 2,
       items: [sys(9, "healthcheck"), sys(8, "log_scan"), alert({ id: 7, kind: "task_urgent", task_type: "urgent_request", client_name: "أحمد" }), alert({ id: 6, read: true })],
     });
     const requests = within(bell).getByRole("list", { name: "الطلبات" });
     expect(within(requests).getAllByRole("button").map((b) => b.textContent)).toEqual([
-      expect.stringContaining("طلب عاجل"), expect.stringContaining("مهمة اتأخرت"),
+      expect.stringContaining("طلب عاجل"), expect.stringContaining("مهمة متأخرة"),
     ]);
-    const folded = within(bell).getByText("مشاكل السيستم").closest("details")!;
+    const folded = within(bell).getByText("مشكلات النظام").closest("details")!;
     expect(folded.open).toBe(false); // the requests come first
     expect(within(folded).getByText("2 جديدة")).toBeTruthy();
-    expect(within(within(folded).getByRole("list", { name: "مشاكل السيستم" })).getAllByRole("button")).toHaveLength(2);
+    expect(within(within(folded).getByRole("list", { name: "مشكلات النظام" })).getAllByRole("button")).toHaveLength(2);
   });
 
   it("only system problems: no red count, a gold dot in the bell, and the list open", async () => {
-    const bell = await openBell("التنبيهات، وفيه مشاكل جديدة في السيستم", { unread: 1, unread_system: 1, items: [sys(9, "backup")] });
-    expect(within(bell).getByText("مفيش طلبات.")).toBeTruthy();
-    expect(within(bell).getByText("مشاكل السيستم").closest("details")!.open).toBe(true);
+    const bell = await openBell("التنبيهات، وتوجد مشكلات جديدة في النظام", { unread: 1, unread_system: 1, items: [sys(9, "backup")] });
+    expect(within(bell).getByText("لا توجد طلبات.")).toBeTruthy();
+    expect(within(bell).getByText("مشكلات النظام").closest("details")!.open).toBe(true);
   });
 
   it("at once over the API's stream: a new alert asks the bell's list again, with no minute's wait", async () => {
@@ -261,7 +290,7 @@ describe("v1.104 the clients' requests first, the system's problems below", () =
     away();
     const { next } = watch([]);
     next([sys(10, "backup"), alert({ id: 11, kind: "task_urgent", task_type: "urgent_request" }), sys(12, "n8n")]);
-    expect(made.map((m) => [m.title, m.stay])).toEqual([["طلب عاجل · سارة", true], ["مشكلة في السيستم", false], ["مشكلة في السيستم", false]]);
+    expect(made.map((m) => [m.title, m.stay])).toEqual([["طلب عاجل · سارة", true], ["مشكلة في النظام", false], ["مشكلة في النظام", false]]);
   });
 });
 

@@ -47,7 +47,7 @@ describe("TASK 06 prices", () => {
     serve({ "GET /auth/me": me("staff"), "GET /prices": list });
     renderAt("/prices");
     expect(await screen.findByText("استشارة بالتليفون أو الفيديو (ربع ساعة)")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "احفظ الأسعار" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "حفظ الأسعار" })).toBeNull();
     expect(screen.queryByRole("spinbutton")).toBeNull();
   });
 
@@ -55,12 +55,12 @@ describe("TASK 06 prices", () => {
     const calls = serve({ "GET /auth/me": me("lawyer"), "GET /prices": list, "GET /prices/changes": [] });
     renderAt("/prices");
     fireEvent.change(await screen.findByLabelText("استشارة بالتليفون أو الفيديو (ربع ساعة)"), { target: { value: "600" } });
-    fireEvent.click(screen.getByRole("button", { name: "احفظ الأسعار" }));
+    fireEvent.click(screen.getByRole("button", { name: "حفظ الأسعار" }));
     const dialog = await screen.findByRole("alertdialog");
-    expect(dialog.textContent).toContain("للطلبات الجديدة بس");
-    fireEvent.click(within(dialog).getByRole("button", { name: "احفظ الأسعار" }));
+    expect(dialog.textContent).toContain("على الطلبات الجديدة فقط");
+    fireEvent.click(within(dialog).getByRole("button", { name: "حفظ الأسعار" }));
     await vi.waitFor(() => expect(calls.some((c) => c.method === "PUT")).toBe(true));
-    expect(await screen.findByText("الأسعار اتحفظت ✅")).toBeTruthy(); // the toast
+    expect(await screen.findByText("تم حفظ الأسعار ✅")).toBeTruthy(); // the toast
     expect(calls.find((c) => c.method === "PUT")).toEqual({ method: "PUT", path: "/prices", body: { values: { "price.phone_video": 600 } } });
   });
 
@@ -71,10 +71,10 @@ describe("TASK 06 prices", () => {
     ];
     serve({ "GET /auth/me": me("lawyer"), "GET /prices": review, "GET /prices/changes": [] });
     renderAt("/prices");
-    const save = () => screen.getByRole("button", { name: "احفظ الأسعار" }) as HTMLButtonElement;
+    const save = () => screen.getByRole("button", { name: "حفظ الأسعار" }) as HTMLButtonElement;
     fireEvent.change(await screen.findByLabelText("مراجعة عقد أو مستندات: من"), { target: { value: "" } });
     expect(save().disabled).toBe(true);
-    expect(screen.getByText(/رقم صحيح من 1/)).toBeTruthy();
+    expect(screen.getByText(/رقمًا صحيحًا من 1/)).toBeTruthy();
     fireEvent.change(screen.getByLabelText("مراجعة عقد أو مستندات: من"), { target: { value: "4000" } });
     expect(save().disabled).toBe(true);
     expect(screen.getByText(/أقل سعر للمراجعة/)).toBeTruthy();
@@ -86,7 +86,7 @@ describe("TASK 06 prices", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     serve({ "GET /auth/me": me("lawyer"), "GET /prices": list });
     renderAt("/prices");
-    expect(await screen.findByText(/آخر التغييرات ما اتحمّلتش/, undefined, { timeout: 5000 })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /جرّب تاني/ })).toBeTruthy();
+    expect(await screen.findByText(/تعذّر تحميل آخر التغييرات/, undefined, { timeout: 5000 })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /حاول مرة أخرى/ })).toBeTruthy();
   });
 });

@@ -13,16 +13,16 @@ import { tasksQuery, useTasks, type Scope, type StateFilter } from "./api";
 
 const SCOPES: { value: Scope; label: string; needsAll?: boolean }[] = [
   { value: "mine", label: "مهامي" },
-  { value: "unassigned", label: "مش متعيّنة" },
+  { value: "unassigned", label: "غير مُسندة" },
   { value: "all", label: "كل المسؤولين", needsAll: true },
 ];
 
 const STATES: { value: StateFilter; label: string; icon: IconName }[] = [
-  { value: "active", label: "محتاجة شغل", icon: "play" },
+  { value: "active", label: "تحتاج إلى إجراء", icon: "play" },
   { value: "urgent", label: "عاجلة", icon: "alert-circle" },
   { value: "overdue", label: "متأخرة", icon: "clock" },
-  { value: "done", label: "خلصت", icon: "check-circle" },
-  { value: "cancelled", label: "اتلغت", icon: "x" },
+  { value: "done", label: "مكتملة", icon: "check-circle" },
+  { value: "cancelled", label: "ملغاة", icon: "x" },
 ];
 
 export const isUrgent = (t: { type: string }) => t.type === "urgent_request" || t.type === "safety_alert";
@@ -87,10 +87,10 @@ export function TasksPage() {
 
       {/* the numbers: each one opens its tab */}
       <section aria-label="أرقام المهام" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat tone="gold" icon="play" title="محتاجة شغل" value={counts.active} on={state === "active"} onClick={() => pick("state", "active")("active")} />
+        <Stat tone="gold" icon="play" title="تحتاج إلى إجراء" value={counts.active} on={state === "active"} onClick={() => pick("state", "active")("active")} />
         <Stat tone="red" icon="alert-circle" title="عاجلة" value={counts.urgent} on={state === "urgent"} onClick={() => pick("state", "active")("urgent")} />
         <Stat tone="orange" icon="clock" title="متأخرة" value={counts.overdue} on={state === "overdue"} onClick={() => pick("state", "active")("overdue")} />
-        <Stat tone="green" icon="check-circle" title="خلصت" value={counts.done} on={state === "done"} onClick={() => pick("state", "active")("done")} />
+        <Stat tone="green" icon="check-circle" title="مكتملة" value={counts.done} on={state === "done"} onClick={() => pick("state", "active")("done")} />
       </section>
 
       <section aria-label="البحث والتصفية" className="liquid flex flex-wrap items-center gap-3 rounded-[22px] p-3 sm:p-4">
@@ -100,12 +100,12 @@ export function TasksPage() {
           change((next) => { if (v) next.set("q", v); else next.delete("q"); next.delete("page"); });
         }}>
           <Icon name="search" className="pointer-events-none absolute inset-y-0 start-3.5 my-auto size-[18px] text-ink-soft" />
-          <input key={q ?? ""} name="q" type="search" defaultValue={q ?? ""} placeholder="ابحث في المهام (اسم العميل أو آخر أرقام رقمه)..." aria-label="ابحث في المهام"
+          <input key={q ?? ""} name="q" type="search" defaultValue={q ?? ""} placeholder="ابحث في المهام (اسم العميل أو آخر أرقام هاتفه)..." aria-label="ابحث في المهام"
             className="min-h-10 w-full rounded-full border max-lg:text-ellipsis border-line/60 bg-card/60 ps-10 pe-4 text-[14px] shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)] outline-none focus:border-gold-line" />
         </form>
         <label className="relative">
-          <span className="sr-only">مين</span>
-          <select aria-label="مين" value={scope} onChange={(e) => pick("scope", scopeFallback)(e.target.value)}
+          <span className="sr-only">المسؤول</span>
+          <select aria-label="المسؤول" value={scope} onChange={(e) => pick("scope", scopeFallback)(e.target.value)}
             className="min-h-10 appearance-none rounded-full border border-line/60 bg-card/60 ps-4 pe-9 text-[14px] font-semibold shadow-[inset_0_1px_0_rgb(255_255_255/0.45)] outline-none focus:border-gold-line">
             {scopes.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
           </select>
@@ -134,9 +134,9 @@ export function TasksPage() {
       {q ? (
         <p className="liquid flex flex-wrap items-center gap-2 rounded-full px-4 py-2 text-sm">
           <Icon name="search" className="size-4 text-gold-ink" />
-          نتايج البحث عن <strong className="rounded-md bg-gold-tint px-2 text-gold-ink">{q}</strong>
+          نتائج البحث عن <strong className="rounded-md bg-gold-tint px-2 text-gold-ink">{q}</strong>
           <button type="button" onClick={() => change((next) => { next.delete("q"); next.delete("page"); })} className="ms-auto inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-ink-soft hover:bg-card-2 hover:text-ink">
-            <Icon name="x" className="size-4" /> امسح البحث
+            <Icon name="x" className="size-4" /> مسح البحث
           </button>
         </p>
       ) : null}
@@ -178,7 +178,7 @@ function Intro({ total }: { total?: number | undefined }) {
         </span>
         <h1 className="text-[26px] leading-tight font-bold">المهام</h1>
         {total !== undefined ? (
-          <span className="tabular rounded-full border border-gold-line bg-gold-tint px-2.5 py-0.5 text-[12.5px] font-bold text-gold-ink">{total} مهمة</span>
+          <span className="tabular rounded-full border border-gold-line bg-gold-tint px-2.5 py-0.5 text-[12.5px] font-bold text-gold-ink">{tasksCount(total)}</span>
         ) : null}
       </div>
     </header>
@@ -212,7 +212,13 @@ function Stat({ tone, icon, title, value, on, onClick }: {
 
 // ---------- one task ----------
 
-const who = (t: TaskListItem) => t.client_name ?? "رقم من غير اسم";
+const who = (t: TaskListItem) => t.client_name ?? "رقم بلا اسم";
+
+/** Arabic number agreement: مهمة واحدة، مهمتان، 3 مهام، 11 مهمة. */
+const tasksCount = (n: number) => {
+  const r = n % 100;
+  return n === 1 ? "مهمة واحدة" : n === 2 ? "مهمتان" : r >= 3 && r <= 10 ? `${n} مهام` : `${n} مهمة`;
+};
 
 // the table's columns on a wide screen: what they need, the client, who has it, by when, how urgent, where it stands, the arrow
 const COLUMNS = "xl:grid-cols-[minmax(14rem,2.2fr)_minmax(9rem,1.1fr)_minmax(8rem,1fr)_minmax(9rem,1fr)_5.5rem_7rem_2.25rem]";
@@ -263,11 +269,11 @@ function TaskRow({ task: t }: { task: TaskListItem }) {
       {/* who has it */}
       <Cell term="المسؤول">
         {t.staff ? <span className="font-semibold">{t.staff.name}</span>
-          : <span className="font-semibold text-orange-ink">{live ? "محدش استلمها لسه" : "مش متعيّنة"}</span>}
+          : <span className="font-semibold text-orange-ink">{live ? "لم يستلمها أحد بعد" : "غير مُسندة"}</span>}
       </Cell>
 
       {/* by when */}
-      <Cell term={late ? "كان المفروض" : "الموعد النهائي"}>
+      <Cell term={late ? "كان موعدها النهائي" : "الموعد النهائي"}>
         <span className={`tabular font-semibold ${late ? "text-red-ink" : ""}`}>{cairoWhen(t.due_at)}</span>
       </Cell>
 
@@ -305,8 +311,8 @@ function Nothing({ state }: { state: StateFilter }) {
       <span className="grid size-14 place-items-center rounded-full bg-gradient-to-br from-green-bg to-card text-green-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.6)]">
         <Icon name="check-circle" className="size-7" />
       </span>
-      <p className="text-[16px] font-bold">{state === "active" ? "مفيش مهام محتاجة شغل دلوقتي" : "مفيش مهام هنا"}</p>
-      {state === "active" ? <p className="max-w-sm text-[13px] text-ink-soft">أول ما حازم يفتح مهمة جديدة هتظهر هنا لوحدها.</p> : null}
+      <p className="text-[16px] font-bold">{state === "active" ? "لا توجد مهام تحتاج إلى إجراء الآن" : "لا توجد مهام هنا"}</p>
+      {state === "active" ? <p className="max-w-sm text-[13px] text-ink-soft">عندما يفتح حازم مهمة جديدة ستظهر هنا تلقائيًا.</p> : null}
     </div>
   );
 }
@@ -318,11 +324,11 @@ function Pager({ page, pageSize, total, onPage }: { page: number; pageSize: numb
   return (
     <nav className="flex items-center justify-center gap-3" aria-label="الصفحات">
       <button type="button" className={pill} disabled={page <= 1} onClick={() => onPage(page - 1)}>
-        <Icon name="chevron-end" className="size-4" />اللي قبلها
+        <Icon name="chevron-end" className="size-4" />السابقة
       </button>
       <span className="tabular rounded-full bg-gold-tint px-3 py-1 text-[13px] font-bold text-gold-ink">صفحة {page} من {pages}</span>
       <button type="button" className={pill} disabled={page >= pages} onClick={() => onPage(page + 1)}>
-        اللي بعدها<Icon name="chevron-start" className="size-4" />
+        التالية<Icon name="chevron-start" className="size-4" />
       </button>
     </nav>
   );

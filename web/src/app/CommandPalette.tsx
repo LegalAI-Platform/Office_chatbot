@@ -10,21 +10,21 @@ type Command = { id: string; text: string; hint: string; icon: IconName; to: str
 const COMMANDS: Command[] = [
   { id: "overdue", text: "المهام المتأخرة", hint: "المهام", icon: "alert", to: "/tasks?state=overdue", words: "عاجل متأخر مستعجل مهام" },
   { id: "receipts", text: "راجع الإيصالات والتحويلات", hint: "الإيصالات والمدفوعات", icon: "receipt", to: "/receipts", words: "ايصال إيصال تحويل فلوس دفع مراجعة", permission: "schedule.manage" },
-  { id: "bookings", text: "الحجوزات والمواعيد", hint: "المواعيد", icon: "calendar", to: "/appointments", words: "مواعيد حجز حجوزات النهارده بكرة", permission: "schedule.manage" },
-  { id: "close-day", text: "اقفل يوم أو غيّر ساعاته", hint: "المواعيد", icon: "calendar", to: "/appointments", words: "اقفل يوم اجازة إجازة ساعات تقويم", permission: "schedule.manage" },
+  { id: "bookings", text: "الحجوزات والمواعيد", hint: "المواعيد", icon: "calendar", to: "/appointments", words: "مواعيد موعد حجز حجوزات اليوم غدا غدًا النهارده بكرة", permission: "schedule.manage" },
+  { id: "close-day", text: "أغلق يومًا أو غيّر ساعاته", hint: "المواعيد", icon: "calendar", to: "/appointments", words: "أغلق اغلق إغلاق اقفل يوم اجازة إجازة ساعات تقويم", permission: "schedule.manage" },
   { id: "services", text: "طلبات الخدمات (عقد، إنذار، رأي)", hint: "الخدمات", icon: "document", to: "/services", words: "سعر خدمة عقد انذار إنذار رأي مراجعة صياغة", permission: "services.manage" },
-  { id: "urf", text: "حالات العرفي", hint: "العرفي", icon: "document", to: "/urf", words: "عرفي جواز طلاق ورق", permission: "urf.manage" },
+  { id: "urf", text: "حالات العرفي", hint: "العرفي", icon: "document", to: "/urf", words: "عرفي زواج جواز طلاق مستندات ورق", permission: "urf.manage" },
   { id: "prices", text: "الأسعار", hint: "صفحة", icon: "receipt", to: "/prices", words: "اسعار أسعار سعر" },
   { id: "home", text: "الرئيسية", hint: "صفحة", icon: "home", to: "/", words: "رئيسية داشبورد" },
   { id: "tasks", text: "المهام", hint: "صفحة", icon: "tasks", to: "/tasks", words: "مهام طلبات" },
   { id: "chats", text: "المحادثات", hint: "Chatwoot", icon: "chat", to: "/chats", words: "محادثات شات واتساب chatwoot" },
   { id: "reports", text: "التقارير", hint: "صفحة", icon: "reports", to: "/reports", words: "تقارير ارقام أرقام شهر", permission: "reports.view" },
-  { id: "lists", text: "قوايم المكتب", hint: "الإعدادات", icon: "clients", to: "/lists", words: "قوايم موكلين ممنوعين", permission: "lists.manage" },
+  { id: "lists", text: "قوائم المكتب", hint: "الإعدادات", icon: "clients", to: "/lists", words: "قوائم قائمة قوايم موكلين موكّلين محظورين ممنوعين", permission: "lists.manage" },
   { id: "texts", text: "نصوص حازم", hint: "الإعدادات", icon: "message", to: "/texts", words: "نصوص رسائل حازم", permission: "texts.manage" },
   { id: "users", text: "الحسابات", hint: "الإعدادات", icon: "users", to: "/users", words: "حسابات موظفين مستخدمين", permission: "users.manage" },
   { id: "settings", text: "الإعدادات", hint: "صفحة", icon: "settings", to: "/settings", words: "اعدادات إعدادات" },
-  { id: "booking-settings", text: "إعدادات المواعيد", hint: "المواعيد", icon: "settings", to: "/appointments/settings", words: "ساعات الشغل المواعيد الثابتة أسبوع اسبوع الحجز من واتساب بيانات المكتب الدفع انستاباي InstaPay محفظة", permission: "schedule.manage" },
-  { id: "testing", text: "حازم ينسى رقم تجربة", hint: "أدوات التجربة", icon: "refresh", to: "/testing", words: "انسى امسح تجربة اختبار رقم ارقام أرقام", permission: "testing.forget" },
+  { id: "booking-settings", text: "إعدادات المواعيد", hint: "المواعيد", icon: "settings", to: "/appointments/settings", words: "ساعات العمل الشغل المواعيد الثابتة أسبوع اسبوع الحجز من واتساب بيانات المكتب الدفع انستاباي InstaPay محفظة", permission: "schedule.manage" },
+  { id: "testing", text: "اجعل حازم ينسى رقم تجربة", hint: "أدوات التجربة", icon: "refresh", to: "/testing", words: "انسى امسح تجربة اختبار رقم ارقام أرقام", permission: "testing.forget" },
   { id: "account", text: "حسابي", hint: "الإعدادات", icon: "account", to: "/account", words: "حسابي كلمة السر باسورد" },
 ];
 
@@ -50,7 +50,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   const term = q.trim();
   const matches = term ? allowed.filter((c) => `${c.text} ${c.words}`.includes(term)) : allowed.slice(0, 8);
   const list: Command[] = term
-    ? [{ id: "search", text: `دوّر في المهام عن «${term}»`, hint: "بالاسم أو آخر أرقام الموبايل", icon: "search", to: `/tasks?q=${encodeURIComponent(term)}`, words: "" }, ...matches]
+    ? [{ id: "search", text: `ابحث في المهام عن «${term}»`, hint: "بالاسم أو بآخر أرقام الهاتف", icon: "search", to: `/tasks?q=${encodeURIComponent(term)}`, words: "" }, ...matches]
     : matches;
   const pick = Math.min(at, Math.max(0, list.length - 1));
   const run = (c: Command | undefined) => {
@@ -67,8 +67,8 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
         className="grid w-full max-w-xl overflow-hidden rounded-[var(--radius-control)] border border-line bg-card text-ink shadow-xl">
         <label className="flex items-center gap-3 border-b border-line px-4">
           <Icon name="search" className="size-5 shrink-0 text-ink-soft" />
-          <input ref={input} value={q} onChange={(e) => { setQ(e.target.value); setAt(0); }} aria-label="دوّر أو اختار"
-            placeholder="روح لصفحة، أو اكتب اسم عميل أو آخر أرقام موبايله"
+          <input ref={input} value={q} onChange={(e) => { setQ(e.target.value); setAt(0); }} aria-label="ابحث أو اختر"
+            placeholder="انتقل إلى صفحة، أو اكتب اسم عميل أو آخر أرقام هاتفه"
             className="min-h-14 min-w-0 flex-1 bg-transparent text-[16px] outline-none placeholder:text-ink-soft"
             onKeyDown={(e) => {
               if (e.key === "ArrowDown") { e.preventDefault(); setAt((i) => Math.min(i + 1, list.length - 1)); }
@@ -78,8 +78,8 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
             }} />
           <kbd className="shrink-0 rounded border border-line bg-card-2 px-1.5 text-[12px] text-ink-soft" dir="ltr">Esc</kbd>
         </label>
-        <ul role="listbox" aria-label="النتايج" className="grid max-h-[50vh] gap-0.5 overflow-y-auto p-2">
-          {list.length === 0 ? <li className="px-3 py-6 text-center text-[14px] text-ink-soft">مفيش حاجة بالاسم ده.</li> : null}
+        <ul role="listbox" aria-label="النتائج" className="grid max-h-[50vh] gap-0.5 overflow-y-auto p-2">
+          {list.length === 0 ? <li className="px-3 py-6 text-center text-[14px] text-ink-soft">لا توجد نتائج بهذا الاسم.</li> : null}
           {list.map((c, i) => (
             <li key={c.id} role="option" aria-selected={i === pick}>
               <button type="button" onMouseEnter={() => setAt(i)} onClick={() => run(c)}
@@ -92,7 +92,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
           ))}
         </ul>
         <p className="flex gap-4 border-t border-line bg-card-2 px-4 py-2 text-[12px] text-ink-soft">
-          <span><kbd dir="ltr">↑ ↓</kbd> تتحرك</span><span><kbd dir="ltr">Enter</kbd> تفتح</span><span><kbd dir="ltr">Ctrl K</kbd> من أي صفحة</span>
+          <span><kbd dir="ltr">↑ ↓</kbd> للتنقل</span><span><kbd dir="ltr">Enter</kbd> للفتح</span><span><kbd dir="ltr">Ctrl K</kbd> من أي صفحة</span>
         </p>
       </div>
     </div>

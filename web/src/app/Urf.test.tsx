@@ -58,12 +58,12 @@ describe("TASK 11 Urfi cases", () => {
     renderAt("/urf");
     const card = (await screen.findByText(/محمد أحمد علي حسن/)).closest("li")!;
     expect(within(card).getByText("الأخ")).toBeTruthy();
-    expect(within(card).getByText("اختلعت قبل كده")).toBeTruthy();
+    expect(within(card).getByText("مختلعة سابقًا")).toBeTruthy();
     // v1.81: the document opens in the glass viewer inside the panel; its private link is there
     fireEvent.click(within(card).getByRole("button", { name: /مستند 2/ }));
-    const viewer = await screen.findByRole("dialog", { name: "ورق العميل" });
+    const viewer = await screen.findByRole("dialog", { name: "مستندات العميل" });
     expect(within(viewer).getByRole("link", { name: /افتح في تبويب جديد/ }).getAttribute("href")).toBe("/api/panel/urf/c1/files/1");
-    fireEvent.click(within(viewer).getByRole("button", { name: "اقفل" }));
+    fireEvent.click(within(viewer).getByRole("button", { name: "إغلاق" }));
     expect(within(card).queryByRole("button", { name: /موافق/ })).toBeNull();
   });
 
@@ -72,7 +72,7 @@ describe("TASK 11 Urfi cases", () => {
     renderAt("/urf");
     const card = (await screen.findByText(/محمد أحمد علي حسن/)).closest("li")!;
     fireEvent.click(within(card).getByRole("button", { name: /رفض/ }));
-    expect(await confirmYes()).toContain("الميعاد هيتلغي");
+    expect(await confirmYes()).toContain("سيُلغي المكتب الموعد");
     await vi.waitFor(() => expect(calls.some((c) => c.method === "POST")).toBe(true));
     expect(calls.find((c) => c.method === "POST")).toMatchObject({ path: "/urf/c1/review", body: { decision: "rejected" } });
   });

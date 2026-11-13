@@ -41,7 +41,7 @@ export function FileViewer({ title, count, href, index, onIndex, onClose, detail
               // not a picture (a PDF, mostly): shown by the browser inside the window, or the way to open it
               <object data={src} type="application/pdf" aria-label={`${title} ${index + 1}`} className="h-[64dvh] w-full rounded-[16px]">
                 <p className="flex items-center gap-2 px-4 py-10 text-sm text-ink-soft" role="status">
-                  <Icon name="info" className="size-5" />الملف ده مش صورة. افتحه من «افتح في تبويب جديد».
+                  <Icon name="info" className="size-5" />هذا الملف ليس صورة. افتحه من «افتح في تبويب جديد».
                 </p>
               </object>
             ) : (
@@ -52,10 +52,10 @@ export function FileViewer({ title, count, href, index, onIndex, onClose, detail
           </div>
           {count > 1 ? (
             <div className="mt-3 flex items-center gap-2 text-[13px]">
-              <button type="button" disabled={index <= 0} onClick={() => onIndex(index - 1)} aria-label="الملف اللي قبله"
+              <button type="button" disabled={index <= 0} onClick={() => onIndex(index - 1)} aria-label="الملف السابق"
                 className="grid size-9 place-items-center rounded-full border border-line/60 bg-card/70 disabled:opacity-40"><Icon name="chevron-end" className="size-4" /></button>
               <span className="tabular rounded-full bg-card/70 px-3 py-1 font-semibold">{index + 1} من {count}</span>
-              <button type="button" disabled={index >= count - 1} onClick={() => onIndex(index + 1)} aria-label="الملف اللي بعده"
+              <button type="button" disabled={index >= count - 1} onClick={() => onIndex(index + 1)} aria-label="الملف التالي"
                 className="grid size-9 place-items-center rounded-full border border-line/60 bg-card/70 disabled:opacity-40"><Icon name="chevron-start" className="size-4" /></button>
             </div>
           ) : null}
@@ -69,7 +69,7 @@ export function FileViewer({ title, count, href, index, onIndex, onClose, detail
               </span>
               {title}
             </h2>
-            <button ref={closeRef} type="button" onClick={onClose} aria-label="اقفل"
+            <button ref={closeRef} type="button" onClick={onClose} aria-label="إغلاق"
               className="grid size-9 shrink-0 place-items-center rounded-full border border-line/60 bg-card/70 transition hover:bg-card-2">
               <Icon name="x" className="size-4" />
             </button>
@@ -88,7 +88,7 @@ export function FileViewer({ title, count, href, index, onIndex, onClose, detail
 
           <p className="flex items-start gap-1.5 text-[12px] text-ink-soft">
             <Icon name="info" className="mt-0.5 size-3.5 shrink-0 text-gold-ink" />
-            لمس الصورة بيكبّرها. كل فتح للملف بيتسجّل.
+            المس الصورة لتكبيرها. يُسجَّل كل فتح للملف.
           </p>
 
           <div className="flex flex-wrap gap-2">

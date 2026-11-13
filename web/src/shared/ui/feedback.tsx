@@ -84,7 +84,7 @@ export function ConfirmHost() {
         <div className="flex flex-wrap justify-end gap-2">
           <button type="button" onClick={() => answer(false)}
             className="inline-flex min-h-10 items-center rounded-[var(--radius-control)] border border-line-strong bg-card px-4 text-[14.5px] font-medium hover:border-gold-line">
-            لأ، ارجع
+            إلغاء
           </button>
           <button ref={yes} type="button" onClick={() => answer(true)}
             className={`inline-flex min-h-10 items-center rounded-[var(--radius-control)] border px-4 text-[14.5px] font-semibold ${current.danger ? "border-red-ink/40 bg-red-bg text-red-ink hover:opacity-90" : "btn-gold hover:brightness-105"}`}>

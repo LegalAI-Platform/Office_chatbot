@@ -33,7 +33,7 @@ function CaseSaid() {
     mutationFn: testing.setCaseSaid,
     onSuccess: (r) => {
       void qc.invalidateQueries({ queryKey: ["testing", "urf-case-said"] });
-      toast(r.on ? "طريقة العرفي الجديدة شغّالة ✅" : "العرفي رجع زي نسخة 1.81 ✅");
+      toast(r.on ? "تم تفعيل طريقة العرفي الجديدة ✅" : "عاد العرفي كما كان في الإصدار 1.81 ✅");
     },
   });
   if (state.isError && !(state.error instanceof ApiError && state.error.status === 404)) {
@@ -44,11 +44,11 @@ function CaseSaid() {
 
   const flip = async () => {
     const ok = await confirmAction({
-      title: on ? "ترجّع العرفي زي نسخة 1.81؟" : "تشغّل طريقة العرفي الجديدة؟",
+      title: on ? "إعادة العرفي كما كان في الإصدار 1.81؟" : "تفعيل طريقة العرفي الجديدة؟",
       body: on
-        ? "حازم هيقرا أسئلة العرفي زي نسخة 1.81 بالظبط."
-        : "حازم هيفهم في العرفي لما العميل يقول، أو يسأل («ينفع ابوها؟»)، أو يرجع في كلامه («اخوها مش هيجي»)، ويجاوب من قواعد المكتب نفسها. تقدر تقفله في أي وقت.",
-      yes: on ? "أيوه، رجّعه" : "أيوه، شغّله",
+        ? "سيقرأ حازم أسئلة العرفي كما في الإصدار 1.81 تمامًا."
+        : "سيفهم حازم في العرفي ما يقوله العميل، أو ما يسأل عنه («ينفع ابوها؟»)، أو ما يتراجع عنه من كلامه («اخوها مش هيجي»)، ويجيب من قواعد المكتب نفسها. يمكنك إيقافها في أي وقت.",
+      yes: on ? "نعم، أعِده" : "نعم، فعّله",
     });
     if (ok) set.mutate(!on);
   };
@@ -60,12 +60,12 @@ function CaseSaid() {
         طريقة العرفي الجديدة
       </h2>
       <p className="text-[13px] text-ink-soft">
-        «ينفع ابوها؟»، «ينفع أجيب الشهود؟»، «اخوها مش هيجي»: حازم بيجاوب من قواعد المكتب ومش بيحوّل للمكتب. مقفولة: العرفي زي نسخة 1.81 بالظبط.
+        «ينفع ابوها؟»، «ينفع أجيب الشهود؟»، «اخوها مش هيجي»: يجيب حازم من قواعد المكتب ولا يحوّل المحادثة إلى المكتب. عند إيقافها: يعمل العرفي كما في الإصدار 1.81 تمامًا.
       </p>
       <div className="flex flex-wrap items-center gap-3 border-t border-line/60 pt-3">
-        <span className={`rounded-full px-3 py-1 text-[13px] font-bold ${on ? "bg-green-bg text-green-ink" : "bg-grey-bg text-ink-soft"}`}>{on ? "شغّالة" : "مقفولة"}</span>
+        <span className={`rounded-full px-3 py-1 text-[13px] font-bold ${on ? "bg-green-bg text-green-ink" : "bg-grey-bg text-ink-soft"}`}>{on ? "مفعّلة" : "متوقفة"}</span>
         <Button variant={on ? "secondary" : "primary"} busy={set.isPending} onClick={() => void flip()}>
-          {on ? "اقفلها" : "شغّلها"}
+          {on ? "إيقاف" : "تفعيل"}
         </Button>
       </div>
       {set.isError ? <p className="text-sm text-bad" role="alert">{errorMessage(set.error)}</p> : null}
@@ -84,7 +84,7 @@ function InfoWriter() {
     mutationFn: testing.setInfoWriter,
     onSuccess: (r) => {
       void qc.invalidateQueries({ queryKey: ["testing", "info-writer"] });
-      toast(r.on ? "جملة الرد على أسئلة المكتب شغّالة ✅" : "ردود العنوان والمواعيد رجعت زي الأول ✅");
+      toast(r.on ? "تم تفعيل جملة الرد على أسئلة المكتب ✅" : "عادت ردود العنوان والمواعيد كما كانت ✅");
     },
   });
   if (state.isError && !(state.error instanceof ApiError && state.error.status === 404)) {
@@ -95,11 +95,11 @@ function InfoWriter() {
 
   const flip = async () => {
     const ok = await confirmAction({
-      title: on ? "ترجّع ردود العنوان والمواعيد زي الأول؟" : "تشغّل جملة الرد على أسئلة المكتب؟",
+      title: on ? "إعادة ردود العنوان والمواعيد كما كانت؟" : "تفعيل جملة الرد على أسئلة المكتب؟",
       body: on
-        ? "العنوان والمواعيد هيتبعتوا نص جاهز بس، من غير جملة قبلهم."
-        : "لما العميل يسأل عن عنوان المكتب أو مواعيده، حازم هيجاوب على سؤاله في جملة واحدة وبعدها العنوان والخريطة والمواعيد زي ما هي بالحرف. تقدر تقفله في أي وقت.",
-      yes: on ? "أيوه، رجّعه" : "أيوه، شغّله",
+        ? "سيُرسل العنوان والمواعيد نصًا جاهزًا فقط، دون جملة قبلهما."
+        : "عندما يسأل العميل عن عنوان المكتب أو مواعيده، سيجيب حازم عن سؤاله في جملة واحدة، ثم يرسل العنوان والخريطة والمواعيد كما هي حرفيًا. يمكنك إيقافها في أي وقت.",
+      yes: on ? "نعم، أعِده" : "نعم، فعّله",
     });
     if (ok) set.mutate(!on);
   };
@@ -111,12 +111,12 @@ function InfoWriter() {
         جملة الرد على أسئلة المكتب
       </h2>
       <p className="text-[13px] text-ink-soft">
-        جملة تجاوب على سؤال العميل قبل العنوان والمواعيد (مثلًا «فيه فرع في إسكندرية؟»). النص الجاهز نفسه ما بيتغيّرش.
+        جملة تجيب عن سؤال العميل قبل العنوان والمواعيد (مثلًا «فيه فرع في إسكندرية؟»). ولا يتغيّر النص الجاهز نفسه.
       </p>
       <div className="flex flex-wrap items-center gap-3 border-t border-line/60 pt-3">
-        <span className={`rounded-full px-3 py-1 text-[13px] font-bold ${on ? "bg-green-bg text-green-ink" : "bg-grey-bg text-ink-soft"}`}>{on ? "شغّالة" : "مقفولة"}</span>
+        <span className={`rounded-full px-3 py-1 text-[13px] font-bold ${on ? "bg-green-bg text-green-ink" : "bg-grey-bg text-ink-soft"}`}>{on ? "مفعّلة" : "متوقفة"}</span>
         <Button variant={on ? "secondary" : "primary"} busy={set.isPending} onClick={() => void flip()}>
-          {on ? "اقفلها" : "شغّلها"}
+          {on ? "إيقاف" : "تفعيل"}
         </Button>
       </div>
       {set.isError ? <p className="text-sm text-bad" role="alert">{errorMessage(set.error)}</p> : null}
@@ -135,7 +135,7 @@ function Understanding() {
     mutationFn: testing.setUnderstanding,
     onSuccess: (r) => {
       void qc.invalidateQueries({ queryKey: ["testing", "understanding"] });
-      toast(r.on ? "الفهم الجديد شغّال ✅" : "حازم رجع زي الأول ✅");
+      toast(r.on ? "تم تفعيل الفهم الجديد ✅" : "عاد حازم كما كان ✅");
     },
   });
   if (state.isError && !(state.error instanceof ApiError && state.error.status === 404)) {
@@ -146,11 +146,11 @@ function Understanding() {
 
   const flip = async () => {
     const ok = await confirmAction({
-      title: on ? "ترجّع حازم زي الأول؟" : "تشغّل الفهم الجديد؟",
+      title: on ? "إعادة حازم كما كان؟" : "تفعيل الفهم الجديد؟",
       body: on
-        ? "حازم هيرجع يفهم الرسالة زي الأول بالظبط."
-        : "حازم هيقرا المحادثة كلها، ويفهم لو العميل بيسأل بس أو مش عايز يكمّل أو شايف السعر غالي، ويجاوب على كل الأسئلة اللي في الرسالة، ويفهم السن بالحروف. تقدر تقفله في أي وقت.",
-      yes: on ? "أيوه، رجّعه" : "أيوه، شغّله",
+        ? "سيعود حازم إلى فهم الرسالة كما كان تمامًا."
+        : "سيقرأ حازم المحادثة كاملة، ويفهم إن كان العميل يستفسر فقط أو لا يريد المتابعة أو يرى السعر مرتفعًا، ويجيب عن جميع الأسئلة الواردة في الرسالة، ويفهم السن المكتوب بالحروف. يمكنك إيقافه في أي وقت.",
+      yes: on ? "نعم، أعِده" : "نعم، فعّله",
     });
     if (ok) set.mutate(!on);
   };
@@ -162,12 +162,12 @@ function Understanding() {
         الفهم الجديد (المرحلة 1)
       </h2>
       <p className="text-[13px] text-ink-soft">
-        حازم بيقرا المحادثة كلها ويفهم موقف العميل. لو حصلت أي مشكلة، اقفله وحازم يرجع زي الأول في ثانية.
+        يقرأ حازم المحادثة كاملة ويفهم موقف العميل. إذا حدثت أي مشكلة، فأوقفه ليعود حازم كما كان خلال ثانية.
       </p>
       <div className="flex flex-wrap items-center gap-3 border-t border-line/60 pt-3">
-        <span className={`rounded-full px-3 py-1 text-[13px] font-bold ${on ? "bg-green-bg text-green-ink" : "bg-grey-bg text-ink-soft"}`}>{on ? "شغّال" : "مقفول"}</span>
+        <span className={`rounded-full px-3 py-1 text-[13px] font-bold ${on ? "bg-green-bg text-green-ink" : "bg-grey-bg text-ink-soft"}`}>{on ? "مفعّل" : "متوقف"}</span>
         <Button variant={on ? "secondary" : "primary"} busy={set.isPending} onClick={() => void flip()}>
-          {on ? "اقفله" : "شغّله"}
+          {on ? "إيقاف" : "تفعيل"}
         </Button>
       </div>
       {set.isError ? <p className="text-sm text-bad" role="alert">{errorMessage(set.error)}</p> : null}
@@ -186,7 +186,7 @@ function UrgentWindow() {
     mutationFn: testing.setUrgentWindow,
     onSuccess: (r) => {
       void qc.invalidateQueries({ queryKey: ["testing", "urgent-window"] });
-      toast(r.on ? "تنبيه العاجل هيوصل رسالة عادية جوه الـ 24 ساعة ✅" : "تنبيه العاجل رجع قالب بس ✅");
+      toast(r.on ? "سيصل تنبيه العاجل رسالةً عادية ضمن نافذة الـ 24 ساعة ✅" : "عاد تنبيه العاجل إلى القالب فقط ✅");
     },
   });
   // 404: not the test environment, the switch is simply not there
@@ -198,11 +198,11 @@ function UrgentWindow() {
 
   const flip = async () => {
     const ok = await confirmAction({
-      title: on ? "ترجّع التنبيه قالب بس؟" : "تشغّل تنبيه العاجل جوه الـ 24 ساعة؟",
+      title: on ? "إعادة التنبيه إلى القالب فقط؟" : "تفعيل تنبيه العاجل ضمن نافذة الـ 24 ساعة؟",
       body: on
-        ? "تنبيه المستشار والمدير هيتبعت قالب urgent_alert بس، زي DECISIONS. ولحد ما Meta توافق عليه، هيوصل في اللوحة والإيميل بس."
-        : "لو المستشار أو المدير بعت أي رسالة للبوت في آخر 24 ساعة، التنبيه هيوصله رسالة عادية بنفس الكلام وزرار «شوف التحويل». غير كده، القالب زي ما هو. ده للتجربة بس: اقفله قبل الإطلاق.",
-      yes: on ? "أيوه، رجّعه" : "أيوه، شغّله",
+        ? "سيُرسل تنبيه المستشار والمدير بقالب urgent_alert فقط، كما في DECISIONS. وإلى أن توافق Meta عليه، سيصل في اللوحة والبريد الإلكتروني فقط."
+        : "إذا أرسل المستشار أو المدير أي رسالة إلى البوت خلال آخر 24 ساعة، فسيصله التنبيه رسالةً عادية بالنص نفسه مع زر «شوف التحويل». وفي غير ذلك، يبقى القالب كما هو. هذا للتجربة فقط: أوقفه قبل الإطلاق.",
+      yes: on ? "نعم، أعِده" : "نعم، فعّله",
     });
     if (ok) set.mutate(!on);
   };
@@ -211,16 +211,16 @@ function UrgentWindow() {
     <section aria-labelledby="testing-urgent" className="liquid relative isolate grid gap-3 overflow-hidden rounded-[22px] p-4 sm:p-5">
       <h2 id="testing-urgent" className="flex items-center gap-2 text-[16px] font-bold">
         <Icon name="alert-circle" className="size-4 text-gold-ink" />
-        تنبيه العاجل جوه الـ 24 ساعة
+        تنبيه العاجل ضمن نافذة الـ 24 ساعة
       </h2>
       <p className="text-[13px] text-ink-soft">
-        لحد ما Meta توافق على قالب تنبيه المستشار، ده بيخلّي التنبيه يوصل رسالة عادية لو المستشار أو المدير كاتب للبوت في آخر 24 ساعة.
-        للتجربة بس.
+        إلى أن توافق Meta على قالب تنبيه المستشار، يتيح هذا الخيار وصول التنبيه رسالةً عادية إذا كان المستشار أو المدير قد راسل البوت خلال آخر 24 ساعة.
+        للتجربة فقط.
       </p>
       <div className="flex flex-wrap items-center gap-3 border-t border-line/60 pt-3">
-        <span className={`rounded-full px-3 py-1 text-[13px] font-bold ${on ? "bg-green-bg text-green-ink" : "bg-grey-bg text-ink-soft"}`}>{on ? "شغّال" : "مقفول"}</span>
+        <span className={`rounded-full px-3 py-1 text-[13px] font-bold ${on ? "bg-green-bg text-green-ink" : "bg-grey-bg text-ink-soft"}`}>{on ? "مفعّل" : "متوقف"}</span>
         <Button variant={on ? "secondary" : "primary"} busy={set.isPending} onClick={() => void flip()}>
-          {on ? "اقفله" : "شغّله"}
+          {on ? "إيقاف" : "تفعيل"}
         </Button>
       </div>
       {set.isError ? <p className="text-sm text-bad" role="alert">{errorMessage(set.error)}</p> : null}
@@ -253,21 +253,21 @@ export function TestingPage() {
     // whatever happened, the list shows what is left
     onSettled: () => void qc.invalidateQueries(),
     onSuccess: ({ done, failed }) => {
-      for (const f of failed) toast(`حازم ما نسيش الرقم اللي آخره ${ending(f.masked)}: ${errorMessage(f.error)}`, "bad");
+      for (const f of failed) toast(`لم ينسَ حازم الرقم المنتهي بـ ${ending(f.masked)}: ${errorMessage(f.error)}`, "bad");
       for (const r of done) {
-        toast(`حازم نسي الرقم اللي آخره ${ending(r.masked)} ✅`);
-        if (r.chatwoot === "failed") toast(`محادثته القديمة لسه في Chatwoot: امسحها من هناك لو عايز`, "bad");
-        if (r.calendar_by_hand.length > 0) toast(`فيه ${r.calendar_by_hand.length} ميعاد في كالندر المستشار ما اتمسحش: امسحه بإيدك (${r.calendar_by_hand.map((t) => cairoWhen(t)).join("، ")})`, "bad");
+        toast(`نسي حازم الرقم المنتهي بـ ${ending(r.masked)} ✅`);
+        if (r.chatwoot === "failed") toast(`ما زالت محادثته القديمة في Chatwoot: احذفها من هناك إذا أردت`, "bad");
+        if (r.calendar_by_hand.length > 0) toast(`مواعيد في تقويم المستشار لم تُحذف (${r.calendar_by_hand.length}): احذفها يدويًا (${r.calendar_by_hand.map((t) => cairoWhen(t)).join("، ")})`, "bad");
       }
     },
   });
 
   const ask = async (items: TestNumber[]) => {
-    const which = items.length === 1 ? `الرقم اللي آخره ${ending(items[0]!.masked)}` : `الأرقام (${items.map((n) => ending(n.masked)).join("، ")})`;
+    const which = items.length === 1 ? `الرقم المنتهي بـ ${ending(items[0]!.masked)}` : `الأرقام (${items.map((n) => ending(n.masked)).join("، ")})`;
     const ok = await confirmAction({
-      title: items.length === 1 ? "حازم ينسى الرقم ده؟" : "حازم ينسى كل أرقام التجربة؟",
-      body: `حازم هينسى كل حاجة عن ${which}: المحادثات، والاسم، والطلبات، والحجوزات ومواعيدها في كالندر المستشار، والمحادثة في Chatwoot. أول رسالة جاية منه هتبدأ من الترحيب. ده مايترجعش.`,
-      yes: items.length === 1 ? "أيوه، انساه" : "أيوه، انساهم",
+      title: items.length === 1 ? "هل ينسى حازم هذا الرقم؟" : "هل ينسى حازم جميع أرقام التجربة؟",
+      body: `سينسى حازم كل ما يخص ${which}: المحادثات، والاسم، والطلبات، والحجوزات ومواعيدها في تقويم المستشار، والمحادثة في Chatwoot. وستبدأ أول رسالة تالية منه من الترحيب. لا يمكن التراجع عن هذا الإجراء.`,
+      yes: items.length === 1 ? "نعم، انسَه" : "نعم، انسَهم",
       danger: true,
     });
     if (ok) forget.mutate(items);
@@ -295,9 +295,9 @@ export function TestingPage() {
       </header>
 
       {list.isPending ? <Loading /> : off ? (
-        <Nothing title="الأدوات دي مقفولة" icon="lock">السيستم مش في وضع التجربة، فمحدش يقدر يمسح حاجة من هنا.</Nothing>
+        <Nothing title="هذه الأدوات مُعطَّلة" icon="lock">النظام ليس في وضع التجربة، لذلك لا يمكن لأحد حذف أي شيء من هنا.</Nothing>
       ) : list.isError ? <ErrorState message={errorMessage(list.error)} onRetry={() => void list.refetch()} /> : list.data.numbers.length === 0 ? (
-        <Nothing title="مفيش أرقام تجربة" icon="message">مفيش أرقام في قايمة الأرقام اللي حازم بيرد عليها وهو في التجربة.</Nothing>
+        <Nothing title="لا توجد أرقام تجربة" icon="message">لا توجد أرقام في قائمة الأرقام التي يردّ عليها حازم أثناء التجربة.</Nothing>
       ) : (
         <section aria-labelledby="testing-numbers" className="liquid relative isolate grid gap-3 overflow-hidden rounded-[22px] p-4 sm:p-5">
           <span aria-hidden className="pointer-events-none absolute -top-16 -end-10 -z-10 size-48 rounded-full bg-gold/15 blur-3xl" />
@@ -316,12 +316,12 @@ export function TestingPage() {
                 <span className="grid min-w-0 flex-1 gap-0.5">
                   <span className="text-[11.5px] text-ink-soft">رقم تجربة</span>
                   <span className="font-semibold">
-                    الرقم اللي آخره <span dir="ltr" className="tabular">{ending(n.masked)}</span>
+                    الرقم المنتهي بـ <span dir="ltr" className="tabular">{ending(n.masked)}</span>
                   </span>
                 </span>
                 <Button variant="danger" busy={forget.isPending && forget.variables?.length === 1 && forget.variables[0]?.key === n.key}
                   disabled={forget.isPending} onClick={() => void ask([n])}>
-                  انسى الرقم ده
+                  انسَ هذا الرقم
                 </Button>
               </li>
             ))}
@@ -330,7 +330,7 @@ export function TestingPage() {
             <div className="flex flex-wrap items-center gap-3 border-t border-line/60 pt-3">
               <Button variant="secondary" busy={forget.isPending && (forget.variables?.length ?? 0) > 1} disabled={forget.isPending}
                 onClick={() => void ask(list.data.numbers)}>
-                انسى كل الأرقام ({list.data.numbers.length})
+                انسَ جميع الأرقام ({list.data.numbers.length})
               </Button>
             </div>
           ) : null}

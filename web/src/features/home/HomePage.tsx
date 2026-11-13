@@ -6,7 +6,8 @@ import { openChatwoot } from "../../shared/api/chatwoot";
 import { useDashboard } from "../../shared/api/dashboard";
 import { can, useMe } from "../../shared/api/session";
 import type { DashboardTask, MonthReport } from "../../shared/api/types";
-import { BOOKING_SERVICES, label, TASK_TYPES } from "../../shared/lib/labels";
+import { BOOKING_SERVICES, label } from "../../shared/lib/labels";
+import { CONVERSATIONS, countWords, firstAndMore, groupByClient, shortType, thingsWords } from "../../shared/lib/group";
 import { cairoDate, cairoDayWord, cairoHour, cairoMonth, cairoWeek, timeAgo } from "../../shared/lib/time";
 import { Icon, type IconName } from "../../shared/ui/Icon";
 import { OwnerImg, type OwnerImage } from "../../shared/ui/Owner";
@@ -19,7 +20,7 @@ interface Appointment {
   id: string; service: string; start: string; state: string; name: string | null; payment: string | null;
   call_app: "whatsapp" | "facetime" | "meet" | "phone" | null;
 }
-const who = (t: DashboardTask) => t.client_name ?? "رقم من غير اسم";
+const who = (t: DashboardTask) => t.client_name ?? "رقم بلا اسم";
 // every card of the page asks again each minute, like the tasks and the bell, so a booking made on WhatsApp shows up
 // on a screen left open. v1.106: and at once when the bell's stream says the office's data changed (shared/api/alerts);
 // the minute stays as the fallback
@@ -82,7 +83,7 @@ export function HomePage() {
         {/* the four numbers (a phone: two by two, like «المهام», so the day's cards are on the first screen too) */}
         <div data-tour="home-kpis" className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
           <Kpi tone="gold" icon="stat_calendar_blue" title="مواعيد اليوم" value={appointments.isError ? null : todays} to="/appointments" more="عرض المواعيد" />
-          <Kpi tone="sand" icon="stat_card_green" title="إيصالات تحتاج تأكيد" value={receipts.isError ? null : receipts.data?.length} to="/receipts" more="من الإيصالات" />
+          <Kpi tone="sand" icon="stat_card_green" title="إيصالات تحتاج إلى تأكيد" value={receipts.isError ? null : receipts.data?.length} to="/receipts" more="عرض الإيصالات" />
           <Kpi tone="copper" icon="stat_alert_yellow" title="أمور عاجلة" value={dash.data?.urgent} series={dash.data?.urgent_by_day} to="/tasks?state=urgent" more="عرض التفاصيل" />
           <Kpi tone="mahogany" icon="stat_clock_red" title="مهام متأخرة" value={dash.data?.overdue} series={dash.data?.overdue_by_day} to="/tasks?state=overdue" more="عرض المهام" />
         </div>
@@ -107,9 +108,10 @@ export function HomePage() {
             <UpcomingPanel now={now} items={nextList} pending={next.isPending} failed={next.isError} />
             {month ? <MonthPanel now={now} /> : null}
           </div>
-          <div className="grid min-w-0 gap-4 md:col-span-2 md:grid-cols-2 xl:col-span-1 xl:grid-cols-1 xl:grid-rows-[auto_1fr] 2xl:gap-5">
-            <AlertsPanel items={dash.data?.recent} pending={dash.isPending} now={now} />
-            <PriorityPanel items={dash.data?.priority} pending={dash.isPending} now={now} />
+          {/* fix/alert-flood: one card for what needs someone (it was «التنبيهات الأخيرة» and «المهام العاجلة والمتأخرة»,
+              the same tasks twice) */}
+          <div className="grid min-w-0 content-start gap-4 md:col-span-2 xl:col-span-1 2xl:gap-5">
+            <NeedsYouPanel recent={dash.data?.recent} priority={dash.data?.priority} pending={dash.isPending} now={now} />
           </div>
         </div>
       </div>
@@ -245,7 +247,7 @@ const TH = "px-2 py-2 text-start text-[12px] font-semibold text-ink-soft";
 
 // the week's short day names, so all seven fit a narrow column whole
 const DAY_NAMES: Record<string, string> = {
-  السبت: "سبت", الأحد: "أحد", الإثنين: "اتنين", الاثنين: "اتنين", الثلاثاء: "تلات", الأربعاء: "أربع", الخميس: "خميس", الجمعة: "جمعة",
+  السبت: "سبت", الأحد: "أحد", الإثنين: "اثنين", الاثنين: "اثنين", الثلاثاء: "ثلاثاء", الأربعاء: "أربعاء", الخميس: "خميس", الجمعة: "جمعة",
 };
 // a dot per kind of appointment in the day's list (the mockup's colors)
 const DOT: Partial<Record<IconName, string>> = { phone: "bg-red", video: "bg-blue", office: "bg-orange" };
@@ -263,16 +265,16 @@ function CalendarPanel({ now, items }: { now: Date; items?: Appointment[] | unde
   return (
     <Panel title="تقويم المواعيد" icon="calendar" action={<SeeAll to="/appointments" />} flush>
       <div className="flex items-center justify-between px-4 py-1.5">
-        <button type="button" onClick={() => setShift((w) => w - 1)} aria-label="الأسبوع اللي فات" className={ARROW}>
+        <button type="button" onClick={() => setShift((w) => w - 1)} aria-label="الأسبوع السابق" className={ARROW}>
           <Icon name="back" className="size-5" />
         </button>
-        <button type="button" onClick={() => setShift(0)} disabled={shift === 0} aria-label="ارجع للأسبوع ده"
+        <button type="button" onClick={() => setShift(0)} disabled={shift === 0} aria-label="العودة إلى الأسبوع الحالي"
           className="rounded-full px-2 text-[16px] font-bold transition enabled:hover:bg-gold-tint enabled:hover:text-gold-ink">{cairoMonth(shown)}</button>
-        <button type="button" onClick={() => setShift((w) => w + 1)} aria-label="الأسبوع الجاي" className={ARROW}>
+        <button type="button" onClick={() => setShift((w) => w + 1)} aria-label="الأسبوع التالي" className={ARROW}>
           <Icon name="forward" className="size-5" />
         </button>
       </div>
-      <ol className="mx-3 mb-3 grid grid-cols-7 rounded-[16px] border border-line/60 bg-card/45 px-1 py-2 text-center shadow-[inset_0_1px_0_rgb(255_255_255/0.45)]" aria-label={shift === 0 ? "الأسبوع ده" : "أسبوع تاني"}>
+      <ol className="mx-3 mb-3 grid grid-cols-7 rounded-[16px] border border-line/60 bg-card/45 px-1 py-2 text-center shadow-[inset_0_1px_0_rgb(255_255_255/0.45)]" aria-label={shift === 0 ? "الأسبوع الحالي" : "أسبوع آخر"}>
         {week.map((d) => (
           <li key={d.key} className="min-w-0" aria-current={d.today ? "date" : undefined}>
             <Link to={`/appointments?day=${d.key}`} aria-label={`مواعيد ${d.weekday} ${d.day}`} className="grid justify-items-center gap-1.5 rounded-[12px] py-0.5 transition hover:bg-gold-tint/60">
@@ -287,7 +289,7 @@ function CalendarPanel({ now, items }: { now: Date; items?: Appointment[] | unde
             said twice */}
         <h3 className="px-4 pb-2 text-[14px] font-bold max-md:hidden">مواعيد اليوم{items ? ` (${items.length})` : ""}</h3>
         {!items?.length ? (
-          <p className="px-4 pt-1 pb-3 text-[13px] text-ink-soft max-md:hidden">{items ? "مفيش مواعيد النهارده." : "…"}</p>
+          <p className="px-4 pt-1 pb-3 text-[13px] text-ink-soft max-md:hidden">{items ? "لا توجد مواعيد اليوم." : "…"}</p>
         ) : (
           <ul className={`${LIST} gap-1.5 pb-0 max-md:hidden`}>
             {items.map((a) => {
@@ -321,7 +323,7 @@ function CalendarPanel({ now, items }: { now: Date; items?: Appointment[] | unde
 
 const isOpen = (a: Appointment) => a.state === "confirmed" || a.state === "pending_payment";
 const byStart = (a: Appointment, b: Appointment) => a.start.localeCompare(b.start);
-const client = (a: Appointment) => a.name ?? "رقم من غير اسم";
+const client = (a: Appointment) => a.name ?? "رقم بلا اسم";
 // «09:00» as in the mockup (24 hours, Cairo), the same in both languages' directions
 const clockFmt = new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Cairo", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 const clock = (iso: string) => clockFmt.format(new Date(iso));
@@ -330,7 +332,7 @@ const clock = (iso: string) => clockFmt.format(new Date(iso));
 function kindOf(a: Appointment): { icon: IconName; text: string } {
   if (a.service === "consultation_office" || a.service.startsWith("urf_")) return { icon: "office", text: label(BOOKING_SERVICES, a.service) };
   if (a.service === "consultation_urgent") return { icon: "phone", text: "استشارة عاجلة" };
-  if (a.call_app === "meet" || a.call_app === "facetime") return { icon: "video", text: "استشارة فيديو" };
+  if (a.call_app === "meet" || a.call_app === "facetime") return { icon: "video", text: "استشارة بالفيديو" };
   if (a.call_app === "phone") return { icon: "phone", text: "مكالمة عادية" }; // v1.49
   return { icon: "phone", text: "استشارة هاتفية" };
 }
@@ -339,11 +341,11 @@ function kindOf(a: Appointment): { icon: IconName; text: string } {
 function paidOf(a: Appointment): { tone: string; text: string; paid: boolean } {
   switch (a.payment) {
     case "verified": return { tone: "green", text: "مدفوع", paid: true };
-    case "proof_received": case "duplicate_suspected": return { tone: "blue", text: "بانتظار المراجعة", paid: false };
+    case "proof_received": case "duplicate_suspected": return { tone: "blue", text: "في انتظار المراجعة", paid: false };
     case "partial": return { tone: "orange", text: "مدفوع جزئيًا", paid: false };
     case "not_received": return { tone: "red", text: "لم يتم الدفع", paid: false };
     case "refund_requested": case "refunded": return { tone: "grey", text: "استرداد", paid: false };
-    default: return { tone: "orange", text: "بانتظار الدفع", paid: false };
+    default: return { tone: "orange", text: "في انتظار الدفع", paid: false };
   }
 }
 
@@ -352,9 +354,9 @@ function TodayPanel({ items, pending, failed }: { items?: Appointment[] | undefi
   return (
     <Panel title="مواعيد اليوم" icon="clock" count={items?.length} action={<SeeAll to="/appointments" />} flush>
       {pending ? <Rows n={4} /> : failed ? (
-        <Quiet icon="stat_calendar_blue" title="مواعيد اليوم مش متاحة دلوقتي">جرّب تاني بعد شوية.</Quiet>
+        <Quiet icon="stat_calendar_blue" title="مواعيد اليوم غير متاحة الآن">حاول مرة أخرى بعد قليل.</Quiet>
       ) : !items?.length ? (
-        <Quiet icon="stat_calendar_blue" title="مفيش مواعيد النهارده">مواعيد اليوم وحالة الدفع بتاعتها هتظهر هنا.</Quiet>
+        <Quiet icon="stat_calendar_blue" title="لا توجد مواعيد اليوم">ستظهر هنا مواعيد اليوم وحالة الدفع الخاصة بها.</Quiet>
       ) : (
         <>
           {/* a phone: one row of two lines per appointment */}
@@ -418,49 +420,10 @@ function Actions({ a, paid }: { a: Appointment; paid: boolean }) {
     <span className="flex items-center justify-end gap-1">
       {paid ? <Link to={day} className={button}>التفاصيل</Link>
         : <button type="button" onClick={() => void openChatwoot({ appointmentId: a.id })} className={button}>التواصل</button>}
-      <Link to={day} aria-label="افتح يوم الميعاد" className="grid size-7 place-items-center rounded-full text-ink-soft transition hover:bg-gold-tint hover:text-gold-ink">
+      <Link to={day} aria-label="افتح يوم الموعد" className="grid size-7 place-items-center rounded-full text-ink-soft transition hover:bg-gold-tint hover:text-gold-ink">
         <Icon name="more" className="size-5" />
       </Link>
     </span>
-  );
-}
-
-// ---------- alerts ----------
-
-function alertLook(t: DashboardTask): { icon: OwnerImage; title: string } {
-  if (URGENT.has(t.type)) return { icon: "alert_urgent_red", title: label(TASK_TYPES, t.type) };
-  if (t.late) return { icon: "alert_task_orange", title: "مهمة متأخرة" };
-  if (t.state === "done") return { icon: "alert_receipt_green", title: `${label(TASK_TYPES, t.type)} - خلصت` };
-  return { icon: "alert_message_blue", title: label(TASK_TYPES, t.type) };
-}
-
-function AlertsPanel({ items, pending, now }: { items?: DashboardTask[] | undefined; pending: boolean; now: Date }) {
-  return (
-    <Panel title="التنبيهات الأخيرة" icon="bell" count={items?.length} action={<SeeAll to="/tasks" />} flush>
-      {pending ? <Rows n={4} /> : !items?.length ? (
-        <Quiet icon="alert_message_blue" title="مفيش تنبيهات جديدة">أي مهمة حازم يفتحها هتظهر هنا.</Quiet>
-      ) : (
-        <ul className={LIST}>
-          {items.map((t) => {
-            const a = alertLook(t);
-            return (
-              <li key={t.id}>
-                <Link to={`/tasks/${t.id}`} className={`${ROW} px-2.5 py-2`}>
-                  <span className="grid size-9 shrink-0 place-items-center rounded-full border border-line/60 bg-card/70 shadow-[inset_0_1px_0_rgb(255_255_255/0.6)]">
-                    <OwnerImg name={a.icon} className="size-7 object-contain" />
-                  </span>
-                  <span className="grid min-w-0 flex-1 gap-0.5 leading-snug">
-                    <span className="truncate text-[13.5px] font-bold">{a.title}</span>
-                    <span className="truncate text-[12px] text-ink-soft">{who(t)}{t.staff_name ? ` - مع ${t.staff_name}` : ""}</span>
-                  </span>
-                  <span className="shrink-0 rounded-full bg-card-2/70 px-2 py-0.5 text-[10.5px] text-ink-soft">{timeAgo(t.created_at, now)}</span>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </Panel>
   );
 }
 
@@ -475,30 +438,79 @@ function priority(t: DashboardTask): { tone: string; text: string } {
   return { tone: "blue", text: "عادية" };
 }
 
-function PriorityPanel({ items, pending, now }: { items?: DashboardTask[] | undefined; pending: boolean; now: Date }) {
+const RANK: Record<string, number> = { orange: 0, red: 1, blue: 2 };
+
+/**
+ * «محتاج منك» (fix/alert-flood, the tester: «both of these cards do the same, merge them»): every task that needs someone,
+ * the most pressing first (urgent, then late, then by due time), one row per client that opens to show each. It replaced
+ * «التنبيهات الأخيرة» and «المهام العاجلة والمتأخرة», which showed the same tasks twice.
+ */
+function NeedsYouPanel({ recent, priority: top, pending, now }: { recent?: DashboardTask[] | undefined; priority?: DashboardTask[] | undefined; pending: boolean; now: Date }) {
+  // the active ones of both lists, once each (a finished task needs nobody)
+  const seen = new Set<string>();
+  const items = [...(top ?? []), ...(recent ?? [])]
+    .filter((t) => t.state !== "done" && t.state !== "cancelled" && !seen.has(t.id) && seen.add(t.id))
+    .sort((x, y) => (RANK[priority(x).tone] ?? 3) - (RANK[priority(y).tone] ?? 3) || x.due_at.localeCompare(y.due_at));
+  const groups = groupByClient(items, (t) => t.client_name);
   return (
-    <Panel title="المهام العاجلة والمتأخرة" icon="tasks" count={items?.length} action={<SeeAll to="/tasks" />} flush>
-      {pending ? <Rows n={4} /> : !items?.length ? (
-        <Quiet icon="alert_receipt_green" title="مفيش مهام مستنياك">كل المهام اتعملت في وقتها.</Quiet>
+    <Panel title="مطلوب منك" icon="tasks" count={groups.length} action={<SeeAll to="/tasks" />} flush>
+      {pending ? <Rows n={4} /> : !items.length ? (
+        <Quiet icon="alert_receipt_green" title="لا يوجد ما ينتظرك">ستظهر هنا أي مهمة يفتحها حازم.</Quiet>
       ) : (
         <ul className={LIST}>
-          {items.map((t) => {
-            const p = priority(t);
-            return (
-              <li key={t.id}>
-                <Link to={`/tasks/${t.id}`} aria-label={`افتح مهمة ${who(t)}`} className={`${ROW} px-3 py-2.5 text-[13px]`}>
-                  <span aria-hidden className={`absolute inset-y-2 start-0 w-[3px] rounded-full ${BAR[p.tone] ?? "bg-blue"}`} />
-                  <span className="grid size-[18px] shrink-0 place-items-center rounded-[6px] border border-ink-soft/40 bg-card/70 shadow-[inset_0_1px_0_rgb(255_255_255/0.6)] transition group-hover:border-gold" aria-hidden />
-                  <span className="min-w-0 flex-1 truncate">{label(TASK_TYPES, t.type)}{t.client_name ? ` - ${t.client_name}` : ""}</span>
-                  <Pill tone={p.tone}>{p.text}</Pill>
-                  <span className="w-14 shrink-0 text-end text-[11.5px] text-ink-soft">{cairoDayWord(t.due_at, now)}</span>
-                </Link>
-              </li>
-            );
-          })}
+          {groups.map((g) => (g.items.length === 1
+            ? <li key={g.key}><PriorityRow t={g.items[0]!} now={now} /></li>
+            : <PriorityGroup key={g.key} items={g.items} now={now} />))}
         </ul>
       )}
     </Panel>
+  );
+}
+
+function PriorityRow({ t, now, inner = false }: { t: DashboardTask; now: Date; inner?: boolean }) {
+  const p = priority(t);
+  return (
+    <Link to={`/tasks/${t.id}`} aria-label={`افتح مهمة ${who(t)}`} className={`${ROW} px-3 py-2.5 text-[13px] ${inner ? "!rounded-[10px] !shadow-none" : ""}`}>
+      <span aria-hidden className={`absolute inset-y-2 start-0 w-[3px] rounded-full ${BAR[p.tone] ?? "bg-blue"}`} />
+      <span className="grid size-[18px] shrink-0 place-items-center rounded-[6px] border border-ink-soft/40 bg-card/70 shadow-[inset_0_1px_0_rgb(255_255_255/0.6)] transition group-hover:border-gold" aria-hidden />
+      <span className="grid min-w-0 flex-1 leading-snug">
+        <span className="line-clamp-2 font-semibold">{shortType(t.type)}</span>
+        <span className="line-clamp-2 text-[11.5px] text-ink-soft">{inner ? null : <><bdi>{who(t)}</bdi> · </>}<span className="whitespace-nowrap">{timeAgo(t.created_at, now)}</span></span>
+      </span>
+      <Pill tone={p.tone}>{p.text}</Pill>
+      <span className="w-14 shrink-0 text-end text-[11.5px] text-ink-soft">{cairoDayWord(t.due_at, now)}</span>
+    </Link>
+  );
+}
+
+/** One client with several tasks: their name, how many, the most pressing state and the soonest due day; it opens to show each. */
+function PriorityGroup({ items, now }: { items: DashboardTask[]; now: Date }) {
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  const first = items[0]!;
+  // the most pressing of them speaks for the row: urgent, then late, then normal
+  const top = items.map(priority).sort((a, b) => (RANK[a.tone] ?? 3) - (RANK[b.tone] ?? 3))[0]!;
+  const soonest = items.map((t) => t.due_at).sort()[0]!;
+  return (
+    <li className={`${ROW} !block min-w-0`}>
+      <button type="button" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)}
+        className="relative flex w-full items-center gap-2.5 px-3 py-2.5 text-start text-[13px]">
+        <span aria-hidden className={`absolute inset-y-2 start-0 w-[3px] rounded-full ${BAR[top.tone] ?? "bg-blue"}`} />
+        <span className="grid size-[18px] shrink-0 place-items-center rounded-[6px] bg-gold text-[10.5px] font-bold text-white tabular" aria-hidden>{items.length}</span>
+        <span className="grid min-w-0 flex-1 leading-snug">
+          <span className="line-clamp-2 font-semibold"><bdi>{who(first)}</bdi> <span className="whitespace-nowrap font-normal text-ink-soft">· {thingsWords(items.length)}</span></span>
+          {open ? null : <span className="line-clamp-2 text-[11.5px] text-ink-soft">{firstAndMore(items.map((t) => t.type))}</span>}
+        </span>
+        <Pill tone={top.tone}>{top.text}</Pill>
+        <span className="w-14 shrink-0 text-end text-[11.5px] text-ink-soft">{cairoDayWord(soonest, now)}</span>
+        <Icon name="chevron-down" className={`size-4 shrink-0 text-ink-soft transition ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open ? (
+        <ul id={id} className="grid grid-cols-[minmax(0,1fr)] gap-1.5 border-t border-line/60 p-2 ps-5">
+          {items.map((t) => <li key={t.id}><PriorityRow t={t} now={now} inner /></li>)}
+        </ul>
+      ) : null}
+    </li>
   );
 }
 
@@ -523,13 +535,13 @@ function UpcomingPanel({ now, items: open, pending, failed }: { now: Date; items
   return (
     <Panel title="أقرب المواعيد القادمة" icon="calendar" count={open?.length} action={<SeeAll to="/appointments" />} className="min-h-0" flush>
       {pending ? <Rows n={4} /> : failed ? (
-        <Quiet icon="top_calendar" title="المواعيد الجاية مش متاحة دلوقتي">جرّب تاني بعد شوية.</Quiet>
+        <Quiet icon="top_calendar" title="المواعيد القادمة غير متاحة الآن">حاول مرة أخرى بعد قليل.</Quiet>
       ) : !items?.length ? (
         <p className="flex items-center gap-3 px-4 pb-4">
           <OwnerImg name="top_calendar" className="size-9 shrink-0 object-contain" />
           <span className="grid gap-0.5">
-            <span className="text-[14px] font-bold">مفيش مواعيد جاية</span>
-            <span className="text-[12.5px] text-ink-soft">الأسبوعين الجايين فاضيين لحد دلوقتي.</span>
+            <span className="text-[14px] font-bold">لا توجد مواعيد قادمة</span>
+            <span className="text-[12.5px] text-ink-soft">لا توجد مواعيد في الأسبوعين القادمين حتى الآن.</span>
           </span>
         </p>
       ) : (
@@ -577,9 +589,13 @@ const MONTH_TILE: Record<string, string> = {
 };
 const egp = new Intl.NumberFormat("en-US");
 
-/** USD for the dashboard's tile: two decimals from a dollar up, three below it. */
+/**
+ * The AI's cost for the dashboard's tile, in dollars (v1.58: Anthropic's own price, what the account is charged; a pound
+ * figure would need a daily exchange rate). The unit is in the tile's title like «وصل (جنيه)», so no «$» sign: two
+ * decimals from a dollar up, three below it.
+ */
 const usdShort = (n: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: n >= 1 ? 2 : 3, maximumFractionDigits: n >= 1 ? 2 : 3 }).format(n);
+  new Intl.NumberFormat("en-US", { minimumFractionDigits: n >= 1 ? 2 : 3, maximumFractionDigits: n >= 1 ? 2 : 3 }).format(n);
 
 /** «الشهر ده» (the manager and the lawyer): the month's report in four numbers, as «التقارير» counts them. */
 function MonthPanel({ now }: { now: Date }) {
@@ -589,26 +605,28 @@ function MonthPanel({ now }: { now: Date }) {
   const onTime = r && r.done ? Math.round((r.done_on_time / r.done) * 100) : null;
   const tiles: { icon: IconName; tone: string; title: string; value: string; sub?: string }[] = r ? [
     { icon: "user-plus", tone: "gold", title: "عملاء جدد", value: String(r.new_clients) },
-    { icon: "check-circle", tone: "green", title: "مهام خلصت", value: String(r.done), sub: `من ${r.tasks}` },
-    { icon: "clock", tone: "blue", title: "خلصت في وقتها", value: onTime === null ? "—" : `${onTime}%` },
-    { icon: "receipt", tone: "orange", title: "وصل (جنيه)", value: egp.format(r.received) },
-    // v1.58: what the AI cost this month (the conversations are in «التقارير»)
-    ...(r.ai_cost ? [{ icon: "trend-up" as IconName, tone: "gold", title: "صرف الذكاء الاصطناعي",
-      value: usdShort(r.ai_cost.total_usd), sub: r.ai_cost.conversations > 0 ? `على ${r.ai_cost.conversations} محادثة` : undefined }] : []),
+    { icon: "check-circle", tone: "green", title: "مهام مكتملة", value: String(r.done), sub: `من ${r.tasks}` },
+    { icon: "clock", tone: "blue", title: "في موعدها", value: onTime === null ? "—" : `${onTime}%` },
+    { icon: "receipt", tone: "orange", title: "المستلم (جنيه)", value: egp.format(r.received) },
   ] : [];
+  // v1.58: what the AI cost this month (the conversations are in «التقارير»): a line under the four, not a fifth tile left alone on
+  // its own row (the tester)
+  const ai = r?.ai_cost;
   return (
-    <Panel title="الشهر ده" icon="trend-up" action={<SeeAll to="/reports" />} className="min-h-0" flush tour="home-month">
+    <Panel title="هذا الشهر" icon="trend-up" action={<SeeAll to="/reports" />} className="min-h-0" flush tour="home-month">
       {report.isPending ? <Rows n={2} /> : report.isError ? (
-        <Quiet icon="top_calendar" title="أرقام الشهر مش متاحة دلوقتي">جرّب تاني بعد شوية.</Quiet>
+        <Quiet icon="top_calendar" title="أرقام الشهر غير متاحة الآن">حاول مرة أخرى بعد قليل.</Quiet>
       ) : (
-        <ul className="grid flex-1 grid-cols-2 gap-2 px-3 pb-3 2xl:grid-cols-5" aria-label="أرقام الشهر">
+        // as many in a row as fit whole (a narrow column: two or three, then the rest under them), never a cut word
+        <>
+        <ul className="grid flex-1 grid-cols-2 gap-2 px-3 pb-3 2xl:grid-cols-4" aria-label="أرقام الشهر">
           {tiles.map((t) => (
             <li key={t.title} className={`${ROW} grid content-center gap-2 px-3 py-3 hover:translate-y-0`}>
               <span className="flex items-center gap-2">
                 <span aria-hidden className={`grid size-8 shrink-0 place-items-center rounded-xl bg-gradient-to-br shadow-[inset_0_1px_0_rgb(255_255_255/0.5)] ${MONTH_TILE[t.tone]}`}>
                   <Icon name={t.icon} className="size-4" />
                 </span>
-                <span className="min-w-0 truncate text-[12.5px] font-semibold text-ink-soft">{t.title}</span>
+                <span className="min-w-0 text-[12.5px] leading-snug font-semibold text-ink-soft">{t.title}</span>
               </span>
               <span className="flex items-baseline gap-1.5">
                 <span className="tabular text-[24px] leading-none font-bold" dir="ltr">{t.value}</span>
@@ -617,6 +635,15 @@ function MonthPanel({ now }: { now: Date }) {
             </li>
           ))}
         </ul>
+        {ai ? (
+          <p className="flex flex-wrap items-center gap-x-1.5 border-t border-line/60 px-4 py-2.5 text-[12.5px] text-ink-soft">
+            <Icon name="trend-up" className="size-4 shrink-0 text-gold-ink" />
+            تكلفة الذكاء الاصطناعي هذا الشهر:
+            <span className="tabular font-bold text-ink" dir="ltr">{usdShort(ai.total_usd)}</span> دولار
+            {ai.conversations > 0 ? <span>(في {countWords(ai.conversations, CONVERSATIONS)})</span> : null}
+          </p>
+        ) : null}
+        </>
       )}
     </Panel>
   );
@@ -648,7 +675,7 @@ function Quiet({ icon, title, children }: { icon: OwnerImage; title: string; chi
 
 function Rows({ n }: { n: number }) {
   return (
-    <div className="grid gap-2 px-4 pb-4" role="status" aria-label="جاري التحميل">
+    <div className="grid gap-2 px-4 pb-4" role="status" aria-label="جارٍ التحميل">
       {Array.from({ length: n }, (_, i) => <div key={i} className="h-12 animate-pulse rounded-lg bg-card-2" />)}
     </div>
   );

@@ -120,8 +120,11 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
 
     // ---------- alerts ----------
 
+    // fix/alert-flood (the owner, v1.108: «التنبيه يروح للي عليه الدور بس» and «الإيميل للعاجل والمتأخر بس، وللمسؤول بس»):
+    // an alert is the job of the task's holder, else of its audience (the staff, the lawyer, the managers); only the urgent
+    // and the overdue ones are e-mailed.
     [Fact]
-    public async Task Alerts_reach_who_may_see_the_task_once_and_the_email_has_no_client_details()
+    public async Task Alerts_reach_whose_job_they_are_once_and_only_the_urgent_and_the_late_are_emailed_without_client_details()
     {
         var urgent = await NewTask("urgent_request", staff: _staffA);
         var unassigned = await NewTask("human_requested");
@@ -132,26 +135,55 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal((0, 0), await RunAlerts()); // once
         Assert.Equal("overdue", await db.ScalarAsync<string>($"SELECT state FROM hazem.staff_tasks WHERE id = '{late}'"));
 
-        // E-mails: the urgent one to yasmin, the boss and the lawyer, never karim; nothing about the client.
-        var urgentMails = _factory.Mail.Sent.Where(m => m.Text.Contains(urgent.ToString(), StringComparison.Ordinal)).Select(m => m.To).ToList();
-        Assert.Equal(["boss@example.test", "lawyer@example.test", "yasmin@example.test"], urgentMails.Order(StringComparer.Ordinal));
+        // E-mails: the urgent one to yasmin, who holds it; the late one to karim, who holds it; nothing for the client
+        // asking for someone (the bell only); and nothing about the client in any of them.
+        string[] To(Guid task) => [.. _factory.Mail.Sent.Where(m => m.Text.Contains(task.ToString(), StringComparison.Ordinal)).Select(m => m.To).Order(StringComparer.Ordinal)];
+        Assert.Equal(["yasmin@example.test"], To(urgent));
+        Assert.Equal(["karim@example.test"], To(late));
+        Assert.Empty(To(unassigned));
         Assert.All(_factory.Mail.Sent, m =>
         {
             Assert.DoesNotContain("سارة", m.Text);
             Assert.DoesNotContain("2010", m.Text);
             Assert.DoesNotContain("البطاقة", m.Text);
         });
-        Assert.Equal(4, _factory.Mail.Sent.Count(m => m.Text.Contains(unassigned.ToString(), StringComparison.Ordinal))); // everyone
 
-        // The bell: yasmin sees hers and the unassigned one, not karim's.
+        // The bell: yasmin hears hers and the unassigned one (the staff's), not karim's.
         var yasmin = await SignIn("yasmin");
         var bell = (await yasmin.GetFromJsonAsync<JsonNode>("/api/panel/alerts", Ct))!;
         Assert.Equal(2, (int)bell["unread"]!);
         Assert.DoesNotContain(bell["items"]!.AsArray(), a => (Guid)a!["task_id"]! == late);
         await yasmin.PostAsJsonAsync("/api/panel/alerts/read", new { ids = (long[]?)null }, Ct);
         Assert.Equal(0, (int)(await yasmin.GetFromJsonAsync<JsonNode>("/api/panel/alerts", Ct))!["unread"]!);
-        var boss = await SignIn("boss");
-        Assert.Equal(4, (int)(await boss.GetFromJsonAsync<JsonNode>("/api/panel/alerts", Ct))!["unread"]!);
+        // karim: his late task's two, and the unassigned one
+        Assert.Equal(3, (int)(await (await SignIn("karim")).GetFromJsonAsync<JsonNode>("/api/panel/alerts", Ct))!["unread"]!);
+        // the boss and the lawyer: none of these is their job (the boss: the system's and a low rating; the lawyer: an
+        // urgent alert nobody holds, pricing, an Urfi review)
+        Assert.Equal(0, (int)(await (await SignIn("boss")).GetFromJsonAsync<JsonNode>("/api/panel/alerts", Ct))!["unread"]!);
+        Assert.Equal(0, (int)(await (await SignIn("lawyer")).GetFromJsonAsync<JsonNode>("/api/panel/alerts", Ct))!["unread"]!);
+    }
+
+    // fix/alert-flood: an urgent alert nobody holds is the lawyer's and the staff's both (nothing escalates it later); a
+    // service to price is the lawyer's only; with no active staff account, the staff's alerts are the managers'.
+    [Fact]
+    public async Task An_unheld_urgent_alert_reaches_the_lawyer_and_the_staff_and_with_no_staff_the_managers_hear_the_staff_s()
+    {
+        var urgent = await NewTask("urgent_request");
+        var pricing = await NewTask("service_pricing");
+        var asking = await NewTask("existing_client_message");
+        await RunAlerts();
+        string[] To(Guid task) => [.. _factory.Mail.Sent.Where(m => m.Text.Contains(task.ToString(), StringComparison.Ordinal)).Select(m => m.To).Distinct().Order(StringComparer.Ordinal)];
+        Assert.Equal(["karim@example.test", "lawyer@example.test", "yasmin@example.test"], To(urgent));
+        Assert.Empty(To(pricing)); // a new task: the bell only
+        async Task<Guid[]> Bell(string who) =>
+            [.. (await (await SignIn(who)).GetFromJsonAsync<JsonNode>("/api/panel/alerts", Ct))!["items"]!.AsArray().Select(a => (Guid)a!["task_id"]!).Distinct().Order()];
+        Assert.Equal(new[] { urgent, pricing }.Order(), await Bell("lawyer"));
+        Assert.Equal(new[] { urgent, asking }.Order(), await Bell("yasmin"));
+        Assert.Empty(await Bell("boss"));
+
+        // no active staff account any more: the boss hears the staff's (the client asking), not the lawyer's pricing
+        await db.ExecAsync("UPDATE hazem.panel_users SET active = false WHERE role = 'staff'");
+        Assert.Equal(new[] { urgent, asking }.Order(), await Bell("boss"));
     }
 
     // v1.105 (the owner: «العميل … اجابته لازم موظف يتدخل ليه فيها … الحاجات دي انا عايزها تيجي في النوتيفيكيشن … نشوف
@@ -311,8 +343,8 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
 
         var mails = _factory.Mail.Sent.ToList();
         Assert.Equal(["boss@example.test", "boss@example.test"], mails.Select(m => m.To));
-        Assert.Contains(mails, m => m.Subject.StartsWith("النسخة الاحتياطية فشلت |"));
-        Assert.Contains(mails, m => m.Subject.StartsWith("فيه حاجات في n8n فشلت |"));
+        Assert.Contains(mails, m => m.Subject.StartsWith("فشلت النسخة الاحتياطية |"));
+        Assert.Contains(mails, m => m.Subject.StartsWith("توجد عمليات فاشلة في n8n |"));
         Assert.All(mails, m =>
         {
             Assert.DoesNotContain("سارة", m.Text); // n8n's message never leaves its schema
@@ -339,7 +371,7 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
             """);
         Assert.Equal((1, 1), await RunAlerts());
         Assert.Equal((0, 0), await RunAlerts()); // one a day
-        Assert.StartsWith("النسخة الاحتياطية فشلت |", Assert.Single(_factory.Mail.Sent).Subject);
+        Assert.StartsWith("فشلت النسخة الاحتياطية |", Assert.Single(_factory.Mail.Sent).Subject);
         Assert.StartsWith("missed:", await db.ScalarAsync<string>("SELECT system_ref FROM hazem.panel_alerts WHERE kind = 'system'"));
     }
 
@@ -356,7 +388,7 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal((1, 1), await RunAlerts()); // only the one set aside, not an ordinary failure
         Assert.Equal((0, 0), await RunAlerts()); // once
         var mail = Assert.Single(_factory.Mail.Sent);
-        Assert.StartsWith("رسالة عميل وقفت بعد محاولات كتير |", mail.Subject);
+        Assert.StartsWith("توقفت معالجة رسالة عميل بعد محاولات عديدة |", mail.Subject);
         Assert.DoesNotContain("2010", mail.Text);
         Assert.Equal("turn:wt:00000000-0000-4000-8000-000000000901",
             await db.ScalarAsync<string>("SELECT system_ref FROM hazem.panel_alerts WHERE system_what = 'turn'"));
@@ -383,7 +415,7 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal((1, 1), await RunAlerts());
         Assert.Equal((0, 0), await RunAlerts()); // one an hour
         var mail = Assert.Single(_factory.Mail.Sent);
-        Assert.StartsWith("الـ AI اللي بيفهم رسايل العملاء مش شغال |", mail.Subject);
+        Assert.StartsWith("الذكاء الاصطناعي الذي يفهم رسائل العملاء متوقف |", mail.Subject);
         Assert.StartsWith("ai:", await db.ScalarAsync<string>("SELECT system_ref FROM hazem.panel_alerts WHERE system_what = 'ai'"));
     }
 

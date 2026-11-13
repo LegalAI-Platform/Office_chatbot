@@ -18,9 +18,9 @@ const KIND_LOOK: Record<ListKind, { icon: IconName; bar: string }> = {
   blocked: { icon: "lock", bar: "bg-red" },
 };
 const ERRORS: Record<string, string> = {
-  invalid_phone: "الرقم مش صحيح. اكتبه زي 01012345678 أو +201012345678.",
-  too_long: "الاسم أو الملاحظة أطول من اللازم.",
-  unknown_staff: "اختار الموظف من القايمة.",
+  invalid_phone: "الرقم غير صحيح. اكتبه بالشكل 01012345678 أو +201012345678.",
+  too_long: "الاسم أو الملاحظة أطول من الحد المسموح.",
+  unknown_staff: "اختر الموظف من القائمة.",
 };
 const PAGE = 50; // the API's page
 const MAX_CSV_BYTES = 600_000; // 300,000 Arabic characters: what the API takes
@@ -65,8 +65,8 @@ export function ListsPage() {
 
       <Intro />
 
-      <section aria-label="اختار القايمة" className="liquid grid gap-2 rounded-[22px] p-4 sm:p-5">
-        <div className="flex flex-wrap gap-1 rounded-[22px] border border-line/60 bg-card/45 p-1 shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)] sm:rounded-full" role="group" aria-label="القايمة">
+      <section aria-label="اختر القائمة" className="liquid grid gap-2 rounded-[22px] p-4 sm:p-5">
+        <div className="flex flex-wrap gap-1 rounded-[22px] border border-line/60 bg-card/45 p-1 shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)] sm:rounded-full" role="group" aria-label="القائمة">
           {KINDS.map((k) => {
             const on = k === kind;
             return (
@@ -91,12 +91,12 @@ export function ListsPage() {
       <GlassCard icon={look.icon} title={label(LIST_KINDS, kind)} count={list.data?.total}
         action={
           <div className="w-full sm:max-w-xs">
-            <Field label="دوّر بالاسم أو آخر أرقام" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />
+            <Field label="ابحث بالاسم أو آخر أرقام الهاتف" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />
           </div>
         }>
         {list.isPending ? <Loading /> : list.isError ? <ErrorState message={errorMessage(list.error)} onRetry={() => void list.refetch()} /> :
           list.data.items.length === 0 ? (
-            <Nothing title="القايمة فاضية" />
+            <Nothing title="القائمة فارغة" />
           ) : (
             <ul className="grid gap-2">
               {list.data.items.map((e) => (
@@ -105,7 +105,7 @@ export function ListsPage() {
                   <span className="flex min-w-0 flex-1 basis-48 items-center gap-3">
                     <Avatar name={e.name ?? "؟"} className="size-9 shrink-0 text-[11px]" />
                     <span className="grid min-w-0">
-                      <span className="font-semibold">{e.name ?? "من غير اسم"}</span>
+                      <span className="font-semibold">{e.name ?? "بلا اسم"}</span>
                       <span className="tabular text-xs text-ink-soft" dir="ltr" style={{ textAlign: "right" }}>+{e.wa_id}</span>
                     </span>
                   </span>
@@ -118,11 +118,11 @@ export function ListsPage() {
                     <span className="tabular">{cairoWhen(e.imported_at)}</span>
                   </span>
                   <Button variant="ghost" className="min-h-9 rounded-full px-3.5" busy={remove.isPending && remove.variables === e.id} onClick={async () => {
-                      if (await confirmAction({ title: `تشيل ${e.name ?? `+${e.wa_id}`} من ${label(LIST_KINDS, kind)}؟`, yes: "أيوه، شيله", danger: true }))
+                      if (await confirmAction({ title: `هل تريد إزالة ${e.name ?? `+${e.wa_id}`} من ${label(LIST_KINDS, kind)}؟`, yes: "نعم، أزِله", danger: true }))
                         remove.mutate(e.id);
                     }}
-                    aria-label={`شيل ${e.name ?? e.wa_id} من القايمة`}>
-                    <Icon name="x" className="size-4" />شيل
+                    aria-label={`إزالة ${e.name ?? e.wa_id} من القائمة`}>
+                    <Icon name="x" className="size-4" />إزالة
                   </Button>
                 </li>
               ))}
@@ -147,7 +147,7 @@ function Intro() {
           <Icon name="clients" className="size-6" />
         </span>
         <div className="grid min-w-0 gap-1">
-          <h1 className="text-[26px] leading-tight font-bold">قوايم المكتب</h1>
+          <h1 className="text-[26px] leading-tight font-bold">قوائم المكتب</h1>
         </div>
       </div>
     </header>
@@ -196,13 +196,13 @@ function Nothing({ title }: { title: string }) {
 function Pager({ page, pages, onPage }: { page: number; pages: number; onPage: (p: number) => void }) {
   const pill = "flex min-h-9 items-center gap-1.5 rounded-full border border-line/60 bg-card/60 px-4 text-[13px] font-semibold shadow-[inset_0_1px_0_rgb(255_255_255/0.45)] transition hover:border-gold-line hover:bg-gold-tint disabled:pointer-events-none disabled:opacity-45";
   return (
-    <nav className="flex flex-wrap items-center justify-center gap-3 pt-1" aria-label="صفحات القايمة">
+    <nav className="flex flex-wrap items-center justify-center gap-3 pt-1" aria-label="صفحات القائمة">
       <button type="button" className={pill} disabled={page <= 1} onClick={() => onPage(page - 1)}>
-        <Icon name="chevron-end" className="size-4" />اللي قبل
+        <Icon name="chevron-end" className="size-4" />السابقة
       </button>
       <span className="tabular rounded-full bg-gold-tint px-3 py-1 text-[13px] font-bold text-gold-ink">صفحة {page} من {pages}</span>
       <button type="button" className={pill} disabled={page >= pages} onClick={() => onPage(page + 1)}>
-        اللي بعد<Icon name="chevron-start" className="size-4" />
+        التالية<Icon name="chevron-start" className="size-4" />
       </button>
     </nav>
   );
@@ -223,7 +223,7 @@ function AddEntry({ kind }: { kind: ListKind }) {
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm({ ...form, [k]: e.target.value });
 
   return (
-    <GlassCard icon="user-plus" title="ضيف رقم">
+    <GlassCard icon="user-plus" title="إضافة رقم">
       <form onSubmit={(e: FormEvent) => { e.preventDefault(); add.mutate(); }} className="grid gap-3 md:grid-cols-2" noValidate>
         <Field label="الرقم" required dir="ltr" inputMode="tel" value={form.phone} onChange={set("phone")} />
         <Field label="الاسم" value={form.name} onChange={set("name")} />
@@ -231,14 +231,14 @@ function AddEntry({ kind }: { kind: ListKind }) {
           <label className="grid gap-1.5 text-sm font-semibold">
             الموظف المسؤول
             <select className={select} value={form.staff_name} onChange={set("staff_name")}>
-              <option value="">من غير موظف</option>
+              <option value="">دون موظف</option>
               {(staff.data ?? []).map((s) => <option key={s.id} value={s.name}>{s.name}</option>)}
             </select>
           </label>
         ) : null}
         <Field label="ملاحظة" value={form.note} onChange={set("note")} />
         {error ? <p className="text-sm text-bad md:col-span-2" role="alert">{error}</p> : null}
-        <div className="md:col-span-2"><Button type="submit" variant="primary" className="rounded-full" busy={add.isPending} disabled={!form.phone.trim()}>ضيف</Button></div>
+        <div className="md:col-span-2"><Button type="submit" variant="primary" className="rounded-full" busy={add.isPending} disabled={!form.phone.trim()}>أضف</Button></div>
       </form>
     </GlassCard>
   );
@@ -255,19 +255,19 @@ function ImportCsv({ kind }: { kind: ListKind }) {
   });
 
   return (
-    <GlassCard icon="document" title="استورد من Excel">
-      <p className="text-[13px] text-ink-soft">احفظ الشيت كـ CSV فيه عمود <code dir="ltr">phone</code> (ومعاه <code dir="ltr">name</code>، و<code dir="ltr">staff</code> للموكلين). الأرقام الغلط بتتعدّى وبيتقالك سطرها.</p>
+    <GlassCard icon="document" title="الاستيراد من Excel">
+      <p className="text-[13px] text-ink-soft">احفظ الجدول بصيغة CSV يحتوي على عمود <code dir="ltr">phone</code> (ومعه <code dir="ltr">name</code>، و<code dir="ltr">staff</code> للموكّلين). تُتجاوز الأرقام غير الصحيحة ويُذكر لك رقم سطرها.</p>
       <label className="flex items-start gap-2 rounded-2xl border border-line/60 bg-card/50 px-3 py-2.5 text-sm">
         <input type="checkbox" className="mt-1 accent-gold" checked={replace} onChange={(e) => setReplace(e.target.checked)} />
-        استبدل القايمة كلها بالملف ده (لو فيه سطر غلط، مفيش حاجة بتتغير)
+        استبدال القائمة كلها بهذا الملف (إذا وُجد سطر غير صحيح، فلن يتغير شيء)
       </label>
       {/* the browser's own file button speaks English: a hidden input under an Arabic one */}
       <label className={`flex flex-wrap items-center gap-3 rounded-2xl border border-dashed border-gold-line/70 bg-card/40 p-3 text-sm text-ink-soft focus-within:border-gold ${run.isPending ? "opacity-60" : "cursor-pointer hover:bg-card/70"}`}>
         <span className="btn-gold inline-flex min-h-9 items-center gap-1.5 rounded-full border px-4 font-semibold">
           {run.isPending ? <span className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden /> : <Icon name="document" className="size-4" />}
-          اختار الملف
+          اختر الملف
         </span>
-        {run.isPending ? "بيستورد…" : "ملف CSV، أقل من 600 كيلو."}
+        {run.isPending ? "جارٍ الاستيراد…" : "ملف CSV بحجم أقل من 600 كيلوبايت."}
         <input type="file" accept=".csv,text/csv" aria-label="ملف CSV" disabled={run.isPending} className="sr-only"
           onChange={async (e) => {
             const input = e.target;
@@ -275,15 +275,15 @@ function ImportCsv({ kind }: { kind: ListKind }) {
             input.value = "";
             setTooBig(!!f && f.size > MAX_CSV_BYTES);
             if (!f || f.size > MAX_CSV_BYTES) return;
-            if (replace && !(await confirmAction({ title: `تستبدل ${label(LIST_KINDS, kind)} كلها بالملف ده؟`,
-              body: "كل الأرقام اللي فيها دلوقتي هتتشال، ويفضل اللي في الملف بس.", yes: "أيوه، استبدلها", danger: true }))) return;
+            if (replace && !(await confirmAction({ title: `هل تريد استبدال ${label(LIST_KINDS, kind)} كلها بهذا الملف؟`,
+              body: "ستُحذف كل الأرقام الموجودة فيها الآن، ولن يبقى إلا ما في الملف.", yes: "نعم، استبدلها", danger: true }))) return;
             run.mutate(f);
           }} />
       </label>
-      {tooBig ? <p className="text-sm text-bad" role="alert">الملف كبير. قسّمه لملفات أصغر من 600 كيلو (حوالي 6,000 سطر) واستوردها واحد ورا التاني.</p> : null}
+      {tooBig ? <p className="text-sm text-bad" role="alert">حجم الملف كبير. قسّمه إلى ملفات أصغر من 600 كيلوبايت (نحو 6,000 سطر) واستوردها واحدًا تلو الآخر.</p> : null}
       {run.isSuccess ? (
         <p className="rounded-2xl bg-green-bg px-3 py-2 text-sm text-green-ink" role="status">
-          اتضاف {run.data.imported}.{run.data.rejected.length > 0 ? ` واتعدّى ${run.data.rejected.length}: ${run.data.rejected.slice(0, 5).map((r) => `سطر ${r.line}`).join("، ")}` : ""}
+          تمت إضافة {run.data.imported}.{run.data.rejected.length > 0 ? ` وتم تجاوز ${run.data.rejected.length}: ${run.data.rejected.slice(0, 5).map((r) => `السطر ${r.line}`).join("، ")}` : ""}
         </p>
       ) : null}
       {run.isError ? <p className="text-sm text-bad" role="alert">{errorMessage(run.error)}</p> : null}
@@ -303,10 +303,10 @@ function Muted() {
   });
 
   return (
-    <GlassCard icon="alert-circle" title="محادثات حازم ساكت فيها" count={muted.data?.length}
-      hint="بسبب شتيمة أو سبام أو رقم ممنوع. لو رجّعتها، حازم بيرد على الرقم ده تاني.">
+    <GlassCard icon="alert-circle" title="محادثات أوقف حازم الرد فيها" count={muted.data?.length}
+      hint="بسبب إساءة أو رسائل مزعجة أو رقم محظور. إذا أعدتها، سيعود حازم إلى الرد على هذا الرقم.">
       {muted.isPending ? <Loading /> : muted.isError ? <ErrorState message={errorMessage(muted.error)} onRetry={() => void muted.refetch()} /> :
-        muted.data.length === 0 ? <Nothing title="مفيش محادثات ساكتة" /> : (
+        muted.data.length === 0 ? <Nothing title="لا توجد محادثات موقوفة" /> : (
           <ul className="grid gap-2">
             {muted.data.map((m) => (
               <li key={m.wa_id} className="relative flex flex-wrap items-center gap-x-4 gap-y-2 overflow-hidden rounded-[16px] border border-line/60 bg-card/55 py-2.5 ps-4 pe-3 shadow-[inset_0_1px_0_rgb(255_255_255/0.45)]">
@@ -314,15 +314,15 @@ function Muted() {
                 <span className="flex min-w-0 flex-1 basis-48 items-center gap-3">
                   <Avatar name={m.name ?? "؟"} className="size-9 shrink-0 text-[11px]" />
                   <span className="grid min-w-0">
-                    <span className="font-semibold">{m.name ?? "من غير اسم"}</span>
-                    <span className="tabular text-xs text-ink-soft" dir="ltr" style={{ textAlign: "right" }}>{phoneOf(m.wa_id) ?? "من غير رقم"}</span>
+                    <span className="font-semibold">{m.name ?? "بلا اسم"}</span>
+                    <span className="tabular text-xs text-ink-soft" dir="ltr" style={{ textAlign: "right" }}>{phoneOf(m.wa_id) ?? "بلا رقم"}</span>
                   </span>
                 </span>
                 <span className="flex items-center gap-1 text-xs text-ink-soft">
                   <Icon name="clock" className="size-3.5" />
-                  <span className="tabular">من {cairoWhen(m.since)}</span>
+                  <span className="tabular">منذ {cairoWhen(m.since)}</span>
                 </span>
-                <Button className="min-h-9 rounded-full px-3.5" busy={unmute.isPending && unmute.variables === m.wa_id} onClick={() => unmute.mutate(m.wa_id)}>رجّعها لحازم</Button>
+                <Button className="min-h-9 rounded-full px-3.5" busy={unmute.isPending && unmute.variables === m.wa_id} onClick={() => unmute.mutate(m.wa_id)}>أعِدها إلى حازم</Button>
               </li>
             ))}
           </ul>

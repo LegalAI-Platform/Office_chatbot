@@ -44,7 +44,7 @@ export function TwoFactorCard() {
   const header = (
     <div className="flex flex-wrap items-center justify-between gap-2">
       <h2 className="text-lg">التحقق بخطوتين</h2>
-      {status.data ? <Chip tone={status.data.enabled ? "green" : "grey"}>{status.data.enabled ? "شغال" : "مقفول"}</Chip> : null}
+      {status.data ? <Chip tone={status.data.enabled ? "green" : "grey"}>{status.data.enabled ? "مفعّل" : "غير مفعّل"}</Chip> : null}
     </div>
   );
 
@@ -66,24 +66,24 @@ export function TwoFactorCard() {
       <Card>
         {header}
         <ol className="grid list-decimal gap-1 ps-5 text-sm">
-          <li>نزّل Google Authenticator أو Microsoft Authenticator على موبايلك.</li>
-          <li>من التطبيق اختار «Scan a QR code» وصوّر المربع ده.</li>
-          <li>اكتب الكود اللي هيظهر في التطبيق.</li>
+          <li>ثبّت Google Authenticator أو Microsoft Authenticator على هاتفك.</li>
+          <li>من التطبيق اختر «Scan a QR code» وامسح هذا المربع ضوئيًا.</li>
+          <li>اكتب الرمز الذي سيظهر في التطبيق.</li>
         </ol>
         <div className="grid justify-items-center gap-2">
           <Qr text={setup.uri} />
           <details className="w-full text-sm">
-            <summary className="cursor-pointer text-ink-soft">مش عارف تصوّر؟ اكتب المفتاح بإيدك</summary>
+            <summary className="cursor-pointer text-ink-soft">تعذّر المسح؟ اكتب المفتاح يدويًا</summary>
             <code className="tabular mt-2 block select-all rounded-[var(--radius-control)] bg-muted px-3 py-2 text-center break-all" dir="ltr">
               {setup.secret.replace(/(.{4})/g, "$1 ").trim()}
             </code>
           </details>
         </div>
         <form onSubmit={(e: FormEvent) => { e.preventDefault(); enable.mutate(); }} className="grid gap-3" noValidate>
-          <CodeField label="الكود من التطبيق" value={code} onChange={setCode} />
+          <CodeField label="الرمز من التطبيق" value={code} onChange={setCode} />
           {enable.isError ? <Notice>{errorMessage(enable.error)}</Notice> : null}
           <div className="flex flex-wrap gap-2">
-            <Button type="submit" variant="primary" busy={enable.isPending} disabled={code.length !== 6}>شغّل</Button>
+            <Button type="submit" variant="primary" busy={enable.isPending} disabled={code.length !== 6}>تفعيل</Button>
             <Button variant="ghost" onClick={() => setSetup(null)}>إلغاء</Button>
           </div>
         </form>
@@ -96,11 +96,11 @@ export function TwoFactorCard() {
       <Card>
         {header}
         <p className="text-sm text-ink-soft">
-          بعد ما تشغّله، الدخول هيحتاج كلمة السر والكود اللي في تطبيق الـ Authenticator على موبايلك. لو حد عرف كلمة السر، برضه مش هيقدر يدخل.
+          بعد تفعيله، سيتطلب الدخول كلمة السر والرمز الظاهر في تطبيق Authenticator على هاتفك. وإذا عرف أحد كلمة السر، فلن يتمكن من الدخول.
         </p>
-        {!s.available ? <Notice>مش متاح لسه على السيرفر. كلّم مدير المكتب.</Notice> : null}
+        {!s.available ? <Notice>غير متاح على الخادم بعد. تواصل مع مدير المكتب.</Notice> : null}
         {start.isError ? <Notice>{errorMessage(start.error)}</Notice> : null}
-        <div><Button variant="primary" busy={start.isPending} disabled={!s.available} onClick={() => start.mutate()}>شغّل التحقق بخطوتين</Button></div>
+        <div><Button variant="primary" busy={start.isPending} disabled={!s.available} onClick={() => start.mutate()}>فعّل التحقق بخطوتين</Button></div>
       </Card>
     );
   }
@@ -109,7 +109,7 @@ export function TwoFactorCard() {
     <Card>
       {header}
       <p className="text-sm text-ink-soft">
-        الدخول محتاج الكود اللي في التطبيق. فاضل <span className="tabular font-semibold text-ink">{s.recovery_codes_left}</span> من أكواد الاسترجاع.
+        يتطلب الدخول الرمز الظاهر في التطبيق. المتبقي من رموز الاسترجاع: <span className="tabular font-semibold text-ink">{s.recovery_codes_left}</span>.
       </p>
       {mode ? (
         <form onSubmit={(e: FormEvent) => { e.preventDefault(); (mode === "off" ? disable : renew).mutate(); }} className="grid gap-3" noValidate>
@@ -117,20 +117,20 @@ export function TwoFactorCard() {
             <Field label="كلمة السر" type="password" required dir="ltr" autoComplete="current-password" value={password}
               onChange={(e) => setPassword(e.target.value)} />
           ) : null}
-          <CodeField label="الكود من التطبيق" value={code} onChange={setCode} allowRecovery={mode === "off"} />
+          <CodeField label="الرمز من التطبيق" value={code} onChange={setCode} allowRecovery={mode === "off"} />
           {(mode === "off" ? disable : renew).isError ? <Notice>{errorMessage((mode === "off" ? disable : renew).error)}</Notice> : null}
           <div className="flex flex-wrap gap-2">
             <Button type="submit" variant={mode === "off" ? "danger" : "primary"} busy={disable.isPending || renew.isPending}
               disabled={code.length < 6 || (mode === "off" && !password)}>
-              {mode === "off" ? "اقفل التحقق بخطوتين" : "اعمل أكواد جديدة"}
+              {mode === "off" ? "إيقاف التحقق بخطوتين" : "إنشاء رموز جديدة"}
             </Button>
             <Button variant="ghost" onClick={() => { setMode(null); setCode(""); setPassword(""); }}>إلغاء</Button>
           </div>
         </form>
       ) : (
         <div className="flex flex-wrap gap-2">
-          <Button onClick={() => setMode("renew")}>أكواد استرجاع جديدة</Button>
-          {mustStay ? null : <Button variant="ghost" onClick={() => setMode("off")}>اقفله</Button>}
+          <Button onClick={() => setMode("renew")}>رموز استرجاع جديدة</Button>
+          {mustStay ? null : <Button variant="ghost" onClick={() => setMode("off")}>إيقافه</Button>}
         </div>
       )}
     </Card>
@@ -144,7 +144,7 @@ function RecoveryCodes({ codes, onDone }: { codes: string[]; onDone: () => void 
   return (
     <div className="grid gap-3">
       <p className="text-sm">
-        <strong>أكواد الاسترجاع:</strong> بتظهر المرة دي بس. اكتبها أو احفظها في مكان آمن بعيد عن الموبايل. كل كود بيدخّلك مرة واحدة لو الموبايل ضاع.
+        <strong>رموز الاسترجاع:</strong> تظهر هذه المرة فقط. اكتبها أو احفظها في مكان آمن بعيدًا عن الهاتف. يتيح لك كل رمز الدخول مرة واحدة إذا فُقد الهاتف.
       </p>
       <ol className="tabular grid grid-cols-2 gap-2 rounded-[var(--radius-control)] bg-muted p-3 text-center text-base" dir="ltr">
         {codes.map((c) => <li key={c} className="select-all">{c}</li>)}
@@ -152,15 +152,15 @@ function RecoveryCodes({ codes, onDone }: { codes: string[]; onDone: () => void 
       <div className="flex flex-wrap gap-2">
         <Button onClick={async () => {
           try { await navigator.clipboard.writeText(text); setCopied(true); } catch { setCopied(false); }
-        }}>{copied ? "اتنسخت" : "انسخ"}</Button>
+        }}>{copied ? "تم النسخ" : "انسخ"}</Button>
         <Button onClick={() => {
           const a = document.createElement("a");
-          a.href = URL.createObjectURL(new Blob([`أكواد استرجاع لوحة المكتب\n\n${text}\n`], { type: "text/plain;charset=utf-8" }));
+          a.href = URL.createObjectURL(new Blob([`رموز استرجاع لوحة المكتب\n\n${text}\n`], { type: "text/plain;charset=utf-8" }));
           a.download = "recovery-codes.txt";
           a.click();
           URL.revokeObjectURL(a.href);
-        }}>نزّلها ملف</Button>
-        <Button variant="primary" onClick={onDone}>خلاص، حفظتها</Button>
+        }}>نزّلها في ملف</Button>
+        <Button variant="primary" onClick={onDone}>تم، حفظتها</Button>
       </div>
     </div>
   );
@@ -178,7 +178,7 @@ function Qr({ text }: { text: string }) {
     return { size: n + 8, path: d };
   }, [text]);
   return (
-    <svg viewBox={`0 0 ${size} ${size}`} className="size-52 rounded-lg" role="img" aria-label="رمز QR لتطبيق الـ Authenticator"
+    <svg viewBox={`0 0 ${size} ${size}`} className="size-52 rounded-lg" role="img" aria-label="رمز QR لتطبيق Authenticator"
       shapeRendering="crispEdges">
       <rect width={size} height={size} fill="#ffffff" />
       <path d={path} fill="#000000" />

@@ -16,7 +16,7 @@ import { ACCEPT, deliverFile, fileUrl, inRange, services, startPrice, type Servi
 const TONE: Record<string, string> = {
   collecting: "grey", awaiting_price: "orange", awaiting_payment: "blue", in_progress: "blue", delivered: "green", closed: "grey",
 };
-const DELIVERY: Record<string, string> = { file: "ملف على واتساب", call: "مكالمة من المستشار" };
+const DELIVERY: Record<string, string> = { file: "ملف عبر واتساب", call: "مكالمة من المستشار" };
 
 const SHOWS: Show[] = ["open", "done"];
 
@@ -30,8 +30,8 @@ export function prefetchData(qc: QueryClient) {
 }
 
 const TABS: { value: Show; label: string; icon: IconName }[] = [
-  { value: "open", label: "شغالة", icon: "play" },
-  { value: "done", label: "اتسلّمت أو اتقفلت", icon: "check-circle" },
+  { value: "open", label: "المفتوحة", icon: "play" },
+  { value: "done", label: "المسلّمة أو المغلقة", icon: "check-circle" },
 ];
 
 /**
@@ -94,7 +94,7 @@ function Intro({ count }: { count?: number | undefined }) {
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-[26px] leading-tight font-bold">طلبات الخدمات</h1>
               {count !== undefined ? (
-                <span className="tabular rounded-full border border-gold-line bg-gold-tint px-2.5 py-0.5 text-[12.5px] font-bold text-gold-ink">{count} طلب</span>
+                <span className="tabular rounded-full border border-gold-line bg-gold-tint px-2.5 py-0.5 text-[12.5px] font-bold text-gold-ink">{count === 1 ? "طلب واحد" : count === 2 ? "طلبان" : count >= 3 && count <= 10 ? `${count} طلبات` : `${count} طلبًا`}</span>
               ) : null}
             </div>
           </div>
@@ -110,7 +110,7 @@ function Nothing() {
       <span className="grid size-14 place-items-center rounded-full bg-gradient-to-br from-green-bg to-card text-green-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.6)]">
         <Icon name="check-circle" className="size-7" />
       </span>
-      <p className="text-[16px] font-bold">مفيش طلبات هنا</p>
+      <p className="text-[16px] font-bold">لا توجد طلبات هنا</p>
     </div>
   );
 }
@@ -119,38 +119,38 @@ function OrderCard({ o }: { o: ServiceOrder }) {
   const qc = useQueryClient();
   const { data: me } = useMe();
   const done = () => { void qc.invalidateQueries({ queryKey: ["services"] }); void qc.invalidateQueries({ queryKey: ["payments"] }); };
-  const close = useMutation({ mutationFn: () => services.close(o.id), onSuccess: () => { done(); toast("الطلب اتقفل"); } });
-  const resend = useMutation({ mutationFn: () => services.resend(o.id), onSuccess: () => { done(); toast("الملف هيتبعت للعميل تاني"); } });
+  const close = useMutation({ mutationFn: () => services.close(o.id), onSuccess: () => { done(); toast("تم إغلاق الطلب"); } });
+  const resend = useMutation({ mutationFn: () => services.resend(o.id), onSuccess: () => { done(); toast("سيُرسل الملف إلى العميل مرة أخرى"); } });
   const open = o.state !== "delivered" && o.state !== "closed";
 
   const facts: [string, ReactNode][] = [];
   if (o.price != null) facts.push(["السعر", <><span className="tabular">{o.price.toLocaleString("en-US")}</span> جنيه{o.price_exception ? " (استثناء)" : ""}</>]);
   if (o.due_on) facts.push(["التسليم", dayText(o.due_on)]);
-  if (o.delivery) facts.push(["إزاي", DELIVERY[o.delivery]]);
+  if (o.delivery) facts.push(["طريقة التسليم", DELIVERY[o.delivery]]);
   if (o.payment) facts.push(["الدفع", label(PAYMENT_STATES, o.payment)]);
 
   return (
-    <CaseCard tone={TONE[o.state] ?? "grey"} label={`${o.name ?? "من غير اسم"}: ${label(SERVICE_KINDS, o.kind)}`}>
-      <CaseHead title={o.name ?? "من غير اسم"} kind={label(SERVICE_KINDS, o.kind)}
+    <CaseCard tone={TONE[o.state] ?? "grey"} label={`${o.name ?? "بدون اسم"}: ${label(SERVICE_KINDS, o.kind)}`}>
+      <CaseHead title={o.name ?? "بدون اسم"} kind={label(SERVICE_KINDS, o.kind)}
         meta={[
-          <Meta key="w" icon="clock">طلب {cairoWhen(o.created_at)}</Meta>,
+          <Meta key="w" icon="clock">طُلب {cairoWhen(o.created_at)}</Meta>,
           <Phone key="p" wa={o.wa_id} />,
-          o.state === "awaiting_payment" && o.price_until ? <span key="u">السعر صالح لحد {cairoWhen(o.price_until)}</span> : null,
-          o.delivered_at ? <span key="d">اتسلّم {cairoWhen(o.delivered_at)}{o.file_name ? ` · ${o.file_name}` : ""}</span> : null,
+          o.state === "awaiting_payment" && o.price_until ? <span key="u">السعر صالح حتى {cairoWhen(o.price_until)}</span> : null,
+          o.delivered_at ? <span key="d">سُلّم {cairoWhen(o.delivered_at)}{o.file_name ? ` · ${o.file_name}` : ""}</span> : null,
         ]}
         status={<Chip tone={TONE[o.state] ?? "grey"}>{label(SERVICE_STATES, o.state)}</Chip>} />
       {facts.length > 0 ? <Facts items={facts} /> : null}
-      <Files label="ورق العميل" count={o.files} href={(i) => fileUrl(o.id, i)} word="مستند" />
-      {o.files === 0 && o.state === "collecting" ? <CaseNote>مستنيين العميل يبعت الورق.</CaseNote> : null}
+      <Files label="مستندات العميل" count={o.files} href={(i) => fileUrl(o.id, i)} word="مستند" />
+      {o.files === 0 && o.state === "collecting" ? <CaseNote>في انتظار أن يرسل العميل المستندات.</CaseNote> : null}
       {(o.state === "awaiting_price" || (o.state === "collecting" && o.files > 0)) && !can(me, "services.price")
-        ? <CaseNote>مستني المستشار أو المدير يحدّد السعر.</CaseNote>
+        ? <CaseNote>في انتظار تحديد السعر من المستشار أو المدير.</CaseNote>
         : null}
-      {o.state === "awaiting_payment" ? <CaseNote>حازم بعت السعر وبيانات الدفع. لما الإيصال يوصل، راجعه من «الإيصالات والمدفوعات».</CaseNote> : null}
+      {o.state === "awaiting_payment" ? <CaseNote>أرسل حازم السعر وبيانات الدفع. عند وصول الإيصال، راجعه من «الإيصالات والمدفوعات».</CaseNote> : null}
       {o.notice === "failed" ? (
         <CaseNote tone="bad">
           {o.notice_error === "OUTSIDE_24H_WINDOW" || !o.notice_error
-            ? "آخر رسالة ما وصلتش للعميل (عدّى 24 ساعة من آخر رسالة منه). هتتبعت تاني لوحدها أول ما يكتب، أو كلّموه."
-            : "آخر رسالة ما وصلتش للعميل: واتساب رفضها. جرّب «ابعت الملف تاني»، ولو اتكررت كلّموه."}
+            ? "لم تصل آخر رسالة إلى العميل (مرّت 24 ساعة على آخر رسالة منه). ستُرسل مرة أخرى تلقائيًا عندما يكتب، أو تواصل معه."
+            : "لم تصل آخر رسالة إلى العميل: رفضها واتساب. جرّب «أعد إرسال الملف»، وإذا تكرر ذلك فتواصل معه."}
         </CaseNote>
       ) : null}
 
@@ -160,8 +160,8 @@ function OrderCard({ o }: { o: ServiceOrder }) {
         {o.state === "delivered" && o.file_name ? (
           <div>
             <Button variant="secondary" busy={resend.isPending} disabled={o.notice === "pending"}
-              onClick={async () => { if (await confirmAction({ title: "تبعت الملف تاني؟", body: `حازم هيبعت «${o.file_name}» للعميل تاني.`, yes: "ابعته" })) resend.mutate(); }}>
-              <Icon name="document" className="size-4" />ابعت الملف تاني
+              onClick={async () => { if (await confirmAction({ title: "إعادة إرسال الملف؟", body: `سيرسل حازم «${o.file_name}» إلى العميل مرة أخرى.`, yes: "أرسل" })) resend.mutate(); }}>
+              <Icon name="document" className="size-4" />أعد إرسال الملف
             </Button>
             {resend.isError ? <span className="text-sm text-bad" role="alert"> {errorMessage(resend.error)}</span> : null}
           </div>
@@ -170,9 +170,9 @@ function OrderCard({ o }: { o: ServiceOrder }) {
           <div>
             <Button variant="ghost" busy={close.isPending}
               onClick={async () => {
-                if (await confirmAction({ title: "تقفل الطلب ده؟", body: "لو كان اتدفع، هيتفتح استرداد وحازم هيبلّغ العميل.", yes: "اقفله", danger: true })) close.mutate();
+                if (await confirmAction({ title: "إغلاق هذا الطلب؟", body: "إذا كان العميل قد دفع، سيُفتح طلب استرداد وسيُبلغ حازم العميل.", yes: "أغلق الطلب", danger: true })) close.mutate();
               }}>
-              <Icon name="x" className="size-4" />اقفل الطلب
+              <Icon name="x" className="size-4" />أغلق الطلب
             </Button>
             {close.isError ? <span className="text-sm text-bad" role="alert"> {errorMessage(close.error)}</span> : null}
           </div>
@@ -197,7 +197,7 @@ function PriceFields({ o, onDone, list }: { o: ServiceOrder; onDone: () => void;
   const [due, setDue] = useState(cairoDate(new Date(Date.now() + 3 * 86_400_000)));
   const [delivery, setDelivery] = useState<"file" | "call">("file");
   const [exception, setException] = useState(false);
-  const save = useMutation({ mutationFn: () => services.price(o.id, { price: Number(shown), exception, due_on: due, delivery }), onSuccess: () => { onDone(); toast("السعر اتبعت للعميل ✅"); } });
+  const save = useMutation({ mutationFn: () => services.price(o.id, { price: Number(shown), exception, due_on: due, delivery }), onSuccess: () => { onDone(); toast("تم إرسال السعر إلى العميل ✅"); } });
   const out = !inRange(o.kind, Number(shown), list);
   // whole pounds only (the API's price is an int): a decimal is refused, never rounded
   const whole = shown.trim() !== "" && Number.isInteger(Number(shown));
@@ -207,7 +207,7 @@ function PriceFields({ o, onDone, list }: { o: ServiceOrder; onDone: () => void;
       <legend className="text-sm font-semibold">السعر</legend>
       <div className="grid gap-2 md:grid-cols-3">
         <Field label="السعر (جنيه)" type="number" min={1} step={1} inputMode="numeric" value={shown} onChange={(e) => setPrice(e.target.value)}
-          error={shown.trim() !== "" && !whole ? "اكتب السعر بالجنيه من غير كسور" : undefined} />
+          error={shown.trim() !== "" && !whole ? "اكتب السعر بالجنيه دون كسور" : undefined} />
         <Field label="يوم التسليم" type="date" min={cairoDate(new Date())} value={due} onChange={(e) => setDue(e.target.value)} />
         <label className="grid gap-1.5 text-sm font-semibold">
           التسليم
@@ -219,15 +219,15 @@ function PriceFields({ o, onDone, list }: { o: ServiceOrder; onDone: () => void;
       </div>
       {out ? (
         <label className="flex items-center gap-2 text-sm text-orange-ink">
-          <input type="checkbox" checked={exception} onChange={(e) => setException(e.target.checked)} />السعر برا المدى المعتاد: ده استثناء
+          <input type="checkbox" checked={exception} onChange={(e) => setException(e.target.checked)} />السعر خارج النطاق المعتاد: هذا استثناء
         </label>
       ) : null}
       <div>
         <Button variant="primary" busy={save.isPending} disabled={!whole || !(Number(shown) > 0) || !due || (out && !exception)}
           onClick={async () => {
-            if (await confirmAction({ title: "تبعت السعر للعميل؟", body: `حازم هيبعت للعميل: ${Number(shown).toLocaleString("en-US")} جنيه، والتسليم يوم ${dayText(due)}.`, yes: "ابعت السعر" })) save.mutate();
+            if (await confirmAction({ title: "إرسال السعر إلى العميل؟", body: `سيرسل حازم إلى العميل: ${Number(shown).toLocaleString("en-US")} جنيه، والتسليم يوم ${dayText(due)}.`, yes: "أرسل السعر" })) save.mutate();
           }}>
-          ابعت السعر للعميل
+          أرسل السعر إلى العميل
         </Button>
       </div>
       {save.isError ? <p className="text-sm text-bad" role="alert">{errorMessage(save.error)}</p> : null}
@@ -239,26 +239,26 @@ function PriceFields({ o, onDone, list }: { o: ServiceOrder; onDone: () => void;
 function Deliver({ o, onDone }: { o: ServiceOrder; onDone: () => void }) {
   const input = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
-  const send = useMutation({ mutationFn: () => (o.delivery === "file" ? deliverFile(o.id, file!) : services.deliver(o.id)), onSuccess: () => { onDone(); toast("اتسلّم للعميل ✅"); } });
+  const send = useMutation({ mutationFn: () => (o.delivery === "file" ? deliverFile(o.id, file!) : services.deliver(o.id)), onSuccess: () => { onDone(); toast("تم التسليم إلى العميل ✅"); } });
 
   return (
     <div className="grid gap-2 border-t border-line pt-3">
-      <p className="text-sm font-semibold">الشغل بدأ.{o.due_on ? ` التسليم يوم ${dayText(o.due_on)}.` : ""}</p>
+      <p className="text-sm font-semibold">بدأ العمل.{o.due_on ? ` التسليم يوم ${dayText(o.due_on)}.` : ""}</p>
       {o.delivery === "file" ? (
         <div className="flex flex-wrap items-center gap-2">
           <input ref={input} type="file" accept={ACCEPT} aria-label="الملف" className="text-sm"
             onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
           <Button variant="primary" busy={send.isPending} disabled={!file || file.size > 20 * 1024 * 1024}
-            onClick={async () => { if (await confirmAction({ title: "تبعت الملف للعميل؟", body: `حازم هيبعت «${file!.name}» للعميل على واتساب.`, yes: "ابعت الملف" })) send.mutate(); }}>
-            ابعت الملف للعميل
+            onClick={async () => { if (await confirmAction({ title: "إرسال الملف إلى العميل؟", body: `سيرسل حازم «${file!.name}» إلى العميل عبر واتساب.`, yes: "أرسل الملف" })) send.mutate(); }}>
+            أرسل الملف إلى العميل
           </Button>
-          {file && file.size > 20 * 1024 * 1024 ? <span className="text-sm text-bad">الملف أكبر من 20 ميجا.</span> : null}
+          {file && file.size > 20 * 1024 * 1024 ? <span className="text-sm text-bad">حجم الملف أكبر من 20 ميجابايت.</span> : null}
         </div>
       ) : (
         <div>
           <Button variant="primary" busy={send.isPending}
-            onClick={async () => { if (await confirmAction({ title: "المكالمة خلصت؟", body: "الطلب هيتسجّل إنه اتسلّم، وحازم هيبلّغ العميل. مفيش رجوع.", yes: "أيوه، اتسلّم" })) send.mutate(); }}>
-            المكالمة خلصت: اتسلّم
+            onClick={async () => { if (await confirmAction({ title: "هل انتهت المكالمة؟", body: "سيُسجَّل الطلب على أنه سُلّم، وسيُبلغ حازم العميل. لا يمكن التراجع عن ذلك.", yes: "نعم، تم التسليم" })) send.mutate(); }}>
+            انتهت المكالمة: تم التسليم
           </Button>
         </div>
       )}

@@ -15,7 +15,7 @@ const TONE: Record<string, string> = {
   collecting: "grey", documents_pending: "blue", booked: "orange", approved: "green", lawyer_rejected: "grey",
   rejected_age: "grey", rejected_guardian: "grey", redirected_consultation: "grey", abandoned: "grey", completed: "green",
 };
-const yesNo = (v: boolean | null) => (v == null ? "—" : v ? "أيوه" : "لأ");
+const yesNo = (v: boolean | null) => (v == null ? "—" : v ? "نعم" : "لا");
 
 const SHOWS: Show[] = ["open", "done"];
 const listQuery = (show: Show) => queryOptions({ queryKey: ["urf", show], queryFn: () => urf.list(show), refetchInterval: 60_000 });
@@ -26,8 +26,8 @@ export function prefetchData(qc: QueryClient) {
 }
 
 const TABS: { value: Show; label: string; icon: IconName }[] = [
-  { value: "open", label: "شغالة", icon: "play" },
-  { value: "done", label: "اتقفلت", icon: "check-circle" },
+  { value: "open", label: "المفتوحة", icon: "play" },
+  { value: "done", label: "المغلقة", icon: "check-circle" },
 ];
 
 /**
@@ -91,7 +91,7 @@ function Intro({ count }: { count?: number | undefined }) {
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-[26px] leading-tight font-bold">حالات العرفي</h1>
               {count !== undefined ? (
-                <span className="tabular rounded-full border border-gold-line bg-gold-tint px-2.5 py-0.5 text-[12.5px] font-bold text-gold-ink">{count} حالة</span>
+                <span className="tabular rounded-full border border-gold-line bg-gold-tint px-2.5 py-0.5 text-[12.5px] font-bold text-gold-ink">{count === 1 ? "حالة واحدة" : count === 2 ? "حالتان" : count >= 3 && count <= 10 ? `${count} حالات` : `${count} حالة`}</span>
               ) : null}
             </div>
           </div>
@@ -107,7 +107,7 @@ function Nothing() {
       <span className="grid size-14 place-items-center rounded-full bg-gradient-to-br from-green-bg to-card text-green-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.6)]">
         <Icon name="check-circle" className="size-7" />
       </span>
-      <p className="text-[16px] font-bold">مفيش حالات هنا</p>
+      <p className="text-[16px] font-bold">لا توجد حالات هنا</p>
     </div>
   );
 }
@@ -120,7 +120,7 @@ function UrfCard({ c }: { c: UrfCase }) {
     onSuccess: (_, d) => {
       void qc.invalidateQueries({ queryKey: ["urf"] });
       void qc.invalidateQueries({ queryKey: ["payments"] });
-      toast(d === "approved" ? "اتوافق على الحالة، وحازم هيبلّغ العميل ✅" : "الحالة اترفضت، وحازم هيبلّغ العميل");
+      toast(d === "approved" ? "تمت الموافقة على الحالة، وسيُبلغ حازم العميل ✅" : "تم رفض الحالة، وسيُبلغ حازم العميل.");
     },
   });
   const answers: [string, string][] = c.kind === "marriage"
@@ -131,14 +131,14 @@ function UrfCard({ c }: { c: UrfCase }) {
         ["الشهود", label(URF_ANSWERS, c.witnesses ?? "") || "—"],
       ]
     : [
-        ["نسخة العقد", yesNo(c.has_copy)], ["متفقين", yesNo(c.agreed)], ["أطفال", yesNo(c.children)],
+        ["نسخة العقد", yesNo(c.has_copy)], ["متفقان", yesNo(c.agreed)], ["أطفال", yesNo(c.children)],
         ["الشهود", label(URF_ANSWERS, c.witnesses ?? "") || "—"],
       ];
   const mayReview = can(me, "urf.review");
 
   return (
-    <CaseCard tone={TONE[c.state] ?? "grey"} label={`${c.name ?? "من غير اسم"}: ${label(URF_KINDS, c.kind)}`}>
-      <CaseHead title={c.name ?? "من غير اسم"} kind={label(URF_KINDS, c.kind)}
+    <CaseCard tone={TONE[c.state] ?? "grey"} label={`${c.name ?? "بدون اسم"}: ${label(URF_KINDS, c.kind)}`}>
+      <CaseHead title={c.name ?? "بدون اسم"} kind={label(URF_KINDS, c.kind)}
         meta={[
           <Meta key="w" icon="clock">بدأ {cairoWhen(c.created_at)}</Meta>,
           <Phone key="p" wa={c.wa_id} />,
@@ -146,28 +146,28 @@ function UrfCard({ c }: { c: UrfCase }) {
         ]}
         status={<Chip tone={TONE[c.state] ?? "grey"}>{label(URF_STATES, c.state)}</Chip>} />
       <Facts items={[
-        ...(c.start ? [["الميعاد", <>{cairoWhen(c.start)} · {label(APPOINTMENT_STATES, c.appointment ?? "")}</>] as [string, ReactNode]] : []),
+        ...(c.start ? [["الموعد", <>{cairoWhen(c.start)} · {label(APPOINTMENT_STATES, c.appointment ?? "")}</>] as [string, ReactNode]] : []),
         ...(c.payment ? [["الدفع", label(PAYMENT_STATES, c.payment)] as [string, ReactNode]] : []),
         ...answers,
       ]} />
       <CaseNote>المطلوب: {c.documents}</CaseNote>
-      <Files label="ورق العميل" count={c.files} href={(i) => fileUrl(c.id, i)} word="مستند" />
-      {c.state === "booked" && !mayReview ? <CaseNote>مستنية المستشار أو المدير يراجع الورق.</CaseNote> : null}
-      {c.files === 0 && c.state === "booked" ? <CaseNote>لسه مفيش ورق. حازم طلبه من العميل بعد صورة التحويل.</CaseNote> : null}
-      {c.notice === "failed" ? <CaseNote tone="bad">رسالة القرار ما وصلتش للعميل (غالبًا عدّى 24 ساعة من آخر رسالة منه). كلّموه.</CaseNote> : null}
+      <Files label="مستندات العميل" count={c.files} href={(i) => fileUrl(c.id, i)} word="مستند" />
+      {c.state === "booked" && !mayReview ? <CaseNote>في انتظار مراجعة المستشار أو المدير للمستندات.</CaseNote> : null}
+      {c.files === 0 && c.state === "booked" ? <CaseNote>لم تصل مستندات بعد. طلبها حازم من العميل بعد صورة التحويل.</CaseNote> : null}
+      {c.notice === "failed" ? <CaseNote tone="bad">لم تصل رسالة القرار إلى العميل (غالبًا مرّت 24 ساعة على آخر رسالة منه). تواصل معه.</CaseNote> : null}
 
       <ActionBar>
         {c.state === "booked" && mayReview ? (
           <div className="flex flex-wrap gap-2">
             <Button variant="primary" busy={review.isPending}
               onClick={async () => {
-                if (await confirmAction({ title: "موافق على الورق؟", body: "حازم هيبعت للعميل تأكيد الميعاد ومين لازم يحضر.", yes: "موافق" })) review.mutate("approved");
+                if (await confirmAction({ title: "الموافقة على المستندات؟", body: "سيرسل حازم إلى العميل تأكيد الموعد ومن يجب أن يحضر.", yes: "موافقة" })) review.mutate("approved");
               }}>
-              <Icon name="check-circle" className="size-4" />موافق
+              <Icon name="check-circle" className="size-4" />موافقة
             </Button>
             <Button variant="ghost" busy={review.isPending}
               onClick={async () => {
-                if (await confirmAction({ title: "ترفض الحالة؟", body: "الميعاد هيتلغي من المكتب، واللي اتدفع هيترد كامل، وحازم هيبلّغ العميل.", yes: "ارفض", danger: true })) review.mutate("rejected");
+                if (await confirmAction({ title: "رفض الحالة؟", body: "سيُلغي المكتب الموعد، ويُردّ المبلغ المدفوع كاملًا، وسيُبلغ حازم العميل.", yes: "رفض", danger: true })) review.mutate("rejected");
               }}>
               <Icon name="x" className="size-4" />رفض
             </Button>

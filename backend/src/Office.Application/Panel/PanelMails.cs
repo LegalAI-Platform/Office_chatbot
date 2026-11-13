@@ -11,63 +11,63 @@ public static class PanelMails
     public const string Office = "مكتب سعد فتحي سعد";
 
     public static PanelMail VerifyCode(PanelUser u, string code) => Build(u.Email,
-        $"كود تأكيد الإيميل: {code}",
+        $"رمز تأكيد البريد الإلكتروني: {code}",
         $"أهلًا {u.DisplayName}،",
-        ["ده كود تأكيد الإيميل لحسابك في لوحة المكتب:"],
+        ["هذا رمز تأكيد البريد الإلكتروني لحسابك في لوحة المكتب:"],
         code,
-        ["الكود شغال 10 دقايق، ولمرة واحدة.", "لو إنت ما سجلتش حساب، تجاهل الإيميل ده."]);
+        ["الرمز صالح لمدة 10 دقائق، ولمرة واحدة فقط.", "إذا لم تسجّل حسابًا، فتجاهل هذه الرسالة."]);
 
     public static PanelMail ResetCode(PanelUser u, string code) => Build(u.Email,
-        $"كود تغيير كلمة السر: {code}",
+        $"رمز تغيير كلمة السر: {code}",
         $"أهلًا {u.DisplayName}،",
-        ["حد طلب تغيير كلمة السر لحسابك في لوحة المكتب. ده الكود:"],
+        ["طلب أحدهم تغيير كلمة السر لحسابك في لوحة المكتب. هذا هو الرمز:"],
         code,
-        ["الكود شغال 10 دقايق، ولمرة واحدة.", "لو مش إنت اللي طلبت، تجاهل الإيميل ده، وكلمة السر هتفضل زي ما هي."]);
+        ["الرمز صالح لمدة 10 دقائق، ولمرة واحدة فقط.", "إذا لم تطلب ذلك، فتجاهل هذه الرسالة، وستبقى كلمة السر كما هي."]);
 
     public static PanelMail SomeoneTried(PanelUser u) => Build(u.Email,
-        "محاولة تسجيل بإيميلك",
+        "محاولة تسجيل ببريدك الإلكتروني",
         $"أهلًا {u.DisplayName}،",
-        [$"حد حاول يعمل حساب جديد في لوحة المكتب بإيميلك، وإيميلك عليه حساب أصلًا (اسم المستخدم: {u.Username}).",
-         "لو نسيت كلمة السر، استخدم «نسيت كلمة السر» في صفحة الدخول. ولو مش إنت، تجاهل الإيميل ده."],
+        [$"حاول أحدهم إنشاء حساب جديد في لوحة المكتب ببريدك الإلكتروني، وهذا البريد مسجّل بالفعل في حساب قائم (اسم المستخدم: {u.Username}).",
+         "إذا نسيت كلمة السر، فاستخدم «نسيت كلمة السر» في صفحة الدخول. وإذا لم تكن أنت، فتجاهل هذه الرسالة."],
         null, []);
 
     public static PanelMail WaitingForApproval(string managerEmail, PanelUser u) => Build(managerEmail,
-        $"حساب جديد مستني التفعيل: {u.DisplayName}",
+        $"حساب جديد في انتظار التفعيل: {u.DisplayName}",
         "أهلًا،",
-        [$"{u.DisplayName} ({u.Username}، {u.Email}) عمل حساب في لوحة المكتب وأكّد إيميله.",
-         "الحساب مش هيقدر يدخل غير لما تفعّله وتختار دوره من «الإعدادات ← الحسابات»."],
-        null, ["لو ما تعرفوش، ارفضه من نفس المكان."]);
+        [$"أنشأ {u.DisplayName} ({u.Username}، {u.Email}) حسابًا في لوحة المكتب وأكّد بريده الإلكتروني.",
+         "لن يتمكن صاحب الحساب من الدخول إلا بعد أن تفعّله وتختار دوره من «الإعدادات ← الحسابات»."],
+        null, ["إذا كنت لا تعرفه، فارفضه من المكان نفسه."]);
 
     public static PanelMail Approved(PanelUser u) => Build(u.Email,
-        "حسابك اتفعّل",
+        "تم تفعيل حسابك",
         $"أهلًا {u.DisplayName}،",
-        ["المدير فعّل حسابك في لوحة المكتب، وتقدر تدخل دلوقتي باسم المستخدم وكلمة السر بتوعك."],
-        null, ["يستحسن تشغّل التحقق بخطوتين من «حسابي» أول ما تدخل."]);
+        ["فعّل المدير حسابك في لوحة المكتب، ويمكنك الدخول الآن باسم المستخدم وكلمة السر الخاصين بك."],
+        null, ["يُستحسن تفعيل التحقق بخطوتين من «حسابي» فور الدخول."]);
 
     public static PanelMail Rejected(PanelUser u) => Build(u.Email,
-        "طلب الحساب ما اتقبلش",
+        "لم يُقبل طلب الحساب",
         $"أهلًا {u.DisplayName}،",
-        ["طلب الحساب بتاعك في لوحة المكتب ما اتقبلش. لو ده غلط، كلّم مدير المكتب."],
+        ["لم يُقبل طلب حسابك في لوحة المكتب. إذا كان ذلك خطأً، فتواصل مع مدير المكتب."],
         null, []);
 
     public static PanelMail PasswordChanged(PanelUser u) => Build(u.Email,
-        "كلمة السر اتغيرت",
+        "تم تغيير كلمة السر",
         $"أهلًا {u.DisplayName}،",
-        ["كلمة السر بتاعة حسابك في لوحة المكتب اتغيرت دلوقتي، وكل الأجهزة اللي كانت داخلة اتقفلت."],
-        null, ["لو مش إنت اللي غيرتها، كلّم مدير المكتب حالًا."]);
+        ["تم الآن تغيير كلمة السر الخاصة بحسابك في لوحة المكتب، وتم تسجيل الخروج من جميع الأجهزة التي كانت مسجّلة الدخول."],
+        null, ["إذا لم تغيّرها أنت، فتواصل مع مدير المكتب فورًا."]);
 
     public static PanelMail TwoFactorOn(PanelUser u) => Build(u.Email,
-        "التحقق بخطوتين اتشغّل",
+        "تم تفعيل التحقق بخطوتين",
         $"أهلًا {u.DisplayName}،",
-        ["التحقق بخطوتين اتشغّل على حسابك. من دلوقتي الدخول محتاج كمان الكود اللي في تطبيق الـ Authenticator.",
-         "احتفظ بأكواد الاسترجاع في مكان آمن: هي اللي هتدخّلك لو الموبايل ضاع."],
-        null, ["لو مش إنت اللي شغلته، كلّم مدير المكتب حالًا."]);
+        ["تم تفعيل التحقق بخطوتين على حسابك. من الآن، يتطلب الدخول أيضًا الرمز الظاهر في تطبيق Authenticator.",
+         "احتفظ برموز الاسترجاع في مكان آمن: فهي التي تتيح لك الدخول إذا فقدت هاتفك."],
+        null, ["إذا لم تفعّله أنت، فتواصل مع مدير المكتب فورًا."]);
 
     public static PanelMail TwoFactorOff(PanelUser u) => Build(u.Email,
-        "التحقق بخطوتين اتقفل",
+        "تم إيقاف التحقق بخطوتين",
         $"أهلًا {u.DisplayName}،",
-        ["التحقق بخطوتين اتقفل على حسابك، والدخول بقى بكلمة السر بس. وكل الأجهزة اللي كانت داخلة اتقفلت."],
-        null, ["لو مش إنت ولا المدير اللي قفله، كلّم مدير المكتب حالًا."]);
+        ["تم إيقاف التحقق بخطوتين على حسابك، وأصبح الدخول بكلمة السر فقط. وتم تسجيل الخروج من جميع الأجهزة التي كانت مسجّلة الدخول."],
+        null, ["إذا لم توقفه أنت أو المدير، فتواصل مع مدير المكتب فورًا."]);
 
     /// <summary>
     /// TASK 07c: an alert. The kind of task, its due time in Cairo and a link: never the client's
@@ -77,16 +77,16 @@ public static class PanelMails
     {
         var (subject, line) = a.Kind switch
         {
-            AlertKinds.Overdue => ("مهمة اتأخرت", "فيه مهمة عدّى ميعادها ولسه ما خلصتش."),
-            AlertKinds.Urgent => ("طلب عاجل", "فيه طلب عاجل جديد محتاج حد يمسكه دلوقتي."),
-            AlertKinds.Rating => ("تقييم ضعيف من عميل", "فيه عميل قيّم الخدمة «يحتاج للتحسين»، ووعدناه إن حد من المكتب هيكلمه."),
-            _ => ("عميل عايز يكلم حد", "فيه عميل طلب يكلم حد من المكتب."),
+            AlertKinds.Overdue => ("مهمة متأخرة", "توجد مهمة تجاوزت موعدها ولم تكتمل بعد."),
+            AlertKinds.Urgent => ("طلب عاجل", "يوجد طلب عاجل جديد يحتاج إلى من يتولّاه الآن."),
+            AlertKinds.Rating => ("تقييم ضعيف من عميل", "قيّم أحد العملاء الخدمة بـ«يحتاج للتحسين»، ووعدناه بأن يتواصل معه أحد من المكتب."),
+            _ => ("عميل يطلب التحدث مع موظف", "طلب أحد العملاء التحدث مع أحد موظفي المكتب."),
         };
         var due = a.DueAt is { } d ? ArabicTime(TimeZoneInfo.ConvertTime(d, Cairo)) : "";
         return Build(to, subject, "أهلًا،",
             [line, $"النوع: {TaskType(a.TaskType ?? "")}", $"المطلوب قبل: {due}"],
             null,
-            [$"افتحها من لوحة المكتب: {panelUrl.TrimEnd('/')}/tasks/{a.TaskId}", "اسم العميل ورقمه وكلامه في اللوحة بس، مش في الإيميل."]);
+            [$"افتحها من لوحة المكتب: {panelUrl.TrimEnd('/')}/tasks/{a.TaskId}", "اسم العميل ورقمه ورسائله موجودة في اللوحة فقط، وليست في هذه الرسالة."]);
     }
 
     /// <summary>TASK 13 (v1.18): a job of the system failed. To the managers; what failed and where to look, nothing else.</summary>
@@ -94,16 +94,16 @@ public static class PanelMails
     {
         var (subject, line, look) = what switch
         {
-            SystemWhat.Backup => ("النسخة الاحتياطية فشلت", "النسخة الاحتياطية بتاعة الليلة ما اتعملتش.", "شغّل backup تاني، ولو فشل شوف docs/runbooks/backup-restore.md."),
-            SystemWhat.Drill => ("تجربة الاسترجاع فشلت", "تجربة استرجاع النسخة الاحتياطية الشهرية فشلت، يعني ممكن النسخة ما تنفعش وقت الحاجة.", "شوف docs/runbooks/backup-restore.md."),
-            SystemWhat.LogScan => ("السجلات فيها بيانات ما ينفعش تتسجل", "فحص سجلات السيستم لقى مفتاح أو رقم تليفون كامل.", "شوف docs/runbooks/secrets.md، وغيّر المفتاح لو اتسجل."),
-            SystemWhat.Turn => ("رسالة عميل وقفت بعد محاولات كتير", "فيه رسالة من عميل السيستم حاول يرد عليها 5 مرات وفشل، فاتشالت على جنب عشان ما توقفش رسايله الجاية.", "شوف المحادثة في Chatwoot ورد عليه بنفسك، وشوف سجل الـ API وقت الرسالة."),
-            SystemWhat.Ai => ("الـ AI اللي بيفهم رسايل العملاء مش شغال", "في الساعة اللي فاتت، حازم ما قدرش يفهم 3 رسايل أو أكتر لأن الـ AI ما ردش: غالبًا مفتاح Anthropic اتوقف أو انتهى، أو الرصيد خلص. حازم بيرد بـ «مش واضحلي» لحد ما يرجع (الشكر والشتيمة بس بيتعرفوا من غيره).", "افتح console.anthropic.com وشوف المفتاح والرصيد، وحط مفتاح جديد في .env على السيرفر (docs/runbooks/secrets.md)، وبعدين docker compose up -d api."),
-            SystemWhat.N8n => ("فيه حاجات في n8n فشلت", "فيه workflows في n8n فشلت في الساعة اللي فاتت.", "افتح n8n وشوف Executions."),
-            _ => ("فحص السيستم لقى مشكلة", "الفحص اليومي للسيستم (healthcheck) لقى حاجة مش شغالة.", "شغّل healthcheck وشوف السطر اللي فيه FAIL."),
+            SystemWhat.Backup => ("فشلت النسخة الاحتياطية", "لم تُنشأ النسخة الاحتياطية الليلية.", "شغّل backup مرة أخرى، وإذا فشل فراجع docs/runbooks/backup-restore.md."),
+            SystemWhat.Drill => ("فشلت تجربة الاسترجاع", "فشلت تجربة استرجاع النسخة الاحتياطية الشهرية، أي أن النسخة قد لا تصلح عند الحاجة إليها.", "راجع docs/runbooks/backup-restore.md."),
+            SystemWhat.LogScan => ("تحتوي السجلات على بيانات لا يجوز تسجيلها", "عثر فحص سجلات النظام على مفتاح أو رقم هاتف كامل.", "راجع docs/runbooks/secrets.md، وغيّر المفتاح إذا كان قد سُجّل."),
+            SystemWhat.Turn => ("توقفت معالجة رسالة عميل بعد محاولات عديدة", "حاول النظام الرد على رسالة من أحد العملاء 5 مرات وفشل، فنُحّيت جانبًا حتى لا تتعطل رسائله التالية.", "راجع المحادثة في Chatwoot وردّ عليه بنفسك، وراجع سجل الـ API وقت الرسالة."),
+            SystemWhat.Ai => ("الذكاء الاصطناعي الذي يفهم رسائل العملاء متوقف", "خلال الساعة الماضية، لم يتمكن حازم من فهم 3 رسائل أو أكثر لأن الذكاء الاصطناعي لم يستجب: على الأرجح أُوقف مفتاح Anthropic أو انتهت صلاحيته، أو نفد الرصيد. يرد حازم بـ«مش واضحلي» حتى يعود (ولا يتعرّف من دونه إلا على الشكر والشتائم).", "افتح console.anthropic.com وراجع المفتاح والرصيد، وضع مفتاحًا جديدًا في .env على الخادم (docs/runbooks/secrets.md)، ثم شغّل docker compose up -d api."),
+            SystemWhat.N8n => ("توجد عمليات فاشلة في n8n", "فشلت بعض الـ workflows في n8n خلال الساعة الماضية.", "افتح n8n وراجع Executions."),
+            _ => ("اكتشف فحص النظام مشكلة", "اكتشف الفحص اليومي للنظام (healthcheck) خدمة متوقفة عن العمل.", "شغّل healthcheck وراجع السطر الذي يحتوي على FAIL."),
         };
         return Build(to, subject, "أهلًا،", [line, look], null,
-            [$"لوحة المكتب: {panelUrl.TrimEnd('/')}", "الإيميل ده ما فيهوش أي بيانات عملاء."]);
+            [$"لوحة المكتب: {panelUrl.TrimEnd('/')}", "لا تحتوي هذه الرسالة على أي بيانات للعملاء."]);
     }
 
     private static TimeZoneInfo Cairo => global::Office.Domain.Tasks.OfficeHours.Cairo;
@@ -122,28 +122,28 @@ public static class PanelMails
     /// <summary>The task types as the panel names them.</summary>
     public static string TaskType(string type) => type switch
     {
-        "existing_client_message" => "موكل حالي بيسأل عن موضوعه",
-        "late_reschedule" => "تغيير ميعاد متأخر",
+        "existing_client_message" => "موكّل حالي يستفسر عن قضيته",
+        "late_reschedule" => "طلب متأخر لتغيير الموعد",
         "refund" => "استرداد",
         "price_quote" => "تسعير",
         "discount_request" => "طلب خصم",
         "complaint" => "شكوى",
-        "human_requested" => "طلب يكلم موظف",
+        "human_requested" => "طلب التحدث مع موظف",
         "safety_alert" => "تنبيه أمان",
-        "lawyer_direct_message" => "رسالة لقايمة المستشار",
+        "lawyer_direct_message" => "رسالة لقائمة المستشار",
         "external_contact" => "زميل أو صحافة أو مورّد",
-        "unclear_message" => "رسالة مش واضحة",
-        "service_question" => "سؤال عن خدمة معيّنة",
-        "payment_review_due" => "تحويل لسه ما اتراجعش والميعاد قرّب",
-        "appointment_unmarked" => "ميعاد عدّى ومحدش علّمه، والتحويل لسه ما اتراجعش",
+        "unclear_message" => "رسالة غير واضحة",
+        "service_question" => "استفسار عن خدمة معيّنة",
+        "payment_review_due" => "اقترب الموعد ولم يُراجَع التحويل بعد",
+        "appointment_unmarked" => "انقضى موعد دون تسجيل نتيجته، ولم يُراجَع التحويل بعد",
         "urgent_request" => "طلب عاجل",
         "service_request" => "طلب خدمة",
-        "reschedule_or_cancel" => "تغيير أو إلغاء ميعاد",
-        "booking_unavailable" => "حجز: مفيش مواعيد أو الكالندر مش متاح",
-        "booking_cancelled" => "عميل لغى حجزه",
-        "booking_message_failed" => "رسالة ما وصلتش للعميل", // v1.44: a booking notice or any reply of Hazem's
-        "calendar_conflict" => "حدث في الكالندر فوق حجز",
-        "office_cancelled" => "المكتب لغى حجز: ميعاد تاني أو استرداد",
+        "reschedule_or_cancel" => "تغيير موعد أو إلغاؤه",
+        "booking_unavailable" => "حجز: لا توجد مواعيد أو التقويم غير متاح",
+        "booking_cancelled" => "عميل ألغى حجزه",
+        "booking_message_failed" => "تعذّر وصول رسالة إلى العميل", // v1.44: a booking notice or any reply of Hazem's
+        "calendar_conflict" => "حدث في التقويم يتعارض مع حجز",
+        "office_cancelled" => "ألغى المكتب حجزًا: موعد آخر أو استرداد",
         _ => type,
     };
 
@@ -159,15 +159,15 @@ public static class PanelMails
     private static PanelMail Build(string to, string subject, string greeting, string[] lines, string? code, string[] notes)
     {
         var text = string.Join("\n\n", new[] { greeting }.Concat(lines).Concat(code is null ? Array.Empty<string>() : [code]).Concat(notes)
-            .Append($"{Office}\nإيميل آلي، الرد عليه مش بيوصل لحد."));
+            .Append($"{Office}\nرسالة آلية، والرد عليها لا يصل إلى أحد."));
 
         static string e(string s) => WebUtility.HtmlEncode(s);
         const string rtl = "direction:rtl;text-align:right;";
-        var preheader = code is null ? lines.FirstOrDefault() ?? subject : $"الكود: {code}. شغال 10 دقايق.";
+        var preheader = code is null ? lines.FirstOrDefault() ?? subject : $"الرمز: {code}. صالح لمدة 10 دقائق.";
         var body = string.Concat(lines.Select(l => $"<p style=\"margin:0 0 12px;{rtl}\">{e(l)}</p>"));
         var codeRow = code is null ? "" : $"""
                 <tr><td align="center" style="padding:4px 32px 22px;">
-                  <div style="font-family:{Font};font-size:12px;color:#8a7a5c;margin:0 0 8px;">الكود</div>
+                  <div style="font-family:{Font};font-size:12px;color:#8a7a5c;margin:0 0 8px;">الرمز</div>
                   <div dir="ltr" style="display:inline-block;font-family:Consolas,'Courier New',monospace;font-size:34px;font-weight:700;letter-spacing:10px;color:#1e1a14;background:#f7f3e9;border:1px solid #dcc8a5;border-radius:12px;padding:14px 22px 14px 32px;">{e(code)}</div>
                 </td></tr>
             """;
@@ -196,7 +196,7 @@ public static class PanelMails
                   </td></tr>
             {codeRow}{noteRow}
                   <tr><td dir="rtl" align="center" style="background:#f7f5f1;border-top:1px solid #ece6db;padding:16px 24px;font-family:{Font};font-size:12px;line-height:1.7;color:#8a8170;text-align:center;">
-                    إيميل آلي من لوحة المكتب، الرد عليه مش بيوصل لحد.<br>{e(Office)} للمحاماة والاستشارات القانونية
+                    رسالة آلية من لوحة المكتب، والرد عليها لا يصل إلى أحد.<br>{e(Office)} للمحاماة والاستشارات القانونية
                   </td></tr>
                 </table>
               </td></tr>

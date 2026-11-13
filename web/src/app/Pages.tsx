@@ -48,7 +48,7 @@ export function ComingSoon({ title, icon, what, when }: { title: string; icon: I
         </p>
         <Link to="/" className="relative mt-2 inline-flex min-h-10 items-center gap-1.5 rounded-full border border-line/60 bg-card/60 px-4 text-sm font-semibold text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.45)] transition hover:border-gold-line hover:bg-gold-tint">
           <Icon name="home" className="size-4" />
-          ارجع للرئيسية
+          العودة إلى الرئيسية
         </Link>
       </section>
     </div>
@@ -64,17 +64,17 @@ type Row = { to: string; icon: IconName; title: string; text: string; show: bool
 export function SettingsPage() {
   const { data: me } = useMe();
   const mine: Row[] = [
-    { to: "/account", icon: "account", title: "حسابي", text: "اسمك وإيميلك ودورك في المكتب.", show: true },
-    { to: "/change-password", icon: "key", title: "تغيير كلمة السر", text: "كلمة سر جديدة، وكل الأجهزة التانية بتخرج.", show: true },
+    { to: "/account", icon: "account", title: "حسابي", text: "اسمك وبريدك الإلكتروني ودورك في المكتب.", show: true },
+    { to: "/change-password", icon: "key", title: "تغيير كلمة السر", text: "كلمة سر جديدة، مع تسجيل الخروج من جميع الأجهزة الأخرى.", show: true },
     // v1.102: the tour again, from its first step (app/Tour.tsx)
-    { to: TOUR_REPLAY, icon: "play", title: "اعرض الجولة تاني", text: "جولة سريعة تعرّفك على اللوحة خطوة بخطوة.", show: true },
+    { to: TOUR_REPLAY, icon: "play", title: "إعادة عرض الجولة", text: "جولة سريعة تعرّفك على اللوحة خطوة بخطوة.", show: true },
   ];
   const office: Row[] = [
-    { to: "/users", icon: "users", title: "الحسابات", text: "زوّد موظف، اقفل حساب، أو اعمل كلمة سر مؤقتة.", show: can(me, "users.manage") },
-    { to: "/lists", icon: "clients", title: "قوايم المكتب", text: "الموكلين الحاليين، وقايمة المستشار، والممنوعين" + (can(me, "conversations.unmute") ? "، والمحادثات الساكتة." : "."), show: can(me, "lists.manage") },
-    { to: "/texts", icon: "chat", title: "نصوص حازم", text: "الكلام اللي حازم بيرد بيه، وكل نسخة قديمة محفوظة.", show: can(me, "texts.manage") },
-    { to: "/prices", icon: "receipt", title: "الأسعار", text: "الأسعار اللي حازم بيقولها وبيطلبها؛ التعديل للأستاذ والمدير.", show: true },
-    { to: "/testing", icon: "refresh", title: "أدوات التجربة", text: "حازم ينسى رقم من أرقام التجربة، علشان تجرّب المحادثة من الأول.", show: can(me, "testing.forget") },
+    { to: "/users", icon: "users", title: "الحسابات", text: "أضف موظفًا، أو أغلق حسابًا، أو أنشئ كلمة سر مؤقتة.", show: can(me, "users.manage") },
+    { to: "/lists", icon: "clients", title: "قوائم المكتب", text: "الموكّلون الحاليون، وقائمة المستشار، والمحظورون" + (can(me, "conversations.unmute") ? "، والمحادثات المكتومة." : "."), show: can(me, "lists.manage") },
+    { to: "/texts", icon: "chat", title: "نصوص حازم", text: "النصوص التي يرد بها حازم، مع حفظ كل نسخة سابقة.", show: can(me, "texts.manage") },
+    { to: "/prices", icon: "receipt", title: "الأسعار", text: "الأسعار التي يذكرها حازم ويطلبها؛ التعديل للمستشار والمدير.", show: true },
+    { to: "/testing", icon: "refresh", title: "أدوات التجربة", text: "اجعل حازم ينسى رقمًا من أرقام التجربة، لتجرّب المحادثة من البداية.", show: can(me, "testing.forget") },
   ];
   return (
     <div className="relative isolate grid gap-5 pb-4">

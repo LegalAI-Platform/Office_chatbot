@@ -29,7 +29,7 @@ export function TaskDetailPage() {
 
       <Link to={back} className="liquid inline-flex min-h-9 w-fit items-center gap-1.5 rounded-full px-3.5 text-[13px] font-semibold text-ink-soft transition hover:text-ink">
         <Icon name="back" className="size-4" />
-        رجوع لكل المهام
+        العودة إلى كل المهام
       </Link>
       {task.isPending ? (
         <Loading />
@@ -48,7 +48,7 @@ const LOOK: Record<string, string> = {
 
 function Detail({ task }: { task: TaskDetail }) {
   const open = task.state !== "done" && task.state !== "cancelled";
-  const name = task.client.name ?? "رقم من غير اسم";
+  const name = task.client.name ?? "رقم بلا اسم";
   const late = task.state === "overdue";
   return (
     <>
@@ -70,7 +70,7 @@ function Detail({ task }: { task: TaskDetail }) {
                 </span>
                 <span className="inline-flex items-center gap-1.5">
                   <Icon name="clock" className="size-4 text-gold-ink" />
-                  {late ? "كان المفروض تخلص " : "المفروض تخلص "}
+                  {late ? "كان موعد إنجازها " : "موعد إنجازها "}
                   <span className={`tabular font-semibold ${late ? "text-red-ink" : "text-ink"}`}>{cairoWhen(task.due_at)}</span>
                 </span>
               </p>
@@ -80,10 +80,10 @@ function Detail({ task }: { task: TaskDetail }) {
       </header>
 
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(19rem,1fr)]">
-        <Section icon="message" title="كلام العميل" count={task.client_words.length}>
+        <Section icon="message" title="رسائل العميل" count={task.client_words.length}>
           <p className="rounded-[12px] border border-line/60 bg-card/50 px-3 py-2 text-[12.5px] leading-relaxed text-ink-soft">
-            نوع الموضوع: <strong className="text-ink">{matterLabel(task.matter_type, task.matter_subtype)}</strong>. ده
-            تصنيف حازم، فاقرا كلام العميل نفسه قبل ما تعتمد عليه.
+            نوع الموضوع: <strong className="text-ink">{matterLabel(task.matter_type, task.matter_subtype)}</strong>. هذا
+            تصنيف حازم، فاقرأ رسائل العميل نفسها قبل الاعتماد عليه.
           </p>
           <ClientWords taskId={task.id} words={task.client_words} />
         </Section>
@@ -92,9 +92,9 @@ function Detail({ task }: { task: TaskDetail }) {
           <Actions task={task} />
           <Section icon="account" title="العميل">
             <dl className="grid gap-1.5">
-              <Row icon="whatsapp" term="الرقم"><span className="tabular" dir="ltr">{phoneOf(task.client.phone) ?? "من غير رقم"}</span></Row>
+              <Row icon="whatsapp" term="الرقم"><span className="tabular" dir="ltr">{phoneOf(task.client.phone) ?? "بلا رقم"}</span></Row>
               <Row icon="users" term="النوع">{label(CLIENT_TYPES, task.client.client_type) || "—"}</Row>
-              <Row icon="trend-up" term="جه منين">{label(SOURCES, task.client.source) || "مش معروف"}</Row>
+              <Row icon="trend-up" term="المصدر">{label(SOURCES, task.client.source) || "غير معروف"}</Row>
               <Row icon="chat" term="حازم">{hazemState(task.client.conversation_state)}</Row>
             </dl>
           </Section>
@@ -136,14 +136,14 @@ function Row({ icon, term, children }: { icon: IconName; term: string; children:
 }
 
 const hazemState = (s?: string) =>
-  s === "human_handoff" ? "ساكت، موظف ماسك المحادثة" : s === "muted" ? "متكتم" : s === "ignored" ? "جروب، متجاهل" : "شغال";
+  s === "human_handoff" ? "متوقف: موظف يتولى المحادثة" : s === "muted" ? "مكتوم" : s === "ignored" ? "مجموعة، يتجاهلها" : "يعمل";
 
 const MEDIA_ICON: Record<string, IconName> = { image: "camera", video: "video", audio: "phone", document: "document" };
 
 /** The client's messages as quotes, in the order they came, each with its file and time. */
 function ClientWords({ taskId, words }: { taskId: string; words: ClientWord[] }) {
   if (words.length === 0) {
-    return <p className="rounded-[14px] border border-dashed border-gold-line bg-card/40 px-4 py-6 text-center text-sm text-ink-soft">مفيش كلام متسجل للمهمة دي.</p>;
+    return <p className="rounded-[14px] border border-dashed border-gold-line bg-card/40 px-4 py-6 text-center text-sm text-ink-soft">لا توجد رسائل مسجّلة لهذه المهمة.</p>;
   }
   return (
     <ol className="grid gap-2.5">
@@ -181,8 +181,8 @@ function ClientWords({ taskId, words }: { taskId: string; words: ClientWord[] })
 
 // «إلغاء المهمة» is apart, at the bottom behind a «متأكد؟»
 const ACTIONS: { action: Exclude<TaskAction, "cancel">; text: string }[] = [
-  { action: "start", text: "هاشتغل عليها" },
-  { action: "done", text: "خلصت" },
+  { action: "start", text: "ابدأ العمل عليها" },
+  { action: "done", text: "تحديد كمكتملة" },
 ];
 
 function Actions({ task }: { task: TaskDetail }) {
@@ -200,9 +200,9 @@ function Actions({ task }: { task: TaskDetail }) {
     <Section icon="play" title="المهمة">
       <dl className="grid gap-1.5">
         <Row icon={task.staff ? "account" : "user-plus"} term="الموظف">
-          {task.staff?.name ?? <span className="text-orange-ink">مش متعيّنة</span>}
+          {task.staff?.name ?? <span className="text-orange-ink">غير مُسندة</span>}
         </Row>
-        <Row icon="clock" term="اتفتحت"><span className="tabular">{cairoWhen(task.created_at)}</span></Row>
+        <Row icon="clock" term="تاريخ الفتح"><span className="tabular">{cairoWhen(task.created_at)}</span></Row>
       </dl>
 
       {main.length > 0 ? (
@@ -218,7 +218,7 @@ function Actions({ task }: { task: TaskDetail }) {
       ) : (
         <p className="flex items-start gap-2 rounded-[12px] bg-green-bg px-3 py-2.5 text-[13px] text-green-ink">
           <Icon name="check-circle" className="mt-0.5 size-4 shrink-0" />
-          {task.state === "done" ? "المهمة دي خلصت. مفيش حاجة تانية تتعمل فيها." : task.state === "cancelled" ? "المهمة دي اتلغت. مفيش حاجة تتعمل فيها." : "مفيش حاجة تقدر تعملها في المهمة دي من حسابك."}
+          {task.state === "done" ? "اكتملت هذه المهمة. لا يوجد إجراء آخر عليها." : task.state === "cancelled" ? "أُلغيت هذه المهمة. لا يوجد إجراء عليها." : "لا يسمح حسابك بأي إجراء على هذه المهمة."}
         </p>
       )}
 
@@ -235,18 +235,18 @@ function Actions({ task }: { task: TaskDetail }) {
           <Icon name="chat" className="size-4" />
           افتح المحادثة في Chatwoot
         </Button>
-        <p id="chatwoot-note" className="text-xs text-ink-soft">بتفتح في تاب جديد وانت داخل على طول. ردك من هناك بيوصل للعميل على واتساب.</p>
+        <p id="chatwoot-note" className="text-xs text-ink-soft">تُفتح في تبويب جديد مع تسجيل دخولك تلقائيًا. يصل ردّك من هناك إلى العميل عبر واتساب.</p>
         {chat.error ? <p className="text-sm text-bad" role="alert">{errorMessage(chat.error)}</p> : null}
       </div>
 
       {task.can.assign ? (
         <div className="grid gap-1 border-t border-line/70 pt-3">
           <label className="grid gap-1.5 text-sm">
-            <span className="flex items-center gap-1.5 font-semibold"><Icon name="user-plus" className="size-4 text-gold-ink" />حوّل المهمة لـ</span>
+            <span className="flex items-center gap-1.5 font-semibold"><Icon name="user-plus" className="size-4 text-gold-ink" />إسناد المهمة إلى</span>
             <select className="min-h-11 rounded-[12px] border border-line-strong bg-card/70 px-3 text-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.4)] focus:border-gold" value={task.staff?.id ?? ""}
               disabled={assign.isPending || staff.isPending}
               onChange={(e) => { act.reset(); assign.mutate(e.target.value || null); }}>
-              <option value="">مش متعيّنة</option>
+              <option value="">غير مُسندة</option>
               {staff.data?.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </label>
@@ -257,10 +257,10 @@ function Actions({ task }: { task: TaskDetail }) {
         <div className="grid gap-2 border-t border-line/70 pt-3">
           {confirmCancel ? (
             <div className="grid gap-2 rounded-[12px] border border-red-ink/30 bg-red-bg p-3">
-              <span className="text-sm font-semibold text-red-ink">متأكد إنك عايز تلغيها؟</span>
+              <span className="text-sm font-semibold text-red-ink">هل أنت متأكد من إلغاء هذه المهمة؟</span>
               <span className="flex flex-wrap gap-2">
-                <Button variant="danger" busy={act.isPending} onClick={() => { assign.reset(); act.mutate("cancel"); }}>أيوه، الغيها</Button>
-                <Button variant="ghost" onClick={() => setConfirmCancel(false)}>لأ</Button>
+                <Button variant="danger" busy={act.isPending} onClick={() => { assign.reset(); act.mutate("cancel"); }}>نعم، ألغِها</Button>
+                <Button variant="ghost" onClick={() => setConfirmCancel(false)}>لا</Button>
               </span>
             </div>
           ) : (
