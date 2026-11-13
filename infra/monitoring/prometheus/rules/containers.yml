@@ -3,16 +3,18 @@
 groups:
   - name: containers
     rules:
-      # One-shot jobs exit when done (preflight, storage-init, monitoring-init, chatwoot-init), and so do `docker compose run`s.
+      # v1.109: only the services the office runs on (the default profile, the edge and the Named Tunnel). A profile's container
+      # stopped on purpose never pages: the old Quick Tunnel (tunnel), WAHA, the test stub. Neither does a one-shot job that
+      # finished (preflight, storage-init, …) or a `docker compose run`. The monitoring's own are TargetDown's.
       - alert: ContainerExited
         expr: |
           max by (service) (docker_container_status_exitcode{container_status=~"exited|dead", oneoff!="True",
-            service!~"preflight|storage-init|monitoring-init|chatwoot-init|tools|migrate|meta-stub"} >= 0)
+            service=~"postgres|redis|garage|n8n|api|web|chatwoot|chatwoot-sidekiq|chatwoot-db|chatwoot-redis|edge|tunnel-named"} >= 0)
         for: 2m
         labels: { severity: critical }
         annotations:
-          summary: 'الـ container {{ $labels.service }} واقف'
-          description: 'خرج بـ exit code {{ $value | printf "%.0f" }} وماقامش تاني. شوف آخر لوجز ليه في Grafana (اللوجز).'
+          summary: 'Container {{ $labels.service }} is stopped'
+          description: 'It exited with code {{ $value | printf "%.0f" }} and did not come back. Check its last logs in Grafana (Hazem · Logs).'
           runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#containerexited
 
       - alert: ContainerUnhealthy
@@ -20,16 +22,16 @@ groups:
         for: 3m
         labels: { severity: warning }
         annotations:
-          summary: 'Docker شايف الـ container {{ $labels.service }} مش healthy'
-          description: الـ healthcheck بتاعه بيفشل. لو ليه فحص من Prometheus كمان (زي ApiDown) هيوصلك هو بدل ده.
+          summary: 'Docker reports container {{ $labels.service }} unhealthy'
+          description: 'Its healthcheck fails. If it has a Prometheus check too (like ApiDown), that alert comes instead.'
           runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#containerunhealthy
 
       - alert: ContainerRestarting
         expr: max by (service) (increase(docker_container_status_restart_count{oneoff!="True"}[15m])) >= 2
         labels: { severity: warning }
         annotations:
-          summary: 'الـ container {{ $labels.service }} بيقع ويقوم تاني'
-          description: 'Docker قومه {{ $value | printf "%.0f" }} مرات في ربع ساعة. شوف لوجزه في Grafana (اللوجز).'
+          summary: 'Container {{ $labels.service }} keeps restarting'
+          description: 'Docker restarted it {{ $value | printf "%.0f" }} times in 15 minutes. Check its logs in Grafana (Hazem · Logs).'
           runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#containerrestarting
 
       - alert: ContainerMemoryNearLimit
@@ -37,6 +39,6 @@ groups:
         for: 10m
         labels: { severity: warning }
         annotations:
-          summary: 'الـ container {{ $labels.service }} قرّب يوصل لحد الرام بتاعه'
-          description: 'مستخدم {{ $value | printf "%.0f" }}% من الحد (mem_limit، أو رام السيرفر كله لو ملوش حد). لو وصل للحد، Linux هيقفله.'
+          summary: 'Container {{ $labels.service }} is near its memory limit'
+          description: 'Using {{ $value | printf "%.0f" }}% of its limit (mem_limit, or the whole server''s memory without one). At the limit, Linux kills it.'
           runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#containermemorynearlimit

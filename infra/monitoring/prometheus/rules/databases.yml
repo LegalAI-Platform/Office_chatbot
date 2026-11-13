@@ -7,8 +7,8 @@ groups:
         for: 1m
         labels: { severity: critical }
         annotations:
-          summary: '{{ if eq $labels.cluster "office" }}داتابيز المكتب{{ else }}داتابيز Chatwoot{{ end }} مش بترد'
-          description: '{{ if eq $labels.cluster "office" }}حازم والبانل وn8n كلهم واقفين من غيرها.{{ else }}Chatwoot (شاشة المحادثات) واقف من غيرها.{{ end }}'
+          summary: '{{ if eq $labels.cluster "office" }}The office database{{ else }}The Chatwoot database{{ end }} is down'
+          description: '{{ if eq $labels.cluster "office" }}Hazem, the panel and n8n all stop without it.{{ else }}Chatwoot (the conversations) stops without it.{{ end }}'
           runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#postgresdown
 
       - alert: PostgresTooManyConnections
@@ -18,16 +18,16 @@ groups:
         for: 5m
         labels: { severity: warning }
         annotations:
-          summary: '{{ if eq $labels.cluster "office" }}داتابيز المكتب{{ else }}داتابيز Chatwoot{{ end }} قرّبت توصل لأقصى عدد اتصالات'
-          description: 'مستخدم {{ $value | humanizePercentage }} من max_connections. لما يكمل، أي اتصال جديد هيترفض.'
+          summary: '{{ if eq $labels.cluster "office" }}The office database{{ else }}The Chatwoot database{{ end }} is near its connection limit'
+          description: 'Using {{ $value | humanizePercentage }} of max_connections. When it is full, new connections are refused.'
           runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#postgrestoomanyconnections
 
       - alert: PostgresDeadlocks
         expr: increase(pg_stat_database_deadlocks{datname!~"template.*|postgres"}[15m]) > 0
         labels: { severity: warning }
         annotations:
-          summary: 'فيه deadlock في داتابيز {{ $labels.datname }}'
-          description: 'حصل {{ $value | printf "%.0f" }} مرة في ربع ساعة. Postgres بيلغي واحدة من العمليتين، والكود بيحاول تاني.'
+          summary: 'Deadlock in database {{ $labels.datname }}'
+          description: '{{ $value | printf "%.0f" }} in 15 minutes. Postgres cancelled one of the two transactions, and the code retries.'
           runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#postgresdeadlocks
 
       - alert: PostgresLongTransaction
@@ -35,8 +35,8 @@ groups:
         for: 5m
         labels: { severity: warning }
         annotations:
-          summary: 'فيه transaction مفتوحة بقالها أكتر من ربع ساعة ({{ $labels.datname }})'
-          description: 'بقالها {{ $value | humanizeDuration }}. بتمسك locks وبتمنع التنضيف (vacuum).'
+          summary: 'A transaction open for over 15 minutes ({{ $labels.datname }})'
+          description: 'Open for {{ $value | humanizeDuration }}. It holds locks and blocks vacuum.'
           runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#postgreslongtransaction
 
       - alert: RedisDown
@@ -44,8 +44,8 @@ groups:
         for: 1m
         labels: { severity: critical }
         annotations:
-          summary: 'Redis بتاع {{ if eq $labels.cluster "office" }}المكتب{{ else }}Chatwoot{{ end }} مش بيرد'
-          description: '{{ if eq $labels.cluster "office" }}n8n بيستخدمه في تجميع الرسايل ومنع التكرار.{{ else }}Chatwoot وSidekiq واقفين من غيره.{{ end }}'
+          summary: '{{ if eq $labels.cluster "office" }}The office Redis{{ else }}The Chatwoot Redis{{ end }} is down'
+          description: '{{ if eq $labels.cluster "office" }}n8n uses it to group messages and stop duplicates.{{ else }}Chatwoot and Sidekiq stop without it.{{ end }}'
           runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#redisdown
 
       - alert: RedisMemoryHigh
@@ -53,14 +53,14 @@ groups:
         for: 10m
         labels: { severity: warning }
         annotations:
-          summary: 'Redis بتاع {{ if eq $labels.cluster "office" }}المكتب{{ else }}Chatwoot{{ end }} مستخدم أكتر من 80% من حده'
-          description: 'مستخدم {{ $value | humanizePercentage }} من maxmemory. لما يتملي بيرفض أي كتابة (noeviction)، فرسايل واتساب تقف.'
+          summary: '{{ if eq $labels.cluster "office" }}The office Redis{{ else }}The Chatwoot Redis{{ end }} uses over 80% of its memory'
+          description: 'Using {{ $value | humanizePercentage }} of maxmemory. When it is full it refuses writes (noeviction), and WhatsApp messages stop.'
           runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#redismemoryhigh
 
       - alert: RedisRejectedConnections
         expr: increase(redis_rejected_connections_total[15m]) > 0
         labels: { severity: warning }
         annotations:
-          summary: 'Redis بتاع {{ if eq $labels.cluster "office" }}المكتب{{ else }}Chatwoot{{ end }} رفض اتصالات'
-          description: 'رفض {{ $value | printf "%.0f" }} اتصال في ربع ساعة (maxclients).'
+          summary: '{{ if eq $labels.cluster "office" }}The office Redis{{ else }}The Chatwoot Redis{{ end }} rejected connections'
+          description: 'Rejected {{ $value | printf "%.0f" }} connection(s) in 15 minutes (maxclients).'
           runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#redisrejectedconnections

@@ -4,7 +4,7 @@ The project owner writes in Egyptian Arabic: answer in Egyptian Arabic, keep tec
 
 ## Read first, every session
 
-1. `docs/decisions/DECISIONS-v1.107.md` — the only source of truth. If anything (a prompt, a doc,
+1. `docs/decisions/DECISIONS-v1.109.md` — the only source of truth. If anything (a prompt, a doc,
    your own idea) conflicts with it, stop and ask the owner.
 2. The newest file in `docs/sessions/` — what was done last, what is pending, what is verified.
    For the state after v1.49 (up to v1.73), the owner's way of working and what is pending, read
@@ -71,7 +71,7 @@ unless the owner asks.
 | `backend-test` | .NET unit + integration tests (throwaway database from the real migrations) |
 | `hazem-e2e` | full loop n8n → .NET → n8n with stubs and dry run (no Meta, no OpenAI), and the panel |
 | `web-test` | the panel: type-check, Vitest, build (prints the bundle size, no limit) (Node container) |
-| `monitoring check` | v1.107: every monitoring config with its pinned image, the alert rules' tests, the log masking test (Docker only) |
+| `monitoring check` | v1.107: every monitoring config with its pinned image, the alert rules' tests, the log masking test, the dashboards against `make-dashboards.py` (v1.109) (Docker only) |
 | `quality-eval` | TASK 18: 236 conversations through the real Hazem + the judge (real AI, costs ~$15–20; before every deploy, the score must not drop and nothing forbidden) |
 
 After tests, `whatsapp.dry_run` must be `false`, base URLs back to Meta/OpenAI defaults, and no

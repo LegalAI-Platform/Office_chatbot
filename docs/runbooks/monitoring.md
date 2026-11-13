@@ -1,7 +1,7 @@
 # The monitoring (v1.107)
 
 What it is and why: [`DECISIONS-v1.107.md`](../decisions/DECISIONS-v1.107.md) (T-16, T-25). This file is the commands, and
-what to do when an alert e-mail comes. Every alert e-mail links to its section below («اعمل إيه»).
+what to do when an alert e-mail comes. Every alert e-mail links to its section below («What to do»).
 
 Two systems, no alert in both:
 
@@ -92,8 +92,8 @@ comes out.
    ```
 
 3. Start it: `bash scripts/linux/monitoring.sh up` (about a minute; it pulls ~1.5 GB of images the first time).
-4. `bash scripts/linux/monitoring.sh test-email`: an e-mail «🔴 مشكلة: MonitoringTestEmail — تجربة: إيميلات المراقبة شغالة»
-   comes within a minute, and «✅ اتحلت» about 5 minutes later. Nothing in a few minutes: [AlertmanagerEmailFailing](#alertmanageremailfailing).
+4. `bash scripts/linux/monitoring.sh test-email`: an e-mail «🔴 FIRING: MonitoringTestEmail — Test: the monitoring e-mails work»
+   comes within a minute, and «✅ RESOLVED» about 5 minutes later. Nothing in a few minutes: [AlertmanagerEmailFailing](#alertmanageremailfailing).
 5. `bash scripts/linux/healthcheck.sh`: «The monitoring's containers» and «The monitoring» pass.
 
 From then on every `deploy/deploy.sh` keeps it on the new version (a commit that changed `infra/monitoring` recreates it),
@@ -108,7 +108,7 @@ ssh -N -L 3300:127.0.0.1:3300 -L 9090:127.0.0.1:9090 -L 9093:127.0.0.1:9093 offi
 ```
 
 - Grafana: http://127.0.0.1:3300 — user `admin` (or `GRAFANA_ADMIN_USER`), password `GRAFANA_ADMIN_PASSWORD`. The home
-  page is «حازم — نظرة عامة»; the others are in the folder «حازم».
+  page is «Hazem · Overview»; the others are in the folder «Hazem» (and in every dashboard's «Dashboards» menu).
 - Prometheus (its targets, the alerts' state): http://127.0.0.1:9090/targets, http://127.0.0.1:9090/alerts
 - Alertmanager (the alerts now, the silences): http://127.0.0.1:9093
 
@@ -116,17 +116,24 @@ If the PC runs its own monitoring on 3300, use another local port (`-L 13300:127
 
 ## The dashboards
 
+All in English (v1.109), one look for all six: a row of status tiles (UP green, DOWN red), a row of key numbers coloured by
+the alert rules' own thresholds, then the graphs.
+
 | Dashboard | What is on it |
 |---|---|
-| حازم — نظرة عامة | every service up or down, the alerts firing, CPU / RAM / disk, the API's requests, 5xx and p95, the office database's connections, error lines per service |
-| حازم — السيرفر والـ containers | CPU, load, memory, disk, disk I/O, the clock, OOM; per container: CPU, memory (and of its limit), network, disk writes, state, healthcheck, restarts |
-| حازم — الـ API (.NET) | requests by status, latency, the busiest and the slowest routes, Hazem's turns, open connections, 5xx; .NET: CPU, memory, GC, thread pool, exceptions; Npgsql's pool and commands; the calls out (OpenAI, Anthropic, Chatwoot, n8n, Google); the bell's rounds and e-mails |
-| حازم — الداتابيز و Redis | both Postgres: up, connections of the maximum and by state, per database, transactions, size, cache, the longest transaction, deadlocks, locks; both Redis: memory, commands, clients, keys, hits |
-| حازم — n8n و Chatwoot | n8n: up, CPU, memory, event loop, workflows; Chatwoot: up, its time, memory, CPU; Sidekiq's queues, retries, dead jobs and work; Garage |
-| حازم — اللوجز | the lines per service, the error lines, the masked lines' counts, and the logs themselves (pick a service, search) |
+| Hazem · Overview | the 12 services up or down; firing alerts, CPU, memory, disk, the API's requests, errors and latency, Hazem's reply time, the office database's connections, Redis memory, error and masked log lines; the firing alerts and since when; every service's availability over time; CPU, memory and the API's requests |
+| Hazem · Server & Containers | CPU, memory, disk, load, uptime, the clock; their graphs; the «Containers» table (state, healthcheck, restarts in 24 h, CPU, memory, memory of its limit); CPU, memory, network and disk writes per container |
+| Hazem · API | requests, errors, latency, Hazem's replies, requests in flight, connections; the busiest and the slowest routes, 5xx by route; .NET: CPU, memory, GC, thread pool, exceptions; Npgsql's pool and commands; the calls out (OpenAI, Anthropic, Chatwoot, n8n, Google); the bell's alert worker |
+| Hazem · Databases | both PostgreSQL: up, connections (of the maximum, by state, by database), transactions, cache hits, sizes, the longest transaction, locks, deadlocks; both Redis: up, memory, clients, commands, keys |
+| Hazem · Services | n8n: up, active workflows, event loop, memory, CPU, failed workflows; Chatwoot and Sidekiq: up, response, queued jobs, retries, dead jobs, jobs per minute; the storage |
+| Hazem · Logs | lines, error lines, masked and dropped lines; lines and error lines by service; the logs themselves (pick a service, search) |
 
-They are files (`infra/monitoring/grafana/dashboards`), read again every minute, and cannot be saved from Grafana. To change
-one: change it in Grafana, «Export» → «Export as JSON», replace the file, commit, deploy.
+After v1.109's deploy the dashboards are in a new folder «Hazem», and v1.107's «حازم» is left empty: delete it once (Grafana
+→ Dashboards → «حازم» → Folder actions → Delete).
+
+They are made by `infra/monitoring/grafana/make-dashboards.py` (one file for all six), read again by Grafana every minute,
+and cannot be saved from Grafana. To change one: change the script, run `python3 infra/monitoring/grafana/make-dashboards.py`,
+commit the script and the JSON, deploy. The CI fails when the JSON is not what the script writes.
 
 ## The alerts
 
@@ -134,7 +141,7 @@ Rules: `infra/monitoring/prometheus/rules/*.yml` (Arabic summaries and descripti
 `infra/monitoring/prometheus/tests/alerts.yml`. Routing and inhibition: `infra/monitoring/alertmanager/alertmanager.yml`.
 
 - **critical** (now): e-mailed after 30 s, again every 4 hours while it lasts. **warning** (today): after 1 minute, again
-  once a day. Every alert says once more when it is resolved («✅ اتحلت»).
+  once a day. Every alert says once more when it is resolved («✅ RESOLVED»).
 - One e-mail per kind of alert and service. Resend's free plan sends 100 e-mails a day, the panel's sign-in codes included:
   this is why the repeats are rare.
 - **Inhibition** (an alert that explains another silences it): a critical alert silences the warnings of the same service; a
@@ -153,174 +160,175 @@ Rules: `infra/monitoring/prometheus/rules/*.yml` (Arabic summaries and descripti
 #### The server
 
 ##### HostHighCpu
-«الـ CPU بتاع السيرفر فوق 85%». Grafana «السيرفر والـ containers»: which container's CPU went up. A quality-eval run or a
+"Server CPU above 85%". Grafana «Hazem · Server & Containers»: which container's CPU went up. A quality-eval run or a
 burst of messages passes; a container stuck at 100% for an hour is restarted (`docker compose restart <service>`).
 
 ##### HostLowMemory
-«الرام الفاضية في السيرفر أقل من 15%». Which container's memory grows (same dashboard). Chatwoot and n8n take the most.
+"Server memory below 15% free". Which container's memory grows (same dashboard). Chatwoot and n8n take the most.
 `docker compose restart <service>` frees it for a while; if it keeps growing, it is a leak to report.
 
 ##### HostOutOfMemory
-«السيرفر قرّب يخلص الرام». Act now: Linux will kill a container soon (even Postgres). Restart the biggest one that is not the
+"Server almost out of memory". Act now: Linux will kill a container soon (even Postgres). Restart the biggest one that is not the
 database, then find out why (above). The server has 2 GB of swap: when swap is full too, this follows.
 
 ##### HostOomKill
-«Linux قفل برنامج عشان الرام خلصت». See which container restarted (`ContainerRestarting`, the dashboard's «حالة كل
-container»), and why it used so much.
+"Linux killed a process: out of memory (OOM)". See which container restarted (`ContainerRestarting`, the «Containers» table of «Hazem · Server & Containers»), and why it used so much.
 
 ##### HostDiskSpaceLow
-«الديسك فاضي فيه أقل من 15%». Usually old images: `docker image prune -a` (removes images no container uses; deploy.sh pulls
+"Disk below 15% free". Usually old images: `docker image prune -a` (removes images no container uses; deploy.sh pulls
 what it needs again). `docker system df` shows what takes the space.
 
 ##### HostDiskSpaceCritical
-«الديسك قرّب يتملي». Act now: when it is full, Postgres and the backup stop. `docker image prune -a` first, then
+"Disk almost full". Act now: when it is full, Postgres and the backup stop. `docker image prune -a` first, then
 `docker system df`, then `du -xh / --max-depth=2 | sort -h | tail`.
 
 ##### HostDiskWillFillIn24h
-«الديسك هيتملي في خلال يوم بالسرعة دي». Something writes a lot: the dashboard's «الكتابة على الديسك لكل container» says who.
+"Disk will be full within a day at this rate". Something writes a lot: «Disk writes by container» («Hazem · Server & Containers») says who.
 
 ##### HostInodesLow
-«عدد الملفات على الديسك قرّب يخلص». Many small files: `docker system prune` (stopped containers, build cache), then look for a
+"The disk is running out of inodes". Many small files: `docker system prune` (stopped containers, build cache), then look for a
 folder with millions of files.
 
 ##### HostClockNotSynced
-«ساعة السيرفر مش مظبوطة». The authenticator codes and the booking depend on it. `timedatectl` (as root) shows the sync;
+"Server clock is off". The authenticator codes and the booking depend on it. `timedatectl` (as root) shows the sync;
 `systemctl restart systemd-timesyncd` usually fixes it.
 
 #### The containers
 
 ##### ContainerExited
-«الـ container … واقف». `docker compose ps -a` and `docker compose logs --tail 100 <service>`; then `docker compose up -d
-<service>`. A one-shot job (preflight, storage-init, monitoring-init, chatwoot-init) or a `docker compose run` is never this.
+"Container … is stopped". `docker compose ps -a` and `docker compose logs --tail 100 <service>`; then `docker compose up -d
+<service>`. Only the services the office runs on page (v1.109): the default profile's, the edge and the Named Tunnel. A
+profile's container stopped on purpose never does (the old Quick Tunnel, WAHA, the test stub), nor a one-shot job that
+finished or a `docker compose run`. A needed service you stop on purpose still pages: silence it in Alertmanager for the work.
 
 ##### ContainerUnhealthy
-«Docker شايف الـ container … مش healthy». Its own healthcheck fails (`docker inspect --format '{{json .State.Health}}'
+"Docker reports container … unhealthy". Its own healthcheck fails (`docker inspect --format '{{json .State.Health}}'
 office-<service>-1`). Its logs say why; a restart is the first try.
 
 ##### ContainerRestarting
-«الـ container … بيقع ويقوم تاني». It crashes and Docker starts it again: its last logs before each start say why (Grafana
-«اللوجز», the service). Out of memory (`ContainerMemoryNearLimit`) is a common reason.
+"Container … keeps restarting". It crashes and Docker starts it again: its last logs before each start say why (Grafana
+«Hazem · Logs», the service). Out of memory (`ContainerMemoryNearLimit`) is a common reason.
 
 ##### ContainerMemoryNearLimit
-«الـ container … قرّب يوصل لحد الرام بتاعه». At its `mem_limit` Linux kills it. If it is normal growth, raise its `mem_limit`
+"Container … is near its memory limit". At its `mem_limit` Linux kills it. If it is normal growth, raise its `mem_limit`
 in `docker-compose.yml` (a commit); if it keeps growing, it is a leak.
 
 #### The databases
 
 ##### PostgresDown
-«داتابيز المكتب / Chatwoot مش بترد». `docker compose ps postgres` (or `chatwoot-db`), its logs; `docker compose up -d
+"The office / Chatwoot database is down". `docker compose ps postgres` (or `chatwoot-db`), its logs; `docker compose up -d
 postgres`. The office's: Hazem, the panel and n8n stop with it (n8n keeps the messages and retries, T-20).
 
 ##### PostgresTooManyConnections
-«… قرّبت توصل لأقصى عدد اتصالات». Grafana «الداتابيز و Redis»: who holds them (per database). The API's pool can grow to 100.
+"The … database is near its connection limit". Grafana «Hazem · Databases»: who holds them («Connections by database»). The API's pool can grow to 100.
 
 ##### PostgresDeadlocks
-«فيه deadlock». Postgres cancelled one of two transactions; the code retries. Once is nothing; many in a day is a bug to report
-(Grafana «اللوجز», postgres, `deadlock detected`).
+"Deadlock in database …". Postgres cancelled one of two transactions; the code retries. Once is nothing; many in a day is a bug to report
+(Grafana «Hazem · Logs», postgres, `deadlock detected`).
 
 ##### PostgresLongTransaction
-«فيه transaction مفتوحة بقالها أكتر من ربع ساعة». It holds locks and stops vacuum. Find it:
+"A transaction open for over 15 minutes". It holds locks and stops vacuum. Find it:
 `docker compose exec postgres psql -U "$POSTGRES_SUPERUSER" -d postgres -c "SELECT pid, usename, state, now() - xact_start AS age, left(query, 60) FROM pg_stat_activity WHERE xact_start < now() - interval '15 minutes'"`
 and, if it is stuck, `SELECT pg_terminate_backend(<pid>)`.
 
 ##### RedisDown
-«Redis بتاع المكتب / Chatwoot مش بيرد». `docker compose ps redis` (or `chatwoot-redis`), its logs, `up -d`.
+"The office / Chatwoot Redis is down". `docker compose ps redis` (or `chatwoot-redis`), its logs, `up -d`.
 
 ##### RedisMemoryHigh
-«Redis … مستخدم أكتر من 80% من حده». The office's Redis has 256 MB and refuses writes when full (noeviction): n8n's grouping
+"The … Redis uses over 80% of its memory". The office's Redis has 256 MB and refuses writes when full (noeviction): n8n's grouping
 stops. Its keys: `docker compose exec redis redis-cli --scan | cut -d: -f1 | sort | uniq -c | sort -rn | head`.
 
 ##### RedisRejectedConnections
-«Redis … رفض اتصالات». More clients than it allows: a service opens connections and never closes them (its logs).
+"The … Redis rejected connections". More clients than it allows: a service opens connections and never closes them (its logs).
 
 #### The API (Hazem)
 
 ##### ApiDown
-«الـ API (حازم) مش بيرد». `docker compose ps api`, `docker compose logs --tail 100 api`, `docker compose up -d api`. n8n keeps
+"Hazem's API is down". `docker compose ps api`, `docker compose logs --tail 100 api`, `docker compose up -d api`. n8n keeps
 the messages and retries every minute (T-20).
 
 ##### ApiHighErrorRate
-«أكتر من 5% من طلبات الـ API بترجع خطأ (5xx)». Grafana «الـ API»: «أخطاء 5xx» says which route; «اللوجز», api, the errors.
+"Over 5% of the API's requests fail (5xx)". Grafana «Hazem · API»: «5xx by route» says which route; «Hazem · Logs», api, the errors.
 
 ##### ApiSlowRequests
-«البانل بطيء». «أبطأ الـ routes» says which; then the database (`PostgresLongTransaction`, the pool) or the server (CPU).
+"The panel is slow (95% of requests over 3 seconds)". «Slowest routes (p95)» («Hazem · API») says which; then the database (`PostgresLongTransaction`, the pool) or the server (CPU).
 
 ##### HazemTurnsSlow
-«حازم بياخد أكتر من 45 ثانية علشان يرد». Usually the AI: «الطلبات اللي خارجة» shows api.anthropic.com / api.openai.com slow
+"Hazem takes over 45 seconds to reply". Usually the AI: «Calls out» («Hazem · API») shows api.anthropic.com / api.openai.com slow
 or failing. The bell's «الـ AI مش شغال» comes when it fails outright.
 
 ##### ApiDbPoolNearFull
-«اتصالات الـ API بالداتابيز قرّبت تخلص». Requests wait for a connection: a slow query or a long transaction holds them.
+"The API's database connections are running out (Npgsql pool)". Requests wait for a connection: a slow query or a long transaction holds them.
 
 ##### ApiThreadPoolQueue
-«الـ API عنده شغل مستني في الـ thread pool». Something blocks threads; a restart clears it, the cause is a bug to report.
+"Work is queued in the API's thread pool". Something blocks threads; a restart clears it, the cause is a bug to report.
 
 ##### AlertWorkerStalled
-«تنبيهات الجرس واقفة». The bell and its e-mails stopped: «اللوجز», api, `Alerts round failed`. Most often the database (then
+"The bell's alerts have stopped". The bell and its e-mails stopped: «Hazem · Logs», api, `Alerts round failed`. Most often the database (then
 `PostgresDown` says so); otherwise `docker compose restart api`.
 
 ##### AlertEmailsFailing
-«إيميلات البانل مش بتتبعت». The panel's mail (Resend) refuses: the same key sends the sign-in codes. «اللوجز», api,
+"The panel's e-mails are not being sent". The panel's mail (Resend) refuses: the same key sends the sign-in codes. «Hazem · Logs», api,
 `e-mail(s) not sent`; Resend's dashboard (the key, the quota); the key is changed with `deploy/set-smtp-resend.sh`.
 
 #### n8n, the panel, Chatwoot, storage, outside
 
 ##### N8nDown
-«n8n واقف». No WhatsApp message comes in or goes out. `docker compose ps n8n`, its logs, `docker compose up -d n8n`. Meta
+"n8n is down". No WhatsApp message comes in or goes out. `docker compose ps n8n`, its logs, `docker compose up -d n8n`. Meta
 sends the messages again when n8n is back.
 
 ##### N8nEventLoopLag
-«n8n مزنوق». A workflow runs something heavy, or n8n is short of CPU or memory. A restart clears it.
+"n8n is stalling (event loop lag over 1 second)". A workflow runs something heavy, or n8n is short of CPU or memory. A restart clears it.
 
 ##### WebDown
-«البانل مش بيفتح». `docker compose ps web`, its logs, `docker compose up -d web`.
+"The panel does not open". `docker compose ps web`, its logs, `docker compose up -d web`.
 
 ##### ChatwootDown
-«Chatwoot مش بيفتح». The staff cannot answer; Hazem still works. `docker compose ps chatwoot`, its logs, `up -d chatwoot`.
+"Chatwoot (the conversations) does not open". The staff cannot answer; Hazem still works. `docker compose ps chatwoot`, its logs, `up -d chatwoot`.
 
 ##### SidekiqNotRunning
-«Sidekiq بتاع Chatwoot مش شغال». Messages do not move between Chatwoot and the API. `docker compose ps chatwoot-sidekiq`, its
+"Chatwoot's Sidekiq is not running". Messages do not move between Chatwoot and the API. `docker compose ps chatwoot-sidekiq`, its
 logs, `docker compose restart chatwoot-sidekiq`.
 
 ##### SidekiqBacklog
-«شغل Chatwoot متأخر». Sidekiq does not keep up: CPU, memory, or one job failing again and again (its logs).
+"Chatwoot's work is behind (over 100 jobs queued)". Sidekiq does not keep up: CPU, memory, or one job failing again and again (its logs).
 
 ##### SidekiqDeadJobs
-«شغل في Chatwoot فشل نهائي». Chatwoot's own page: `https://chat.<domain>/monitoring/sidekiq` (super admin) → «Dead».
+"Chatwoot jobs failed for good (dead jobs)". Chatwoot's own page: `https://chat.<domain>/monitoring/sidekiq` (super admin) → «Dead».
 
 ##### GarageDown
-«التخزين (Garage) مش بيرد». `docker compose ps garage`, its logs, `up -d garage`. n8n cannot keep new files meanwhile.
+"The storage (Garage) is down". `docker compose ps garage`, its logs, `up -d garage`. n8n cannot keep new files meanwhile.
 
 ##### PublicEndpointDown
-«… مش بيفتح من برّه». From the server through Cloudflare: `wa.` (Meta's webhook) or the landing page. `docker compose
+"… does not open from outside". From the server through Cloudflare: `wa.` (Meta's webhook) or the landing page. `docker compose
 --profile tunnel-named ps` (the tunnel and the edge), `docker compose --profile tunnel-named logs --tail 50 tunnel-named`,
 Cloudflare's dashboard (the tunnel's state). `panel.` and `chat.` are not checked: Cloudflare lets Egypt only reach them.
 
 #### The logs
 
 ##### LogsHavePhoneNumber
-«لوجز … فيها رقم موبايل كامل». Masked in Loki, but Docker still holds the line, so the night's log-scan will fail. Find it:
-Grafana «اللوجز», the service, search `****` (the masked number). The code that logged it must change
+"The … logs have a full phone number". Masked in Loki, but Docker still holds the line, so the night's log-scan will fail. Find it:
+Grafana «Hazem · Logs», the service, search `****` (the masked number). The code that logged it must change
 (`LogMask.Phone`, or no literal in a SQL that can fail: a subquery).
 
 ##### LogsHaveSecret
-«لوجز … فيها مفتاح أو توكن». Treat the key as seen: change it (`docs/runbooks/secrets.md`), then fix what logged it.
+"The … logs have a key or a token". Treat the key as seen: change it (`docs/runbooks/secrets.md`), then fix what logged it.
 
 ##### LogShippingFailing
-«لوجز مش بتوصل لـ Loki». `docker compose --profile monitoring logs --tail 50 loki alloy`.
+"Logs are not reaching Loki". `docker compose --profile monitoring logs --tail 50 loki alloy`.
 
 #### The monitoring itself
 
 ##### TargetDown
-«Prometheus مش قادر يقرا من …». `bash scripts/linux/monitoring.sh status` (the containers, the targets that do not answer);
+"Prometheus cannot read …". `bash scripts/linux/monitoring.sh status` (the containers, the targets that do not answer);
 `docker compose --profile monitoring up -d <service>`.
 
 ##### PrometheusRuleFailures
-«Prometheus مش قادر يحسب بعض التنبيهات». A rule's query is wrong for the data it gets: http://127.0.0.1:9090/rules shows it.
+"Prometheus cannot evaluate some alerts". A rule's query is wrong for the data it gets: http://127.0.0.1:9090/rules shows it.
 Fixed in `infra/monitoring/prometheus/rules` (with its test), committed, deployed.
 
 ##### AlertmanagerEmailFailing
-«إيميلات المراقبة مش بتتبعت». This may not reach you by e-mail, since it is the e-mail that fails: the healthcheck checks it
+"The monitoring's e-mails are not being sent". This may not reach you by e-mail, since it is the e-mail that fails: the healthcheck checks it
 too, and the bell shows a failed healthcheck. `docker compose --profile monitoring logs --tail 50 alertmanager`: a refused key
 (the panel's `SMTP_PASSWORD`, `deploy/set-smtp-resend.sh`), Resend's daily quota, or `ALERT_EMAIL_TO`.
 

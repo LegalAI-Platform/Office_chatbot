@@ -1,12 +1,14 @@
-# Grafana's dashboards (v1.107): the JSON files in infra/monitoring/grafana/dashboards, in the folder «حازم». They are read
-# again every minute and cannot be saved from the UI: change the file (export the JSON from Grafana), commit, deploy.
+# Grafana's dashboards (v1.107): the JSON files in infra/monitoring/grafana/dashboards, in the folder «Hazem» (v1.109:
+# English, made by make-dashboards.py). They are read
+# again every minute and cannot be saved from the UI: change make-dashboards.py, run it, commit, deploy.
 apiVersion: 1
 
 providers:
   - name: hazem
     orgId: 1
-    folder: حازم
-    folderUid: hazem
+    folder: Hazem
+    # v1.109: a new uid, so the folder is made again with its English name (the old «حازم» one is left empty)
+    folderUid: hazem-dashboards
     type: file
     disableDeletion: true
     allowUiUpdates: false

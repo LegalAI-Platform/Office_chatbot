@@ -1,7 +1,7 @@
 {
   "uid": "hazem-api",
-  "title": "حازم — الـ API (.NET)",
-  "description": "طلبات الـ API، والـ runtime بتاع .NET، واتصالات الداتابيز (Npgsql)، والطلبات اللي خارجة (الـ AI)، ودورة تنبيهات الجرس.",
+  "title": "Hazem · API",
+  "description": "Hazem's .NET API: its requests, the .NET runtime, the database pool, the calls it makes, and the bell's alert worker.",
   "tags": [
     "hazem",
     "api"
@@ -10,13 +10,23 @@
   "editable": false,
   "graphTooltip": 1,
   "refresh": "30s",
+  "liveNow": false,
   "schemaVersion": 41,
   "version": 1,
+  "fiscalYearStartMonth": 0,
+  "weekStart": "saturday",
   "time": {
     "from": "now-6h",
     "to": "now"
   },
-  "timepicker": {},
+  "timepicker": {
+    "refresh_intervals": [
+      "30s",
+      "1m",
+      "5m",
+      "15m"
+    ]
+  },
   "templating": {
     "list": []
   },
@@ -25,34 +35,36 @@
   },
   "links": [
     {
-      "title": "كل الـ dashboards",
+      "title": "Dashboards",
       "type": "dashboards",
       "tags": [
         "hazem"
       ],
       "asDropdown": true,
       "includeVars": false,
-      "keepTime": true
+      "keepTime": true,
+      "icon": "external link",
+      "targetBlank": false
     }
   ],
   "panels": [
     {
       "type": "row",
-      "title": "الطلبات",
+      "title": "Traffic",
       "collapsed": false,
-      "id": 1,
       "panels": [],
+      "id": 1,
       "gridPos": {
-        "x": 0,
-        "y": 0,
+        "h": 1,
         "w": 24,
-        "h": 1
+        "x": 0,
+        "y": 0
       }
     },
     {
-      "type": "timeseries",
-      "title": "الطلبات في الثانية",
-      "description": "كل طلب للـ API: من n8n (حازم) ومن البانل. فحوصات الصحة مش محسوبة.",
+      "type": "stat",
+      "title": "Requests",
+      "description": "Requests per second (n8n's turns and the panel; health checks are not counted).",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -63,55 +75,66 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (status) (label_replace(rate(http_server_request_duration_seconds_count{job=\"api\"}[$__rate_interval]), \"status\", \"${1}xx\", \"http_response_status_code\", \"(.)..\"))",
-          "refId": "A",
-          "legendFormat": "{{status}}"
+          "expr": "sum(rate(http_server_request_duration_seconds_count{job=\"api\"}[5m]))",
+          "legendFormat": "__auto",
+          "range": true,
+          "instant": false,
+          "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "reqps",
-          "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 10,
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "mode": "normal",
-              "group": "A"
-            }
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
           },
-          "min": 0
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "decimals": 2
         },
         "overrides": []
       },
       "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
+        "reduceOptions": {
           "calcs": [
-            "mean",
-            "max",
             "lastNotNull"
-          ]
+          ],
+          "fields": "",
+          "values": false
         },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 12,
+          "valueSize": 26
         }
       },
       "id": 2,
       "gridPos": {
+        "h": 4,
+        "w": 4,
         "x": 0,
-        "y": 1,
-        "w": 12,
-        "h": 8
+        "y": 1
       }
     },
     {
-      "type": "timeseries",
-      "title": "زمن الرد",
-      "description": "البانل والـ webhooks، من غير ردود حازم (مستنية الـ AI) ولا خط الجرس (مفتوح دقايق).",
+      "type": "stat",
+      "title": "Errors (5xx)",
+      "description": "Last 15 minutes.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -122,73 +145,74 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.5, sum by (le) (rate(http_server_request_duration_seconds_bucket{job=\"api\",http_route!=\"/api/panel/alerts/stream\",http_route!=\"/api/hazem/turns\"}[$__rate_interval])))",
-          "refId": "A",
-          "legendFormat": "p50"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_request_duration_seconds_bucket{job=\"api\",http_route!=\"/api/panel/alerts/stream\",http_route!=\"/api/hazem/turns\"}[$__rate_interval])))",
-          "refId": "B",
-          "legendFormat": "p95"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(http_server_request_duration_seconds_bucket{job=\"api\",http_route!=\"/api/panel/alerts/stream\",http_route!=\"/api/hazem/turns\"}[$__rate_interval])))",
-          "refId": "C",
-          "legendFormat": "p99"
+          "expr": "100 * sum(rate(http_server_request_duration_seconds_count{job=\"api\",http_response_status_code=~\"5..\"}[15m])) / clamp_min(sum(rate(http_server_request_duration_seconds_count{job=\"api\"}[15m])), 1e-9)",
+          "legendFormat": "__auto",
+          "range": true,
+          "instant": false,
+          "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "s",
-          "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 10,
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "mode": "none",
-              "group": "A"
-            }
+          "unit": "percent",
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
           },
-          "min": 0
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          },
+          "mappings": [],
+          "decimals": 1
         },
         "overrides": []
       },
       "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
+        "reduceOptions": {
           "calcs": [
-            "mean",
-            "max",
             "lastNotNull"
-          ]
+          ],
+          "fields": "",
+          "values": false
         },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 12,
+          "valueSize": 26
         }
       },
       "id": 3,
       "gridPos": {
-        "x": 12,
-        "y": 1,
-        "w": 12,
-        "h": 8
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 1
       }
     },
     {
-      "type": "table",
-      "title": "أكتر الـ routes طلبات (الفترة اللي فوق)",
-      "description": "",
+      "type": "stat",
+      "title": "Panel latency p95",
+      "description": "Last 15 minutes.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -199,70 +223,74 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (http_route, http_request_method) (increase(http_server_request_duration_seconds_count{job=\"api\",http_route!=\"\"}[$__range])) > 0",
-          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_request_duration_seconds_bucket{job=\"api\",http_route=~\"/api/panel/.+\",http_route!=\"/api/panel/alerts/stream\"}[15m])))",
           "legendFormat": "__auto",
-          "instant": true,
-          "range": false,
-          "format": "table"
-        }
-      ],
-      "transformations": [
-        {
-          "id": "merge",
-          "options": {}
-        },
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true
-            },
-            "renameByName": {
-              "http_route": "route",
-              "http_request_method": "method",
-              "Value": "طلبات"
-            }
-          }
+          "range": true,
+          "instant": false,
+          "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
-          "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
-            }
-          }
+          "unit": "s",
+          "noValue": "–",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 3
+              }
+            ]
+          },
+          "mappings": [],
+          "decimals": 2
         },
         "overrides": []
       },
       "options": {
-        "showHeader": true,
-        "cellHeight": "sm",
-        "footer": {
-          "show": false
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
         },
-        "sortBy": [
-          {
-            "displayName": "طلبات",
-            "desc": true
-          }
-        ]
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 12,
+          "valueSize": 26
+        }
       },
       "id": 4,
       "gridPos": {
-        "x": 0,
-        "y": 9,
-        "w": 12,
-        "h": 9
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 1
       }
     },
     {
-      "type": "table",
-      "title": "أبطأ الـ routes (p95، الفترة اللي فوق)",
-      "description": "",
+      "type": "stat",
+      "title": "Hazem reply p95",
+      "description": "n8n's turns, the AI included; last 15 minutes.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -273,137 +301,74 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.95, sum by (http_route, le) (rate(http_server_request_duration_seconds_bucket{job=\"api\",http_route!=\"\",http_route!=\"/api/panel/alerts/stream\"}[$__range]))) > 0",
-          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_request_duration_seconds_bucket{job=\"api\",http_route=\"/api/hazem/turns\"}[15m])))",
           "legendFormat": "__auto",
-          "instant": true,
-          "range": false,
-          "format": "table"
-        }
-      ],
-      "transformations": [
-        {
-          "id": "merge",
-          "options": {}
-        },
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true
-            },
-            "renameByName": {
-              "http_route": "route",
-              "Value": "p95"
-            }
-          }
+          "range": true,
+          "instant": false,
+          "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "s",
-          "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
-            }
-          }
+          "noValue": "–",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 20
+              },
+              {
+                "color": "red",
+                "value": 45
+              }
+            ]
+          },
+          "mappings": [],
+          "decimals": 1
         },
         "overrides": []
       },
       "options": {
-        "showHeader": true,
-        "cellHeight": "sm",
-        "footer": {
-          "show": false
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
         },
-        "sortBy": [
-          {
-            "displayName": "p95",
-            "desc": true
-          }
-        ]
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 12,
+          "valueSize": 26
+        }
       },
       "id": 5,
       "gridPos": {
+        "h": 4,
+        "w": 4,
         "x": 12,
-        "y": 9,
-        "w": 12,
-        "h": 9
+        "y": 1
       }
     },
     {
-      "type": "timeseries",
-      "title": "ردود حازم (/api/hazem/turns)",
-      "description": "من ساعة ما n8n يسلّم الرسايل لحد ما حازم يرد (فيها الـ AI).",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_request_duration_seconds_bucket{job=\"api\",http_route=\"/api/hazem/turns\"}[$__rate_interval])))",
-          "refId": "A",
-          "legendFormat": "p95"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "histogram_quantile(0.5, sum by (le) (rate(http_server_request_duration_seconds_bucket{job=\"api\",http_route=\"/api/hazem/turns\"}[$__rate_interval])))",
-          "refId": "B",
-          "legendFormat": "p50"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s",
-          "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 10,
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "mode": "none",
-              "group": "A"
-            }
-          },
-          "min": 0
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max",
-            "lastNotNull"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "id": 6,
-      "gridPos": {
-        "x": 0,
-        "y": 18,
-        "w": 8,
-        "h": 8
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "الطلبات المفتوحة دلوقتي",
-      "description": "خط الجرس (SSE) بيفضل مفتوح، فكل بانل مفتوح = اتصال.",
+      "type": "stat",
+      "title": "Requests in flight",
+      "description": "The bell's live stream (one per open panel) stays open.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -415,62 +380,664 @@
             "uid": "prometheus"
           },
           "expr": "sum(http_server_active_requests{job=\"api\"})",
-          "refId": "A",
-          "legendFormat": "طلبات شغالة"
+          "legendFormat": "__auto",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "decimals": 0
         },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 12,
+          "valueSize": 26
+        }
+      },
+      "id": 6,
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 1
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Open connections",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
         {
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
           },
           "expr": "sum(kestrel_active_connections{job=\"api\"})",
-          "refId": "B",
-          "legendFormat": "اتصالات مفتوحة"
+          "legendFormat": "__auto",
+          "range": true,
+          "instant": false,
+          "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "short",
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 12,
+          "valueSize": 26
+        }
+      },
+      "id": 7,
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 1
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Requests by status",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (status) (label_replace(rate(http_server_request_duration_seconds_count{job=\"api\"}[$__rate_interval]), \"status\", \"${1}xx\", \"http_response_status_code\", \"(.)..\"))",
+          "legendFormat": "{{status}}",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 10,
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "gradientMode": "opacity",
             "showPoints": "never",
-            "spanNulls": false,
+            "spanNulls": true,
+            "pointSize": 4,
+            "axisBorderShow": false,
             "stacking": {
-              "mode": "none",
+              "mode": "normal",
               "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
             }
           },
-          "min": 0
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
         },
         "overrides": []
       },
       "options": {
         "legend": {
-          "displayMode": "table",
+          "showLegend": true,
+          "displayMode": "list",
           "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max",
-            "lastNotNull"
-          ]
+          "calcs": []
         },
         "tooltip": {
           "mode": "multi",
           "sort": "desc"
         }
       },
-      "id": 7,
+      "id": 8,
       "gridPos": {
-        "x": 8,
-        "y": 18,
-        "w": 8,
-        "h": 8
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 5
       }
     },
     {
       "type": "timeseries",
-      "title": "أخطاء 5xx",
+      "title": "Latency",
+      "description": "The panel and the webhooks: not Hazem's replies (they wait for the AI) nor the bell's live stream (open for minutes).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(http_server_request_duration_seconds_bucket{job=\"api\",http_route!=\"/api/panel/alerts/stream\",http_route!=\"/api/hazem/turns\"}[$__rate_interval])))",
+          "legendFormat": "p50",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_request_duration_seconds_bucket{job=\"api\",http_route!=\"/api/panel/alerts/stream\",http_route!=\"/api/hazem/turns\"}[$__rate_interval])))",
+          "legendFormat": "p95",
+          "range": true,
+          "instant": false,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(http_server_request_duration_seconds_bucket{job=\"api\",http_route!=\"/api/panel/alerts/stream\",http_route!=\"/api/hazem/turns\"}[$__rate_interval])))",
+          "legendFormat": "p99",
+          "range": true,
+          "instant": false,
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "gradientMode": "opacity",
+            "showPoints": "never",
+            "spanNulls": true,
+            "pointSize": 4,
+            "axisBorderShow": false,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 9,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 5
+      }
+    },
+    {
+      "type": "table",
+      "title": "Busiest routes",
+      "description": "Requests in the time range above.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (http_route, http_request_method) (increase(http_server_request_duration_seconds_count{job=\"api\",http_route!=\"\"}[$__range])) > 0",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true,
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "indexByName": {
+              "http_request_method": 0,
+              "http_route": 1,
+              "Value": 2
+            },
+            "renameByName": {
+              "http_route": "Route",
+              "http_request_method": "Method",
+              "Value": "Requests"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Method"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 80
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Requests"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "custom.width",
+                "value": 110
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": ""
+        },
+        "sortBy": [
+          {
+            "displayName": "Requests",
+            "desc": true
+          }
+        ]
+      },
+      "id": 10,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 13
+      }
+    },
+    {
+      "type": "table",
+      "title": "Slowest routes (p95)",
+      "description": "In the time range above.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (http_route, le) (rate(http_server_request_duration_seconds_bucket{job=\"api\",http_route!=\"\",http_route!=\"/api/panel/alerts/stream\"}[$__range]))) > 0",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true,
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "renameByName": {
+              "http_route": "Route",
+              "Value": "p95"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p95"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "custom.width",
+                "value": 110
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 1
+                    },
+                    {
+                      "color": "red",
+                      "value": 3
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": ""
+        },
+        "sortBy": [
+          {
+            "displayName": "p95",
+            "desc": true
+          }
+        ]
+      },
+      "id": 11,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 13
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Hazem's replies",
+      "description": "From n8n handing over a client's messages to Hazem's answer, the AI included.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(http_server_request_duration_seconds_bucket{job=\"api\",http_route=\"/api/hazem/turns\"}[$__rate_interval])))",
+          "legendFormat": "p50",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_request_duration_seconds_bucket{job=\"api\",http_route=\"/api/hazem/turns\"}[$__rate_interval])))",
+          "legendFormat": "p95",
+          "range": true,
+          "instant": false,
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "gradientMode": "opacity",
+            "showPoints": "never",
+            "spanNulls": true,
+            "pointSize": 4,
+            "axisBorderShow": false,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 45
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 12,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 21
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "5xx by route",
       "description": "",
       "datasource": {
         "type": "prometheus",
@@ -483,67 +1050,85 @@
             "uid": "prometheus"
           },
           "expr": "sum by (http_route) (rate(http_server_request_duration_seconds_count{job=\"api\",http_response_status_code=~\"5..\"}[$__rate_interval]))",
-          "refId": "A",
-          "legendFormat": "{{http_route}}"
+          "legendFormat": "{{http_route}}",
+          "range": true,
+          "instant": false,
+          "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "reqps",
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 10,
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "gradientMode": "opacity",
             "showPoints": "never",
-            "spanNulls": false,
+            "spanNulls": true,
+            "pointSize": 4,
+            "axisBorderShow": false,
             "stacking": {
               "mode": "none",
               "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
             }
           },
-          "min": 0
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
         },
         "overrides": []
       },
       "options": {
         "legend": {
-          "displayMode": "table",
+          "showLegend": true,
+          "displayMode": "list",
           "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max",
-            "lastNotNull"
-          ]
+          "calcs": []
         },
         "tooltip": {
           "mode": "multi",
           "sort": "desc"
         }
       },
-      "id": 8,
+      "id": 13,
       "gridPos": {
-        "x": 16,
-        "y": 18,
-        "w": 8,
-        "h": 8
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 21
       }
     },
     {
       "type": "row",
-      "title": "الـ runtime (.NET)",
+      "title": ".NET runtime",
       "collapsed": false,
-      "id": 9,
       "panels": [],
+      "id": 14,
       "gridPos": {
-        "x": 0,
-        "y": 26,
+        "h": 1,
         "w": 24,
-        "h": 1
+        "x": 0,
+        "y": 29
       }
     },
     {
       "type": "timeseries",
-      "title": "الـ CPU",
-      "description": "",
+      "title": "CPU",
+      "description": "100% = one CPU.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -554,54 +1139,72 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(dotnet_process_cpu_time_seconds_total{job=\"api\"}[$__rate_interval]))",
-          "refId": "A",
-          "legendFormat": "الـ API"
+          "expr": "sum(rate(dotnet_process_cpu_time_seconds_total{job=\"api\"}[$__rate_interval])) * 100",
+          "legendFormat": "API",
+          "range": true,
+          "instant": false,
+          "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "percentunit",
+          "unit": "percent",
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 10,
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "gradientMode": "opacity",
             "showPoints": "never",
-            "spanNulls": false,
+            "spanNulls": true,
+            "pointSize": 4,
+            "axisBorderShow": false,
             "stacking": {
               "mode": "none",
               "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
             }
           },
-          "min": 0
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
         },
         "overrides": []
       },
       "options": {
         "legend": {
-          "displayMode": "table",
+          "showLegend": true,
+          "displayMode": "list",
           "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max",
-            "lastNotNull"
-          ]
+          "calcs": []
         },
         "tooltip": {
           "mode": "multi",
           "sort": "desc"
         }
       },
-      "id": 10,
+      "id": 15,
       "gridPos": {
-        "x": 0,
-        "y": 27,
+        "h": 8,
         "w": 8,
-        "h": 8
+        "x": 0,
+        "y": 30
       }
     },
     {
       "type": "timeseries",
-      "title": "الرام",
+      "title": "Memory",
       "description": "",
       "datasource": {
         "type": "prometheus",
@@ -614,8 +1217,10 @@
             "uid": "prometheus"
           },
           "expr": "dotnet_process_memory_working_set_bytes{job=\"api\"}",
-          "refId": "A",
-          "legendFormat": "working set"
+          "legendFormat": "working set",
+          "range": true,
+          "instant": false,
+          "refId": "A"
         },
         {
           "datasource": {
@@ -623,63 +1228,72 @@
             "uid": "prometheus"
           },
           "expr": "sum(dotnet_gc_last_collection_heap_size_bytes{job=\"api\"})",
-          "refId": "B",
-          "legendFormat": "GC heap"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "dotnet_gc_last_collection_memory_committed_size_bytes{job=\"api\"}",
-          "refId": "C",
-          "legendFormat": "committed"
+          "legendFormat": "GC heap",
+          "range": true,
+          "instant": false,
+          "refId": "B"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "bytes",
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 10,
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "gradientMode": "opacity",
             "showPoints": "never",
-            "spanNulls": false,
+            "spanNulls": true,
+            "pointSize": 4,
+            "axisBorderShow": false,
             "stacking": {
               "mode": "none",
               "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
             }
           },
-          "min": 0
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
         },
         "overrides": []
       },
       "options": {
         "legend": {
-          "displayMode": "table",
+          "showLegend": true,
+          "displayMode": "list",
           "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max",
-            "lastNotNull"
-          ]
+          "calcs": []
         },
         "tooltip": {
           "mode": "multi",
           "sort": "desc"
         }
       },
-      "id": 11,
+      "id": 16,
       "gridPos": {
-        "x": 8,
-        "y": 27,
+        "h": 8,
         "w": 8,
-        "h": 8
+        "x": 8,
+        "y": 30
       }
     },
     {
       "type": "timeseries",
-      "title": "الـ GC",
-      "description": "عدد مرات الـ GC في الثانية لكل generation.",
+      "title": "GC collections",
+      "description": "",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -691,53 +1305,71 @@
             "uid": "prometheus"
           },
           "expr": "sum by (gc_heap_generation) (rate(dotnet_gc_collections_total{job=\"api\"}[$__rate_interval]))",
-          "refId": "A",
-          "legendFormat": "{{gc_heap_generation}}"
+          "legendFormat": "{{gc_heap_generation}}",
+          "range": true,
+          "instant": false,
+          "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "ops",
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 10,
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "gradientMode": "opacity",
             "showPoints": "never",
-            "spanNulls": false,
+            "spanNulls": true,
+            "pointSize": 4,
+            "axisBorderShow": false,
             "stacking": {
               "mode": "none",
               "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
             }
           },
-          "min": 0
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
         },
         "overrides": []
       },
       "options": {
         "legend": {
-          "displayMode": "table",
+          "showLegend": true,
+          "displayMode": "list",
           "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max",
-            "lastNotNull"
-          ]
+          "calcs": []
         },
         "tooltip": {
           "mode": "multi",
           "sort": "desc"
         }
       },
-      "id": 12,
+      "id": 17,
       "gridPos": {
-        "x": 16,
-        "y": 27,
+        "h": 8,
         "w": 8,
-        "h": 8
+        "x": 16,
+        "y": 30
       }
     },
     {
       "type": "timeseries",
-      "title": "الـ thread pool",
+      "title": "Thread pool",
       "description": "",
       "datasource": {
         "type": "prometheus",
@@ -750,8 +1382,10 @@
             "uid": "prometheus"
           },
           "expr": "dotnet_thread_pool_thread_count_total{job=\"api\"}",
-          "refId": "A",
-          "legendFormat": "threads"
+          "legendFormat": "threads",
+          "range": true,
+          "instant": false,
+          "refId": "A"
         },
         {
           "datasource": {
@@ -759,53 +1393,71 @@
             "uid": "prometheus"
           },
           "expr": "dotnet_thread_pool_queue_length_total{job=\"api\"}",
-          "refId": "B",
-          "legendFormat": "شغل مستني"
+          "legendFormat": "queued work",
+          "range": true,
+          "instant": false,
+          "refId": "B"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 10,
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "gradientMode": "opacity",
             "showPoints": "never",
-            "spanNulls": false,
+            "spanNulls": true,
+            "pointSize": 4,
+            "axisBorderShow": false,
             "stacking": {
               "mode": "none",
               "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
             }
           },
-          "min": 0
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
         },
         "overrides": []
       },
       "options": {
         "legend": {
-          "displayMode": "table",
+          "showLegend": true,
+          "displayMode": "list",
           "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max",
-            "lastNotNull"
-          ]
+          "calcs": []
         },
         "tooltip": {
           "mode": "multi",
           "sort": "desc"
         }
       },
-      "id": 13,
+      "id": 18,
       "gridPos": {
-        "x": 0,
-        "y": 35,
+        "h": 8,
         "w": 8,
-        "h": 8
+        "x": 0,
+        "y": 38
       }
     },
     {
       "type": "timeseries",
-      "title": "الـ exceptions",
+      "title": "Exceptions",
       "description": "",
       "datasource": {
         "type": "prometheus",
@@ -818,53 +1470,71 @@
             "uid": "prometheus"
           },
           "expr": "sum by (error_type) (rate(dotnet_exceptions_total{job=\"api\"}[$__rate_interval]))",
-          "refId": "A",
-          "legendFormat": "{{error_type}}"
+          "legendFormat": "{{error_type}}",
+          "range": true,
+          "instant": false,
+          "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "ops",
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 10,
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "gradientMode": "opacity",
             "showPoints": "never",
-            "spanNulls": false,
+            "spanNulls": true,
+            "pointSize": 4,
+            "axisBorderShow": false,
             "stacking": {
               "mode": "none",
               "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
             }
           },
-          "min": 0
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
         },
         "overrides": []
       },
       "options": {
         "legend": {
-          "displayMode": "table",
+          "showLegend": true,
+          "displayMode": "list",
           "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max",
-            "lastNotNull"
-          ]
+          "calcs": []
         },
         "tooltip": {
           "mode": "multi",
           "sort": "desc"
         }
       },
-      "id": 14,
+      "id": 19,
       "gridPos": {
-        "x": 8,
-        "y": 35,
+        "h": 8,
         "w": 8,
-        "h": 8
+        "x": 8,
+        "y": 38
       }
     },
     {
       "type": "timeseries",
-      "title": "وقت الـ GC",
+      "title": "GC pause",
       "description": "",
       "datasource": {
         "type": "prometheus",
@@ -876,68 +1546,87 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "rate(dotnet_gc_pause_time_seconds_total{job=\"api\"}[$__rate_interval])",
-          "refId": "A",
-          "legendFormat": "pause"
+          "expr": "rate(dotnet_gc_pause_time_seconds_total{job=\"api\"}[$__rate_interval]) * 100",
+          "legendFormat": "time paused",
+          "range": true,
+          "instant": false,
+          "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "percentunit",
+          "unit": "percent",
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 10,
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "gradientMode": "opacity",
             "showPoints": "never",
-            "spanNulls": false,
+            "spanNulls": true,
+            "pointSize": 4,
+            "axisBorderShow": false,
             "stacking": {
               "mode": "none",
               "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
             }
           },
-          "min": 0
+          "min": 0,
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
         },
         "overrides": []
       },
       "options": {
         "legend": {
-          "displayMode": "table",
+          "showLegend": true,
+          "displayMode": "list",
           "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max",
-            "lastNotNull"
-          ]
+          "calcs": []
         },
         "tooltip": {
           "mode": "multi",
           "sort": "desc"
         }
       },
-      "id": 15,
+      "id": 20,
       "gridPos": {
-        "x": 16,
-        "y": 35,
+        "h": 8,
         "w": 8,
-        "h": 8
+        "x": 16,
+        "y": 38
       }
     },
     {
       "type": "row",
-      "title": "الداتابيز (Npgsql)",
+      "title": "Database pool (Npgsql)",
       "collapsed": false,
-      "id": 16,
       "panels": [],
+      "id": 21,
       "gridPos": {
-        "x": 0,
-        "y": 43,
+        "h": 1,
         "w": 24,
-        "h": 1
+        "x": 0,
+        "y": 46
       }
     },
     {
       "type": "timeseries",
-      "title": "اتصالات الـ pool",
-      "description": "used = شغالة دلوقتي، idle = مفتوحة ومستنية.",
+      "title": "Connections",
+      "description": "used = running a command now; idle = open and waiting.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -949,8 +1638,10 @@
             "uid": "prometheus"
           },
           "expr": "sum by (db_client_connection_state) (db_client_connection_count{job=\"api\"})",
-          "refId": "A",
-          "legendFormat": "{{db_client_connection_state}}"
+          "legendFormat": "{{db_client_connection_state}}",
+          "range": true,
+          "instant": false,
+          "refId": "A"
         },
         {
           "datasource": {
@@ -958,53 +1649,71 @@
             "uid": "prometheus"
           },
           "expr": "max(db_client_connection_max{job=\"api\"})",
-          "refId": "B",
-          "legendFormat": "الحد"
+          "legendFormat": "max",
+          "range": true,
+          "instant": false,
+          "refId": "B"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 10,
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "gradientMode": "opacity",
             "showPoints": "never",
-            "spanNulls": false,
+            "spanNulls": true,
+            "pointSize": 4,
+            "axisBorderShow": false,
             "stacking": {
               "mode": "none",
               "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
             }
           },
-          "min": 0
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
         },
         "overrides": []
       },
       "options": {
         "legend": {
-          "displayMode": "table",
+          "showLegend": true,
+          "displayMode": "list",
           "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max",
-            "lastNotNull"
-          ]
+          "calcs": []
         },
         "tooltip": {
           "mode": "multi",
           "sort": "desc"
         }
       },
-      "id": 17,
+      "id": 22,
       "gridPos": {
-        "x": 0,
-        "y": 44,
+        "h": 8,
         "w": 8,
-        "h": 8
+        "x": 0,
+        "y": 47
       }
     },
     {
       "type": "timeseries",
-      "title": "زمن أوامر الداتابيز",
+      "title": "Command time",
       "description": "",
       "datasource": {
         "type": "prometheus",
@@ -1017,8 +1726,10 @@
             "uid": "prometheus"
           },
           "expr": "histogram_quantile(0.95, sum by (le) (rate(db_client_operation_duration_seconds_bucket{job=\"api\"}[$__rate_interval])))",
-          "refId": "A",
-          "legendFormat": "p95"
+          "legendFormat": "p95",
+          "range": true,
+          "instant": false,
+          "refId": "A"
         },
         {
           "datasource": {
@@ -1026,53 +1737,71 @@
             "uid": "prometheus"
           },
           "expr": "histogram_quantile(0.5, sum by (le) (rate(db_client_operation_duration_seconds_bucket{job=\"api\"}[$__rate_interval])))",
-          "refId": "B",
-          "legendFormat": "p50"
+          "legendFormat": "p50",
+          "range": true,
+          "instant": false,
+          "refId": "B"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "s",
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 10,
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "gradientMode": "opacity",
             "showPoints": "never",
-            "spanNulls": false,
+            "spanNulls": true,
+            "pointSize": 4,
+            "axisBorderShow": false,
             "stacking": {
               "mode": "none",
               "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
             }
           },
-          "min": 0
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
         },
         "overrides": []
       },
       "options": {
         "legend": {
-          "displayMode": "table",
+          "showLegend": true,
+          "displayMode": "list",
           "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max",
-            "lastNotNull"
-          ]
+          "calcs": []
         },
         "tooltip": {
           "mode": "multi",
           "sort": "desc"
         }
       },
-      "id": 18,
+      "id": 23,
       "gridPos": {
-        "x": 8,
-        "y": 44,
+        "h": 8,
         "w": 8,
-        "h": 8
+        "x": 8,
+        "y": 47
       }
     },
     {
       "type": "timeseries",
-      "title": "أوامر في الثانية",
+      "title": "Commands",
       "description": "",
       "datasource": {
         "type": "prometheus",
@@ -1085,75 +1814,95 @@
             "uid": "prometheus"
           },
           "expr": "sum(rate(db_client_operation_duration_seconds_count{job=\"api\"}[$__rate_interval]))",
-          "refId": "A",
-          "legendFormat": "أوامر"
+          "legendFormat": "commands/s",
+          "range": true,
+          "instant": false,
+          "refId": "A"
         },
         {
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(db_client_connection_pending_requests{job=\"api\"})",
-          "refId": "B",
-          "legendFormat": "مستنية اتصال"
+          "expr": "sum(db_client_connection_pending_requests{job=\"api\"}) or vector(0)",
+          "legendFormat": "waiting for a connection",
+          "range": true,
+          "instant": false,
+          "refId": "B"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 10,
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "gradientMode": "opacity",
             "showPoints": "never",
-            "spanNulls": false,
+            "spanNulls": true,
+            "pointSize": 4,
+            "axisBorderShow": false,
             "stacking": {
               "mode": "none",
               "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
             }
           },
-          "min": 0
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
         },
         "overrides": []
       },
       "options": {
         "legend": {
-          "displayMode": "table",
+          "showLegend": true,
+          "displayMode": "list",
           "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max",
-            "lastNotNull"
-          ]
+          "calcs": []
         },
         "tooltip": {
           "mode": "multi",
           "sort": "desc"
         }
       },
-      "id": 19,
+      "id": 24,
       "gridPos": {
-        "x": 16,
-        "y": 44,
+        "h": 8,
         "w": 8,
-        "h": 8
+        "x": 16,
+        "y": 47
       }
     },
     {
       "type": "row",
-      "title": "الطلبات اللي خارجة (الـ AI، Chatwoot، n8n، Google)",
+      "title": "Calls out (the AI, Chatwoot, n8n, Google)",
       "collapsed": false,
-      "id": 20,
       "panels": [],
+      "id": 25,
       "gridPos": {
-        "x": 0,
-        "y": 52,
+        "h": 1,
         "w": 24,
-        "h": 1
+        "x": 0,
+        "y": 55
       }
     },
     {
       "type": "timeseries",
-      "title": "زمن الرد لكل سيرفر (p95)",
+      "title": "Latency by host (p95)",
       "description": "",
       "datasource": {
         "type": "prometheus",
@@ -1166,53 +1915,71 @@
             "uid": "prometheus"
           },
           "expr": "histogram_quantile(0.95, sum by (server_address, le) (rate(http_client_request_duration_seconds_bucket{job=\"api\"}[$__rate_interval])))",
-          "refId": "A",
-          "legendFormat": "{{server_address}}"
+          "legendFormat": "{{server_address}}",
+          "range": true,
+          "instant": false,
+          "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "s",
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 10,
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "gradientMode": "opacity",
             "showPoints": "never",
-            "spanNulls": false,
+            "spanNulls": true,
+            "pointSize": 4,
+            "axisBorderShow": false,
             "stacking": {
               "mode": "none",
               "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
             }
           },
-          "min": 0
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
         },
         "overrides": []
       },
       "options": {
         "legend": {
-          "displayMode": "table",
+          "showLegend": true,
+          "displayMode": "list",
           "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max",
-            "lastNotNull"
-          ]
+          "calcs": []
         },
         "tooltip": {
           "mode": "multi",
           "sort": "desc"
         }
       },
-      "id": 21,
+      "id": 26,
       "gridPos": {
-        "x": 0,
-        "y": 53,
+        "h": 8,
         "w": 12,
-        "h": 8
+        "x": 0,
+        "y": 56
       }
     },
     {
       "type": "timeseries",
-      "title": "الطلبات لكل سيرفر",
+      "title": "Calls by host and status",
       "description": "",
       "datasource": {
         "type": "prometheus",
@@ -1225,67 +1992,85 @@
             "uid": "prometheus"
           },
           "expr": "sum by (server_address, http_response_status_code) (rate(http_client_request_duration_seconds_count{job=\"api\"}[$__rate_interval]))",
-          "refId": "A",
-          "legendFormat": "{{server_address}} {{http_response_status_code}}"
+          "legendFormat": "{{server_address}} {{http_response_status_code}}",
+          "range": true,
+          "instant": false,
+          "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "reqps",
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 10,
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "gradientMode": "opacity",
             "showPoints": "never",
-            "spanNulls": false,
+            "spanNulls": true,
+            "pointSize": 4,
+            "axisBorderShow": false,
             "stacking": {
               "mode": "none",
               "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
             }
           },
-          "min": 0
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
         },
         "overrides": []
       },
       "options": {
         "legend": {
-          "displayMode": "table",
+          "showLegend": true,
+          "displayMode": "list",
           "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max",
-            "lastNotNull"
-          ]
+          "calcs": []
         },
         "tooltip": {
           "mode": "multi",
           "sort": "desc"
         }
       },
-      "id": 22,
+      "id": 27,
       "gridPos": {
-        "x": 12,
-        "y": 53,
+        "h": 8,
         "w": 12,
-        "h": 8
+        "x": 12,
+        "y": 56
       }
     },
     {
       "type": "row",
-      "title": "تنبيهات الجرس (AlertWorker)",
+      "title": "The bell's alert worker",
       "collapsed": false,
-      "id": 23,
       "panels": [],
+      "id": 28,
       "gridPos": {
-        "x": 0,
-        "y": 61,
+        "h": 1,
         "w": 24,
-        "h": 1
+        "x": 0,
+        "y": 64
       }
     },
     {
       "type": "stat",
-      "title": "آخر لفة نجحت من",
-      "description": "اللفة كل 3 ثواني. لو عدّت 3 دقايق، التنبيه AlertWorkerStalled بيتبعت.",
+      "title": "Last good round",
+      "description": "A round runs every 3 seconds; past 3 minutes AlertWorkerStalled is e-mailed.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -1297,15 +2082,19 @@
             "uid": "prometheus"
           },
           "expr": "time() - office_alerts_last_ok_round_timestamp_seconds{job=\"api\"}",
-          "refId": "A",
-          "legendFormat": "__auto"
+          "legendFormat": "__auto",
+          "range": true,
+          "instant": false,
+          "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "s",
-          "noValue": "مفيش بيانات",
-          "mappings": [],
+          "noValue": "–",
+          "color": {
+            "mode": "thresholds"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1323,6 +2112,7 @@
               }
             ]
           },
+          "mappings": [],
           "decimals": 0
         },
         "overrides": []
@@ -1335,25 +2125,29 @@
           "fields": "",
           "values": false
         },
-        "colorMode": "background",
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "value",
         "graphMode": "none",
         "justifyMode": "center",
-        "textMode": "auto",
-        "orientation": "auto",
         "wideLayout": true,
-        "showPercentChange": false
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 12,
+          "valueSize": 26
+        }
       },
-      "id": 24,
+      "id": 29,
       "gridPos": {
-        "x": 0,
-        "y": 62,
+        "h": 7,
         "w": 6,
-        "h": 7
+        "x": 0,
+        "y": 65
       }
     },
     {
       "type": "timeseries",
-      "title": "اللفات",
+      "title": "Rounds",
       "description": "",
       "datasource": {
         "type": "prometheus",
@@ -1366,53 +2160,71 @@
             "uid": "prometheus"
           },
           "expr": "sum by (result) (rate(office_alerts_rounds_total{job=\"api\"}[$__rate_interval]))",
-          "refId": "A",
-          "legendFormat": "{{result}}"
+          "legendFormat": "{{result}}",
+          "range": true,
+          "instant": false,
+          "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "ops",
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 10,
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "gradientMode": "opacity",
             "showPoints": "never",
-            "spanNulls": false,
+            "spanNulls": true,
+            "pointSize": 4,
+            "axisBorderShow": false,
             "stacking": {
               "mode": "none",
               "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
             }
           },
-          "min": 0
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
         },
         "overrides": []
       },
       "options": {
         "legend": {
-          "displayMode": "table",
+          "showLegend": true,
+          "displayMode": "list",
           "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max",
-            "lastNotNull"
-          ]
+          "calcs": []
         },
         "tooltip": {
           "mode": "multi",
           "sort": "desc"
         }
       },
-      "id": 25,
+      "id": 30,
       "gridPos": {
-        "x": 6,
-        "y": 62,
+        "h": 7,
         "w": 9,
-        "h": 7
+        "x": 6,
+        "y": 65
       }
     },
     {
       "type": "timeseries",
-      "title": "إيميلات التنبيهات",
+      "title": "Alert e-mails",
       "description": "",
       "datasource": {
         "type": "prometheus",
@@ -1425,48 +2237,66 @@
             "uid": "prometheus"
           },
           "expr": "sum by (result) (increase(office_alerts_emails_total{job=\"api\"}[$__rate_interval]))",
-          "refId": "A",
-          "legendFormat": "{{result}}"
+          "legendFormat": "{{result}}",
+          "range": true,
+          "instant": false,
+          "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 10,
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "gradientMode": "opacity",
             "showPoints": "never",
-            "spanNulls": false,
+            "spanNulls": true,
+            "pointSize": 4,
+            "axisBorderShow": false,
             "stacking": {
               "mode": "none",
               "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
             }
           },
-          "min": 0
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
         },
         "overrides": []
       },
       "options": {
         "legend": {
-          "displayMode": "table",
+          "showLegend": true,
+          "displayMode": "list",
           "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max",
-            "lastNotNull"
-          ]
+          "calcs": []
         },
         "tooltip": {
           "mode": "multi",
           "sort": "desc"
         }
       },
-      "id": 26,
+      "id": 31,
       "gridPos": {
-        "x": 15,
-        "y": 62,
+        "h": 7,
         "w": 9,
-        "h": 7
+        "x": 15,
+        "y": 65
       }
     }
   ]

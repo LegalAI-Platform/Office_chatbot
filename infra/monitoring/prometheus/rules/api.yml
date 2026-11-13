@@ -8,8 +8,8 @@ groups:
         for: 2m
         labels: { severity: critical }
         annotations:
-          summary: الـ API (حازم) مش بيرد
-          description: رسايل واتساب مش هتتجاوب، والبانل مش هيفتح بياناته. n8n بيحتفظ بالرسايل ويحاول تاني كل دقيقة (T-20).
+          summary: 'Hazem''s API is down'
+          description: 'WhatsApp messages get no reply, and the panel shows no data. n8n keeps the messages and retries every minute (T-20).'
           runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#apidown
 
       - alert: ApiHighErrorRate
@@ -20,8 +20,8 @@ groups:
         for: 5m
         labels: { severity: warning }
         annotations:
-          summary: أكتر من 5% من طلبات الـ API بترجع خطأ (5xx)
-          description: 'النسبة {{ $value | humanizePercentage }} في آخر 10 دقايق. شوف لوجز الـ api في Grafana.'
+          summary: 'Over 5% of the API''s requests fail (5xx)'
+          description: 'The rate is {{ $value | humanizePercentage }} over the last 10 minutes. Check the api logs in Grafana.'
           runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#apihigherrorrate
 
       # The panel's pages (not Hazem's turns, which wait for the AI, nor the bell's live stream, which stays open minutes).
@@ -32,8 +32,8 @@ groups:
         for: 10m
         labels: { severity: warning }
         annotations:
-          summary: البانل بطيء (95% من الطلبات فوق 3 ثواني)
-          description: 'الـ p95 {{ $value | humanizeDuration }}. شوف أبطأ الـ routes في dashboard الـ API.'
+          summary: 'The panel is slow (95% of requests over 3 seconds)'
+          description: 'The p95 is {{ $value | humanizeDuration }}. See the slowest routes on the API dashboard.'
           runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#apislowrequests
 
       - alert: HazemTurnsSlow
@@ -43,8 +43,8 @@ groups:
         for: 15m
         labels: { severity: warning }
         annotations:
-          summary: حازم بياخد أكتر من 45 ثانية علشان يرد
-          description: 'الـ p95 {{ $value | humanizeDuration }}. غالبًا الـ AI بطيء (شوف «الطلبات اللي خارجة» في dashboard الـ API).'
+          summary: 'Hazem takes over 45 seconds to reply'
+          description: 'The p95 is {{ $value | humanizeDuration }}. Usually the AI is slow (see "Calls out" on the API dashboard).'
           runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#hazemturnsslow
 
       - alert: ApiDbPoolNearFull
@@ -54,8 +54,8 @@ groups:
         for: 5m
         labels: { severity: warning }
         annotations:
-          summary: اتصالات الـ API بالداتابيز قرّبت تخلص (Npgsql pool)
-          description: 'مستخدم {{ $value | humanizePercentage }} من الـ pool. الطلبات الجديدة هتستنى اتصال يفضى.'
+          summary: 'The API''s database connections are running out (Npgsql pool)'
+          description: 'Using {{ $value | humanizePercentage }} of the pool. New requests wait for a free connection.'
           runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#apidbpoolnearfull
 
       - alert: ApiThreadPoolQueue
@@ -63,8 +63,8 @@ groups:
         for: 5m
         labels: { severity: warning }
         annotations:
-          summary: الـ API عنده شغل مستني في الـ thread pool
-          description: '{{ $value | printf "%.0f" }} شغلانة مستنية. ده معناه إن حاجة بتعطّل الـ threads (طلب بيستنى من غير async).'
+          summary: 'Work is queued in the API''s thread pool'
+          description: '{{ $value | printf "%.0f" }} items waiting. Something is blocking threads (a request waiting without async).'
           runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#apithreadpoolqueue
 
       # The bell's own worker (AlertMetrics): it makes the alerts every 3 seconds and mails them. When it stops, the bell and
@@ -78,8 +78,8 @@ groups:
         for: 2m
         labels: { severity: critical }
         annotations:
-          summary: تنبيهات الجرس واقفة
-          description: الجرس وإيميلات التنبيهات (العاجل، والمتأخر، ومشاكل السيستم) مش بتتعمل دلوقتي. شوف لوجز الـ api.
+          summary: 'The bell''s alerts have stopped'
+          description: 'The bell and its e-mails (urgent, overdue, system problems) are not being made now. Check the api logs.'
           runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#alertworkerstalled
 
       # (the counter starts at its first failure: the "unless … offset" half is that first one)
@@ -90,6 +90,6 @@ groups:
               unless max by (service) (office_alerts_emails_total{job="api", result="failed"} offset 30m))
         labels: { severity: warning }
         annotations:
-          summary: إيميلات البانل مش بتتبعت
-          description: 'فشل {{ $value | printf "%.0f" }} إيميل تنبيه في نص ساعة. نفس الإيميل (Resend) بيبعت أكواد الدخول، فممكن تكون واقفة هي كمان.'
+          summary: 'The panel''s e-mails are not being sent'
+          description: '{{ $value | printf "%.0f" }} alert e-mail(s) failed in half an hour. The same mail (Resend) sends the sign-in codes, so they may be failing too.'
           runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#alertemailsfailing

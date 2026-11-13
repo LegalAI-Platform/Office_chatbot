@@ -1,7 +1,7 @@
 {
   "uid": "hazem-overview",
-  "title": "حازم — نظرة عامة",
-  "description": "كل حاجة في شاشة واحدة: الخدمات شغالة ولا لأ، والتنبيهات، والسيرفر، والـ API.",
+  "title": "Hazem · Overview",
+  "description": "Every service up or down, the alerts firing, and the server's and the API's key numbers.",
   "tags": [
     "hazem",
     "overview"
@@ -10,13 +10,23 @@
   "editable": false,
   "graphTooltip": 1,
   "refresh": "30s",
+  "liveNow": false,
   "schemaVersion": 41,
   "version": 1,
+  "fiscalYearStartMonth": 0,
+  "weekStart": "saturday",
   "time": {
     "from": "now-3h",
     "to": "now"
   },
-  "timepicker": {},
+  "timepicker": {
+    "refresh_intervals": [
+      "30s",
+      "1m",
+      "5m",
+      "15m"
+    ]
+  },
   "templating": {
     "list": []
   },
@@ -25,37 +35,36 @@
   },
   "links": [
     {
-      "title": "كل الـ dashboards",
+      "title": "Dashboards",
       "type": "dashboards",
       "tags": [
         "hazem"
       ],
       "asDropdown": true,
       "includeVars": false,
-      "keepTime": true
+      "keepTime": true,
+      "icon": "external link",
+      "targetBlank": false
     }
   ],
   "panels": [
     {
-      "type": "text",
-      "title": "",
-      "options": {
-        "mode": "markdown",
-        "content": "**أخضر** = شغال، **أحمر** = واقف. التنبيهات بتوصل بالإيميل (Alertmanager)، وتنبيهات البيزنس والشغلانة الليلية فضلت في جرس البانل. اعمل إيه في كل تنبيه: `docs/runbooks/monitoring.md`."
-      },
-      "transparent": true,
+      "type": "row",
+      "title": "Services",
+      "collapsed": false,
+      "panels": [],
       "id": 1,
       "gridPos": {
-        "x": 0,
-        "y": 0,
+        "h": 1,
         "w": 24,
-        "h": 2
+        "x": 0,
+        "y": 0
       }
     },
     {
       "type": "stat",
-      "title": "الخدمات",
-      "description": "كل خدمة بالفحص بتاعها: صفحة الصحة من جوه، والداتابيز وRedis من الـ exporters، وwa. والصفحة الرئيسية من برّه عن طريق Cloudflare.",
+      "title": "API",
+      "description": "Hazem's API: /health/ready (the database answers, schema hazem is there).",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -67,139 +76,57 @@
             "uid": "prometheus"
           },
           "expr": "probe_success{job=\"probe\",service=\"api\"}",
-          "refId": "A",
-          "legendFormat": "حازم (API)"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "probe_success{job=\"probe\",service=\"web\"}",
-          "refId": "B",
-          "legendFormat": "البانل"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "probe_success{job=\"probe\",service=\"n8n\"}",
-          "refId": "C",
-          "legendFormat": "n8n"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "probe_success{job=\"probe\",service=\"chatwoot\"}",
-          "refId": "D",
-          "legendFormat": "Chatwoot"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "clamp_max(max(redis_key_size{cluster=\"chatwoot\",key=\"processes\"}), 1)",
-          "refId": "E",
-          "legendFormat": "Sidekiq"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "probe_success{job=\"probe\",service=\"garage\"}",
-          "refId": "F",
-          "legendFormat": "التخزين"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "pg_up{cluster=\"office\"}",
-          "refId": "G",
-          "legendFormat": "داتابيز المكتب"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "pg_up{cluster=\"chatwoot\"}",
-          "refId": "H",
-          "legendFormat": "داتابيز Chatwoot"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "redis_up{cluster=\"office\"}",
-          "refId": "I",
-          "legendFormat": "Redis المكتب"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "redis_up{cluster=\"chatwoot\"}",
-          "refId": "J",
-          "legendFormat": "Redis Chatwoot"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "probe_success{job=\"probe_public\",service=\"edge\"}",
-          "refId": "K",
-          "legendFormat": "واتساب من برّه (wa.)"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "probe_success{job=\"probe_public\",service=\"web\"}",
-          "refId": "L",
-          "legendFormat": "صفحة المكتب من برّه"
+          "legendFormat": "API",
+          "range": true,
+          "instant": false,
+          "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
-          "noValue": "مفيش بيانات",
+          "unit": "none",
+          "decimals": 0,
           "mappings": [
             {
               "type": "value",
               "options": {
                 "0": {
-                  "text": "واقف",
-                  "color": "red",
-                  "index": 1
+                  "text": "DOWN",
+                  "color": "semi-dark-red",
+                  "index": 0
                 },
                 "1": {
-                  "text": "شغال",
-                  "color": "green",
-                  "index": 0
+                  "text": "UP",
+                  "color": "semi-dark-green",
+                  "index": 1
+                }
+              }
+            },
+            {
+              "type": "special",
+              "options": {
+                "match": "null+nan",
+                "result": {
+                  "text": "NO DATA",
+                  "color": "gray",
+                  "index": 2
                 }
               }
             }
           ],
+          "noValue": "NO DATA",
+          "color": {
+            "mode": "thresholds"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
+                "color": "semi-dark-red",
                 "value": null
               },
               {
-                "color": "green",
+                "color": "semi-dark-green",
                 "value": 1
               }
             ]
@@ -215,26 +142,30 @@
           "fields": "",
           "values": false
         },
-        "colorMode": "background",
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "background_solid",
         "graphMode": "none",
         "justifyMode": "center",
-        "textMode": "value_and_name",
-        "orientation": "auto",
         "wideLayout": true,
-        "showPercentChange": false
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 12,
+          "valueSize": 18
+        }
       },
       "id": 2,
       "gridPos": {
+        "h": 3,
+        "w": 4,
         "x": 0,
-        "y": 2,
-        "w": 24,
-        "h": 6
+        "y": 1
       }
     },
     {
-      "type": "table",
-      "title": "التنبيهات الشغالة دلوقتي",
-      "description": "من Prometheus. السكوت (silences) في Alertmanager: http://127.0.0.1:9093",
+      "type": "stat",
+      "title": "Panel",
+      "description": "The panel's web container: /healthz.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -245,72 +176,1194 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "ALERTS{alertstate=\"firing\"}",
-          "refId": "A",
-          "legendFormat": "__auto",
-          "instant": true,
-          "range": false,
-          "format": "table"
-        }
-      ],
-      "transformations": [
-        {
-          "id": "merge",
-          "options": {}
-        },
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true,
-              "Value": true,
-              "__name__": true,
-              "alertstate": true,
-              "instance": true,
-              "job": true,
-              "target": true,
-              "module": true
-            },
-            "renameByName": {
-              "alertname": "التنبيه",
-              "severity": "الدرجة",
-              "service": "الخدمة",
-              "cluster": "الداتابيز"
-            }
-          }
+          "expr": "probe_success{job=\"probe\",service=\"web\"}",
+          "legendFormat": "Panel",
+          "range": true,
+          "instant": false,
+          "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
-          "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
+          "unit": "none",
+          "decimals": 0,
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "semi-dark-red",
+                  "index": 0
+                },
+                "1": {
+                  "text": "UP",
+                  "color": "semi-dark-green",
+                  "index": 1
+                }
+              }
+            },
+            {
+              "type": "special",
+              "options": {
+                "match": "null+nan",
+                "result": {
+                  "text": "NO DATA",
+                  "color": "gray",
+                  "index": 2
+                }
+              }
             }
+          ],
+          "noValue": "NO DATA",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "semi-dark-red",
+                "value": null
+              },
+              {
+                "color": "semi-dark-green",
+                "value": 1
+              }
+            ]
           }
         },
         "overrides": []
       },
       "options": {
-        "showHeader": true,
-        "cellHeight": "sm",
-        "footer": {
-          "show": false
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "background_solid",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 12,
+          "valueSize": 18
         }
       },
       "id": 3,
       "gridPos": {
-        "x": 0,
-        "y": 8,
-        "w": 12,
-        "h": 8
+        "h": 3,
+        "w": 4,
+        "x": 4,
+        "y": 1
       }
     },
     {
-      "type": "gauge",
-      "title": "الـ CPU",
-      "description": "",
+      "type": "stat",
+      "title": "n8n",
+      "description": "n8n's readiness: the WhatsApp layer, in and out.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "probe_success{job=\"probe\",service=\"n8n\"}",
+          "legendFormat": "n8n",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "semi-dark-red",
+                  "index": 0
+                },
+                "1": {
+                  "text": "UP",
+                  "color": "semi-dark-green",
+                  "index": 1
+                }
+              }
+            },
+            {
+              "type": "special",
+              "options": {
+                "match": "null+nan",
+                "result": {
+                  "text": "NO DATA",
+                  "color": "gray",
+                  "index": 2
+                }
+              }
+            }
+          ],
+          "noValue": "NO DATA",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "semi-dark-red",
+                "value": null
+              },
+              {
+                "color": "semi-dark-green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "background_solid",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 12,
+          "valueSize": 18
+        }
+      },
+      "id": 4,
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 8,
+        "y": 1
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Chatwoot",
+      "description": "Chatwoot's /api: the staff's conversations.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "probe_success{job=\"probe\",service=\"chatwoot\"}",
+          "legendFormat": "Chatwoot",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "semi-dark-red",
+                  "index": 0
+                },
+                "1": {
+                  "text": "UP",
+                  "color": "semi-dark-green",
+                  "index": 1
+                }
+              }
+            },
+            {
+              "type": "special",
+              "options": {
+                "match": "null+nan",
+                "result": {
+                  "text": "NO DATA",
+                  "color": "gray",
+                  "index": 2
+                }
+              }
+            }
+          ],
+          "noValue": "NO DATA",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "semi-dark-red",
+                "value": null
+              },
+              {
+                "color": "semi-dark-green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "background_solid",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 12,
+          "valueSize": 18
+        }
+      },
+      "id": 5,
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 12,
+        "y": 1
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Sidekiq",
+      "description": "Chatwoot's Sidekiq: a process listed in its Redis.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "clamp_max(max(redis_key_size{cluster=\"chatwoot\",key=\"processes\"}), 1)",
+          "legendFormat": "Sidekiq",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "semi-dark-red",
+                  "index": 0
+                },
+                "1": {
+                  "text": "UP",
+                  "color": "semi-dark-green",
+                  "index": 1
+                }
+              }
+            },
+            {
+              "type": "special",
+              "options": {
+                "match": "null+nan",
+                "result": {
+                  "text": "NO DATA",
+                  "color": "gray",
+                  "index": 2
+                }
+              }
+            }
+          ],
+          "noValue": "NO DATA",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "semi-dark-red",
+                "value": null
+              },
+              {
+                "color": "semi-dark-green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "background_solid",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 12,
+          "valueSize": 18
+        }
+      },
+      "id": 6,
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 16,
+        "y": 1
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Storage",
+      "description": "Garage (S3): the clients' files and the backups.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "probe_success{job=\"probe\",service=\"garage\"}",
+          "legendFormat": "Storage",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "semi-dark-red",
+                  "index": 0
+                },
+                "1": {
+                  "text": "UP",
+                  "color": "semi-dark-green",
+                  "index": 1
+                }
+              }
+            },
+            {
+              "type": "special",
+              "options": {
+                "match": "null+nan",
+                "result": {
+                  "text": "NO DATA",
+                  "color": "gray",
+                  "index": 2
+                }
+              }
+            }
+          ],
+          "noValue": "NO DATA",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "semi-dark-red",
+                "value": null
+              },
+              {
+                "color": "semi-dark-green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "background_solid",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 12,
+          "valueSize": 18
+        }
+      },
+      "id": 7,
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 20,
+        "y": 1
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Office DB",
+      "description": "The office's PostgreSQL (databases office and n8n).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "pg_up{cluster=\"office\"}",
+          "legendFormat": "Office DB",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "semi-dark-red",
+                  "index": 0
+                },
+                "1": {
+                  "text": "UP",
+                  "color": "semi-dark-green",
+                  "index": 1
+                }
+              }
+            },
+            {
+              "type": "special",
+              "options": {
+                "match": "null+nan",
+                "result": {
+                  "text": "NO DATA",
+                  "color": "gray",
+                  "index": 2
+                }
+              }
+            }
+          ],
+          "noValue": "NO DATA",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "semi-dark-red",
+                "value": null
+              },
+              {
+                "color": "semi-dark-green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "background_solid",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 12,
+          "valueSize": 18
+        }
+      },
+      "id": 8,
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 0,
+        "y": 4
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Chatwoot DB",
+      "description": "Chatwoot's PostgreSQL.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "pg_up{cluster=\"chatwoot\"}",
+          "legendFormat": "Chatwoot DB",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "semi-dark-red",
+                  "index": 0
+                },
+                "1": {
+                  "text": "UP",
+                  "color": "semi-dark-green",
+                  "index": 1
+                }
+              }
+            },
+            {
+              "type": "special",
+              "options": {
+                "match": "null+nan",
+                "result": {
+                  "text": "NO DATA",
+                  "color": "gray",
+                  "index": 2
+                }
+              }
+            }
+          ],
+          "noValue": "NO DATA",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "semi-dark-red",
+                "value": null
+              },
+              {
+                "color": "semi-dark-green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "background_solid",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 12,
+          "valueSize": 18
+        }
+      },
+      "id": 9,
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 4,
+        "y": 4
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Office Redis",
+      "description": "The office's Redis (n8n's grouping and dedupe).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "redis_up{cluster=\"office\"}",
+          "legendFormat": "Office Redis",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "semi-dark-red",
+                  "index": 0
+                },
+                "1": {
+                  "text": "UP",
+                  "color": "semi-dark-green",
+                  "index": 1
+                }
+              }
+            },
+            {
+              "type": "special",
+              "options": {
+                "match": "null+nan",
+                "result": {
+                  "text": "NO DATA",
+                  "color": "gray",
+                  "index": 2
+                }
+              }
+            }
+          ],
+          "noValue": "NO DATA",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "semi-dark-red",
+                "value": null
+              },
+              {
+                "color": "semi-dark-green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "background_solid",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 12,
+          "valueSize": 18
+        }
+      },
+      "id": 10,
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 8,
+        "y": 4
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Chatwoot Redis",
+      "description": "Chatwoot's Redis (Sidekiq's queues).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "redis_up{cluster=\"chatwoot\"}",
+          "legendFormat": "Chatwoot Redis",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "semi-dark-red",
+                  "index": 0
+                },
+                "1": {
+                  "text": "UP",
+                  "color": "semi-dark-green",
+                  "index": 1
+                }
+              }
+            },
+            {
+              "type": "special",
+              "options": {
+                "match": "null+nan",
+                "result": {
+                  "text": "NO DATA",
+                  "color": "gray",
+                  "index": 2
+                }
+              }
+            }
+          ],
+          "noValue": "NO DATA",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "semi-dark-red",
+                "value": null
+              },
+              {
+                "color": "semi-dark-green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "background_solid",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 12,
+          "valueSize": 18
+        }
+      },
+      "id": 11,
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 12,
+        "y": 4
+      }
+    },
+    {
+      "type": "stat",
+      "title": "WhatsApp webhook",
+      "description": "From outside, as Meta reaches it: wa.<domain>/healthz through Cloudflare, the tunnel and the edge.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "probe_success{job=\"probe_public\",service=\"edge\"}",
+          "legendFormat": "WhatsApp webhook",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "semi-dark-red",
+                  "index": 0
+                },
+                "1": {
+                  "text": "UP",
+                  "color": "semi-dark-green",
+                  "index": 1
+                }
+              }
+            },
+            {
+              "type": "special",
+              "options": {
+                "match": "null+nan",
+                "result": {
+                  "text": "NO DATA",
+                  "color": "gray",
+                  "index": 2
+                }
+              }
+            }
+          ],
+          "noValue": "NO DATA",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "semi-dark-red",
+                "value": null
+              },
+              {
+                "color": "semi-dark-green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "background_solid",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 12,
+          "valueSize": 18
+        }
+      },
+      "id": 12,
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 16,
+        "y": 4
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Website",
+      "description": "From outside: the landing page through Cloudflare, the tunnel, the edge and the panel.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "probe_success{job=\"probe_public\",service=\"web\"}",
+          "legendFormat": "Website",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "semi-dark-red",
+                  "index": 0
+                },
+                "1": {
+                  "text": "UP",
+                  "color": "semi-dark-green",
+                  "index": 1
+                }
+              }
+            },
+            {
+              "type": "special",
+              "options": {
+                "match": "null+nan",
+                "result": {
+                  "text": "NO DATA",
+                  "color": "gray",
+                  "index": 2
+                }
+              }
+            }
+          ],
+          "noValue": "NO DATA",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "semi-dark-red",
+                "value": null
+              },
+              {
+                "color": "semi-dark-green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "background_solid",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 12,
+          "valueSize": 18
+        }
+      },
+      "id": 13,
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 20,
+        "y": 4
+      }
+    },
+    {
+      "type": "row",
+      "title": "Key numbers",
+      "collapsed": false,
+      "panels": [],
+      "id": 14,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 7
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Firing alerts",
+      "description": "Alerts firing now (Alertmanager e-mails them).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "count(ALERTS{alertstate=\"firing\"}) or vector(0)",
+          "legendFormat": "__auto",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "mappings": [],
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 12,
+          "valueSize": 26
+        }
+      },
+      "id": 15,
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 8
+      }
+    },
+    {
+      "type": "stat",
+      "title": "CPU",
+      "description": "The server's CPU in use (2 vCPU).",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -322,18 +1375,19 @@
             "uid": "prometheus"
           },
           "expr": "100 * (1 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])))",
-          "refId": "A",
           "legendFormat": "__auto",
-          "instant": true,
-          "range": false
+          "range": true,
+          "instant": false,
+          "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "percent",
-          "min": 0,
-          "max": 100,
-          "decimals": 0,
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -350,7 +1404,9 @@
                 "value": 85
               }
             ]
-          }
+          },
+          "mappings": [],
+          "decimals": 0
         },
         "overrides": []
       },
@@ -362,21 +1418,30 @@
           "fields": "",
           "values": false
         },
-        "showThresholdLabels": false,
-        "showThresholdMarkers": true
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 12,
+          "valueSize": 26
+        }
       },
-      "id": 4,
+      "id": 16,
       "gridPos": {
-        "x": 12,
-        "y": 8,
+        "h": 4,
         "w": 4,
-        "h": 8
+        "x": 4,
+        "y": 8
       }
     },
     {
-      "type": "gauge",
-      "title": "الرام",
-      "description": "",
+      "type": "stat",
+      "title": "Memory",
+      "description": "The server's memory in use.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -388,18 +1453,19 @@
             "uid": "prometheus"
           },
           "expr": "100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)",
-          "refId": "A",
           "legendFormat": "__auto",
-          "instant": true,
-          "range": false
+          "range": true,
+          "instant": false,
+          "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "percent",
-          "min": 0,
-          "max": 100,
-          "decimals": 0,
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -416,7 +1482,9 @@
                 "value": 90
               }
             ]
-          }
+          },
+          "mappings": [],
+          "decimals": 0
         },
         "overrides": []
       },
@@ -428,21 +1496,30 @@
           "fields": "",
           "values": false
         },
-        "showThresholdLabels": false,
-        "showThresholdMarkers": true
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 12,
+          "valueSize": 26
+        }
       },
-      "id": 5,
+      "id": 17,
       "gridPos": {
-        "x": 16,
-        "y": 8,
+        "h": 4,
         "w": 4,
-        "h": 8
+        "x": 8,
+        "y": 8
       }
     },
     {
-      "type": "gauge",
-      "title": "الديسك",
-      "description": "",
+      "type": "stat",
+      "title": "Disk",
+      "description": "The root disk in use.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -454,18 +1531,19 @@
             "uid": "prometheus"
           },
           "expr": "100 * (1 - node_filesystem_avail_bytes{mountpoint=\"/\"} / node_filesystem_size_bytes{mountpoint=\"/\"})",
-          "refId": "A",
           "legendFormat": "__auto",
-          "instant": true,
-          "range": false
+          "range": true,
+          "instant": false,
+          "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "percent",
-          "min": 0,
-          "max": 100,
-          "decimals": 0,
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -482,7 +1560,9 @@
                 "value": 90
               }
             ]
-          }
+          },
+          "mappings": [],
+          "decimals": 0
         },
         "overrides": []
       },
@@ -494,21 +1574,30 @@
           "fields": "",
           "values": false
         },
-        "showThresholdLabels": false,
-        "showThresholdMarkers": true
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 12,
+          "valueSize": 26
+        }
       },
-      "id": 6,
+      "id": 18,
       "gridPos": {
-        "x": 20,
-        "y": 8,
+        "h": 4,
         "w": 4,
-        "h": 8
+        "x": 12,
+        "y": 8
       }
     },
     {
-      "type": "timeseries",
-      "title": "طلبات الـ API في الثانية",
-      "description": "من غير فحوصات الصحة. 5xx = أخطاء من الـ API نفسه.",
+      "type": "stat",
+      "title": "API requests",
+      "description": "Requests per second to the API (n8n's turns and the panel; health checks are not counted).",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -519,54 +1608,66 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (status) (label_replace(rate(http_server_request_duration_seconds_count{job=\"api\"}[$__rate_interval]), \"status\", \"${1}xx\", \"http_response_status_code\", \"(.)..\"))",
-          "refId": "A",
-          "legendFormat": "{{status}}"
+          "expr": "sum(rate(http_server_request_duration_seconds_count{job=\"api\"}[5m]))",
+          "legendFormat": "__auto",
+          "range": true,
+          "instant": false,
+          "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "reqps",
-          "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 10,
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "mode": "normal",
-              "group": "A"
-            }
-          }
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "decimals": 2
         },
         "overrides": []
       },
       "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
+        "reduceOptions": {
           "calcs": [
-            "mean",
-            "max",
             "lastNotNull"
-          ]
+          ],
+          "fields": "",
+          "values": false
         },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 12,
+          "valueSize": 26
         }
       },
-      "id": 7,
+      "id": 19,
       "gridPos": {
-        "x": 0,
-        "y": 16,
-        "w": 8,
-        "h": 7
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 8
       }
     },
     {
       "type": "stat",
-      "title": "أخطاء الـ API (5xx) آخر ساعة",
-      "description": "",
+      "title": "API errors",
+      "description": "Share of the API's answers that were 5xx, last 15 minutes.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -577,16 +1678,20 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "100 * sum(increase(http_server_request_duration_seconds_count{job=\"api\",http_response_status_code=~\"5..\"}[1h])) / clamp_min(sum(increase(http_server_request_duration_seconds_count{job=\"api\"}[1h])), 1)",
-          "refId": "A",
-          "legendFormat": "__auto"
+          "expr": "100 * sum(rate(http_server_request_duration_seconds_count{job=\"api\",http_response_status_code=~\"5..\"}[15m])) / clamp_min(sum(rate(http_server_request_duration_seconds_count{job=\"api\"}[15m])), 1e-9)",
+          "legendFormat": "__auto",
+          "range": true,
+          "instant": false,
+          "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "percent",
           "noValue": "0",
-          "mappings": [],
+          "color": {
+            "mode": "thresholds"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -604,6 +1709,7 @@
               }
             ]
           },
+          "mappings": [],
           "decimals": 1
         },
         "overrides": []
@@ -616,26 +1722,30 @@
           "fields": "",
           "values": false
         },
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "center",
-        "textMode": "auto",
         "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
         "wideLayout": true,
-        "showPercentChange": false
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 12,
+          "valueSize": 26
+        }
       },
-      "id": 8,
+      "id": 20,
       "gridPos": {
-        "x": 8,
-        "y": 16,
+        "h": 4,
         "w": 4,
-        "h": 7
+        "x": 20,
+        "y": 8
       }
     },
     {
       "type": "stat",
-      "title": "زمن رد البانل (p95)",
-      "description": "",
+      "title": "Panel latency p95",
+      "description": "95% of the panel's API requests answered within this, last 15 minutes.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -647,15 +1757,19 @@
             "uid": "prometheus"
           },
           "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_request_duration_seconds_bucket{job=\"api\",http_route=~\"/api/panel/.+\",http_route!=\"/api/panel/alerts/stream\"}[15m])))",
-          "refId": "A",
-          "legendFormat": "__auto"
+          "legendFormat": "__auto",
+          "range": true,
+          "instant": false,
+          "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "s",
-          "noValue": "مفيش بيانات",
-          "mappings": [],
+          "noValue": "–",
+          "color": {
+            "mode": "thresholds"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -673,6 +1787,7 @@
               }
             ]
           },
+          "mappings": [],
           "decimals": 2
         },
         "overrides": []
@@ -685,26 +1800,30 @@
           "fields": "",
           "values": false
         },
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "center",
-        "textMode": "auto",
         "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
         "wideLayout": true,
-        "showPercentChange": false
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 12,
+          "valueSize": 26
+        }
       },
-      "id": 9,
+      "id": 21,
       "gridPos": {
-        "x": 12,
-        "y": 16,
+        "h": 4,
         "w": 4,
-        "h": 7
+        "x": 0,
+        "y": 12
       }
     },
     {
-      "type": "timeseries",
-      "title": "اتصالات داتابيز المكتب",
-      "description": "كل الاتصالات بداتابيز المكتب: الـ API وn8n والـ backup والمراقبة.",
+      "type": "stat",
+      "title": "Hazem reply p95",
+      "description": "95% of Hazem's replies (n8n's turns, the AI included) within this, last 15 minutes.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -715,85 +1834,20 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(pg_stat_activity_count{cluster=\"office\"})",
-          "refId": "A",
-          "legendFormat": "مستخدمة"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "max(pg_settings_max_connections{cluster=\"office\"})",
-          "refId": "B",
-          "legendFormat": "الحد (max_connections)"
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_request_duration_seconds_bucket{job=\"api\",http_route=\"/api/hazem/turns\"}[15m])))",
+          "legendFormat": "__auto",
+          "range": true,
+          "instant": false,
+          "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
-          "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 10,
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "mode": "none",
-              "group": "A"
-            }
+          "unit": "s",
+          "noValue": "–",
+          "color": {
+            "mode": "thresholds"
           },
-          "min": 0
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max",
-            "lastNotNull"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "id": 10,
-      "gridPos": {
-        "x": 16,
-        "y": 16,
-        "w": 8,
-        "h": 7
-      }
-    },
-    {
-      "type": "bargauge",
-      "title": "أسطر فيها خطأ في اللوجز (آخر ساعة)",
-      "description": "عدد الأسطر اللي فيها error أو fatal أو exception، لكل خدمة. اللوجز نفسها في dashboard «اللوجز».",
-      "datasource": {
-        "type": "loki",
-        "uid": "loki"
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "loki"
-          },
-          "expr": "sum by (service) (count_over_time({service=~\".+\"} |~ \"(?i)(error|fatal|panic|exception)\" [1h]))",
-          "refId": "A",
-          "legendFormat": "{{service}}",
-          "instant": true,
-          "range": false
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "min": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -803,14 +1857,16 @@
               },
               {
                 "color": "orange",
-                "value": 10
+                "value": 20
               },
               {
                 "color": "red",
-                "value": 100
+                "value": 45
               }
             ]
-          }
+          },
+          "mappings": [],
+          "decimals": 1
         },
         "overrides": []
       },
@@ -822,19 +1878,897 @@
           "fields": "",
           "values": false
         },
-        "orientation": "horizontal",
-        "displayMode": "gradient",
-        "showUnfilled": true,
-        "valueMode": "color",
-        "namePlacement": "left",
-        "sizing": "auto"
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 12,
+          "valueSize": 26
+        }
       },
-      "id": 11,
+      "id": 22,
       "gridPos": {
-        "x": 0,
-        "y": 23,
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 12
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Office DB connections",
+      "description": "Connections to the office's PostgreSQL, of max_connections.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "100 * sum(pg_stat_activity_count{cluster=\"office\"}) / max(pg_settings_max_connections{cluster=\"office\"})",
+          "legendFormat": "__auto",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 60
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "mappings": [],
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 12,
+          "valueSize": 26
+        }
+      },
+      "id": 23,
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 12
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Office Redis memory",
+      "description": "Of its 256 MB: full, it refuses writes (noeviction).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "100 * max(redis_memory_used_bytes{cluster=\"office\"}) / max(redis_memory_max_bytes{cluster=\"office\"} > 0)",
+          "legendFormat": "__auto",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 60
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "mappings": [],
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 12,
+          "valueSize": 26
+        }
+      },
+      "id": 24,
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 12
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Error log lines (1h)",
+      "description": "Log lines with error, fatal, panic or exception in the last hour, every service.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum(count_over_time({service=~\".+\"} |~ \"(?i)(error|fatal|panic|exception)\" [1h]))",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 50
+              },
+              {
+                "color": "red",
+                "value": 500
+              }
+            ]
+          },
+          "mappings": [],
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 12,
+          "valueSize": 26
+        }
+      },
+      "id": 25,
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 12
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Masked log lines (24h)",
+      "description": "Lines that had a full phone number or a key, masked before Loki kept them: the code that logged them must change.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(sum(increase(loki_process_custom_log_lines_with_phone_total[24h]) and loki_process_custom_log_lines_with_phone_total offset 24h) or vector(0)) + (sum(loki_process_custom_log_lines_with_phone_total unless loki_process_custom_log_lines_with_phone_total offset 24h) or vector(0)) + (sum(increase(loki_process_custom_log_lines_with_secret_total[24h]) and loki_process_custom_log_lines_with_secret_total offset 24h) or vector(0)) + (sum(loki_process_custom_log_lines_with_secret_total unless loki_process_custom_log_lines_with_secret_total offset 24h) or vector(0))",
+          "legendFormat": "__auto",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "mappings": [],
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 12,
+          "valueSize": 26
+        }
+      },
+      "id": 26,
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 12
+      }
+    },
+    {
+      "type": "row",
+      "title": "Alerts and availability",
+      "collapsed": false,
+      "panels": [],
+      "id": 27,
+      "gridPos": {
+        "h": 1,
         "w": 24,
-        "h": 7
+        "x": 0,
+        "y": 16
+      }
+    },
+    {
+      "type": "table",
+      "title": "Firing alerts",
+      "description": "What fires now, since when. Silences: Alertmanager (127.0.0.1:9093).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max by (alertname, severity, service) (ALERTS_FOR_STATE) * 1000 and on (alertname, severity, service) max by (alertname, severity, service) (ALERTS{alertstate=\"firing\"})",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true,
+          "format": "table",
+          "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "indexByName": {
+              "alertname": 0,
+              "severity": 1,
+              "service": 2,
+              "Value": 3
+            },
+            "renameByName": {
+              "alertname": "Alert",
+              "severity": "Severity",
+              "service": "Service",
+              "Value": "Since"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Since"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeFromNow"
+              },
+              {
+                "id": "custom.width",
+                "value": 150
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Severity"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 110
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "critical": {
+                        "color": "red",
+                        "index": 0
+                      },
+                      "warning": {
+                        "color": "orange",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": ""
+        },
+        "sortBy": [
+          {
+            "displayName": "Since",
+            "desc": true
+          }
+        ]
+      },
+      "id": 28,
+      "gridPos": {
+        "h": 9,
+        "w": 10,
+        "x": 0,
+        "y": 17
+      }
+    },
+    {
+      "type": "state-timeline",
+      "title": "Availability",
+      "description": "Each service UP (green) or DOWN (red) over the time range.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "probe_success{job=\"probe\",service=\"api\"}",
+          "legendFormat": "API",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "probe_success{job=\"probe\",service=\"web\"}",
+          "legendFormat": "Panel",
+          "range": true,
+          "instant": false,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "probe_success{job=\"probe\",service=\"n8n\"}",
+          "legendFormat": "n8n",
+          "range": true,
+          "instant": false,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "probe_success{job=\"probe\",service=\"chatwoot\"}",
+          "legendFormat": "Chatwoot",
+          "range": true,
+          "instant": false,
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "clamp_max(max(redis_key_size{cluster=\"chatwoot\",key=\"processes\"}), 1)",
+          "legendFormat": "Sidekiq",
+          "range": true,
+          "instant": false,
+          "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "probe_success{job=\"probe\",service=\"garage\"}",
+          "legendFormat": "Storage",
+          "range": true,
+          "instant": false,
+          "refId": "F"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "pg_up{cluster=\"office\"}",
+          "legendFormat": "Office DB",
+          "range": true,
+          "instant": false,
+          "refId": "G"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "pg_up{cluster=\"chatwoot\"}",
+          "legendFormat": "Chatwoot DB",
+          "range": true,
+          "instant": false,
+          "refId": "H"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "redis_up{cluster=\"office\"}",
+          "legendFormat": "Office Redis",
+          "range": true,
+          "instant": false,
+          "refId": "I"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "redis_up{cluster=\"chatwoot\"}",
+          "legendFormat": "Chatwoot Redis",
+          "range": true,
+          "instant": false,
+          "refId": "J"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "probe_success{job=\"probe_public\",service=\"edge\"}",
+          "legendFormat": "WhatsApp webhook",
+          "range": true,
+          "instant": false,
+          "refId": "K"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "probe_success{job=\"probe_public\",service=\"web\"}",
+          "legendFormat": "Website",
+          "range": true,
+          "instant": false,
+          "refId": "L"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "semi-dark-red",
+                  "index": 0
+                },
+                "1": {
+                  "text": "UP",
+                  "color": "semi-dark-green",
+                  "index": 1
+                }
+              }
+            },
+            {
+              "type": "special",
+              "options": {
+                "match": "null+nan",
+                "result": {
+                  "text": "NO DATA",
+                  "color": "gray",
+                  "index": 2
+                }
+              }
+            }
+          ],
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "semi-dark-red",
+                "value": null
+              },
+              {
+                "color": "semi-dark-green",
+                "value": 1
+              }
+            ]
+          },
+          "custom": {
+            "fillOpacity": 85,
+            "lineWidth": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "mergeValues": true,
+        "showValue": "never",
+        "alignValue": "left",
+        "rowHeight": 0.75,
+        "legend": {
+          "showLegend": false,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "id": 29,
+      "gridPos": {
+        "h": 9,
+        "w": 14,
+        "x": 10,
+        "y": 17
+      }
+    },
+    {
+      "type": "row",
+      "title": "Trends",
+      "collapsed": false,
+      "panels": [],
+      "id": 30,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 26
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Server CPU and memory",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "100 * (1 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])))",
+          "legendFormat": "CPU",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)",
+          "legendFormat": "Memory",
+          "range": true,
+          "instant": false,
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "gradientMode": "opacity",
+            "showPoints": "never",
+            "spanNulls": true,
+            "pointSize": 4,
+            "axisBorderShow": false,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 85
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 31,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 27
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "API requests by status",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (status) (label_replace(rate(http_server_request_duration_seconds_count{job=\"api\"}[$__rate_interval]), \"status\", \"${1}xx\", \"http_response_status_code\", \"(.)..\"))",
+          "legendFormat": "{{status}}",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "gradientMode": "opacity",
+            "showPoints": "never",
+            "spanNulls": true,
+            "pointSize": 4,
+            "axisBorderShow": false,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 32,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 27
       }
     }
   ]

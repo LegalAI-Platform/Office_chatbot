@@ -8,8 +8,8 @@ groups:
         for: 15m
         labels: { severity: warning }
         annotations:
-          summary: الـ CPU بتاع السيرفر فوق 85%
-          description: 'بقاله 15 دقيقة على {{ $value | printf "%.0f" }}%. الردود هتبقى أبطأ لو فضل كده.'
+          summary: 'Server CPU above 85%'
+          description: 'At {{ $value | printf "%.0f" }}% for 15 minutes. Replies slow down if it stays.'
           runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#hosthighcpu
 
       - alert: HostLowMemory
@@ -17,8 +17,8 @@ groups:
         for: 10m
         labels: { severity: warning }
         annotations:
-          summary: الرام الفاضية في السيرفر أقل من 15%
-          description: 'الفاضي {{ $value | humanizePercentage }} بس. لو وصل لـ 5% هيبقى تنبيه critical.'
+          summary: 'Server memory below 15% free'
+          description: 'Only {{ $value | humanizePercentage }} free. Under 5% it becomes critical.'
           runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#hostlowmemory
 
       - alert: HostOutOfMemory
@@ -26,16 +26,16 @@ groups:
         for: 5m
         labels: { severity: critical }
         annotations:
-          summary: السيرفر قرّب يخلص الرام
-          description: 'الفاضي {{ $value | humanizePercentage }} بس. Linux ممكن يقفل أي container (OOM)، حتى الداتابيز.'
+          summary: 'Server almost out of memory'
+          description: 'Only {{ $value | humanizePercentage }} free. Linux may kill any container (OOM), even the database.'
           runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#hostoutofmemory
 
       - alert: HostOomKill
         expr: increase(node_vmstat_oom_kill[15m]) > 0
         labels: { severity: warning }
         annotations:
-          summary: Linux قفل برنامج عشان الرام خلصت (OOM)
-          description: 'حصل {{ $value | printf "%.0f" }} مرة في آخر ربع ساعة. شوف أنهي container عمل restart في Grafana.'
+          summary: 'Linux killed a process: out of memory (OOM)'
+          description: 'It happened {{ $value | printf "%.0f" }} time(s) in the last 15 minutes. See which container restarted in Grafana.'
           runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#hostoomkill
 
       - alert: HostDiskSpaceLow
@@ -43,8 +43,8 @@ groups:
         for: 10m
         labels: { severity: warning }
         annotations:
-          summary: الديسك فاضي فيه أقل من 15%
-          description: 'الفاضي {{ $value | humanizePercentage }}. الـ images القديمة بتاخد مكان كبير (docker image prune).'
+          summary: 'Disk below 15% free'
+          description: 'Only {{ $value | humanizePercentage }} free. Old images take a lot of space (docker image prune).'
           runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#hostdiskspacelow
 
       - alert: HostDiskSpaceCritical
@@ -52,8 +52,8 @@ groups:
         for: 5m
         labels: { severity: critical }
         annotations:
-          summary: الديسك قرّب يتملي
-          description: 'الفاضي {{ $value | humanizePercentage }} بس. لو اتملي، الداتابيز والـ backup هيقفوا.'
+          summary: 'Disk almost full'
+          description: 'Only {{ $value | humanizePercentage }} free. When it is full, the database and the backup stop.'
           runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#hostdiskspacecritical
 
       - alert: HostDiskWillFillIn24h
@@ -63,8 +63,8 @@ groups:
         for: 30m
         labels: { severity: warning }
         annotations:
-          summary: الديسك هيتملي في خلال يوم بالسرعة دي
-          description: حاجة بتكتب كتير على الديسك من 6 ساعات (لوجز، أو backup، أو ملفات). شوف الديسك في Grafana.
+          summary: 'Disk will be full within a day at this rate'
+          description: 'Something has been writing a lot for 6 hours (logs, a backup or files). See the disk in Grafana.'
           runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#hostdiskwillfillin24h
 
       - alert: HostInodesLow
@@ -72,8 +72,8 @@ groups:
         for: 10m
         labels: { severity: warning }
         annotations:
-          summary: عدد الملفات على الديسك قرّب يخلص (inodes)
-          description: 'الفاضي {{ $value | humanizePercentage }}. ده بيحصل من ملفات صغيرة كتير، مش من الحجم.'
+          summary: 'The disk is running out of inodes'
+          description: 'Only {{ $value | humanizePercentage }} free. Many small files cause this, not their size.'
           runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#hostinodeslow
 
       - alert: HostClockNotSynced
@@ -81,6 +81,6 @@ groups:
         for: 15m
         labels: { severity: warning }
         annotations:
-          summary: ساعة السيرفر مش مظبوطة
-          description: أكواد التحقق بخطوتين (Authenticator) ومواعيد الحجز معتمدة على الساعة. الساعة لازم تتظبط من الإنترنت (NTP).
+          summary: 'Server clock is off'
+          description: 'The authenticator codes and the booking depend on the time. The clock must sync with internet time (NTP).'
           runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#hostclocknotsynced
