@@ -4,7 +4,7 @@
 #   monitoring.sh up            start it, or bring it to this version's configs (they are recreated)
 #   monitoring.sh down          stop it (its data stays: 30 days of numbers, 7 days of logs)
 #   monitoring.sh status        its containers, and Prometheus' targets that do not answer
-#   monitoring.sh test-email    a test alert: its e-mail within a minute, and «اتحلت» about 5 minutes later
+#   monitoring.sh test-email    a test alert: its e-mail within a minute, and its RESOLVED one about 5 minutes later
 #   monitoring.sh check         the configs, the alert rules' tests and the masking test (Docker only; the CI's job)
 #   monitoring.sh grafana-password   Grafana's admin password set again from GRAFANA_ADMIN_PASSWORD in .env
 source "$(dirname "$0")/_common.sh"
@@ -41,16 +41,16 @@ case "${1:-}" in
     ;;
   test-email)
     require_env_file
-    # critical, so it goes out after 30 s (its route's group_wait); it ends by itself after 2 minutes, then «اتحلت»
+    # critical, so it goes out after 30 s (its route's group_wait); it ends by itself after 2 minutes, then RESOLVED
     # (each value in double quotes: amtool's UTF-8 parser)
     docker compose --profile monitoring exec -T alertmanager amtool alert add 'alertname="MonitoringTestEmail"' \
       'severity="critical"' 'service="monitoring"' \
-      --annotation='summary="تجربة: إيميلات المراقبة شغالة"' \
-      --annotation='description="ده تنبيه تجربة من monitoring.sh test-email. لو وصلك، الإيميلات شغالة. هيتحل لوحده بعد دقيقتين."' \
+      --annotation='summary="Test: the monitoring e-mails work"' \
+      --annotation='description="A test alert from monitoring.sh test-email. If it reached you, the e-mails work. It resolves by itself in two minutes."' \
       --annotation='runbook_url="https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#test-email"' \
       --end="$(date -u -d '+2 minutes' '+%Y-%m-%dT%H:%M:%SZ')" \
       --alertmanager.url=http://127.0.0.1:9093
-    echo "Sent to Alertmanager: the e-mail goes to ALERT_EMAIL_TO within a minute, «اتحلت» a few minutes later."
+    echo "Sent to Alertmanager: the e-mail goes to ALERT_EMAIL_TO within a minute, its RESOLVED one a few minutes later."
     ;;
   check)
     # Each tool runs from its own pinned image (the one docker-compose.yml names), as in the CI.

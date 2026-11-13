@@ -15,12 +15,14 @@ for the old Quick Tunnel (`office-tunnel-1`, stopped on purpose since the Named 
 | The folder «Hazem» (a new uid), Grafana's default language en-US | `provisioning/dashboards/dashboards.yml`, `docker-compose.yml` |
 | `ContainerExited` for the services the office runs on only; a test case for the stopped Quick Tunnel and WAHA | `infra/monitoring/prometheus/rules/containers.yml`, `tests/alerts.yml` |
 | `monitoring-init` waits up to a minute for each database over TCP (a fresh database's socket healthcheck says ready too early) | `infra/tools/bin/monitoring-init` |
+| The alert e-mails in English (the owner: «أيوه، إنجليزي»): the 43 rules' summaries and descriptions, the e-mail template (🔴 FIRING / ✅ RESOLVED), the test e-mail; their tests | `infra/monitoring/prometheus/rules`, `tests/alerts.yml`, `alertmanager/templates/hazem.tmpl`, `scripts/linux/monitoring.sh` |
 | Docs | `DECISIONS-v1.109.md`, `docs/runbooks/monitoring.md`, CLAUDE.md, START-HERE |
 
 ## Checked
 
 - `make-dashboards.py --check`: the JSON is what it writes; no Arabic left; unique panel ids; every panel inside the grid.
-- The alert rules' tests (promtool) with the new case passed locally before the local Docker run was stopped.
+- The alert rules' tests (promtool) with the Quick Tunnel case passed locally, before the local Docker run was stopped. Their
+  English version (the e-mails' words, checked exactly) runs in the CI.
 - The rest (promtool, amtool, Loki, Alloy and the masking test, Telegraf, blackbox, the dashboards' check) runs in the CI's
   «Monitoring config» job.
 
@@ -34,4 +36,3 @@ for the old Quick Tunnel (`office-tunnel-1`, stopped on purpose since the Named 
 ## Next
 
 - His OK to merge, then to deploy (deploy.sh recreates the monitoring, since infra/monitoring changed).
-- The alert e-mails' wording (Arabic now) waits for his decision.

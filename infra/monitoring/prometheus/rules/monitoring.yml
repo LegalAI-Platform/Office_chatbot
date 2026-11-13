@@ -10,22 +10,22 @@ groups:
         for: 5m
         labels: { severity: warning }
         annotations:
-          summary: 'Prometheus مش قادر يقرا من {{ $labels.job }}'
-          description: 'الـ exporter أو الخدمة ({{ $labels.instance }}) مش بترد بقالها 5 دقايق، فالأرقام بتاعتها مش ظاهرة والتنبيهات المبنية عليها مش شغالة.'
+          summary: 'Prometheus cannot read {{ $labels.job }}'
+          description: 'The exporter or service ({{ $labels.instance }}) has not answered for 5 minutes, so its numbers are missing and the alerts built on them do not work.'
           runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#targetdown
 
       - alert: PrometheusRuleFailures
         expr: increase(prometheus_rule_evaluation_failures_total[10m]) > 0
         labels: { severity: warning, service: prometheus }
         annotations:
-          summary: Prometheus مش قادر يحسب بعض التنبيهات
-          description: 'المجموعة {{ $labels.rule_group }} فشلت {{ $value | printf "%.0f" }} مرة. التنبيهات اللي فيها مش شغالة.'
+          summary: 'Prometheus cannot evaluate some alerts'
+          description: 'Group {{ $labels.rule_group }} failed {{ $value | printf "%.0f" }} time(s). Its alerts are not working.'
           runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#prometheusrulefailures
 
       - alert: AlertmanagerEmailFailing
         expr: sum by (service) (increase(alertmanager_notifications_failed_total{job="alertmanager", integration="email"}[15m])) > 0
         labels: { severity: critical }
         annotations:
-          summary: إيميلات المراقبة مش بتتبعت
-          description: 'Alertmanager فشل يبعت {{ $value | printf "%.0f" }} مرة في ربع ساعة. شوف لوجز alertmanager.'
+          summary: 'The monitoring''s e-mails are not being sent'
+          description: 'Alertmanager failed {{ $value | printf "%.0f" }} time(s) in 15 minutes. Check the alertmanager logs.'
           runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#alertmanageremailfailing

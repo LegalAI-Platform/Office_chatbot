@@ -13,8 +13,8 @@ groups:
               unless sum by (service) (loki_process_custom_log_lines_with_phone_total offset 15m))
         labels: { severity: warning }
         annotations:
-          summary: 'لوجز {{ $labels.service }} فيها رقم موبايل كامل'
-          description: '{{ $value | printf "%.0f" }} سطر في ربع ساعة. اتخفى قبل Loki، بس Docker لسه شايله، ففحص الليل (log-scan) هيفشل.'
+          summary: 'The {{ $labels.service }} logs have a full phone number'
+          description: '{{ $value | printf "%.0f" }} line(s) in 15 minutes. Masked before Loki, but Docker still keeps the line, so the nightly log scan will fail.'
           runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#logshavephonenumber
 
       - alert: LogsHaveSecret
@@ -24,14 +24,14 @@ groups:
               unless sum by (service) (loki_process_custom_log_lines_with_secret_total offset 15m))
         labels: { severity: critical }
         annotations:
-          summary: 'لوجز {{ $labels.service }} فيها مفتاح أو توكن'
-          description: '{{ $value | printf "%.0f" }} سطر في ربع ساعة. اتخفى قبل Loki، بس Docker لسه شايله: اعتبر المفتاح ده اتكشف وغيّره.'
+          summary: 'The {{ $labels.service }} logs have a key or a token'
+          description: '{{ $value | printf "%.0f" }} line(s) in 15 minutes. Masked before Loki, but Docker still keeps the line: treat the key as exposed and change it.'
           runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#logshavesecret
 
       - alert: LogShippingFailing
         expr: sum by (service) (increase(loki_write_dropped_entries_total{job="alloy"}[15m])) > 0
         labels: { severity: warning }
         annotations:
-          summary: لوجز مش بتوصل لـ Loki
-          description: 'Alloy رمى {{ $value | printf "%.0f" }} سطر في ربع ساعة (Loki واقف أو رافض).'
+          summary: 'Logs are not reaching Loki'
+          description: 'Alloy dropped {{ $value | printf "%.0f" }} line(s) in 15 minutes (Loki is down or refusing them).'
           runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#logshippingfailing

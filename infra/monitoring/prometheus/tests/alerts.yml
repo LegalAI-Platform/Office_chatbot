@@ -28,16 +28,16 @@ tests:
         exp_alerts:
           - exp_labels: { severity: critical, mountpoint: "/", service: host, job: node, instance: "node-exporter:9100" }
             exp_annotations:
-              summary: الديسك قرّب يتملي
-              description: 'الفاضي 4% بس. لو اتملي، الداتابيز والـ backup هيقفوا.'
+              summary: 'Disk almost full'
+              description: 'Only 4% free. When it is full, the database and the backup stop.'
               runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#hostdiskspacecritical
       - eval_time: 11m
         alertname: HostDiskSpaceLow
         exp_alerts:
           - exp_labels: { severity: warning, mountpoint: "/", service: host, job: node, instance: "node-exporter:9100" }
             exp_annotations:
-              summary: الديسك فاضي فيه أقل من 15%
-              description: 'الفاضي 4%. الـ images القديمة بتاخد مكان كبير (docker image prune).'
+              summary: 'Disk below 15% free'
+              description: 'Only 4% free. Old images take a lot of space (docker image prune).'
               runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#hostdiskspacelow
 
   # ---------- The office's database: down for a minute ----------
@@ -53,8 +53,8 @@ tests:
         exp_alerts:
           - exp_labels: { severity: critical, cluster: office, service: postgres, job: postgres, instance: "postgres-exporter:9187" }
             exp_annotations:
-              summary: داتابيز المكتب مش بترد
-              description: حازم والبانل وn8n كلهم واقفين من غيرها.
+              summary: 'The office database is down'
+              description: 'Hazem, the panel and n8n all stop without it.'
               runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#postgresdown
 
   # ---------- The API: 1 request in 6 is a 5xx, for more than 5 minutes ----------
@@ -70,8 +70,8 @@ tests:
         exp_alerts:
           - exp_labels: { severity: warning, service: api }
             exp_annotations:
-              summary: أكتر من 5% من طلبات الـ API بترجع خطأ (5xx)
-              description: 'النسبة 16.67% في آخر 10 دقايق. شوف لوجز الـ api في Grafana.'
+              summary: 'Over 5% of the API''s requests fail (5xx)'
+              description: 'The rate is 16.67% over the last 10 minutes. Check the api logs in Grafana.'
               runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#apihigherrorrate
 
   # ---------- The bell's rounds: stalled (an old last round), and failing from the start (never a good one) ----------
@@ -85,8 +85,8 @@ tests:
         exp_alerts:
           - exp_labels: { severity: critical, service: api }
             exp_annotations:
-              summary: تنبيهات الجرس واقفة
-              description: الجرس وإيميلات التنبيهات (العاجل، والمتأخر، ومشاكل السيستم) مش بتتعمل دلوقتي. شوف لوجز الـ api.
+              summary: 'The bell''s alerts have stopped'
+              description: 'The bell and its e-mails (urgent, overdue, system problems) are not being made now. Check the api logs.'
               runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#alertworkerstalled
   - interval: 15s
     input_series:
@@ -98,8 +98,8 @@ tests:
         exp_alerts:
           - exp_labels: { severity: critical, service: api }
             exp_annotations:
-              summary: تنبيهات الجرس واقفة
-              description: الجرس وإيميلات التنبيهات (العاجل، والمتأخر، ومشاكل السيستم) مش بتتعمل دلوقتي. شوف لوجز الـ api.
+              summary: 'The bell''s alerts have stopped'
+              description: 'The bell and its e-mails (urgent, overdue, system problems) are not being made now. Check the api logs.'
               runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#alertworkerstalled
   # rounds every 3 seconds, the last one always fresh: nothing
   - interval: 15s
@@ -127,8 +127,8 @@ tests:
         exp_alerts:
           - exp_labels: { severity: warning, service: postgres }
             exp_annotations:
-              summary: لوجز postgres فيها رقم موبايل كامل
-              description: '1 سطر في ربع ساعة. اتخفى قبل Loki، بس Docker لسه شايله، ففحص الليل (log-scan) هيفشل.'
+              summary: 'The postgres logs have a full phone number'
+              description: '1 line(s) in 15 minutes. Masked before Loki, but Docker still keeps the line, so the nightly log scan will fail.'
               runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#logshavephonenumber
       # nothing new for 15 minutes: resolved
       - eval_time: 40m
@@ -153,8 +153,8 @@ tests:
               target: https://wa.hazem-office.tech/healthz
               instance: https://wa.hazem-office.tech/healthz
             exp_annotations:
-              summary: https://wa.hazem-office.tech/healthz مش بيفتح من برّه
-              description: 'Meta مش هتقدر توصّل رسايل واتساب: الـ tunnel أو الـ edge أو Cloudflare.'
+              summary: 'https://wa.hazem-office.tech/healthz does not open from outside'
+              description: 'Meta cannot deliver WhatsApp messages: the tunnel, the edge or Cloudflare.'
               runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#publicendpointdown
 
   # ---------- A container that stopped; a one-shot job that finished is not one, nor a profile's container stopped on
@@ -177,8 +177,8 @@ tests:
         exp_alerts:
           - exp_labels: { severity: critical, service: api }
             exp_annotations:
-              summary: الـ container api واقف
-              description: 'خرج بـ exit code 137 وماقامش تاني. شوف آخر لوجز ليه في Grafana (اللوجز).'
+              summary: 'Container api is stopped'
+              description: 'It exited with code 137 and did not come back. Check its last logs in Grafana (Hazem · Logs).'
               runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#containerexited
 
   # ---------- Chatwoot's Sidekiq: no process listed ----------
@@ -192,8 +192,8 @@ tests:
         exp_alerts:
           - exp_labels: { severity: critical, service: chatwoot-sidekiq, cluster: chatwoot }
             exp_annotations:
-              summary: Sidekiq بتاع Chatwoot مش شغال
-              description: رسايل العملاء وردود الموظفين مش بتتنقل بين Chatwoot والـ API، والإيميلات بتاعته واقفة.
+              summary: 'Chatwoot''s Sidekiq is not running'
+              description: 'Clients'' messages and the staff''s replies do not move between Chatwoot and the API, and its e-mails stop.'
               runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#sidekiqnotrunning
 
   # ---------- A target down; the HTTP checks' own scrapes are not targets here ----------
@@ -209,6 +209,6 @@ tests:
         exp_alerts:
           - exp_labels: { severity: warning, job: node, service: host, instance: "node-exporter:9100" }
             exp_annotations:
-              summary: Prometheus مش قادر يقرا من node
-              description: 'الـ exporter أو الخدمة (node-exporter:9100) مش بترد بقالها 5 دقايق، فالأرقام بتاعتها مش ظاهرة والتنبيهات المبنية عليها مش شغالة.'
+              summary: 'Prometheus cannot read node'
+              description: 'The exporter or service (node-exporter:9100) has not answered for 5 minutes, so its numbers are missing and the alerts built on them do not work.'
               runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#targetdown

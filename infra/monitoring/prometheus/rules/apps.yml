@@ -7,8 +7,8 @@ groups:
         for: 2m
         labels: { severity: critical }
         annotations:
-          summary: n8n واقف
-          description: رسايل واتساب الجديدة مش بتوصل، وردود حازم مش بتتبعت. Meta بتبعت الرسالة تاني لما n8n يرجع.
+          summary: 'n8n is down'
+          description: 'New WhatsApp messages do not arrive, and Hazem''s replies are not sent. Meta sends the messages again once n8n is back.'
           runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#n8ndown
 
       - alert: N8nEventLoopLag
@@ -16,8 +16,8 @@ groups:
         for: 10m
         labels: { severity: warning }
         annotations:
-          summary: n8n مزنوق (event loop بيتأخر أكتر من ثانية)
-          description: 'التأخير {{ $value | humanizeDuration }}. كل الـ workflows هتبطأ.'
+          summary: 'n8n is stalling (event loop lag over 1 second)'
+          description: 'The lag is {{ $value | humanizeDuration }}. Every workflow slows down.'
           runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#n8neventlooplag
 
       - alert: WebDown
@@ -25,8 +25,8 @@ groups:
         for: 2m
         labels: { severity: critical }
         annotations:
-          summary: البانل مش بيفتح
-          description: الـ container بتاع البانل (web) مش بيرد على /healthz.
+          summary: 'The panel does not open'
+          description: 'The panel''s web container does not answer /healthz.'
           runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#webdown
 
       - alert: ChatwootDown
@@ -34,8 +34,8 @@ groups:
         for: 5m
         labels: { severity: critical }
         annotations:
-          summary: Chatwoot (شاشة المحادثات) مش بيفتح
-          description: الموظفين مش هيقدروا يردوا على العملاء. حازم نفسه شغال عادي.
+          summary: 'Chatwoot (the conversations) does not open'
+          description: 'The staff cannot answer clients. Hazem itself still works.'
           runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#chatwootdown
 
       # Sidekiq lists itself in "processes" while it runs; Chatwoot's scheduled jobs make it work every few minutes.
@@ -46,8 +46,8 @@ groups:
         for: 5m
         labels: { severity: critical, service: chatwoot-sidekiq }
         annotations:
-          summary: Sidekiq بتاع Chatwoot مش شغال
-          description: رسايل العملاء وردود الموظفين مش بتتنقل بين Chatwoot والـ API، والإيميلات بتاعته واقفة.
+          summary: 'Chatwoot''s Sidekiq is not running'
+          description: 'Clients'' messages and the staff''s replies do not move between Chatwoot and the API, and its e-mails stop.'
           runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#sidekiqnotrunning
 
       - alert: SidekiqBacklog
@@ -55,16 +55,16 @@ groups:
         for: 15m
         labels: { severity: warning, service: chatwoot-sidekiq }
         annotations:
-          summary: شغل Chatwoot متأخر (أكتر من 100 في الطابور)
-          description: '{{ $value | printf "%.0f" }} شغلانة مستنية بقالها ربع ساعة. Sidekiq مش ملاحق.'
+          summary: 'Chatwoot''s work is behind (over 100 jobs queued)'
+          description: '{{ $value | printf "%.0f" }} jobs waiting for 15 minutes. Sidekiq is not keeping up.'
           runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#sidekiqbacklog
 
       - alert: SidekiqDeadJobs
         expr: max by (cluster) (delta(redis_key_size{cluster="chatwoot", key="dead"}[1h])) > 0
         labels: { severity: warning, service: chatwoot-sidekiq }
         annotations:
-          summary: شغل في Chatwoot فشل نهائي (dead jobs)
-          description: '{{ $value | printf "%.0f" }} شغلانة جديدة في dead في آخر ساعة، يعني فشلت بعد كل المحاولات.'
+          summary: 'Chatwoot jobs failed for good (dead jobs)'
+          description: '{{ $value | printf "%.0f" }} new dead job(s) in the last hour: they failed after every retry.'
           runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#sidekiqdeadjobs
 
       - alert: GarageDown
@@ -72,8 +72,8 @@ groups:
         for: 2m
         labels: { severity: critical }
         annotations:
-          summary: التخزين (Garage) مش بيرد
-          description: صور ومستندات العملاء والـ backup بيتخزنوا فيه. n8n مش هيقدر يحفظ الملفات الجديدة.
+          summary: 'The storage (Garage) is down'
+          description: 'Clients'' images and documents and the backups are kept there. n8n cannot keep new files.'
           runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#garagedown
 
   - name: public
@@ -84,6 +84,6 @@ groups:
         for: 3m
         labels: { severity: critical }
         annotations:
-          summary: '{{ $labels.target }} مش بيفتح من برّه'
-          description: '{{ if eq $labels.service "edge" }}Meta مش هتقدر توصّل رسايل واتساب: الـ tunnel أو الـ edge أو Cloudflare.{{ else }}صفحة المكتب مش بتفتح من النت: الـ tunnel أو الـ edge أو البانل.{{ end }}'
+          summary: '{{ $labels.target }} does not open from outside'
+          description: '{{ if eq $labels.service "edge" }}Meta cannot deliver WhatsApp messages: the tunnel, the edge or Cloudflare.{{ else }}The office''s page does not open from the internet: the tunnel, the edge or the panel.{{ end }}'
           runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#publicendpointdown
