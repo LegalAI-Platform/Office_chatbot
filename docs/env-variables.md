@@ -42,6 +42,10 @@ contains `CHANGE_ME`, or has the wrong format.
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SSL` | api (`Mail__Host`, `Mail__Port`, `Mail__Ssl`): the no-reply sender | no | the owner's provider; port `587` with STARTTLS (`SMTP_SSL=true`); 465 is not supported. Empty host = sign-up "not available". The server: Resend (`smtp.resend.com`, user `resend`), set by `deploy/set-smtp-resend.sh` | v1.9 |
 | `SMTP_USERNAME`, `SMTP_PASSWORD` | api (`Mail__Username`, `Mail__Password`) | **yes** (password) | from the provider. Never printed or logged | v1.9 |
 | `SMTP_FROM`, `SMTP_FROM_NAME` | api (`Mail__From`, `Mail__FromName`) | no | e.g. `no-reply@<domain>`; empty name = the office's name | v1.9 |
+| `ALERT_EMAIL_TO` | alertmanager (the monitoring's e-mails), monitoring-init (checks it) | no, but personal: `.env` only (public repo) | one address or several separated by commas; typed by the owner (docs/runbooks/monitoring.md). Alertmanager sends through the `SMTP_*` above | v1.107 |
+| `GRAFANA_ADMIN_USER`, `GRAFANA_ADMIN_PASSWORD` | grafana | **yes** (password) | `admin`; the password 12 characters at least, typed by the owner (`read -rsp`); Grafana keeps it from its first start, `monitoring.sh grafana-password` sets it again | v1.107 |
+| `GRAFANA_PORT` | grafana (its `127.0.0.1` port) | no | `3300` | v1.107 |
+| `PROMETHEUS_RETENTION`, `PROMETHEUS_RETENTION_SIZE` | prometheus | no | `30d`, `8GB` (the owner's choice: 30 days) | v1.107 |
 | `S3_API_ACCESS_KEY_ID`, `S3_API_SECRET_ACCESS_KEY` | api (`S3__*`); storage-init | **yes** | `GK` + 24 hex / 64 hex (`gen-secrets`): read-only on `office-media` and `office-sensitive`, nothing on backups. The panel opens client files with it | 07c |
 | `WAHA_API_KEY` | waha (`WAHA_API_KEY`), n8n credential `waha-api` (X-Api-Key) | no | **TASK 02b, the WAHA test channel only** (docs/runbooks/waha.md); empty = WAHA unused. ≥ 32 letters, digits, `_` or `-` (`gen-secrets`) | 02b |
 | `WAHA_WEBHOOK_TOKEN` | the WAHA session's webhook header, n8n credential `waha-webhook` (X-Waha-Token) | no | same; set on the session by `tools waha-session`. Without it `WAHA-INBOUND` is never published | 02b |

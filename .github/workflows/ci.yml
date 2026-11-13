@@ -111,6 +111,26 @@ jobs:
           docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/repo:ro" -w /repo ghcr.io/gitleaks/gitleaks:v8.21.2 \
             git /repo --no-banner --redact -v --config /repo/.gitleaks.toml --gitleaks-ignore-path /repo/.gitleaksignore
 
+  # v1.107: the monitoring (docs/runbooks/monitoring.md). The compose file reads with every profile; then each config is
+  # checked by its own pinned image: Prometheus and the alert rules' tests, Alertmanager (as start.sh fills it), Loki,
+  # Alloy and the masking test (the nightly log-scan's patterns find nothing in what it lets through), Telegraf, blackbox,
+  # and the dashboards.
+  monitoring:
+    name: Monitoring config
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: The compose file, every profile
+        run: |
+          cp .env.example .env
+          docker compose --profile monitoring --profile tools --profile tests --profile tunnel --profile tunnel-named \
+            --profile waha config --quiet
+      - name: The monitoring's checks
+        run: bash scripts/linux/monitoring.sh check
+
   images:
     name: Image build (${{ matrix.image }})
     runs-on: ubuntu-24.04

@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Office.Application.Panel;
+using Office.Infrastructure.Monitoring;
 using Office.Infrastructure.Persistence;
 
 namespace Office.Infrastructure.Panel;
@@ -251,9 +252,11 @@ public sealed class PanelAlertStore(HazemDbContext db) : IPanelAlertStore
 /// (S-05), and new alerts are made and mailed. The open panels hear them at once (<see cref="AlertSignal"/>). The system's
 /// checks stay once a minute, because a client's request comes first (the owner, 2026-11-12). v1.106: every round also
 /// looks which areas of the office's data changed, and wakes the open panels the same way (<see cref="DataSignal"/>). Off in tests
-/// (Alerts:RunWorker=false): they call the steps themselves.
+/// (Alerts:RunWorker=false): they call the steps themselves. v1.107: every round is counted (<see cref="AlertMetrics"/>), so the
+/// monitoring's e-mails say when the rounds stop or the e-mails fail.
 /// </summary>
-public sealed class AlertWorker(IServiceScopeFactory scopes, IConfiguration config, ILogger<AlertWorker> log) : BackgroundService
+public sealed class AlertWorker(IServiceScopeFactory scopes, IConfiguration config, AlertMetrics metrics, ILogger<AlertWorker> log)
+    : BackgroundService
 {
     private static readonly TimeSpan Minute = TimeSpan.FromMinutes(1);
 
@@ -283,6 +286,7 @@ public sealed class AlertWorker(IServiceScopeFactory scopes, IConfiguration conf
                 var alerts = scope.ServiceProvider.GetRequiredService<PanelAlerts>();
                 await alerts.WatchDataAsync(stop); // v1.106: before the e-mails, which may take a while
                 var (made, mailed, failed, error) = await alerts.RunAsync(panelUrl, stop, system);
+                metrics.RoundOk(mailed, failed, DateTimeOffset.UtcNow);
                 if (overdue + made + mailed > 0)
                 {
                     log.LogInformation("Alerts: {Overdue} task(s) overdue, {Made} alert(s), {Mailed} e-mail(s)", overdue, made, mailed);
@@ -295,6 +299,7 @@ public sealed class AlertWorker(IServiceScopeFactory scopes, IConfiguration conf
             }
             catch (Exception e) when (e is not OperationCanceledException)
             {
+                metrics.RoundFailed();
                 // a round every few seconds: one warning a minute at most while it keeps failing
                 if (DateTimeOffset.UtcNow - warnedAt >= Minute)
                 {

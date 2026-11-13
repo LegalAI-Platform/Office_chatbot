@@ -9,6 +9,8 @@
 # The tunnel is not restarted, so its link (and Meta's webhook) stays the same. Two parts the stack's `up` does not
 # refresh by itself are refreshed when that commit changed them: n8n's workflows (n8n runs the copy in its own
 # database, so they are imported again, n8n restarts for ~30 s and Meta's link is checked) and the edge's config.
+# v1.107: the monitoring, when it runs (scripts/linux/monitoring.sh up started it), goes to the same version; its configs
+# are files compose does not watch, so a commit that changed infra/monitoring recreates it. Going back takes it back too.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export MSYS_NO_PATHCONV=1
@@ -41,6 +43,16 @@ refresh_parts() { # after the stack is up on a version
   if changed infra/edge && docker compose --profile tunnel --profile tunnel-named ps --status running --quiet edge | grep -q .; then
     echo "-- the edge's config changed: restarting it"
     docker compose --profile tunnel --profile tunnel-named up -d --force-recreate --no-deps edge
+  fi
+  # v1.107: the monitoring; a failure here is the healthcheck's to report (it checks the monitoring), not a stop half way
+  if docker compose --profile monitoring ps --status running --quiet prometheus 2>/dev/null | grep -q .; then
+    if changed infra/monitoring; then
+      echo "-- the monitoring's configs changed: recreating it"
+      bash scripts/linux/monitoring.sh up || echo "WARN: the monitoring did not come up (scripts/linux/monitoring.sh status)"
+    else
+      echo "-- the monitoring: on this version"
+      docker compose --profile monitoring up -d --wait || echo "WARN: the monitoring did not come up (scripts/linux/monitoring.sh status)"
+    fi
   fi
 }
 point_at() { # the files and the images of one commit

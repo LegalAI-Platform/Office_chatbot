@@ -1,0 +1,209 @@
+# The alert rules' tests (v1.107): made-up series, and what must fire, when, with which labels and words; and what must not.
+#   promtool test rules tests/alerts.yml        (CI "Monitoring config"; scripts/linux/monitoring.sh check)
+rule_files:
+  - ../rules/host.yml
+  - ../rules/containers.yml
+  - ../rules/databases.yml
+  - ../rules/api.yml
+  - ../rules/apps.yml
+  - ../rules/logs.yml
+  - ../rules/monitoring.yml
+
+evaluation_interval: 15s
+
+tests:
+  # ---------- The disk: 4% free is both "low" (after 10 minutes) and "critical" (after 5) ----------
+  - interval: 15s
+    input_series:
+      - series: 'node_filesystem_avail_bytes{mountpoint="/",service="host",job="node",instance="node-exporter:9100"}'
+        values: '4x80'
+      - series: 'node_filesystem_size_bytes{mountpoint="/",service="host",job="node",instance="node-exporter:9100"}'
+        values: '100x80'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: HostDiskSpaceCritical
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: HostDiskSpaceCritical
+        exp_alerts:
+          - exp_labels: { severity: critical, mountpoint: "/", service: host, job: node, instance: "node-exporter:9100" }
+            exp_annotations:
+              summary: الديسك قرّب يتملي
+              description: 'الفاضي 4% بس. لو اتملي، الداتابيز والـ backup هيقفوا.'
+              runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#hostdiskspacecritical
+      - eval_time: 11m
+        alertname: HostDiskSpaceLow
+        exp_alerts:
+          - exp_labels: { severity: warning, mountpoint: "/", service: host, job: node, instance: "node-exporter:9100" }
+            exp_annotations:
+              summary: الديسك فاضي فيه أقل من 15%
+              description: 'الفاضي 4%. الـ images القديمة بتاخد مكان كبير (docker image prune).'
+              runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#hostdiskspacelow
+
+  # ---------- The office's database: down for a minute ----------
+  - interval: 15s
+    input_series:
+      - series: 'pg_up{cluster="office",service="postgres",job="postgres",instance="postgres-exporter:9187"}'
+        values: '1 0x10'
+      - series: 'pg_up{cluster="chatwoot",service="chatwoot-db",job="postgres",instance="chatwoot-db-exporter:9187"}'
+        values: '1x10'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: PostgresDown
+        exp_alerts:
+          - exp_labels: { severity: critical, cluster: office, service: postgres, job: postgres, instance: "postgres-exporter:9187" }
+            exp_annotations:
+              summary: داتابيز المكتب مش بترد
+              description: حازم والبانل وn8n كلهم واقفين من غيرها.
+              runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#postgresdown
+
+  # ---------- The API: 1 request in 6 is a 5xx, for more than 5 minutes ----------
+  - interval: 15s
+    input_series:
+      - series: 'http_server_request_duration_seconds_count{job="api",service="api",http_route="/api/panel/tasks",http_response_status_code="200"}'
+        values: '0+10x100'
+      - series: 'http_server_request_duration_seconds_count{job="api",service="api",http_route="/api/panel/tasks",http_response_status_code="500"}'
+        values: '0+2x100'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: ApiHighErrorRate
+        exp_alerts:
+          - exp_labels: { severity: warning, service: api }
+            exp_annotations:
+              summary: أكتر من 5% من طلبات الـ API بترجع خطأ (5xx)
+              description: 'النسبة 16.67% في آخر 10 دقايق. شوف لوجز الـ api في Grafana.'
+              runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#apihigherrorrate
+
+  # ---------- The bell's rounds: stalled (an old last round), and failing from the start (never a good one) ----------
+  - interval: 15s
+    input_series:
+      - series: 'office_alerts_last_ok_round_timestamp_seconds{job="api",service="api",instance="api:9464"}'
+        values: '100x60'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: AlertWorkerStalled
+        exp_alerts:
+          - exp_labels: { severity: critical, service: api }
+            exp_annotations:
+              summary: تنبيهات الجرس واقفة
+              description: الجرس وإيميلات التنبيهات (العاجل، والمتأخر، ومشاكل السيستم) مش بتتعمل دلوقتي. شوف لوجز الـ api.
+              runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#alertworkerstalled
+  - interval: 15s
+    input_series:
+      - series: 'office_alerts_rounds_total{job="api",service="api",instance="api:9464",result="failed"}'
+        values: '0+1x60'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: AlertWorkerStalled
+        exp_alerts:
+          - exp_labels: { severity: critical, service: api }
+            exp_annotations:
+              summary: تنبيهات الجرس واقفة
+              description: الجرس وإيميلات التنبيهات (العاجل، والمتأخر، ومشاكل السيستم) مش بتتعمل دلوقتي. شوف لوجز الـ api.
+              runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#alertworkerstalled
+  # rounds every 3 seconds, the last one always fresh: nothing
+  - interval: 15s
+    input_series:
+      - series: 'office_alerts_last_ok_round_timestamp_seconds{job="api",service="api",instance="api:9464"}'
+        values: '0+15x60'
+      - series: 'office_alerts_rounds_total{job="api",service="api",instance="api:9464",result="ok"}'
+        values: '0+5x60'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: AlertWorkerStalled
+        exp_alerts: []
+
+  # ---------- The logs: the first line with a full number makes the alert (its counter starts at 1) ----------
+  - interval: 15s
+    input_series:
+      - series: 'loki_process_custom_log_lines_with_phone_total{job="alloy",service="postgres",container="office-postgres-1",stream="stderr"}'
+        values: '_x80 1x100'
+    alert_rule_test:
+      - eval_time: 19m
+        alertname: LogsHavePhoneNumber
+        exp_alerts: []
+      - eval_time: 21m
+        alertname: LogsHavePhoneNumber
+        exp_alerts:
+          - exp_labels: { severity: warning, service: postgres }
+            exp_annotations:
+              summary: لوجز postgres فيها رقم موبايل كامل
+              description: '1 سطر في ربع ساعة. اتخفى قبل Loki، بس Docker لسه شايله، ففحص الليل (log-scan) هيفشل.'
+              runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#logshavephonenumber
+      # nothing new for 15 minutes: resolved
+      - eval_time: 40m
+        alertname: LogsHavePhoneNumber
+        exp_alerts: []
+
+  # ---------- From outside: Meta's webhook through Cloudflare ----------
+  - interval: 15s
+    input_series:
+      - series: 'probe_success{job="probe_public",service="edge",scope="public",module="http_ok",target="https://wa.hazem-office.tech/healthz",instance="https://wa.hazem-office.tech/healthz"}'
+        values: '0x20'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: PublicEndpointDown
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              job: probe_public
+              service: edge
+              scope: public
+              module: http_ok
+              target: https://wa.hazem-office.tech/healthz
+              instance: https://wa.hazem-office.tech/healthz
+            exp_annotations:
+              summary: https://wa.hazem-office.tech/healthz مش بيفتح من برّه
+              description: 'Meta مش هتقدر توصّل رسايل واتساب: الـ tunnel أو الـ edge أو Cloudflare.'
+              runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#publicendpointdown
+
+  # ---------- A container that stopped; a one-shot job that finished is not one ----------
+  - interval: 15s
+    input_series:
+      - series: 'docker_container_status_exitcode{job="docker",service="api",container="office-api-1",container_status="exited",oneoff="False"}'
+        values: '137x20'
+      - series: 'docker_container_status_exitcode{job="docker",service="preflight",container="office-preflight-1",container_status="exited",oneoff="False"}'
+        values: '0x20'
+      - series: 'docker_container_status_exitcode{job="docker",service="tools",container="office-tools-run-1a2b",container_status="exited",oneoff="True"}'
+        values: '1x20'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: ContainerExited
+        exp_alerts:
+          - exp_labels: { severity: critical, service: api }
+            exp_annotations:
+              summary: الـ container api واقف
+              description: 'خرج بـ exit code 137 وماقامش تاني. شوف آخر لوجز ليه في Grafana (اللوجز).'
+              runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#containerexited
+
+  # ---------- Chatwoot's Sidekiq: no process listed ----------
+  - interval: 15s
+    input_series:
+      - series: 'redis_key_size{job="redis",cluster="chatwoot",service="chatwoot-redis",db="db0",key="processes"}'
+        values: '0x40'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: SidekiqNotRunning
+        exp_alerts:
+          - exp_labels: { severity: critical, service: chatwoot-sidekiq, cluster: chatwoot }
+            exp_annotations:
+              summary: Sidekiq بتاع Chatwoot مش شغال
+              description: رسايل العملاء وردود الموظفين مش بتتنقل بين Chatwoot والـ API، والإيميلات بتاعته واقفة.
+              runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#sidekiqnotrunning
+
+  # ---------- A target down; the HTTP checks' own scrapes are not targets here ----------
+  - interval: 15s
+    input_series:
+      - series: 'up{job="node",service="host",instance="node-exporter:9100"}'
+        values: '0x40'
+      - series: 'up{job="probe",service="api",instance="http://api:8080/health/ready"}'
+        values: '0x40'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: TargetDown
+        exp_alerts:
+          - exp_labels: { severity: warning, job: node, service: host, instance: "node-exporter:9100" }
+            exp_annotations:
+              summary: Prometheus مش قادر يقرا من node
+              description: 'الـ exporter أو الخدمة (node-exporter:9100) مش بترد بقالها 5 دقايق، فالأرقام بتاعتها مش ظاهرة والتنبيهات المبنية عليها مش شغالة.'
+              runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#targetdown

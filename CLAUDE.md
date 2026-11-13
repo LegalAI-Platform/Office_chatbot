@@ -50,7 +50,8 @@ unless the owner asks.
 ## Environment
 
 - Docker Compose stack: `postgres`, `redis`, `garage`, `n8n`, `api`, `web` (the panel, TASK 07a)
-  (+ profiles `tunnel`, `tunnel-named`, `tools`, `tests`). All ports on `127.0.0.1`; only n8n is
+  (+ profiles `tunnel`, `tunnel-named`, `tools`, `tests`, and `monitoring`: v1.107, Prometheus, Alertmanager, Loki, Alloy,
+  Grafana, `scripts/linux/monitoring.sh`, `docs/runbooks/monitoring.md`). All ports on `127.0.0.1`; only n8n is
   ever exposed, through the Cloudflare Quick Tunnel. The panel (`web/`, React) talks to
   `/api/panel` only (nginx blocks every other `/api` path); its accounts and permissions follow
   T-23 (RBAC, no super admin). Chatwoot (T-24) comes in TASK 07b.
@@ -70,6 +71,7 @@ unless the owner asks.
 | `backend-test` | .NET unit + integration tests (throwaway database from the real migrations) |
 | `hazem-e2e` | full loop n8n → .NET → n8n with stubs and dry run (no Meta, no OpenAI), and the panel |
 | `web-test` | the panel: type-check, Vitest, build (prints the bundle size, no limit) (Node container) |
+| `monitoring check` | v1.107: every monitoring config with its pinned image, the alert rules' tests, the log masking test (Docker only) |
 | `quality-eval` | TASK 18: 236 conversations through the real Hazem + the judge (real AI, costs ~$15–20; before every deploy, the score must not drop and nothing forbidden) |
 
 After tests, `whatsapp.dry_run` must be `false`, base URLs back to Meta/OpenAI defaults, and no

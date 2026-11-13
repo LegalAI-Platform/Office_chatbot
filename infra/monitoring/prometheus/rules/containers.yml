@@ -1,0 +1,42 @@
+# The containers (Telegraf, from Docker's own API). A service with an HTTP check says more (apps.yml, api.yml, databases.yml);
+# these catch the rest: a container that stopped, that Docker's own healthcheck calls unhealthy, or that keeps restarting.
+groups:
+  - name: containers
+    rules:
+      # One-shot jobs exit when done (preflight, storage-init, monitoring-init, chatwoot-init), and so do `docker compose run`s.
+      - alert: ContainerExited
+        expr: |
+          max by (service) (docker_container_status_exitcode{container_status=~"exited|dead", oneoff!="True",
+            service!~"preflight|storage-init|monitoring-init|chatwoot-init|tools|migrate|meta-stub"} >= 0)
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: 'الـ container {{ $labels.service }} واقف'
+          description: 'خرج بـ exit code {{ $value | printf "%.0f" }} وماقامش تاني. شوف آخر لوجز ليه في Grafana (اللوجز).'
+          runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#containerexited
+
+      - alert: ContainerUnhealthy
+        expr: count by (service) (docker_container_health_failing_streak{health_status="unhealthy", container_status="running"}) > 0
+        for: 3m
+        labels: { severity: warning }
+        annotations:
+          summary: 'Docker شايف الـ container {{ $labels.service }} مش healthy'
+          description: الـ healthcheck بتاعه بيفشل. لو ليه فحص من Prometheus كمان (زي ApiDown) هيوصلك هو بدل ده.
+          runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#containerunhealthy
+
+      - alert: ContainerRestarting
+        expr: max by (service) (increase(docker_container_status_restart_count{oneoff!="True"}[15m])) >= 2
+        labels: { severity: warning }
+        annotations:
+          summary: 'الـ container {{ $labels.service }} بيقع ويقوم تاني'
+          description: 'Docker قومه {{ $value | printf "%.0f" }} مرات في ربع ساعة. شوف لوجزه في Grafana (اللوجز).'
+          runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#containerrestarting
+
+      - alert: ContainerMemoryNearLimit
+        expr: max by (service) (docker_container_mem_usage_percent{container_status="running"}) > 90
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: 'الـ container {{ $labels.service }} قرّب يوصل لحد الرام بتاعه'
+          description: 'مستخدم {{ $value | printf "%.0f" }}% من الحد (mem_limit، أو رام السيرفر كله لو ملوش حد). لو وصل للحد، Linux هيقفله.'
+          runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#containermemorynearlimit

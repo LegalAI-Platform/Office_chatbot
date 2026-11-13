@@ -1,0 +1,61 @@
+#!/bin/bash
+# The monitoring's start (v1.107, docs/runbooks/monitoring.md), on every `monitoring.sh up` (compose: monitoring-init):
+#   1. its settings in .env: the alert e-mails (ALERT_EMAIL_TO), Grafana's password (GRAFANA_ADMIN_PASSWORD, 12 characters at
+#      least) and the panel's mail server (SMTP_HOST, SMTP_FROM), which the alerts' e-mails go out through;
+#   2. the exporters' database roles: office_monitor on the office's Postgres and chatwoot_monitor on Chatwoot's, each with
+#      pg_monitor only (statistics, never the tables), 3 connections at most. Their passwords are made here once, at random,
+#      into the monitoring_secrets volume (/secrets), which only the two exporters read: never in .env, never printed.
+#      Deleting that volume makes new ones on the next start. Idempotent.
+set -euo pipefail
+source /usr/local/bin/_lib
+
+fail() { echo "MONITORING FAIL: $*" >&2; exit 1; }
+
+# ---------- 1. The settings ----------
+email='[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'
+list="^$email( *, *$email)*\$"
+[[ -n "${ALERT_EMAIL_TO:-}" ]] || fail "ALERT_EMAIL_TO is empty in .env: who gets the alerts' e-mails (docs/runbooks/monitoring.md)"
+[[ "$ALERT_EMAIL_TO" =~ $list ]] || fail "ALERT_EMAIL_TO must be e-mail addresses separated by commas"
+grafana_pw="${GRAFANA_ADMIN_PASSWORD:-}"
+[[ ${#grafana_pw} -ge 12 ]] \
+  || fail "GRAFANA_ADMIN_PASSWORD must be at least 12 characters in .env (Grafana's sign-in; docs/runbooks/monitoring.md)"
+unset grafana_pw
+[[ -n "${SMTP_HOST:-}" && -n "${SMTP_FROM:-}" ]] \
+  || fail "SMTP_HOST and SMTP_FROM are empty in .env: the alerts' e-mails go out through the panel's mail server"
+echo "monitoring: settings ok (alerts to $(tr ',' '\n' <<< "$ALERT_EMAIL_TO" | grep -c @) address(es))"
+
+# ---------- 2. The exporters' roles ----------
+umask 077
+for role in office_monitor chatwoot_monitor; do
+  f="/secrets/$role"
+  [[ -s "$f" ]] || openssl rand -hex 24 | tr -d '\n' > "$f"
+  [[ "$(cat "$f")" =~ ^[0-9a-f]{48}$ ]] \
+    || fail "the password of $role in the monitoring_secrets volume is damaged: remove the volume and start again"
+  chown 65534:65534 "$f" # the exporters run as nobody
+  chmod 0400 "$f"
+done
+
+# The password goes in as a psql variable and the statement never reaches the server's log, even if it fails
+# (log_min_error_statement = panic; only a superuser may set it, for this session only).
+role_sql() {
+  cat <<SQL
+SET client_min_messages = warning;
+SET log_min_error_statement = panic;
+SET log_statement = none;
+SELECT 'CREATE ROLE $1 LOGIN' WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '$1') \gexec
+ALTER ROLE $1 WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS CONNECTION LIMIT 3 PASSWORD :'pw';
+GRANT pg_monitor TO $1;
+GRANT CONNECT ON DATABASE postgres TO $1;
+ALTER ROLE $1 SET statement_timeout = '10s';
+SQL
+}
+make_role() { # make_role HOST SUPERUSER PASSWORD ROLE
+  role_sql "$4" | PGPASSWORD="$3" psql -h "$1" -U "$2" -d postgres -v ON_ERROR_STOP=1 --no-psqlrc -qAt \
+    -v pw="$(cat "/secrets/$4")" -f - >/dev/null \
+    || fail "could not make $4 on $1"
+  PGPASSWORD="$(cat "/secrets/$4")" psql -h "$1" -U "$4" -d postgres --no-psqlrc -qAt -c "SELECT pg_has_role('pg_monitor', 'MEMBER')" \
+    | grep -qx t || fail "$4 cannot sign in to $1, or has no pg_monitor"
+  echo "monitoring: $4 ready on $1 (pg_monitor only)"
+}
+make_role postgres "$POSTGRES_SUPERUSER" "$POSTGRES_SUPERUSER_PASSWORD" office_monitor
+make_role chatwoot-db chatwoot "$CHATWOOT_DB_PASSWORD" chatwoot_monitor

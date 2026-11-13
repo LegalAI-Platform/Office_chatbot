@@ -152,3 +152,11 @@ Meta, once, on the fixed link (it never changes again, so no tunnel-refresh afte
 bash scripts/linux/tunnel-refresh.sh --url https://wa.<domain>
 docker compose --profile tunnel stop tunnel      # the Quick Tunnel is no longer needed
 ```
+
+## 10. The monitoring (v1.107)
+
+Prometheus, Alertmanager, Loki, Alloy and Grafana, profile `monitoring`: [`monitoring.md`](monitoring.md). Once, after the
+deploy that brings it: two lines in `.env` (the alert e-mails, Grafana's password; its «Turning it on»), then
+`bash scripts/linux/monitoring.sh up` and `bash scripts/linux/monitoring.sh test-email`. From then on `deploy/deploy.sh`
+keeps it on each version. Grafana, Prometheus and Alertmanager are on `127.0.0.1` only: from the PC through an SSH tunnel
+(`ssh -N -L 3300:127.0.0.1:3300 -L 9090:127.0.0.1:9090 -L 9093:127.0.0.1:9093 office@<server>`).
