@@ -27,6 +27,62 @@ public static class AlertKinds
     /// someone (the owner: «نشوف حل عام»). Whoever may see the task hears at once, in the bell and Windows; no e-mail.
     /// </summary>
     public const string New = "task_new";
+
+    /// <summary>
+    /// fix/alert-flood (the owner, v1.108: «الإيميل للعاجل والمتأخر بس»): the kinds that are also e-mailed. The others (a new
+    /// task, a client asking for someone, a low rating) are the bell's and Windows' only.
+    /// </summary>
+    public static readonly IReadOnlyList<string> Mailed = [Urgent, Overdue, System];
+}
+
+/// <summary>
+/// fix/alert-flood (the owner, v1.108: «التنبيه يروح للي عليه الدور بس»; one booking made up to 5 alerts, each to all 4
+/// accounts): whose job an alert is, in the bell and the e-mail. It is not a permission: a manager may still open every task.
+/// <list type="bullet">
+/// <item>A task someone holds: that person only.</item>
+/// <item><see cref="Urgent"/>: an urgent alert nobody holds: the lawyer and the office both (nobody escalates it later, so it is
+/// never one person's only).</item>
+/// <item><see cref="Lawyer"/>: pricing a service, an Urfi case's review, while nobody holds them.</item>
+/// <item><see cref="Office"/>: the staff, everything else Hazem opens (an urgent call that did not reach the lawyer or that
+/// he did not answer included: the staff act on those). An office with no active staff account: the managers.</item>
+/// <item><see cref="Managers"/>: the system's problems and a low rating (the manager and the maintenance account).</item>
+/// </list>
+/// </summary>
+public static class AlertAudience
+{
+    public const string Lawyer = "lawyer";
+    public const string Office = "office";
+    public const string Managers = "managers";
+    public const string Urgent = "urgent";
+
+    /// <summary>The task types that are the lawyer's while nobody holds them.</summary>
+    public static readonly IReadOnlyList<string> LawyerWork = ["service_pricing", "urf_review"];
+
+    public const string RatingType = "rating_low";
+
+    /// <summary>The audience a signed-in role belongs to.</summary>
+    public static string Of(string role) => role switch
+    {
+        Permissions.Lawyer => Lawyer,
+        Permissions.Staff => Office,
+        _ => Managers, // the manager and the maintenance account
+    };
+
+    /// <summary>The roles whose accounts get an audience's e-mails (<paramref name="noStaff"/>: the office has no active staff account).</summary>
+    public static IReadOnlyList<string> Roles(string audience, bool noStaff) => audience switch
+    {
+        Lawyer => [Permissions.Lawyer],
+        Urgent => noStaff ? [Permissions.Lawyer, Permissions.Manager, Permissions.Maintenance] : [Permissions.Lawyer, Permissions.Staff],
+        Office when !noStaff => [Permissions.Staff],
+        _ => [Permissions.Manager, Permissions.Maintenance],
+    };
+
+    /// <summary>Whose job an alert nobody holds is (a held task's alerts are its holder's, but a rating's and the system's).</summary>
+    public static string For(string kind, string? taskType) =>
+        kind == AlertKinds.System || kind == AlertKinds.Rating || taskType == RatingType ? Managers
+        : kind == AlertKinds.Urgent ? Urgent
+        : taskType is not null && LawyerWork.Contains(taskType) ? Lawyer
+        : Office;
 }
 
 /// <summary>What a system alert is about (hazem.panel_alerts.system_what).</summary>
@@ -63,10 +119,10 @@ public interface IPanelAlertStore
     /// <summary>TASK 13: an alert for every failed nightly job, and one for every hour n8n workflows failed in.</summary>
     Task<int> MakeSystemAsync(CancellationToken ct);
 
-    /// <summary>The e-mail of every active manager (a system alert is theirs only).</summary>
-    Task<IReadOnlyList<string>> ManagersAsync(CancellationToken ct);
-
-    /// <summary>Not e-mailed yet, from the last day only (an old backlog is never mailed in a burst).</summary>
+    /// <summary>
+    /// Not e-mailed yet, from the last day only (an old backlog is never mailed in a burst). fix/alert-flood: the kinds in
+    /// <see cref="AlertKinds.Mailed"/> only.
+    /// </summary>
     Task<IReadOnlyList<AlertToMail>> UnsentAsync(CancellationToken ct);
 
     Task MarkEmailedAsync(long id, CancellationToken ct);
@@ -74,8 +130,11 @@ public interface IPanelAlertStore
     /// <summary>Alerts whose task was finished before the e-mail: marked as handled, never mailed.</summary>
     Task<int> DropFinishedAsync(CancellationToken ct);
 
-    /// <summary>The e-mail of every active account that may see a task with this staff member (null: unassigned).</summary>
-    Task<IReadOnlyList<string>> RecipientsAsync(Guid? staffId, CancellationToken ct);
+    /// <summary>
+    /// fix/alert-flood: the e-mail of every active account whose job the alert is: the task's holder, else its
+    /// <see cref="AlertAudience"/>.
+    /// </summary>
+    Task<IReadOnlyList<string>> RecipientsAsync(AlertToMail alert, CancellationToken ct);
 
     Task<IReadOnlyList<PanelAlert>> ListAsync(Viewer viewer, int limit, CancellationToken ct);
 
@@ -191,8 +250,8 @@ public sealed class PanelAlerts(IPanelAlertStore store, IPanelMailer mailer, Ale
         foreach (var alert in await store.UnsentAsync(ct))
         {
             var isSystem = alert.Kind == AlertKinds.System;
-            var managers = isSystem || alert.Kind == AlertKinds.Rating; // v1.31: a low rating is the managers' too
-            foreach (var to in managers ? await store.ManagersAsync(ct) : await store.RecipientsAsync(alert.StaffId, ct))
+            // fix/alert-flood: only whose job it is (the holder, else its audience), never everyone who may see the task
+            foreach (var to in await store.RecipientsAsync(alert, ct))
             {
                 try
                 {

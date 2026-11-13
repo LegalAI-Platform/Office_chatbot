@@ -61,13 +61,13 @@ describe("TASK 08 booking", () => {
     });
     renderAt("/appointments");
     fireEvent.click(await screen.findByRole("gridcell", { name: /2026-11-20/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "تعديل اليوم ده" }));
+    fireEvent.click(await screen.findByRole("button", { name: "تعديل هذا اليوم" }));
     const dialog = await screen.findByRole("dialog", { name: /تعديل/ });
-    fireEvent.click(within(dialog).getByRole("button", { name: "احفظ" }));
-    const ask = await screen.findByRole("alertdialog", { name: "فيه حجوزات" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "حفظ" }));
+    const ask = await screen.findByRole("alertdialog", { name: "توجد حجوزات" });
     expect(within(ask).getByText(/محمد أحمد علي حسن/)).toBeTruthy();
-    fireEvent.click(within(ask).getByRole("button", { name: "كمّل وبلّغ العملاء" }));
-    expect(await screen.findByText(/اتلغى 1 حجز/)).toBeTruthy();
+    fireEvent.click(within(ask).getByRole("button", { name: "متابعة وإبلاغ العملاء" }));
+    expect(await screen.findByText(/عدد الحجوزات الملغاة: 1/)).toBeTruthy();
     const posts = calls.filter((c) => c.method === "POST" && c.path === "/booking/exceptions").map((c) => c.body as { confirm: boolean; kind: string; day: string });
     expect(posts.map((b) => [b.day, b.kind, b.confirm])).toEqual([["2026-11-20", "closed_day", false], ["2026-11-20", "closed_day", true]]);
   });
@@ -76,12 +76,12 @@ describe("TASK 08 booking", () => {
     const week = [0, 1, 2, 3, 4, 5, 6].map((w) => ({ weekday: w, ranges: [{ start: 600, end: 1440 }] }));
     const calls = serve({ "GET /auth/me": { body: staff }, "GET /booking/week": { body: week }, "PUT /booking/week": { body: { cancelled: 0, not_told: 0 } } });
     renderAt("/appointments/settings");
-    expect((await screen.findByRole("tab", { name: "ساعات الشغل" })).getAttribute("aria-selected")).toBe("true");
+    expect((await screen.findByRole("tab", { name: "ساعات العمل" })).getAttribute("aria-selected")).toBe("true");
     const friday = (await screen.findByText("الجمعة")).closest("li")!;
-    fireEvent.click(within(friday).getByRole("button", { name: "شيل الفترة" }));
+    fireEvent.click(within(friday).getByRole("button", { name: "إزالة الفترة" }));
     expect(within(friday).getByText("إجازة")).toBeTruthy();
     fireEvent.change(screen.getByLabelText("نهاية فترة 1 يوم السبت"), { target: { value: "840" } });
-    fireEvent.click(screen.getByRole("button", { name: "احفظ الأسبوع" }));
+    fireEvent.click(screen.getByRole("button", { name: "حفظ الأسبوع" }));
     await vi.waitFor(() => expect(calls.some((c) => c.method === "PUT")).toBe(true));
     const sent = calls.find((c) => c.method === "PUT")!.body as { days: { weekday: number; ranges: { start: number; end: number }[] }[] };
     expect(sent.days.find((d) => d.weekday === 5)!.ranges).toEqual([]);
@@ -101,15 +101,15 @@ describe("TASK 08 booking", () => {
       ] },
     });
     renderAt("/appointments");
-    fireEvent.click(await screen.findByRole("button", { name: "كل الجاي" }));
-    expect((await screen.findByText(/ما أكدوش حضورهم/)).closest("p")!.textContent).toMatch(/بكرة 2 مواعيد، 1 ما أكدوش حضورهم/);
-    const first = screen.getAllByText(/محمد أحمد علي حسن/).map((e) => e.closest("li")).find(Boolean)!; // the row, not «الميعاد الجاي»
+    fireEvent.click(await screen.findByRole("button", { name: "كل المواعيد" }));
+    expect((await screen.findByText(/لم يؤكد الحضور/)).closest("p")!.textContent).toMatch(/غدًا: موعدان، لم يؤكد الحضور: 1/);
+    const first = screen.getAllByText(/محمد أحمد علي حسن/).map((e) => e.closest("li")).find(Boolean)!; // the row, not «الموعد التالي»
     expect(within(first).getByText("أكّد حضوره ✅")).toBeTruthy();
-    expect(within(first).getByText(/تذكير اليوم اللي قبله: اتبعت ✓ \(قالب واتساب\)/)).toBeTruthy();
-    expect(within(first).getByText(/تذكير قبلها بساعتين: ما اتبعتش: الوقت قريب من الميعاد/)).toBeTruthy();
+    expect(within(first).getByText(/تذكير قبل الموعد بيوم: تم الإرسال ✓ \(قالب واتساب\)/)).toBeTruthy();
+    expect(within(first).getByText(/تذكير قبل الموعد بساعتين: لم يُرسل: الوقت قريب جدًا من الموعد/)).toBeTruthy();
     const second = screen.getAllByText(/سارة محمد علي حسن/).map((e) => e.closest("li")).find(Boolean)!;
     expect(within(second).queryByText("أكّد حضوره ✅")).toBeNull();
-    expect(within(second).getByText(/ما وصلش ✗/)).toBeTruthy();
+    expect(within(second).getByText(/لم يصل ✗/)).toBeTruthy();
   });
 
   // PR #14's ideas: the counts, the next appointment, the search, the kind filter and what to look at on a booking.
@@ -126,19 +126,19 @@ describe("TASK 08 booking", () => {
       ] },
     });
     renderAt("/appointments");
-    fireEvent.click(await screen.findByRole("button", { name: "كل الجاي" }));
-    expect(await screen.findByText("الميعاد الجاي")).toBeTruthy(); // the data is in
+    fireEvent.click(await screen.findByRole("button", { name: "كل المواعيد" }));
+    expect(await screen.findByText("الموعد التالي")).toBeTruthy(); // the data is in
     const tiles = screen.getByRole("region", { name: "ملخص الحجوزات" });
-    expect(within(tiles).getByText("تحويل محتاج مراجعة").previousElementSibling!.textContent).toBe("1");
+    expect(within(tiles).getByText("تحويلات في انتظار المراجعة").previousElementSibling!.textContent).toBe("1");
     const first = screen.getAllByText(/محمد أحمد علي حسن/).map((e) => e.closest("li")).find(Boolean)!;
-    expect(within(first).getByText(/التحويل محتاج مراجعة/)).toBeTruthy();
+    expect(within(first).getByText(/التحويل في انتظار المراجعة/)).toBeTruthy();
     expect(within(first).getByText(/بعد 3 ساعات/)).toBeTruthy();
     const second = screen.getAllByText(/سارة محمد علي حسن/).map((e) => e.closest("li")).find(Boolean)!;
-    expect(within(second).getByText(/عدّى: علّم «خلص» أو «ماحضرش»/)).toBeTruthy();
+    expect(within(second).getByText(/انتهى وقته: سجّل «تم» أو «لم يحضر»/)).toBeTruthy();
 
-    fireEvent.change(screen.getByPlaceholderText("دوّر بالاسم أو الرقم"), { target: { value: "0077" } });
+    fireEvent.change(screen.getByPlaceholderText("ابحث بالاسم أو الرقم"), { target: { value: "0077" } });
     expect(screen.queryAllByText(/محمد أحمد علي حسن/).filter((e) => e.closest("li"))).toHaveLength(0);
-    fireEvent.change(screen.getByPlaceholderText("دوّر بالاسم أو الرقم"), { target: { value: "" } });
+    fireEvent.change(screen.getByPlaceholderText("ابحث بالاسم أو الرقم"), { target: { value: "" } });
     fireEvent.click(screen.getByRole("button", { name: "في المكتب" }));
     expect(screen.queryAllByText(/محمد أحمد علي حسن/).filter((e) => e.closest("li"))).toHaveLength(0);
     expect(screen.getAllByText(/سارة محمد علي حسن/).filter((e) => e.closest("li"))).toHaveLength(1);
@@ -162,7 +162,7 @@ describe("TASK 08 booking", () => {
     expect(await within(list).findByText(/محمد أحمد علي حسن/)).toBeTruthy();
     fireEvent.click(within(list).getByRole("button", { name: /انسخ الرقم/ }));
     await vi.waitFor(() => expect(write).toHaveBeenCalledWith("+201000000091"));
-    expect(await screen.findByText("الرقم اتنسخ")).toBeTruthy();
+    expect(await screen.findByText("تم نسخ الرقم")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("link", { name: "إعدادات المواعيد" }));
     expect((await screen.findByText("في الأسبوع")).textContent).toContain("48 ساعة"); // 6 days × 8 hours
@@ -172,36 +172,36 @@ describe("TASK 08 booking", () => {
   it("the page's view, the bookings' filter and the settings' section live in the address", async () => {
     serve({ "GET /auth/me": { body: staff }, "GET /booking/appointments": { body: [appointment] } });
     renderAt("/appointments?show=all&kind=office");
-    expect((await screen.findByRole("button", { name: "كل الجاي" })).getAttribute("aria-pressed")).toBe("true");
+    expect((await screen.findByRole("button", { name: "كل المواعيد" })).getAttribute("aria-pressed")).toBe("true");
     expect((await screen.findByRole("button", { name: "في المكتب" })).getAttribute("aria-pressed")).toBe("true");
     cleanup();
     renderAt("/appointments/settings?section=booking");
     expect((await screen.findByRole("tab", { name: "الحجز من واتساب" })).getAttribute("aria-selected")).toBe("true");
-    expect(await screen.findByLabelText("حازم يحجز من واتساب")).toBeTruthy();
+    expect(await screen.findByLabelText("يحجز حازم المواعيد عبر واتساب")).toBeTruthy();
   });
 
-  it("the daily screen has no tabs, and the day is changed from «تعديل اليوم ده» in a window", async () => {
+  it("the daily screen has no tabs, and the day is changed from «تعديل هذا اليوم» in a window", async () => {
     const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Cairo" }).format(new Date());
     serve({ "GET /auth/me": { body: staff }, "GET /booking/month": { body: [day(today)] }, "GET /booking/appointments": { body: [] } });
     renderAt("/appointments");
     expect(await screen.findByRole("grid", { name: "أيام الشهر" })).toBeTruthy();
     expect(screen.queryByRole("tablist")).toBeNull();
-    expect(screen.queryByRole("radio", { name: "اقفل اليوم كله" })).toBeNull(); // not on the page itself
+    expect(screen.queryByRole("radio", { name: "إغلاق اليوم بالكامل" })).toBeNull(); // not on the page itself
     expect(screen.getByRole("link", { name: "إعدادات المواعيد" }).getAttribute("href")).toBe("/appointments/settings");
-    fireEvent.click(await screen.findByRole("button", { name: "تعديل اليوم ده" }));
+    fireEvent.click(await screen.findByRole("button", { name: "تعديل هذا اليوم" }));
     const dialog = await screen.findByRole("dialog", { name: /تعديل/ });
-    expect(within(dialog).getByRole("radio", { name: "اقفل اليوم كله" })).toBeTruthy();
-    expect(within(dialog).getByRole("radio", { name: "اقفل جزء منه" })).toBeTruthy();
-    expect(within(dialog).getByRole("radio", { name: "ساعات مختلفة لليوم ده" })).toBeTruthy();
-    expect(within(dialog).getByLabelText("السبب (للمكتب بس)")).toBeTruthy();
+    expect(within(dialog).getByRole("radio", { name: "إغلاق اليوم بالكامل" })).toBeTruthy();
+    expect(within(dialog).getByRole("radio", { name: "إغلاق جزء من اليوم" })).toBeTruthy();
+    expect(within(dialog).getByRole("radio", { name: "ساعات مختلفة لهذا اليوم" })).toBeTruthy();
+    expect(within(dialog).getByLabelText("السبب (للمكتب فقط)")).toBeTruthy();
     fireEvent.keyDown(dialog, { key: "Escape" });
     expect(screen.queryByRole("dialog")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "تعديل اليوم ده" }));
-    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "اقفل" }));
+    fireEvent.click(screen.getByRole("button", { name: "تعديل هذا اليوم" }));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "إغلاق" }));
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("«تراجع» says what the last change was and asks first; «لأ، سيبه» leaves no error behind", async () => {
+  it("«تراجع» says what the last change was and asks first; «لا، اتركه كما هو» leaves no error behind", async () => {
     const week = [0, 1, 2, 3, 4, 5, 6].map((w) => ({ weekday: w, ranges: [{ start: 600, end: 1440 }] }));
     const calls = serve({
       "GET /auth/me": { body: staff }, "GET /booking/week": { body: week },
@@ -213,8 +213,8 @@ describe("TASK 08 booking", () => {
     expect(await screen.findByText(/آخر تعديل: بيانات المكتب · حازم/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "تراجع" }));
     const sure = await screen.findByRole("alertdialog");
-    expect(calls.some((c) => c.path === "/booking/undo")).toBe(false); // nothing sent before «أيوه»
-    fireEvent.click(within(sure).getByRole("button", { name: "أيوه، رجّعه" }));
+    expect(calls.some((c) => c.path === "/booking/undo")).toBe(false); // nothing sent before «نعم»
+    fireEvent.click(within(sure).getByRole("button", { name: "نعم، استعِده" }));
     expect(await screen.findByRole("alert")).toBeTruthy();
     expect(calls.filter((c) => c.path === "/booking/undo")).toHaveLength(1);
 
@@ -222,24 +222,24 @@ describe("TASK 08 booking", () => {
     expect(within((await screen.findByText("السبت")).closest("li")!).queryByRole("button", { name: "+ فترة" })).toBeNull();
     fireEvent.change(screen.getByLabelText("نهاية فترة 1 يوم السبت"), { target: { value: "840" } });
     expect(within(screen.getByText("السبت").closest("li")!).getByRole("button", { name: "+ فترة" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "احفظ الأسبوع" }));
-    fireEvent.click(within(await screen.findByRole("alertdialog", { name: "فيه حجوزات" })).getByRole("button", { name: "لأ، سيبه" }));
-    expect(screen.queryByRole("alertdialog", { name: "فيه حجوزات" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "حفظ الأسبوع" }));
+    fireEvent.click(within(await screen.findByRole("alertdialog", { name: "توجد حجوزات" })).getByRole("button", { name: "لا، اتركه كما هو" }));
+    expect(screen.queryByRole("alertdialog", { name: "توجد حجوزات" })).toBeNull();
     expect(screen.getAllByRole("alert")).toHaveLength(1); // only the undo's, the week's error is gone
   });
 
   it("a staff member sees the calendar's email but cannot change it", async () => {
     serve({ "GET /auth/me": { body: staff } });
     renderAt("/appointments/settings?section=booking");
-    expect((await screen.findByLabelText("إيميل كالندر المستشار (Google)") as HTMLInputElement).readOnly).toBe(true);
+    expect((await screen.findByLabelText("البريد الإلكتروني لتقويم المستشار (Google)") as HTMLInputElement).readOnly).toBe(true);
     cleanup();
     vi.restoreAllMocks();
     serve({ "GET /auth/me": { body: manager }, "GET /booking/week": { body: [] } });
     renderAt("/appointments/settings?section=booking");
-    expect((await screen.findByLabelText("إيميل كالندر المستشار (Google)") as HTMLInputElement).readOnly).toBe(false);
+    expect((await screen.findByLabelText("البريد الإلكتروني لتقويم المستشار (Google)") as HTMLInputElement).readOnly).toBe(false);
   });
 
-  it("«خلص» and «ماحضرش» only once the appointment started, and each asks first; a past day can't be changed", async () => {
+  it("«تم» and «لم يحضر» only once the appointment started, and each asks first; a past day can't be changed", async () => {
     const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Cairo" }).format(new Date());
     const started = new Date(Date.now() - 5 * 60_000).toISOString();
     const later = new Date(Date.now() + 2 * 3_600_000).toISOString();
@@ -256,28 +256,28 @@ describe("TASK 08 booking", () => {
     const list = await screen.findByRole("region", { name: "حجوزات اليوم" });
     const now = (await within(list).findByText(/محمد أحمد علي حسن/)).closest("li")!;
     const ahead = within(list).getByText(/سارة محمد علي حسن/).closest("li")!;
-    expect(within(ahead).queryByRole("button", { name: /خلص/ })).toBeNull();
-    expect(within(ahead).queryByRole("button", { name: /ماحضرش/ })).toBeNull();
-    fireEvent.click(within(now).getByRole("button", { name: /خلص/ }));
+    expect(within(ahead).queryByRole("button", { name: /^تم$/ })).toBeNull();
+    expect(within(ahead).queryByRole("button", { name: /لم يحضر/ })).toBeNull();
+    fireEvent.click(within(now).getByRole("button", { name: /^تم$/ }));
     const sure = await screen.findByRole("alertdialog");
     expect(calls.some((c) => c.path.endsWith("/state"))).toBe(false);
-    fireEvent.click(within(sure).getByRole("button", { name: "أيوه، خلص" }));
+    fireEvent.click(within(sure).getByRole("button", { name: "نعم، تم" }));
     await vi.waitFor(() => expect(calls.find((c) => c.path === "/booking/appointments/a1/state")?.body).toEqual({ state: "completed" }));
 
-    expect(screen.getByRole("button", { name: "تعديل اليوم ده" })).toBeTruthy(); // today
+    expect(screen.getByRole("button", { name: "تعديل هذا اليوم" })).toBeTruthy(); // today
     fireEvent.click(screen.getByRole("gridcell", { name: /2020-01-01/ }));
     expect(await screen.findByRole("heading", { level: 2, name: /يناير/ })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "تعديل اليوم ده" })).toBeNull(); // a past day
+    expect(screen.queryByRole("button", { name: "تعديل هذا اليوم" })).toBeNull(); // a past day
   });
 
   it("the settings page: three sections for a manager, the office's payment details hidden from a staff member", async () => {
     serve({ "GET /auth/me": { body: manager }, "GET /booking/week": { body: [] }, "GET /office": { body: { instapay: "hazem@instapay", wallet_number: "", wallet_provider: "", address: "", map_url: "", meet_link: null, phone: null, lawyer_whatsapp: null, manager_whatsapp: null } } });
     renderAt("/appointments/settings");
     const menu = await screen.findByRole("tablist", { name: "أقسام الإعدادات" });
-    expect(within(menu).getAllByRole("tab").map((t) => t.textContent)).toEqual(["ساعات الشغل", "الحجز من واتساب", "بيانات المكتب والدفع"]);
+    expect(within(menu).getAllByRole("tab").map((t) => t.textContent)).toEqual(["ساعات العمل", "الحجز من واتساب", "بيانات المكتب والدفع"]);
     fireEvent.click(within(menu).getByRole("tab", { name: "بيانات المكتب والدفع" }));
     expect(((await screen.findByLabelText("عنوان InstaPay")) as HTMLInputElement).value).toBe("hazem@instapay");
-    expect(screen.getByRole("link", { name: "رجوع للمواعيد" }).getAttribute("href")).toBe("/appointments");
+    expect(screen.getByRole("link", { name: "العودة إلى المواعيد" }).getAttribute("href")).toBe("/appointments");
     cleanup();
     vi.restoreAllMocks();
 
@@ -286,6 +286,6 @@ describe("TASK 08 booking", () => {
     const staffMenu = await screen.findByRole("tablist", { name: "أقسام الإعدادات" });
     expect(within(staffMenu).getByRole("tab", { name: "الحجز من واتساب" })).toBeTruthy();
     expect(within(staffMenu).queryByRole("tab", { name: "بيانات المكتب والدفع" })).toBeNull();
-    expect(within(staffMenu).getByRole("tab", { name: "ساعات الشغل" }).getAttribute("aria-selected")).toBe("true");
+    expect(within(staffMenu).getByRole("tab", { name: "ساعات العمل" }).getAttribute("aria-selected")).toBe("true");
   });
 });

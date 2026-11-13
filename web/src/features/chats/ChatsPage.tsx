@@ -36,8 +36,8 @@ export function ChatsPage() {
           <Icon name="whatsapp" className="size-8" />
         </span>
         <p className="max-w-md text-[14px] leading-relaxed text-ink-soft">
-          محادثات العملاء والرد عليهم في <strong className="text-ink">Chatwoot</strong>. بيفتح في تاب جديد وانت داخل على طول،
-          من غير كلمة سر تانية.
+          محادثات العملاء والرد عليها في <strong className="text-ink">Chatwoot</strong>. يُفتح في تبويب جديد مع تسجيل دخولك تلقائيًا،
+          دون كلمة مرور أخرى.
         </p>
         <Button variant="primary" busy={state.busy} onClick={async () => {
           setState({ busy: true });

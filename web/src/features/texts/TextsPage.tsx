@@ -8,8 +8,8 @@ import { Button, Chip, ErrorState, Loading } from "../../shared/ui/ui";
 import { toast } from "../../shared/ui/feedback";
 
 const ERRORS: Record<string, string> = {
-  too_long: "النص أطول من الحد المسموح للرسالة دي.",
-  placeholder: "النص فيه {{...}}: اكتب الكلام نفسه، مش مكان فاضي.",
+  too_long: "النص أطول من الحد المسموح به لهذه الرسالة.",
+  placeholder: "يحتوي النص على {{...}}: اكتب النص نفسه، لا موضعًا فارغًا.",
 };
 
 /**
@@ -40,7 +40,7 @@ export function TextsPage() {
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-[26px] leading-tight font-bold">نصوص حازم</h1>
               {texts.data ? (
-                <span className="tabular rounded-full border border-gold-line bg-gold-tint px-2.5 py-0.5 text-[12.5px] font-bold text-gold-ink">{texts.data.length} نص</span>
+                <span className="tabular rounded-full border border-gold-line bg-gold-tint px-2.5 py-0.5 text-[12.5px] font-bold text-gold-ink">عدد النصوص: {texts.data.length}</span>
               ) : null}
             </div>
           </div>
@@ -49,11 +49,11 @@ export function TextsPage() {
 
       <div className="liquid flex min-h-12 max-w-xl items-center gap-2 rounded-full px-4">
         <Icon name="search" className="size-4 shrink-0 text-gold-ink" />
-        <input className="min-h-11 min-w-0 flex-1 bg-transparent text-ink outline-none placeholder:text-ink-soft" placeholder="دوّر في النصوص..." aria-label="دوّر في النصوص"
+        <input className="min-h-11 min-w-0 flex-1 bg-transparent text-ink outline-none placeholder:text-ink-soft" placeholder="ابحث في النصوص..." aria-label="ابحث في النصوص"
           value={q} onChange={(e) => setQ(e.target.value)} />
         {q ? (
           <button type="button" onClick={() => setQ("")} className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[13px] text-ink-soft hover:bg-card-2 hover:text-ink">
-            <Icon name="x" className="size-4" /> امسح البحث
+            <Icon name="x" className="size-4" /> مسح البحث
           </button>
         ) : null}
       </div>
@@ -63,7 +63,7 @@ export function TextsPage() {
           <span className="grid size-14 place-items-center rounded-full bg-gradient-to-br from-gold-tint to-card text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.6)]">
             <Icon name="search" className="size-7" />
           </span>
-          <p className="text-[16px] font-bold">{q.trim() ? "مفيش نص فيه الكلام ده" : "مفيش نصوص لسه"}</p>
+          <p className="text-[16px] font-bold">{q.trim() ? "لا يوجد نص يحتوي على هذه العبارة" : "لا توجد نصوص بعد"}</p>
         </div>
       ) : (
         <ul className="grid gap-3">
@@ -80,7 +80,7 @@ function TextCard({ text }: { text: ApprovedText }) {
   const [history, setHistory] = useState(false);
   const save = useMutation({
     mutationFn: () => api<{ version: number }>("POST", `/texts/${text.key}`, { text: draft }),
-    onSuccess: () => { setDraft(null); void qc.invalidateQueries({ queryKey: ["texts"] }); void qc.invalidateQueries({ queryKey: ["text", text.key] }); toast("النص اتحفظ ✅"); },
+    onSuccess: () => { setDraft(null); void qc.invalidateQueries({ queryKey: ["texts"] }); void qc.invalidateQueries({ queryKey: ["text", text.key] }); toast("تم حفظ النص ✅"); },
   });
   const length = draft?.length ?? 0;
   const error = save.error instanceof ApiError && save.error.code ? ERRORS[save.error.code] ?? errorMessage(save.error) : undefined;
@@ -103,12 +103,12 @@ function TextCard({ text }: { text: ApprovedText }) {
         <>
           {/* the words as the client reads them: a message bubble */}
           <div className="grid gap-1">
-            <span className="flex items-center gap-1 text-[11.5px] text-ink-soft"><Icon name="whatsapp" className="size-3.5" />حازم بيقول</span>
+            <span className="flex items-center gap-1 text-[11.5px] text-ink-soft"><Icon name="whatsapp" className="size-3.5" />يقول حازم</span>
             <p className="font-display max-w-3xl rounded-[18px] rounded-ss-[6px] border border-line/60 bg-gold-tint/50 px-4 py-3 text-lg leading-relaxed whitespace-pre-wrap shadow-[inset_0_1px_0_rgb(255_255_255/0.4)]">{text.text}</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button onClick={() => setDraft(text.text)}>عدّل</Button>
-            {text.versions > 1 ? <Button variant="ghost" onClick={() => setHistory((h) => !h)}>{history ? "اخفي النسخ القديمة" : `النسخ القديمة (${text.versions - 1})`}</Button> : null}
+            <Button onClick={() => setDraft(text.text)}>تعديل</Button>
+            {text.versions > 1 ? <Button variant="ghost" onClick={() => setHistory((h) => !h)}>{history ? "إخفاء النسخ السابقة" : `النسخ السابقة (${text.versions - 1})`}</Button> : null}
           </div>
         </>
       ) : (
@@ -119,12 +119,12 @@ function TextCard({ text }: { text: ApprovedText }) {
             <span aria-hidden className="block h-1.5 w-32 overflow-hidden rounded-full bg-line/80">
               <span className={`block h-1.5 rounded-full ${over ? "bg-red" : "bg-gradient-to-l from-[#dcb98c] to-[#a87a48]"}`} style={{ width: `${Math.min(100, (length / text.max_chars) * 100)}%` }} />
             </span>
-            <span className={`tabular text-xs ${over ? "text-bad" : "text-ink-soft"}`}>{length} من {text.max_chars} حرف</span>
+            <span className={`tabular text-xs ${over ? "text-bad" : "text-ink-soft"}`}>عدد الأحرف: {length} من {text.max_chars}</span>
           </div>
           {error ? <p className="text-sm text-bad" role="alert">{error}</p> : save.isError ? <p className="text-sm text-bad" role="alert">{errorMessage(save.error)}</p> : null}
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="primary" busy={save.isPending} disabled={!draft.trim() || over || draft.trim() === text.text}
-              onClick={() => save.mutate()}>احفظ نسخة جديدة</Button>
+              onClick={() => save.mutate()}>حفظ نسخة جديدة</Button>
             <Button variant="ghost" onClick={() => { setDraft(null); save.reset(); }}>إلغاء</Button>
           </div>
         </div>
@@ -147,7 +147,7 @@ function History({ textKey }: { textKey: string }) {
   const versions = useQuery({ queryKey: ["text", textKey], queryFn: () => api<TextVersion[]>("GET", `/texts/${textKey}`) });
   const activate = useMutation({
     mutationFn: (version: number) => api<void>("POST", `/texts/${textKey}/versions/${version}/activate`),
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["texts"] }); void qc.invalidateQueries({ queryKey: ["text", textKey] }); toast("النسخة دي بقت الشغالة ✅"); },
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["texts"] }); void qc.invalidateQueries({ queryKey: ["text", textKey] }); toast("أصبحت هذه النسخة هي المُفعَّلة ✅"); },
   });
   if (versions.isPending) return <Loading />;
   if (versions.isError) return <ErrorState message={errorMessage(versions.error)} onRetry={() => void versions.refetch()} />;
@@ -160,7 +160,7 @@ function History({ textKey }: { textKey: string }) {
               نسخة {v.version}{sourceLabel(v.source) ? ` · ${sourceLabel(v.source)}` : ""}{v.updated_by ? ` · ${v.updated_by}` : ""} · {cairoWhen(v.updated_at)}
             </span>
             <p className="whitespace-pre-wrap text-sm">{v.text}</p>
-            <div><Button variant="ghost" busy={activate.isPending && activate.variables === v.version} onClick={() => activate.mutate(v.version)}>رجّع النسخة دي</Button></div>
+            <div><Button variant="ghost" busy={activate.isPending && activate.variables === v.version} onClick={() => activate.mutate(v.version)}>استعادة هذه النسخة</Button></div>
           </li>
         ))}
       </ol>

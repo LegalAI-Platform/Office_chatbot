@@ -56,12 +56,12 @@ export function ChangePasswordPage() {
         <div className="grid gap-2.5 rounded-[16px] border border-gold-line/70 bg-gold-tint/60 px-4 py-3 text-sm">
           <p className="flex items-center gap-2 font-bold text-gold-ink">
             <Icon name="key" className="size-4 shrink-0" />
-            {first ? `أهلًا يا ${first} 👋` : "أهلًا بحضرتك 👋"}
+            {first ? `مرحبًا ${first} 👋` : "مرحبًا 👋"}
           </p>
-          <p>دي أول مرة تدخل، وكلمة السر اللي دخلت بيها مؤقتة من المدير. خطوتين بس وتكمّل:</p>
+          <p>هذا أول دخول لك، وكلمة السر التي دخلت بها مؤقتة من المدير. أكمل خطوتين فقط:</p>
           <ol className="grid gap-1 ps-1">
-            <Step n={1}>اكتب كلمة السر المؤقتة اللي المدير ادّاهالك.</Step>
-            <Step n={2}>اختار كلمة سر جديدة بتاعتك (محدش غيرك هيعرفها).</Step>
+            <Step n={1}>اكتب كلمة السر المؤقتة التي أعطاك إياها المدير.</Step>
+            <Step n={2}>اختر كلمة سر جديدة خاصة بك (لن يعرفها أحد غيرك).</Step>
           </ol>
         </div>
       ) : null}
@@ -71,15 +71,15 @@ export function ChangePasswordPage() {
         <PasswordField label="كلمة السر الجديدة" autoComplete="new-password"
           value={next} onChange={(e) => setNext(e.target.value)} />
         <Strength length={next.length} />
-        <PasswordField label="اكتبها تاني" autoComplete="new-password"
+        <PasswordField label="أعد كتابتها" autoComplete="new-password"
           value={repeat} onChange={(e) => setRepeat(e.target.value)} />
 
         {/* what the new password still needs: it ticks itself while it is typed */}
         <ul className="grid gap-1.5 rounded-[14px] border border-line/60 bg-card-2/50 px-3.5 py-3 text-[13px]" aria-label="شروط كلمة السر الجديدة">
-          <Rule ok={longEnough} started={next.length > 0}>{MIN_PASSWORD} حرف على الأقل{next.length > 0 && !longEnough ? ` (لسه ${MIN_PASSWORD - next.length})` : ""}</Rule>
-          <Rule ok={differs} started={next.length > 0}>غير كلمة السر المؤقتة أو الحالية</Rule>
-          <Rule ok={same} started={repeat.length > 0}>الاتنين زي بعض</Rule>
-          <li className="pt-0.5 text-[12px] text-ink-soft">جملة طويلة سهل تفتكرها أحسن من كلمة معقدة.</li>
+          <Rule ok={longEnough} started={next.length > 0}>{MIN_PASSWORD} حرفًا على الأقل{next.length > 0 && !longEnough ? ` (يتبقى ${MIN_PASSWORD - next.length})` : ""}</Rule>
+          <Rule ok={differs} started={next.length > 0}>مختلفة عن كلمة السر المؤقتة أو الحالية</Rule>
+          <Rule ok={same} started={repeat.length > 0}>الكلمتان متطابقتان</Rule>
+          <li className="pt-0.5 text-[12px] text-ink-soft">العبارة الطويلة السهلة التذكّر أفضل من الكلمة المعقدة.</li>
         </ul>
 
         {error ? <Notice>{error}</Notice> : null}
@@ -120,7 +120,7 @@ function Rule({ ok, started, children }: { ok: boolean; started: boolean; childr
         {ok ? <Icon name="check" className="size-3" /> : null}
       </span>
       <span>{children}</span>
-      <span className="sr-only">{ok ? "تمام" : "لسه"}</span>
+      <span className="sr-only">{ok ? "مستوفى" : "غير مستوفى"}</span>
     </li>
   );
 }

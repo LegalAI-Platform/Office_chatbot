@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router";
 import { useAlerts, useAlertStream, useMarkAlertsRead } from "../shared/api/alerts";
 import type { PanelAlert } from "../shared/api/types";
 import { useDashboard } from "../shared/api/dashboard";
 import { avatarUrl, can, useLogout, useMe } from "../shared/api/session";
 import { ALERT_KINDS, label, ROLES } from "../shared/lib/labels";
+import { countWords, firstAndMore, groupByClient, LATE_TASKS, NEW_ALERTS, thingsWords } from "../shared/lib/group";
 import { alertLine, notifyState, testNotification, useAlertNotifications } from "../shared/lib/notify";
 import { cairoLongDate, cairoTime, timeAgo } from "../shared/lib/time";
 import { Avatar } from "../shared/ui/Avatar";
@@ -34,7 +36,7 @@ export function Layout() {
   // tour: what the tour's bubbles point at (app/tourSteps.ts), on the side bar and on the phone's tab bar alike
   const groups: { title: string; items: Item[]; tour?: string }[] = [
     {
-      title: "الشغل اليومي",
+      title: "العمل اليومي",
       items: [
         { to: "/tasks", text: "الطلبات / المهام", short: "المهام", icon: "nav_tasks", dot: late > 0, tour: "nav-tasks" },
         { to: "/appointments", text: "المواعيد", short: "المواعيد", icon: "nav_appointments", tour: "nav-appointments" },
@@ -43,7 +45,7 @@ export function Layout() {
       ],
     },
     {
-      title: "الفلوس والخدمات",
+      title: "المالية والخدمات",
       tour: "nav-money",
       items: [
         { to: "/receipts", text: "الإيصالات والمدفوعات", short: "الإيصالات", icon: "receipt" },
@@ -74,7 +76,7 @@ export function Layout() {
   return (
     <div className="min-h-dvh lg:grid lg:grid-cols-[16.5rem_minmax(0,1fr)]">
       <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:m-2 focus:rounded-full focus:bg-side focus:px-4 focus:py-2 focus:text-side-ink">
-        روح للمحتوى
+        انتقل إلى المحتوى
       </a>
 
       {/* computer: the black side bar */}
@@ -84,11 +86,11 @@ export function Layout() {
         {/* a thin gold line along the bar's inner edge */}
         <span aria-hidden className="pointer-events-none absolute inset-y-0 end-0 z-20 w-px bg-gradient-to-b from-transparent via-gold/45 to-transparent" />
         {/* the seal and the name on plain black (the owner kept this part as it was) */}
-        <div className="relative z-10 grid justify-items-center gap-1 px-3 pt-5 pb-4 text-center">
+        <HomeLogo className="relative z-10 grid justify-items-center gap-1 rounded-2xl px-3 pt-5 pb-4 text-center transition hover:bg-white/5 focus-visible:outline-2 focus-visible:outline-gold">
           <OwnerImg name="logo_emblem" className="size-[5.5rem]" />
-          <p className="mt-1 text-[16px] leading-tight font-bold text-white">مكتب سعد فتحي سعد</p>
-          <p className="text-[12px] text-side-ink/80">للمحاماة والاستشارات القانونية</p>
-        </div>
+          <span className="mt-1 text-[16px] leading-tight font-bold text-white">مكتب سعد فتحي سعد</span>
+          <span className="text-[12px] text-side-ink/80">للمحاماة والاستشارات القانونية</span>
+        </HomeLogo>
         <nav aria-label="التنقل" className="relative z-10 flex min-h-0 flex-1 flex-col px-2.5 pb-3">
           <div className="soft-scroll grid min-h-0 grid-cols-[minmax(0,1fr)] content-start gap-1 overflow-x-hidden overflow-y-auto px-0.5">
             <SideLink item={home} />
@@ -181,7 +183,7 @@ function PhoneMore({ groups, settings }: { groups: { title: string; items: Item[
         المزيد
       </button>
       {open ? (
-        <div id="more-sheet" ref={sheet} role="dialog" aria-label="باقي الصفحات" tabIndex={-1}
+        <div id="more-sheet" ref={sheet} role="dialog" aria-label="بقية الصفحات" tabIndex={-1}
           onClick={(e) => { if ((e.target as HTMLElement).closest("a")) setOpen(false); }}
           className="soft-scroll absolute inset-x-0 bottom-full max-h-[70dvh] overflow-y-auto rounded-t-[22px] border-t border-white/10 bg-side px-3 pt-2 pb-3 text-side-ink shadow-[0_-18px_40px_-12px_rgb(0_0_0/0.6)] outline-none transition duration-200 ease-out starting:translate-y-4 starting:opacity-0">
           <span aria-hidden className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-l from-transparent via-gold/55 to-transparent" />
@@ -223,7 +225,7 @@ function SideLink({ item: i }: { item: Item }) {
           </span>
           <span className="min-w-0 flex-1 truncate [text-shadow:0_1px_3px_rgb(0_0_0/0.7)]">{i.text}</span>
           {i.badge ? <span className="grid size-6 place-items-center rounded-full bg-red text-[12px] font-bold text-white">{i.badge}</span> : null}
-          {i.dot ? <span className="size-2 rounded-full bg-red shadow-[0_0_0_3px_rgb(239_68_68/0.2),0_0_10px_rgb(239_68_68/0.8)]" aria-label="فيه مهام متأخرة" role="img" /> : null}
+          {i.dot ? <span className="size-2 rounded-full bg-red shadow-[0_0_0_3px_rgb(239_68_68/0.2),0_0_10px_rgb(239_68_68/0.8)]" aria-label="توجد مهام متأخرة" role="img" /> : null}
           {isActive ? null : <Icon name="chevron-start" className="size-3.5 shrink-0 text-side-soft opacity-0 transition group-hover:opacity-100" />}
         </>
       )}
@@ -254,9 +256,9 @@ function TopBar({ late }: { late: number }) {
       style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
       <span aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-l from-transparent via-gold/50 to-transparent" />
       <div className="flex min-h-[4.6rem] items-center gap-3 px-4 lg:gap-4 lg:px-7">
-        <Link to="/" className="lg:hidden" aria-label="الرئيسية">
+        <HomeLogo className="lg:hidden">
           <OwnerImg name="logo_emblem" className="size-11" />
-        </Link>
+        </HomeLogo>
         <Clock />
         <Bell late={late} />
         <Search />
@@ -267,6 +269,25 @@ function TopBar({ late }: { late: number }) {
 }
 
 /** TASK 07c: the office's alerts (overdue, urgent, a client asking for someone) that this person may see. */
+/**
+ * The office's logo (the side bar's seal and name, the phone's top bar): back to the home page with everything asked again,
+ * like a refresh without reloading the page (the tester: «when I press the logo it refreshes and gets me back on the main
+ * page»). On the home page already, it only asks again and goes back to the top.
+ */
+function HomeLogo({ className, children }: { className: string; children: ReactNode }) {
+  const qc = useQueryClient();
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const refresh = (e: ReactMouseEvent) => {
+    if (e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return; // a new tab or window: the browser's own
+    e.preventDefault();
+    if (pathname !== "/") void navigate("/");
+    window.scrollTo({ top: 0 });
+    void qc.invalidateQueries();
+  };
+  return <Link to="/" onClick={refresh} aria-label="الرئيسية: تحديث الصفحة" title="الرئيسية" className={className}>{children}</Link>;
+}
+
 function Bell({ late }: { late: number }) {
   const alerts = useAlerts();
   const read = useMarkAlertsRead();
@@ -324,7 +345,7 @@ function Bell({ late }: { late: number }) {
       <button type="button" data-tour="bell" aria-expanded={open} aria-haspopup="dialog" onClick={() => setOpen((v) => !v)}
         className={`relative grid size-11 place-items-center rounded-full border text-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.4),0_2px_8px_rgb(0_0_0/0.04)] transition duration-200
           ${open ? "border-gold-line bg-card text-gold-ink" : "border-line/80 bg-card/70 hover:border-gold-line hover:bg-card hover:text-gold-ink"}`}
-        aria-label={unreadRequests > 0 ? `${unreadRequests} تنبيهات جديدة` : late > 0 ? `${late} مهام متأخرة` : unreadSystem > 0 ? "التنبيهات، وفيه مشاكل جديدة في السيستم" : "التنبيهات"}>
+        aria-label={unreadRequests > 0 ? countWords(unreadRequests, NEW_ALERTS) : late > 0 ? countWords(late, LATE_TASKS) : unreadSystem > 0 ? "التنبيهات، وتوجد مشكلات جديدة في النظام" : "التنبيهات"}>
         <Icon name="bell" className="size-[22px]" />
         {unreadRequests > 0 ? (
           <>
@@ -342,7 +363,7 @@ function Bell({ late }: { late: number }) {
             <span className="font-bold">التنبيهات</span>
             {unread > 0 ? (
               <button type="button" className="text-xs font-semibold text-gold-ink hover:underline" onClick={() => read.mutate(undefined)}>
-                علّم الكل مقروء
+                تحديد الكل كمقروء
               </button>
             ) : null}
           </div>
@@ -350,36 +371,56 @@ function Bell({ late }: { late: number }) {
             <button type="button" onClick={allow}
               className="mx-1 flex items-center gap-2 rounded-lg border border-gold-line bg-gold-tint px-2.5 py-2 text-start text-xs font-semibold text-gold-ink hover:brightness-105">
               <Icon name="bell" className="size-4 shrink-0" />
-              شغّل إشعارات الويندوز علشان التنبيهات توصلك وإنت في تاب تاني
+              فعّل إشعارات ويندوز لتصلك التنبيهات وأنت في تبويب آخر
             </button>
           ) : perm === "granted" ? (
             <button type="button" onClick={() => testNotification()}
               className="mx-1 flex w-fit items-center gap-2 rounded-lg px-2.5 py-1.5 text-start text-xs font-semibold text-gold-ink hover:bg-muted">
               <Icon name="bell" className="size-4 shrink-0" />
-              جرّب إشعار الويندوز
+              جرّب إشعار ويندوز
             </button>
           ) : perm === "denied" ? (
             <p className="mx-1 rounded-lg bg-muted px-2.5 py-2 text-xs leading-relaxed text-ink-soft">
-              إشعارات الويندوز مقفولة للوحة. تفتحها من العلامة اللي جنب عنوان الموقع فوق، وبعدها «الإشعارات»، وبعدها «سماح».
+              إشعارات ويندوز معطّلة لهذه اللوحة. لتفعيلها، اضغط العلامة المجاورة لعنوان الموقع في الأعلى، ثم «الإشعارات»، ثم «سماح».
             </p>
           ) : null}
           {items.length === 0 ? (
-            <p className="px-2 py-6 text-center text-sm text-ink-soft">مفيش تنبيهات.</p>
+            <p className="px-2 py-6 text-center text-sm text-ink-soft">لا توجد تنبيهات.</p>
           ) : (
             <div className="grid max-h-[60vh] content-start gap-1.5 overflow-y-auto">
               {requests.length ? (
-                <ul aria-label="الطلبات" className="grid gap-0.5">{requests.map(row)}</ul>
+                // fix/alert-flood: one client's alerts are one row that opens (a booking makes several at once)
+                <ul aria-label="الطلبات" className="grid gap-0.5">
+                  {groupByClient(requests, (a) => (a.client_name || a.phone_last3 ? `${a.client_name ?? ""}|${a.phone_last3 ?? ""}` : undefined))
+                    .map((g) => (g.items.length === 1 ? row(g.items[0]!) : (
+                      <li key={g.key}>
+                        <details className="group rounded-lg open:bg-muted/50">
+                          <summary className="grid cursor-pointer list-none gap-0.5 rounded-lg px-2.5 py-2 text-start hover:bg-muted [&::-webkit-details-marker]:hidden">
+                            <span className="flex items-center gap-2 text-sm font-bold">
+                              {g.items.some((a) => !a.read) ? <span className="size-2 shrink-0 rounded-full bg-red" aria-label="جديد" role="img" /> : null}
+                              <span className="truncate">{g.items[0]!.client_name ?? "رقم بلا اسم"}</span>
+                              <span className="shrink-0 rounded-full bg-gold-tint px-1.5 py-px text-[11px] font-semibold text-gold-ink">{thingsWords(g.items.length)}</span>
+                              <span className="ms-auto shrink-0 text-[11px] font-normal text-ink-soft">{timeAgo(g.items[0]!.created_at, now)}</span>
+                              <Icon name="chevron-down" className="size-4 shrink-0 text-ink-soft transition group-open:rotate-180" />
+                            </span>
+                            <span className="truncate text-xs text-ink-soft">{firstAndMore(g.items.map((a) => a.task_type))}</span>
+                          </summary>
+                          <ul className="grid gap-0.5 ps-3 pb-1">{g.items.map(row)}</ul>
+                        </details>
+                      </li>
+                    )))}
+                </ul>
               ) : (
-                <p className="px-2 py-3 text-center text-sm text-ink-soft">مفيش طلبات.</p>
+                <p className="px-2 py-3 text-center text-sm text-ink-soft">لا توجد طلبات.</p>
               )}
               {system.length ? (
                 // folded under the requests while there are any; open when it is all there is
                 <details className="mx-1 rounded-lg border border-line/60" open={requests.length === 0}>
                   <summary className="flex cursor-pointer items-center gap-2 px-2 py-1.5 text-xs font-semibold text-ink-soft hover:text-ink">
-                    مشاكل السيستم
+                    مشكلات النظام
                     {unreadSystem > 0 ? <span className="rounded-full bg-gold-tint px-1.5 py-px text-[11px] text-gold-ink">{unreadSystem} جديدة</span> : null}
                   </summary>
-                  <ul aria-label="مشاكل السيستم" className="grid gap-0.5 pb-1">{system.map(row)}</ul>
+                  <ul aria-label="مشكلات النظام" className="grid gap-0.5 pb-1">{system.map(row)}</ul>
                 </details>
               ) : null}
             </div>
@@ -464,13 +505,13 @@ function UserMenu() {
             </span>
           </div>
           <Row icon="account" hint="بياناتك وصورتك" onClick={() => go("/account")}>حسابي</Row>
-          <Row icon="key" hint="غيّرها كل فترة" onClick={() => go("/change-password")}>تغيير كلمة السر</Row>
+          <Row icon="key" hint="غيّرها من حين لآخر" onClick={() => go("/change-password")}>تغيير كلمة السر</Row>
           {can(me, "users.manage") ? <Row icon="users" hint="حسابات المكتب وصلاحياتها" onClick={() => go("/users")}>الحسابات</Row> : null}
-          <Row icon="play" hint="جولة سريعة على اللوحة" onClick={() => go(TOUR_REPLAY)}>اعرض الجولة تاني</Row>
+          <Row icon="play" hint="جولة سريعة على اللوحة" onClick={() => go(TOUR_REPLAY)}>إعادة عرض الجولة</Row>
           <div className="mx-1 my-1 h-px bg-gradient-to-l from-transparent via-line to-transparent" aria-hidden />
           <div className="grid gap-2 px-2.5 pt-0.5 pb-1.5">
             <span className="flex items-center gap-1.5 text-[11.5px] font-semibold text-ink-soft" id="look-label">
-              <Icon name="sun" className="size-3.5" />الشكل
+              <Icon name="sun" className="size-3.5" />المظهر
             </span>
             <ThemePicker labelledBy="look-label" />
           </div>
@@ -530,7 +571,7 @@ function Search() {
         hover:border-gold-line focus-within:border-gold focus-within:bg-card focus-within:shadow-[0_0_0_4px_rgb(176_133_82/0.16)] lg:max-w-[36rem]">
       <Icon name="search" className="size-[18px] shrink-0 text-ink-soft transition-colors group-focus-within/search:text-gold-ink" />
       {/* a phone shows the start of the hint, ending in «…» */}
-      <input ref={input} type="search" aria-label="بحث" placeholder="ابحث عن عميل، ميعاد، مهمة، أو رقم قضية..."
+      <input ref={input} type="search" aria-label="بحث" placeholder="ابحث عن عميل أو موعد أو مهمة أو رقم قضية..."
         className="min-h-10 min-w-0 flex-1 bg-transparent text-[14px] outline-none placeholder:text-ink-soft/80 max-lg:text-ellipsis" />
       <button type="button" onClick={() => setPalette(true)} aria-label="اختصارات وبحث (Ctrl K)"
         className="hidden shrink-0 items-center gap-1 rounded-full px-1.5 py-1 font-sans text-[11px] font-semibold text-ink-soft transition hover:bg-card-2 sm:flex" dir="ltr">

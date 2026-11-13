@@ -12,10 +12,10 @@ export function SetupTwoFactorPage() {
   const done = me ? !me.two_factor_required : false;
 
   return (
-    <AuthLayout title="شغّل التحقق بخطوتين"
-      subtitle="حسابك بيقدر يدير كل الحسابات، فلازم يبقى محمي بالموبايل كمان. خطوة واحدة وبعدها تكمّل.">
+    <AuthLayout title="تفعيل التحقق بخطوتين"
+      subtitle="يستطيع حسابك إدارة كل الحسابات، لذا يجب حمايته بالهاتف أيضًا. خطوة واحدة ثم تتابع.">
       <TwoFactorCard />
-      <Button variant="primary" disabled={!done} onClick={() => navigate("/", { replace: true })}>كمّل للوحة</Button>
+      <Button variant="primary" disabled={!done} onClick={() => navigate("/", { replace: true })}>المتابعة إلى اللوحة</Button>
       <button type="button" className="text-sm font-semibold text-gold-ink hover:underline"
         onClick={async () => { await logout(); navigate("/login", { replace: true }); }}>
         خروج

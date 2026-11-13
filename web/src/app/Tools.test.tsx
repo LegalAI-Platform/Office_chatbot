@@ -50,7 +50,7 @@ describe("TASK 07c tools", () => {
       "POST /alerts/read": { status: 204 },
     });
     const router = renderAt("/");
-    const bell = await screen.findByRole("button", { name: "1 تنبيهات جديدة" });
+    const bell = await screen.findByRole("button", { name: "تنبيه جديد" });
     fireEvent.click(bell);
     const dialog = screen.getByRole("dialog", { name: "التنبيهات" });
     fireEvent.click(within(dialog).getByRole("button", { name: /طلب عاجل/ }));
@@ -66,13 +66,13 @@ describe("TASK 07c tools", () => {
     fireEvent.keyDown(document, { key: "k", ctrlKey: true });
     const dialog = await screen.findByRole("dialog", { name: "اختصارات وبحث" });
     expect(within(dialog).queryByText("التقارير")).toBeNull(); // a staff member has no reports.view
-    const box = within(dialog).getByRole("textbox", { name: "دوّر أو اختار" });
+    const box = within(dialog).getByRole("textbox", { name: "ابحث أو اختر" });
     fireEvent.change(box, { target: { value: "مهام" } });
     fireEvent.keyDown(box, { key: "ArrowDown" }); // past «دوّر في المهام عن…» to the first page found
     fireEvent.keyDown(box, { key: "Enter" });
     expect(router.state.location.pathname).toBe("/tasks");
     fireEvent.keyDown(document, { key: "k", ctrlKey: true });
-    const again = within(await screen.findByRole("dialog", { name: "اختصارات وبحث" })).getByRole("textbox", { name: "دوّر أو اختار" });
+    const again = within(await screen.findByRole("dialog", { name: "اختصارات وبحث" })).getByRole("textbox", { name: "ابحث أو اختر" });
     fireEvent.change(again, { target: { value: "سارة" } });
     fireEvent.keyDown(again, { key: "Enter" });
     expect(router.state.location.search).toBe(`?q=${encodeURIComponent("سارة")}`);
@@ -112,21 +112,21 @@ describe("TASK 07c tools", () => {
     expect(within(ratings).getByText("منى سعيد")).toBeTruthy();
     expect(within(ratings).getAllByText("مراجعة عقد")).toHaveLength(2);
     // v1.39 (TASK 16, 3.4): «محادثات محتاجة مراجعة», the alarm first
-    const review = screen.getByRole("region", { name: "محادثات محتاجة مراجعة" });
+    const review = screen.getByRole("region", { name: "محادثات تحتاج إلى مراجعة" });
     const rows = within(review).getAllByRole("row").slice(1);
     expect(rows[0]!.textContent).toContain("عرض مدفوع لعميل دفع");
-    expect(rows[0]!.textContent).toContain("رقم من غير اسم");
+    expect(rows[0]!.textContent).toContain("رقم بلا اسم");
     expect(rows[1]!.textContent).toContain("ابو عماد");
-    expect(rows[1]!.textContent).toContain("الرد اتكرر");
+    expect(rows[1]!.textContent).toContain("تكرّر الرد");
     // v1.53 (B-34, layer 6): «ردود حازم الحرة», what went and what was refused and why
     const free = screen.getByRole("region", { name: "ردود حازم الحرة" });
     const said = within(free).getAllByRole("row").slice(1);
     expect(said[0]!.textContent).toContain("متقلقش يا فندم");
-    expect(said[1]!.textContent).toContain("اترفض: وعد المكتب ما يقدرش يضمنه");
+    expect(said[1]!.textContent).toContain("رُفض: وعد لا يستطيع المكتب ضمانه");
     const summary = within(free).getByTestId("written-summary").textContent ?? "";
-    expect(summary).toContain("كتب حازم 8 رد");
+    expect(summary).toContain("عدد الردود التي كتبها حازم هذا الشهر: 8");
     expect(summary).toContain("(25%)"); // 2 of 8 went back to the approved words
-    expect(summary).toContain("المراجِع اتأخر (1)");
+    expect(summary).toContain("تأخّر المراجِع (1)");
   });
 
   it("v1.58: the AI cost by conversation, and by message when a row is opened", async () => {
@@ -144,14 +144,14 @@ describe("TASK 07c tools", () => {
     renderAt("/reports");
     const section = await screen.findByRole("region", { name: "تكلفة المحادثات" });
     expect(await within(section).findByText("$0.420")).toBeTruthy(); // the month's spend (once it loaded)
-    expect(within(section).getByText("$0.210 للمحادثة")).toBeTruthy();
+    expect(within(section).getByText("$0.210 لكل محادثة")).toBeTruthy();
     const rows = within(section).getAllByRole("row").slice(1);
     expect(rows[0]!.textContent).toContain("ابو عماد");
     expect(rows[0]!.textContent).toContain("$0.310");
-    expect(rows[1]!.textContent).toContain("رقم من غير اسم");
+    expect(rows[1]!.textContent).toContain("رقم بلا اسم");
     expect(rows[1]!.textContent).toContain("+"); // a call with no known price
     fireEvent.click(within(section).getByRole("button", { name: "ابو عماد" }));
-    const turn = await within(section).findByLabelText("رسايل المحادثة");
+    const turn = await within(section).findByLabelText("رسائل المحادثة");
     expect(turn.textContent).toContain("فهم الرسالة");
     expect(turn.textContent).toContain("كتابة الرد");
     expect(turn.textContent).toContain("$0.0123");
@@ -181,9 +181,9 @@ describe("TASK 07c tools", () => {
     renderAt("/reports");
     const card = await screen.findByRole("region", { name: "حسب الخدمة" });
     const rows = within(card).getAllByRole("row").slice(1);
-    expect(rows[0]!.textContent).toContain("عقد عرفي (شهود المكتب)");
+    expect(rows[0]!.textContent).toContain("عقد زواج عرفي (شهود المكتب)");
     expect(rows[0]!.textContent).toContain("5,000");
-    expect(rows[1]!.textContent).toContain("تليفون أو فيديو");
+    expect(rows[1]!.textContent).toContain("هاتفيًا أو بالفيديو");
     expect(rows[1]!.textContent).toContain("500");
     expect(rows[1]!.textContent).toContain("3,000");
     expect(rows[2]!.textContent).toContain("مراجعة عقد");
@@ -199,8 +199,8 @@ describe("TASK 07c tools", () => {
       "GET /reports/trend": { body: { months: Array.from({ length: 12 }, (_, i) => ({ month: `2026-${String(i + 1).padStart(2, "0")}`, received: i === 10 ? 9500 : 0, booked: i === 10 ? 7 : 0 })) } },
     });
     renderAt("/reports");
-    const months = await screen.findByRole("region", { name: "الفلوس اللي وصلت كل شهر" });
-    expect(await within(months).findByText(/2026: 9,500 جنيه، 7 حجز/)).toBeTruthy(); // November, said to a screen reader too
+    const months = await screen.findByRole("region", { name: "المبالغ المُستلَمة كل شهر" });
+    expect(await within(months).findByText(/2026: 9,500 جنيه، الحجوزات: 7/)).toBeTruthy(); // November, said to a screen reader too
     fireEvent.click(screen.getByRole("button", { name: "يوم" }));
     await waitFor(() => expect(calls.some((c) => c.path === "/reports" && /from=\d{4}-\d{2}-\d{2}&to=\d{4}-\d{2}-\d{2}/.test(c.url))).toBe(true));
     fireEvent.click(screen.getByRole("button", { name: "سنة" }));
@@ -213,10 +213,10 @@ describe("TASK 07c tools", () => {
       "GET /texts": { body: [{ key: "welcome_ask_name", version: 1, text: "أهلًا", max_chars: 10, source: "DECISIONS", updated_at: "2026-10-20T10:00:00Z", versions: 1 }] },
     });
     renderAt("/texts");
-    fireEvent.click(await screen.findByRole("button", { name: "عدّل" }));
+    fireEvent.click(await screen.findByRole("button", { name: "تعديل" }));
     fireEvent.change(screen.getByLabelText("نص welcome_ask_name"), { target: { value: "نص طويل أكتر من عشرة" } });
-    expect(screen.getByText(/من 10 حرف/).className).toContain("text-bad");
-    expect((screen.getByRole("button", { name: "احفظ نسخة جديدة" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText(/عدد الأحرف: \d+ من 10/).className).toContain("text-bad");
+    expect((screen.getByRole("button", { name: "حفظ نسخة جديدة" }) as HTMLButtonElement).disabled).toBe(true);
     expect(calls.some((c) => c.method === "POST" && c.path.startsWith("/texts"))).toBe(false);
   });
 
@@ -238,14 +238,14 @@ describe("TASK 07c tools", () => {
       "DELETE /lists/e1": { status: 204 },
     });
     renderAt("/lists");
-    fireEvent.click(await screen.findByRole("button", { name: "شيل منى من القايمة" }));
+    fireEvent.click(await screen.findByRole("button", { name: "إزالة منى من القائمة" }));
     const dialog = await screen.findByRole("alertdialog");
-    expect(dialog.textContent).toContain("تشيل منى");
-    fireEvent.click(within(dialog).getByRole("button", { name: "لأ، ارجع" }));
+    expect(dialog.textContent).toContain("إزالة منى");
+    fireEvent.click(within(dialog).getByRole("button", { name: "إلغاء" }));
     await vi.waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
     expect(calls.some((c) => c.method === "DELETE")).toBe(false);
-    fireEvent.click(screen.getByRole("button", { name: "شيل منى من القايمة" }));
-    fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "أيوه، شيله" }));
+    fireEvent.click(screen.getByRole("button", { name: "إزالة منى من القائمة" }));
+    fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "نعم، أزِله" }));
     await vi.waitFor(() => expect(calls.some((c) => c.method === "DELETE" && c.path === "/lists/e1")).toBe(true));
   });
 });

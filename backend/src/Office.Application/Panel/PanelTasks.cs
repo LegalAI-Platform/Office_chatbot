@@ -290,7 +290,9 @@ public sealed class PanelTasks(IPanelTaskStore store, TimeProvider clock)
             UrgentByDay: urgentByDay,
             OverdueByDay: lateByDay,
             Recent: rows.OrderByDescending(t => t.CreatedAt).Take(4).Select(t => t with { Late = Late(t) }).ToList(),
-            Priority: active.OrderByDescending(Late).ThenByDescending(Urgent).ThenBy(t => t.DueAt).Take(5)
+            // fix/alert-flood: the home's one «محتاج منك» card (it replaced «التنبيهات الأخيرة» and «المهام العاجلة والمتأخرة»,
+            // which showed the same tasks twice) groups these by client, so it gets more of them than five
+            Priority: active.OrderByDescending(Late).ThenByDescending(Urgent).ThenBy(t => t.DueAt).Take(12)
                 .Select(t => t with { Late = Late(t) }).ToList());
     }
 

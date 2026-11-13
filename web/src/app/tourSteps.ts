@@ -41,60 +41,60 @@ export function tourSteps(me: Me): TourStep[] {
     "حسابك",
     "وكلمة السر",
     ...(can(me, "users.manage") ? ["وحسابات المكتب"] : []),
-    ...(can(me, "lists.manage") ? ["وقوايم المكتب"] : []),
+    ...(can(me, "lists.manage") ? ["وقوائم المكتب"] : []),
     ...(can(me, "texts.manage") ? ["ونصوص حازم وأدوات التجربة"] : []),
     "والأسعار",
   ];
   const steps: (TourStep | false)[] = [
     {
-      id: "welcome", icon: "seal", targets: [], next: "يلا نبدأ",
-      title: name ? `أهلًا بيك يا ${name}` : "أهلًا بيك",
-      body: () => "دي جولة سريعة تعرّفك على لوحة المكتب في أقل من دقيقة. تقدر تتخطاها في أي وقت.",
+      id: "welcome", icon: "seal", targets: [], next: "لنبدأ",
+      title: name ? `مرحبًا بك يا ${name}` : "مرحبًا بك",
+      body: () => "هذه جولة سريعة تعرّفك بلوحة المكتب في أقل من دقيقة. يمكنك تخطّيها في أي وقت.",
     },
     {
-      id: "kpis", icon: "trend-up", targets: ["home-kpis"], title: "أرقام النهارده",
-      body: () => "مواعيد اليوم، والإيصالات اللي مستنية تأكيد، والأمور العاجلة، والمهام المتأخرة. اضغط أي كارت يفتح تفاصيله.",
+      id: "kpis", icon: "trend-up", targets: ["home-kpis"], title: "أرقام اليوم",
+      body: () => "مواعيد اليوم، والإيصالات في انتظار التأكيد، والأمور العاجلة، والمهام المتأخرة. اضغط أي بطاقة لعرض تفاصيلها.",
     },
     {
       id: "tasks", icon: "tasks", targets: ["nav-tasks"], title: "الطلبات / المهام",
-      body: () => "لما عميل على واتساب يحتاج حد من المكتب، حازم بيفتح له مهمة هنا. "
-        + (can(me, "tasks.assign") ? "وتقدر تعيّن مين يشتغل عليها." : "اضغط «هاشتغل عليها»، ولما تخلّص «خلصت»."),
+      body: () => "عندما يحتاج عميل على واتساب إلى أحد من المكتب، يفتح له حازم مهمة هنا. "
+        + (can(me, "tasks.assign") ? "ويمكنك تحديد من يعمل عليها." : "اضغط «ابدأ العمل عليها»، وعند الانتهاء «تحديد كمكتملة»."),
     },
     can(me, "schedule.manage") && {
       id: "appointments", icon: "calendar", targets: ["nav-appointments"], title: "المواعيد",
-      body: () => "كل حجوزات العملاء يوم بيوم. ومن هنا كمان تقفل يوم أو تغيّر ساعات الشغل.",
+      body: () => "جميع حجوزات العملاء يومًا بيوم. ومن هنا أيضًا يمكنك إغلاق يوم أو تغيير ساعات العمل.",
     },
     {
       id: "chats", icon: "chat", targets: ["nav-chats"], title: "المحادثات",
-      body: () => "هنا تقرا شات العملاء على واتساب وترد عليهم بنفسك. بتفتح في Chatwoot.",
+      body: () => "هنا تقرأ محادثات العملاء على واتساب وترد عليهم بنفسك. تُفتح في Chatwoot.",
     },
     (can(me, "schedule.manage") || can(me, "services.manage") || can(me, "urf.manage")) && {
       // a phone has no side bar: the tab bar's «المزيد», whose sheet holds these pages (and says so, the owner's words)
-      id: "money", icon: "receipt", targets: ["nav-money", "nav-more"], title: "الفلوس والخدمات",
-      body: (on) => "الإيصالات: تتأكد إن التحويل وصل. طلبات الخدمات: عقد أو إنذار أو رأي. حالات العرفي: الورق والميعاد."
-        + (on.target === "nav-more" ? " وتلاقيهم كلهم في «المزيد»." : ""),
+      id: "money", icon: "receipt", targets: ["nav-money", "nav-more"], title: "المالية والخدمات",
+      body: (on) => "الإيصالات: للتأكد من وصول التحويل. طلبات الخدمات: عقد أو إنذار أو رأي. حالات العرفي: المستندات والموعد."
+        + (on.target === "nav-more" ? " وتجدها جميعًا في «المزيد»." : ""),
     },
     can(me, "reports.view") && {
       // a phone: the home page's «الشهر ده», whose «عرض الكل» opens the reports
       id: "reports", icon: "reports", targets: ["nav-reports", "home-month"], title: "التقارير",
-      body: () => "أرقام الشهر: المهام اللي خلصت، والعملاء الجداد، والحجوزات والفلوس، وتقييم العملاء.",
+      body: () => "أرقام الشهر: المهام المكتملة، والعملاء الجدد، والحجوزات والمبالغ، وتقييم العملاء.",
     },
     {
       id: "bell", icon: "bell", targets: ["bell"], title: "التنبيهات",
-      body: () => "الجرس بيقولك على الجديد والعاجل والمتأخر. ومنه تشغّل الإشعارات علشان توصلك وإنت في تاب تاني.",
+      body: () => "يُعلمك الجرس بالجديد والعاجل والمتأخر. ومنه تفعّل الإشعارات لتصلك وأنت في تبويب آخر.",
     },
     {
       id: "search", icon: "search", targets: ["search"], title: "البحث",
-      body: (on) => "دوّر في المهام باسم العميل أو بآخر أرقام موبايله." + (on.wide ? " وCtrl K بيفتح اختصارات لكل صفحة." : ""),
+      body: (on) => "ابحث في المهام باسم العميل أو بآخر أرقام هاتفه." + (on.wide ? " ويفتح Ctrl K اختصارات لكل صفحة." : ""),
     },
     {
       // a phone: «المزيد» too, whose sheet ends with «الإعدادات» (v1.101: no tab of its own), and it says so
       id: "settings", icon: "settings", targets: ["nav-settings", "nav-more"], title: "الإعدادات",
-      body: (on) => `فيها ${settings.join("، ")}.` + (on.target === "nav-more" ? " وعلى الموبايل هتلاقيها في آخر «المزيد»." : ""),
+      body: (on) => `فيها ${settings.join("، ")}.` + (on.target === "nav-more" ? " وعلى الهاتف تجدها في آخر «المزيد»." : ""),
     },
     {
-      id: "account", icon: "account", targets: ["account-menu"], title: "حسابك", next: "تمام",
-      body: () => "من هنا حسابك، وكلمة السر، والشكل فاتح أو غامق، والخروج. وعايز الجولة دي تاني؟ اضغط «اعرض الجولة تاني» من هنا.",
+      id: "account", icon: "account", targets: ["account-menu"], title: "حسابك", next: "إنهاء",
+      body: () => "من هنا تصل إلى حسابك، وكلمة السر، والمظهر الفاتح أو الداكن، وتسجيل الخروج. ولعرض هذه الجولة مرة أخرى، اضغط «إعادة عرض الجولة» من هنا.",
     },
   ];
   return steps.filter((s): s is TourStep => !!s);

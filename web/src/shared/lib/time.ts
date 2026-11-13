@@ -11,7 +11,7 @@ const cairoDay = (d: Date): string => dayFmt.format(d);
 /** The Cairo date of an instant, «yyyy-mm-dd». */
 export const cairoDate = cairoDay;
 
-/** «النهارده 10:00 ص» / «بكرة 10:00 ص» / «امبارح …» / «23 أكتوبر 10:00 ص». */
+/** «اليوم 10:00 ص» / «غدًا 10:00 ص» / «أمس …» / «23 أكتوبر 10:00 ص». */
 export function cairoWhen(iso: string, now: Date = new Date()): string {
   const d = new Date(iso);
   const time = timeFmt.format(d);
@@ -19,9 +19,9 @@ export function cairoWhen(iso: string, now: Date = new Date()): string {
   const today = cairoDay(now);
   const tomorrow = cairoDay(new Date(now.getTime() + 86_400_000));
   const yesterday = cairoDay(new Date(now.getTime() - 86_400_000));
-  if (day === today) return `النهارده ${time}`;
-  if (day === tomorrow) return `بكرة ${time}`;
-  if (day === yesterday) return `امبارح ${time}`;
+  if (day === today) return `اليوم ${time}`;
+  if (day === tomorrow) return `غدًا ${time}`;
+  if (day === yesterday) return `أمس ${time}`;
   return `${dateFmt.format(d)} ${time}`;
 }
 
@@ -54,7 +54,7 @@ export function cairoWeek(now: Date = new Date()): { key: string; weekday: strin
 /** «منذ 10 دقائق» / «منذ ساعتين» / «منذ 3 أيام». */
 export function timeAgo(iso: string, now: Date = new Date()): string {
   const min = Math.max(0, Math.round((now.getTime() - new Date(iso).getTime()) / 60_000));
-  if (min < 1) return "دلوقتي";
+  if (min < 1) return "الآن";
   if (min < 60) return min === 1 ? "منذ دقيقة" : min === 2 ? "منذ دقيقتين" : `منذ ${min} ${min <= 10 ? "دقائق" : "دقيقة"}`;
   const h = Math.round(min / 60);
   if (h < 24) return h === 1 ? "منذ ساعة" : h === 2 ? "منذ ساعتين" : `منذ ${h} ${h <= 10 ? "ساعات" : "ساعة"}`;
@@ -64,11 +64,11 @@ export function timeAgo(iso: string, now: Date = new Date()): string {
 
 const shortDateFmt = new Intl.DateTimeFormat("ar-EG-u-nu-latn", { timeZone: CAIRO, day: "numeric", month: "long" });
 
-/** «اليوم» / «أمس» / «غداً» / «26 أكتوبر», as the mockup's due column. */
+/** «اليوم» / «أمس» / «غدًا» / «26 أكتوبر», as the mockup's due column. */
 export function cairoDayWord(iso: string, now: Date = new Date()): string {
   const day = cairoDay(new Date(iso));
   if (day === cairoDay(now)) return "اليوم";
   if (day === cairoDay(new Date(now.getTime() - 86_400_000))) return "أمس";
-  if (day === cairoDay(new Date(now.getTime() + 86_400_000))) return "غداً";
+  if (day === cairoDay(new Date(now.getTime() + 86_400_000))) return "غدًا";
   return shortDateFmt.format(new Date(iso));
 }

@@ -65,10 +65,10 @@ describe("TASK 10 service orders", () => {
     const card = (await screen.findByText(/محمد أحمد علي حسن/)).closest("li")!;
     // v1.81: the document opens in the glass viewer inside the panel; its private link is there
     fireEvent.click(within(card).getByRole("button", { name: /مستند 2/ }));
-    const viewer = await screen.findByRole("dialog", { name: "ورق العميل" });
+    const viewer = await screen.findByRole("dialog", { name: "مستندات العميل" });
     expect(within(viewer).getByRole("link", { name: /افتح في تبويب جديد/ }).getAttribute("href")).toBe("/api/panel/services/o1/files/1");
-    fireEvent.click(within(viewer).getByRole("button", { name: "اقفل" }));
-    expect(within(card).queryByRole("button", { name: "ابعت السعر للعميل" })).toBeNull();
+    fireEvent.click(within(viewer).getByRole("button", { name: "إغلاق" }));
+    expect(within(card).queryByRole("button", { name: "أرسل السعر إلى العميل" })).toBeNull();
   });
 
   it("the lawyer prices: outside the range only as an exception", async () => {
@@ -76,9 +76,9 @@ describe("TASK 10 service orders", () => {
     renderAt("/services");
     const card = (await screen.findByText(/محمد أحمد علي حسن/)).closest("li")!;
     fireEvent.change(await within(card).findByLabelText("السعر (جنيه)"), { target: { value: "5000" } });
-    const send = within(card).getByRole("button", { name: "ابعت السعر للعميل" }) as HTMLButtonElement;
+    const send = within(card).getByRole("button", { name: "أرسل السعر إلى العميل" }) as HTMLButtonElement;
     expect(send.disabled).toBe(true);
-    fireEvent.click(within(card).getByLabelText(/ده استثناء/));
+    fireEvent.click(within(card).getByLabelText(/هذا استثناء/));
     fireEvent.change(within(card).getByLabelText("يوم التسليم"), { target: { value: "2026-11-25" } });
     fireEvent.click(send);
     expect(await confirmYes()).toContain("5,000 جنيه");
@@ -95,11 +95,11 @@ describe("TASK 10 service orders", () => {
       "GET /services?show=done": [order({ state: "delivered", delivery: "file", file_name: "مراجعة.pdf", delivered_at: "2026-11-20T10:00:00Z", notice: "failed", notice_error: "META_ERROR" })],
     });
     renderAt("/services");
-    fireEvent.click(await screen.findByRole("tab", { name: "اتسلّمت أو اتقفلت" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "المسلّمة أو المغلقة" }));
     const card = (await screen.findByText(/محمد أحمد علي حسن/)).closest("li")!;
-    expect(within(card).getByText(/آخر رسالة ما وصلتش للعميل: واتساب رفضها\./)).toBeTruthy(); // v1.28, without the raw code
+    expect(within(card).getByText(/لم تصل آخر رسالة إلى العميل: رفضها واتساب\./)).toBeTruthy(); // v1.28, without the raw code
     expect(within(card).queryByText(/META_ERROR/)).toBeNull();
-    fireEvent.click(within(card).getByRole("button", { name: /ابعت الملف تاني/ }));
+    fireEvent.click(within(card).getByRole("button", { name: /أعد إرسال الملف/ }));
     await confirmYes();
     await vi.waitFor(() => expect(calls.some((c) => c.path === "/services/o1/resend")).toBe(true));
   });
@@ -114,7 +114,7 @@ describe("TASK 10 service orders", () => {
     renderAt("/services");
     const card = (await screen.findByText(/محمد أحمد علي حسن/)).closest("li")!;
     fireEvent.change(within(card).getByLabelText("الملف"), { target: { files: [new File(["%PDF"], "مراجعة.pdf", { type: "application/pdf" })] } });
-    fireEvent.click(within(card).getByRole("button", { name: "ابعت الملف للعميل" }));
+    fireEvent.click(within(card).getByRole("button", { name: "أرسل الملف إلى العميل" }));
     await confirmYes();
     await vi.waitFor(() => expect(calls.some((c) => c.path === "/services/o1/deliver")).toBe(true));
     expect(calls.filter((c) => c.method !== "GET").map((c) => `${c.method} ${c.path}`)).toEqual([
@@ -130,8 +130,8 @@ describe("TASK 10 service orders", () => {
     });
     renderAt("/services");
     const card = (await screen.findByText(/محمد أحمد علي حسن/)).closest("li")!;
-    expect(within(card).getByText("الشغل بدأ.")).toBeTruthy(); // no «التسليم يوم» without a day
-    fireEvent.click(within(card).getByRole("button", { name: "المكالمة خلصت: اتسلّم" }));
+    expect(within(card).getByText("بدأ العمل.")).toBeTruthy(); // no «التسليم يوم» without a day
+    fireEvent.click(within(card).getByRole("button", { name: "انتهت المكالمة: تم التسليم" }));
     expect(calls.some((c) => c.path === "/services/o1/deliver")).toBe(false);
     await confirmYes();
     await vi.waitFor(() => expect(calls.some((c) => c.path === "/services/o1/deliver")).toBe(true));

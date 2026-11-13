@@ -27,7 +27,7 @@ export function prefetchData(qc: QueryClient) {
 }
 
 const TABS: { value: Show; label: string; icon: IconName }[] = [
-  { value: "review", label: "مستني مراجعتك", icon: "receipt" },
+  { value: "review", label: "في انتظار المراجعة", icon: "receipt" },
   { value: "refunds", label: "استرداد مطلوب", icon: "refresh" },
   { value: "all", label: "الكل", icon: "document" },
 ];
@@ -95,7 +95,7 @@ function Intro({ count }: { count?: number | undefined }) {
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-[26px] leading-tight font-bold">الإيصالات والمدفوعات</h1>
               {count !== undefined ? (
-                <span className="tabular rounded-full border border-gold-line bg-gold-tint px-2.5 py-0.5 text-[12.5px] font-bold text-gold-ink">{count} عملية دفع</span>
+                <span className="tabular rounded-full border border-gold-line bg-gold-tint px-2.5 py-0.5 text-[12.5px] font-bold text-gold-ink">{count === 1 ? "عملية دفع واحدة" : count === 2 ? "عمليتا دفع" : count >= 3 && count <= 10 ? `${count} عمليات دفع` : `${count} عملية دفع`}</span>
               ) : null}
             </div>
           </div>
@@ -111,7 +111,7 @@ function Nothing() {
       <span className="grid size-14 place-items-center rounded-full bg-gradient-to-br from-green-bg to-card text-green-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.6)]">
         <Icon name="check-circle" className="size-7" />
       </span>
-      <p className="text-[16px] font-bold">مفيش حاجة هنا</p>
+      <p className="text-[16px] font-bold">لا توجد عناصر هنا</p>
     </div>
   );
 }
@@ -126,30 +126,30 @@ function PaymentCard({ p }: { p: Payment }) {
   const done = () => { setAsk(null); void qc.invalidateQueries({ queryKey: ["payments"] }); void qc.invalidateQueries({ queryKey: ["booking"] }); };
   const review = useMutation({
     mutationFn: (s: Review) => payments.review(p.appointment_id, s, s === "not_received" ? undefined : Number(amount)),
-    onSuccess: (_, s) => { done(); toast(s === "verified" ? "اتسجّل إن التحويل وصل ✅" : "اتسجّل، وحازم هيبلّغ العميل"); },
+    onSuccess: (_, s) => { done(); toast(s === "verified" ? "تم تسجيل وصول التحويل ✅" : "تم التسجيل، وسيُبلغ حازم العميل."); },
   });
-  const refunded = useMutation({ mutationFn: () => payments.refunded(p.appointment_id, method, note || undefined), onSuccess: () => { done(); toast("الاسترداد اتسجّل، وحازم هيبلّغ العميل ✅"); } });
+  const refunded = useMutation({ mutationFn: () => payments.refunded(p.appointment_id, method, note || undefined), onSuccess: () => { done(); toast("تم تسجيل الاسترداد، وسيُبلغ حازم العميل ✅"); } });
   const reviewable = can(me, "payments.verify") && ["proof_received", "duplicate_suspected", "verified", "partial", "not_received"].includes(p.state);
   const received = Number(amount);
   // The API takes whole pounds only: a decimal is refused here, not rounded behind the person's back.
   const whole = amount.trim() !== "" && Number.isInteger(received);
   const what: Record<Review, string> = {
-    verified: received > p.amount_due ? `تمام، ووصل ${pounds(received)} جنيه: الزيادة (${pounds(received - p.amount_due)}) هتتعمل بيها مهمة استرداد.` : `تمام: وصل ${pounds(received)} جنيه.`,
-    partial: `ناقص: وصل ${pounds(received)} من ${pounds(p.amount_due)}. حازم هيبعت للعميل يكمّل ${pounds(p.amount_due - received)} جنيه.`,
-    not_received: "ما وصلش: حازم هيطلب من العميل يتأكد ويبعت الصورة تاني.",
+    verified: received > p.amount_due ? `وصل كاملًا: ${pounds(received)} جنيه، وستُنشأ مهمة استرداد للمبلغ الزائد (${pounds(received - p.amount_due)}).` : `وصل كاملًا: ${pounds(received)} جنيه.`,
+    partial: `مبلغ ناقص: وصل ${pounds(received)} من ${pounds(p.amount_due)}. سيطلب حازم من العميل استكمال ${pounds(p.amount_due - received)} جنيه.`,
+    not_received: "لم يصل: سيطلب حازم من العميل التحقق من التحويل وإرسال الصورة مرة أخرى.",
   };
 
   const service = p.order ? label(SERVICE_KINDS, p.service) : label(BOOKING_SERVICES, p.service);
   const facts: [string, ReactNode][] = [
     ["المطلوب", <><span className="tabular">{pounds(p.amount_due)}</span> جنيه</>],
-    ["وصل", p.amount_received != null ? <><span className="tabular">{pounds(p.amount_received)}</span> جنيه</> : "—"],
-    ["الإيصال وصل", p.proof_at ? cairoWhen(p.proof_at) : "—"],
-    [p.order ? "الطلب" : "الميعاد", p.order ? label(SERVICE_STATES, p.appointment) : label(APPOINTMENT_STATES, p.appointment)],
+    ["الواصل", p.amount_received != null ? <><span className="tabular">{pounds(p.amount_received)}</span> جنيه</> : "—"],
+    ["وصول الإيصال", p.proof_at ? cairoWhen(p.proof_at) : "—"],
+    [p.order ? "الطلب" : "الموعد", p.order ? label(SERVICE_STATES, p.appointment) : label(APPOINTMENT_STATES, p.appointment)],
   ];
 
   return (
-    <CaseCard tone={TONE[p.state] ?? "grey"} label={`${p.name ?? "من غير اسم"}: ${service}`}>
-      <CaseHead title={p.name ?? "من غير اسم"} kind={service}
+    <CaseCard tone={TONE[p.state] ?? "grey"} label={`${p.name ?? "بدون اسم"}: ${service}`}>
+      <CaseHead title={p.name ?? "بدون اسم"} kind={service}
         meta={[
           <Meta key="w" icon="clock">{cairoWhen(p.start)}</Meta>,
           <Phone key="p" wa={p.wa_id} />,
@@ -157,23 +157,23 @@ function PaymentCard({ p }: { p: Payment }) {
         ]}
         status={<>
           <Chip tone={TONE[p.state] ?? "grey"}>{label(PAYMENT_STATES, p.state)}</Chip>
-          {p.duplicate ? <Chip tone="orange">نفس الصورة على حجز تاني</Chip> : null}
+          {p.duplicate ? <Chip tone="orange">الصورة نفسها في حجز آخر</Chip> : null}
         </>} />
       <Facts items={facts} />
       <ReceiptButtons p={p} tone={TONE[p.state] ?? "grey"} />
       {p.state === "refunded" ? (
-        <CaseNote>اترد {pounds(p.refund_due ?? 0)} جنيه على {p.refund_method} · {p.refunded_by}{p.refunded_at ? `، ${cairoWhen(p.refunded_at)}` : ""}</CaseNote>
+        <CaseNote>تم ردّ {pounds(p.refund_due ?? 0)} جنيه عبر {p.refund_method} · {p.refunded_by}{p.refunded_at ? `، ${cairoWhen(p.refunded_at)}` : ""}</CaseNote>
       ) : null}
 
       <ActionBar>
         {reviewable ? (
           <div className="grid gap-2">
             <div className="flex flex-wrap items-end gap-2">
-              <Field label="المبلغ اللي وصل فعلًا (جنيه)" type="number" min={1} inputMode="numeric" step={1} value={amount} onChange={(e) => setAmount(e.target.value)}
-                error={amount.trim() !== "" && !whole ? "اكتب المبلغ بالجنيه من غير كسور" : undefined} />
-              <Button variant="primary" disabled={!(whole && received >= p.amount_due)} onClick={() => setAsk("verified")}>تمام</Button>
-              <Button disabled={!(whole && received > 0 && received < p.amount_due)} onClick={() => setAsk("partial")}>ناقص</Button>
-              <Button variant="danger" onClick={() => setAsk("not_received")}>ما وصلش</Button>
+              <Field label="المبلغ الذي وصل فعلًا (جنيه)" type="number" min={1} inputMode="numeric" step={1} value={amount} onChange={(e) => setAmount(e.target.value)}
+                error={amount.trim() !== "" && !whole ? "اكتب المبلغ بالجنيه دون كسور" : undefined} />
+              <Button variant="primary" disabled={!(whole && received >= p.amount_due)} onClick={() => setAsk("verified")}>وصل كاملًا</Button>
+              <Button disabled={!(whole && received > 0 && received < p.amount_due)} onClick={() => setAsk("partial")}>وصل ناقصًا</Button>
+              <Button variant="danger" onClick={() => setAsk("not_received")}>لم يصل</Button>
             </div>
             {ask && ask !== "refunded" ? (
               <Sure text={what[ask]} busy={review.isPending} onYes={() => review.mutate(ask)} onNo={() => setAsk(null)} />
@@ -186,15 +186,15 @@ function PaymentCard({ p }: { p: Payment }) {
           <div className="grid gap-2">
             <p className="text-sm font-semibold">
               استرداد {pounds(p.refund_due ?? 0)} جنيه{p.refund_reason ? ` (${label(REFUND_REASONS, p.refund_reason)})` : ""}.
-              {!p.reviewed_by ? " لسه ما اتراجعش." : ""}
+              {!p.reviewed_by ? " لم يُراجَع بعد." : ""}
             </p>
             <div className="grid gap-2 md:grid-cols-2">
-              <Field label="حوّلته على إيه" hint="مثلًا فودافون كاش أو InstaPay" maxLength={100} value={method} onChange={(e) => setMethod(e.target.value)} />
+              <Field label="وسيلة التحويل" hint="مثلًا فودافون كاش أو InstaPay" maxLength={100} value={method} onChange={(e) => setMethod(e.target.value)} />
               <Field label="ملاحظة (اختياري)" maxLength={200} value={note} onChange={(e) => setNote(e.target.value)} />
             </div>
-            <div><Button variant="primary" disabled={method.trim() === ""} onClick={() => setAsk("refunded")}>اتحوّل</Button></div>
+            <div><Button variant="primary" disabled={method.trim() === ""} onClick={() => setAsk("refunded")}>سجّل التحويل</Button></div>
             {ask === "refunded" ? (
-              <Sure text={`إنت حوّلت ${pounds(p.refund_due ?? 0)} جنيه فعلًا على ${method}؟ حازم هيبلّغ العميل إن المبلغ اترد.`} busy={refunded.isPending}
+              <Sure text={`هل حوّلت ${pounds(p.refund_due ?? 0)} جنيه فعلًا عبر ${method}؟ سيُبلغ حازم العميل بردّ المبلغ.`} busy={refunded.isPending}
                 onYes={() => refunded.mutate()} onNo={() => setAsk(null)} />
             ) : null}
             {refunded.isError ? <p className="text-sm text-bad" role="alert">{errorMessage(refunded.error)}</p> : null}
@@ -210,8 +210,8 @@ function Sure({ text, busy, onYes, onNo }: { text: string; busy: boolean; onYes:
     <div className="grid gap-2 rounded-[14px] border border-gold-line bg-gold-tint/85 p-3 text-sm shadow-[inset_0_1px_0_rgb(255_255_255/0.5)]" role="alertdialog" aria-label="تأكيد">
       <p>{text}</p>
       <div className="flex gap-2">
-        <Button variant="primary" busy={busy} onClick={onYes}>أيوه، أكّد</Button>
-        <Button onClick={onNo}>لأ</Button>
+        <Button variant="primary" busy={busy} onClick={onYes}>نعم، أكّد</Button>
+        <Button onClick={onNo}>لا</Button>
       </div>
     </div>
   );

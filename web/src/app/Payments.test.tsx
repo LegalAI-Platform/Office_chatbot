@@ -44,11 +44,11 @@ afterEach(() => {
 });
 
 describe("TASK 09 payments", () => {
-  it("a receipt waiting for the review: open it, mark «ناقص» with the amount after confirming", async () => {
+  it("a receipt waiting for the review: open it, mark «وصل ناقصًا» with the amount after confirming", async () => {
     const calls = serve({ "GET /auth/me": staff, "GET /payments?show=review": [payment()] });
     renderAt("/receipts");
     const card = (await screen.findByText(/محمد أحمد علي حسن/)).closest("li")!;
-    expect(within(card).getByText("وصل إيصال، مستني المراجعة")).toBeTruthy();
+    expect(within(card).getByText("وصل إيصال، في انتظار المراجعة")).toBeTruthy();
     // the receipt opens in a window of the panel (the picture, and what to check it against), not as a bare picture in a tab
     fireEvent.click(within(card).getByRole("button", { name: /فتح الإيصال/ }));
     const viewer = screen.getByRole("dialog", { name: "الإيصال" });
@@ -57,12 +57,12 @@ describe("TASK 09 payments", () => {
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByRole("dialog", { name: "الإيصال" })).toBeNull();
 
-    fireEvent.change(within(card).getByLabelText(/المبلغ اللي وصل/), { target: { value: "300" } });
-    expect((within(card).getByRole("button", { name: "تمام" }) as HTMLButtonElement).disabled).toBe(true); // less than due
-    fireEvent.click(within(card).getByRole("button", { name: "ناقص" }));
+    fireEvent.change(within(card).getByLabelText(/المبلغ الذي وصل/), { target: { value: "300" } });
+    expect((within(card).getByRole("button", { name: "وصل كاملًا" }) as HTMLButtonElement).disabled).toBe(true); // less than due
+    fireEvent.click(within(card).getByRole("button", { name: "وصل ناقصًا" }));
     const sure = within(card).getByRole("alertdialog", { name: "تأكيد" });
-    expect(within(sure).getByText(/يكمّل 200 جنيه/)).toBeTruthy();
-    fireEvent.click(within(sure).getByRole("button", { name: "أيوه، أكّد" }));
+    expect(within(sure).getByText(/استكمال 200 جنيه/)).toBeTruthy();
+    fireEvent.click(within(sure).getByRole("button", { name: "نعم، أكّد" }));
     await vi.waitFor(() => expect(calls.some((c) => c.method === "POST")).toBe(true));
     expect(calls.find((c) => c.method === "POST")).toMatchObject({ path: "/payments/a1/review", body: { state: "partial", received: 300 } });
   });
@@ -76,11 +76,11 @@ describe("TASK 09 payments", () => {
     renderAt("/receipts");
     fireEvent.click(await screen.findByRole("tab", { name: "استرداد مطلوب" }));
     const card = (await screen.findByText(/استرداد 500 جنيه/)).closest("li")!;
-    expect(within(card).getByText(/العميل لغى خلال 24 ساعة/)).toBeTruthy();
-    expect((within(card).getByRole("button", { name: "اتحوّل" }) as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.change(within(card).getByLabelText("حوّلته على إيه"), { target: { value: "فودافون كاش" } });
-    fireEvent.click(within(card).getByRole("button", { name: "اتحوّل" }));
-    fireEvent.click(within(within(card).getByRole("alertdialog", { name: "تأكيد" })).getByRole("button", { name: "أيوه، أكّد" }));
+    expect(within(card).getByText(/ألغى العميل خلال 24 ساعة/)).toBeTruthy();
+    expect((within(card).getByRole("button", { name: "سجّل التحويل" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(within(card).getByLabelText("وسيلة التحويل"), { target: { value: "فودافون كاش" } });
+    fireEvent.click(within(card).getByRole("button", { name: "سجّل التحويل" }));
+    fireEvent.click(within(within(card).getByRole("alertdialog", { name: "تأكيد" })).getByRole("button", { name: "نعم، أكّد" }));
     await vi.waitFor(() => expect(calls.some((c) => c.method === "POST")).toBe(true));
     expect(calls.find((c) => c.method === "POST")).toMatchObject({ path: "/payments/a1/refunded", body: { method: "فودافون كاش" } });
   });
@@ -88,11 +88,11 @@ describe("TASK 09 payments", () => {
   it("a decimal amount is refused (whole pounds only), and the header counts payments", async () => {
     serve({ "GET /auth/me": staff, "GET /payments?show=review": [payment()] });
     renderAt("/receipts");
-    expect(await screen.findByText("1 عملية دفع")).toBeTruthy();
+    expect(await screen.findByText("عملية دفع واحدة")).toBeTruthy();
     const card = (await screen.findByText(/محمد أحمد علي حسن/)).closest("li")!;
-    fireEvent.change(within(card).getByLabelText(/المبلغ اللي وصل/), { target: { value: "500.5" } });
-    expect((within(card).getByRole("button", { name: "تمام" }) as HTMLButtonElement).disabled).toBe(true);
-    expect((within(card).getByRole("button", { name: "ناقص" }) as HTMLButtonElement).disabled).toBe(true);
-    expect(within(card).getByText("اكتب المبلغ بالجنيه من غير كسور")).toBeTruthy();
+    fireEvent.change(within(card).getByLabelText(/المبلغ الذي وصل/), { target: { value: "500.5" } });
+    expect((within(card).getByRole("button", { name: "وصل كاملًا" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(card).getByRole("button", { name: "وصل ناقصًا" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(within(card).getByText("اكتب المبلغ بالجنيه دون كسور")).toBeTruthy();
   });
 });

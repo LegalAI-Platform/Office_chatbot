@@ -54,7 +54,7 @@ describe("api client", () => {
     const error = await api("POST", "/users", {}).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ApiError);
     expect((error as ApiError).fields?.username).toEqual(["taken"]);
-    expect(errorMessage(error)).toBe("اسم المستخدم ده موجود قبل كده.");
+    expect(errorMessage(error)).toBe("اسم المستخدم هذا مسجّل من قبل.");
   });
 
   it("takes a success with no body (202 from /auth/forgot, 204) as done, not as a lost connection", async () => {
@@ -65,11 +65,11 @@ describe("api client", () => {
   });
 
   it("has a clear message for every common status and for no connection", () => {
-    expect(errorMessage(new ApiError(401, "x"))).toContain("سجّل دخول");
-    expect(errorMessage(new ApiError(403, "x"))).toContain("مش مسموح");
-    expect(errorMessage(new ApiError(404, "x"))).toContain("مش لاقيين");
+    expect(errorMessage(new ApiError(401, "x"))).toContain("سجّل الدخول");
+    expect(errorMessage(new ApiError(403, "x"))).toContain("غير مسموح");
+    expect(errorMessage(new ApiError(404, "x"))).toContain("لم نعثر");
     expect(errorMessage(new ApiError(429, "x"))).toContain("محاولات");
-    expect(errorMessage(new ApiError(503, "x"))).toContain("مشكلة");
-    expect(errorMessage(new TypeError("Failed to fetch"))).toContain("نوصل");
+    expect(errorMessage(new ApiError(503, "x"))).toContain("خطأ في الخادم");
+    expect(errorMessage(new TypeError("Failed to fetch"))).toContain("تعذّر الاتصال");
   });
 });

@@ -1,6 +1,6 @@
 import { setTheme, useTheme, type Theme } from "../lib/theme";
 
-const LOOKS: [Theme, string][] = [["light", "فاتح"], ["dark", "غامق"]];
+const LOOKS: [Theme, string][] = [["light", "فاتح"], ["dark", "داكن"]];
 
 /**
  * «فاتح / غامق»: two equal buttons with a sliding mark; the new look spreads from the pressed one (theme.ts).

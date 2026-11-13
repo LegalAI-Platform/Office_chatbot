@@ -54,10 +54,10 @@ function ReceiptViewer({ p, tone, index, onIndex, onClose }: { p: Payment; tone:
   useEffect(() => { setZoom(false); setFailed(false); setLoaded(false); }, [index]);
 
   const rows: [string, React.ReactNode][] = [
-    ["العميل", p.name ?? "من غير اسم"],
+    ["العميل", p.name ?? "بدون اسم"],
     ["المطلوب", <><span className="tabular">{pounds(p.amount_due)}</span> جنيه</>],
-    ["وصل", p.amount_received != null ? <><span className="tabular">{pounds(p.amount_received)}</span> جنيه</> : "لسه ما اتسجّلش"],
-    ["الإيصال وصل", p.proof_at ? cairoWhen(p.proof_at) : "—"],
+    ["الواصل", p.amount_received != null ? <><span className="tabular">{pounds(p.amount_received)}</span> جنيه</> : "لم يُسجّل بعد"],
+    ["وصول الإيصال", p.proof_at ? cairoWhen(p.proof_at) : "—"],
   ];
 
   return createPortal(
@@ -70,7 +70,7 @@ function ReceiptViewer({ p, tone, index, onIndex, onClose }: { p: Payment; tone:
             {!loaded && !failed ? <span aria-hidden className="absolute inset-0 animate-pulse rounded-[22px] bg-card-2/60" /> : null}
             {failed ? (
               <p className="flex items-center gap-2 px-4 py-10 text-sm text-red-ink" role="alert">
-                <Icon name="alert-circle" className="size-5" />الصورة ما فتحتش. جرّب «افتح في تبويب جديد».
+                <Icon name="alert-circle" className="size-5" />تعذّر فتح الصورة. جرّب «افتح في تبويب جديد».
               </p>
             ) : (
               <img key={src} src={src} alt="صورة التحويل" onLoad={() => setLoaded(true)} onError={() => setFailed(true)}
@@ -80,10 +80,10 @@ function ReceiptViewer({ p, tone, index, onIndex, onClose }: { p: Payment; tone:
           </div>
           {p.receipts > 1 ? (
             <div className="mt-3 flex items-center gap-2 text-[13px]">
-              <button type="button" disabled={index <= 0} onClick={() => onIndex(index - 1)} aria-label="الصورة اللي قبلها"
+              <button type="button" disabled={index <= 0} onClick={() => onIndex(index - 1)} aria-label="الصورة السابقة"
                 className="grid size-9 place-items-center rounded-full border border-line/60 bg-card/70 disabled:opacity-40"><Icon name="chevron-end" className="size-4" /></button>
               <span className="tabular rounded-full bg-card/70 px-3 py-1 font-semibold">{index + 1} من {p.receipts}</span>
-              <button type="button" disabled={index >= p.receipts - 1} onClick={() => onIndex(index + 1)} aria-label="الصورة اللي بعدها"
+              <button type="button" disabled={index >= p.receipts - 1} onClick={() => onIndex(index + 1)} aria-label="الصورة التالية"
                 className="grid size-9 place-items-center rounded-full border border-line/60 bg-card/70 disabled:opacity-40"><Icon name="chevron-start" className="size-4" /></button>
             </div>
           ) : null}
@@ -101,7 +101,7 @@ function ReceiptViewer({ p, tone, index, onIndex, onClose }: { p: Payment; tone:
               </h2>
               <Chip tone={tone}>{label(PAYMENT_STATES, p.state)}</Chip>
             </div>
-            <button ref={closeRef} type="button" onClick={onClose} aria-label="اقفل"
+            <button ref={closeRef} type="button" onClick={onClose} aria-label="إغلاق"
               className="grid size-9 shrink-0 place-items-center rounded-full border border-line/60 bg-card/70 transition hover:bg-card-2">
               <Icon name="x" className="size-4" />
             </button>
@@ -118,7 +118,7 @@ function ReceiptViewer({ p, tone, index, onIndex, onClose }: { p: Payment; tone:
 
           <p className="flex items-start gap-1.5 text-[12px] text-ink-soft">
             <Icon name="info" className="mt-0.5 size-3.5 shrink-0 text-gold-ink" />
-            قارن اللي في الصورة (المبلغ والتاريخ ومرجع التحويل) بحساب InstaPay أو المحفظة، وبعدها سجّل اللي وصل فعلًا من الكارت تحت. لمس الصورة بيكبّرها.
+            قارن ما في الصورة (المبلغ والتاريخ ومرجع التحويل) بحساب InstaPay أو المحفظة، ثم سجّل ما وصل فعلًا من البطاقة أدناه. المس الصورة لتكبيرها.
           </p>
 
           <div className="flex flex-wrap gap-2">
@@ -128,7 +128,7 @@ function ReceiptViewer({ p, tone, index, onIndex, onClose }: { p: Payment; tone:
             </a>
             <button type="button" onClick={() => setZoom((z) => !z)}
               className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-line/70 bg-card/70 px-4 text-sm font-semibold transition hover:border-gold-line hover:bg-gold-tint">
-              <Icon name="search" className="size-4" />{zoom ? "صغّر" : "كبّر"}
+              <Icon name="search" className="size-4" />{zoom ? "تصغير" : "تكبير"}
             </button>
           </div>
         </div>

@@ -34,7 +34,7 @@ type Span = "month" | "day" | "range" | "year";
 const SPANS: { value: Span; label: string; icon: IconName }[] = [
   { value: "month", label: "شهر", icon: "calendar" },
   { value: "day", label: "يوم", icon: "clock" },
-  { value: "range", label: "من يوم ليوم", icon: "trend-up" },
+  { value: "range", label: "من يوم إلى يوم", icon: "trend-up" },
   { value: "year", label: "سنة", icon: "reports" },
 ];
 
@@ -102,7 +102,7 @@ export function ReportsPage() {
                 <>
                   <Field label="من"><input type="date" className={INPUT} value={from} min="2024-01-01" max={today()}
                     onChange={(e) => { const v = e.target.value; if (v >= "2024-01-01" && v <= today()) setFrom(v); }} /></Field>
-                  <Field label="لحد"><input type="date" className={INPUT} value={to} min="2024-01-01" max={today()}
+                  <Field label="إلى"><input type="date" className={INPUT} value={to} min="2024-01-01" max={today()}
                     onChange={(e) => { const v = e.target.value; if (v >= "2024-01-01" && v <= today()) setTo(v); }} /></Field>
                 </>
               ) : null}
@@ -119,9 +119,9 @@ export function ReportsPage() {
           <Group icon="tasks" title="المهام">
             <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
               <Number icon="tasks" title="المهام" value={r.tasks} />
-              <Number icon="check-circle" tone="green" title="خلصت" value={r.done} note={pct(r.done, r.tasks)} />
-              <Number icon="clock" tone="blue" title="خلصت في وقتها" value={r.done_on_time} note={pct(r.done_on_time, r.done)} />
-              <Number icon="user-plus" tone="orange" title="عملاء جداد" value={r.new_clients} />
+              <Number icon="check-circle" tone="green" title="المكتملة" value={r.done} note={pct(r.done, r.tasks)} />
+              <Number icon="clock" tone="blue" title="اكتملت في موعدها" value={r.done_on_time} note={pct(r.done_on_time, r.done)} />
+              <Number icon="user-plus" tone="orange" title="عملاء جدد" value={r.new_clients} />
             </div>
             <div className="grid gap-4 lg:grid-cols-2">
               <Table icon="tasks" title="المهام حسب النوع" rows={r.by_type} name={(k) => label(TASK_TYPES, k)} />
@@ -129,27 +129,27 @@ export function ReportsPage() {
             </div>
           </Group>
 
-          <Group icon="clients" title="العملاء الجداد">
+          <Group icon="clients" title="العملاء الجدد">
             <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
-              <Table icon="trend-up" title="العملاء الجداد حسب المصدر" rows={r.by_source} name={(k) => (k === "unknown" ? "مش معروف" : label(SOURCES, k))} />
-              <Table icon="document" title="العملاء الجداد حسب الموضوع" rows={r.by_matter} name={(k) => (k === "unknown" ? "لسه ما اتحددش" : matterLabel(k))} />
-              <Table icon="users" title="حسب نوع العميل" rows={r.by_client_type} name={(k) => (k === "unknown" ? "لسه ما اتحددش" : label(CLIENT_TYPES, k))} />
+              <Table icon="trend-up" title="العملاء الجدد حسب المصدر" rows={r.by_source} name={(k) => (k === "unknown" ? "غير معروف" : label(SOURCES, k))} />
+              <Table icon="document" title="العملاء الجدد حسب الموضوع" rows={r.by_matter} name={(k) => (k === "unknown" ? "لم يُحدَّد بعد" : matterLabel(k))} />
+              <Table icon="users" title="حسب نوع العميل" rows={r.by_client_type} name={(k) => (k === "unknown" ? "لم يُحدَّد بعد" : label(CLIENT_TYPES, k))} />
             </div>
           </Group>
 
-          <Group icon="calendar" title="الحجوزات والفلوس">
+          <Group icon="calendar" title="الحجوزات والمبالغ">
             <div className="grid gap-4 lg:grid-cols-2">
               <Table icon="calendar" title="الحجوزات حسب الحالة" rows={r.by_booking} name={(k) => label(APPOINTMENT_STATES, k)} />
               <div className="grid content-start gap-3 sm:grid-cols-3 lg:grid-cols-1 2xl:grid-cols-3">
-                <Number icon="check-circle" tone="green" title="وصل (جنيه)" value={r.received} />
-                <Number icon="alert-circle" tone="orange" title="ناقص (جنيه)" value={r.missing} />
-                <Number icon="refresh" tone="grey" title="اترد (جنيه)" value={r.refunded} />
+                <Number icon="check-circle" tone="green" title="المُستلَم (جنيه)" value={r.received} />
+                <Number icon="alert-circle" tone="orange" title="الناقص (جنيه)" value={r.missing} />
+                <Number icon="refresh" tone="grey" title="المُسترَد (جنيه)" value={r.refunded} />
               </div>
             </div>
             <ByService rows={r.by_service ?? []} />
             <Months />
-            <Note>«في وقتها» = خلصت قبل الميعاد المطلوب. الفلوس = اللي المكتب علّم إنه وصل فعلًا لحجوزات الشهر.</Note>
-            <Note>«اتحجز» = اتأكد بالدفع (خلص، أو لسه جاي، أو ماحضرش). الخدمات المكتوبة: الطلب اللي اتسعّر، و«خلص» = اتسلّم.</Note>
+            <Note>«في موعدها» = اكتملت قبل الموعد المطلوب. المبالغ = ما سجّل المكتب أنه وصل فعلًا عن حجوزات الشهر.</Note>
+            <Note>«محجوز» = تم تأكيده بالدفع (تم، أو لم يحن موعده بعد، أو لم يحضر). الخدمات المكتوبة: الطلب الذي تم تسعيره، و«تم» = تم التسليم.</Note>
           </Group>
 
           {r.ratings ? <Ratings ratings={r.ratings} /> : null}
@@ -239,7 +239,7 @@ function Table({ icon, title, rows, name }: { icon: IconName; title: string; row
   const max = Math.max(1, ...rows.map((r) => r.count));
   return (
     <GlassCard icon={icon} title={title}>
-      {rows.length === 0 ? <Blank>مفيش حاجة الشهر ده.</Blank> : (
+      {rows.length === 0 ? <Blank>لا توجد بيانات هذا الشهر.</Blank> : (
         <ul className="grid gap-2.5">
           {rows.map((r) => (
             <li key={r.key} className="grid gap-1">
@@ -267,14 +267,14 @@ const TH = "px-2 py-2 text-start text-[12px] font-semibold text-ink-soft";
 function Staff({ rows }: { rows: MonthReport["by_staff"] }) {
   return (
     <GlassCard icon="users" title="المهام حسب الموظف">
-      {rows.length === 0 ? <Blank>مفيش مهام الشهر ده.</Blank> : (
+      {rows.length === 0 ? <Blank>لا توجد مهام هذا الشهر.</Blank> : (
         <div className="soft-scroll overflow-x-auto">
           <table className="w-full min-w-[20rem] text-[13.5px]">
-            <thead><tr className="border-b border-line/70"><th className={TH}>الموظف</th><th className={TH}>ليه</th><th className={TH}>خلصت</th><th className={TH}>في وقتها</th></tr></thead>
+            <thead><tr className="border-b border-line/70"><th className={TH}>الموظف</th><th className={TH}>المُسندة إليه</th><th className={TH}>المكتملة</th><th className={TH}>في موعدها</th></tr></thead>
             <tbody className="divide-y divide-line/60">
               {rows.map((s) => (
                 <tr key={s.staff} className="transition hover:bg-card/60">
-                  <td className="px-2 py-2 font-semibold">{s.staff || "مش متعيّنة"}</td><td className="tabular px-2">{s.assigned}</td><td className="tabular px-2">{s.done}</td><td className="tabular px-2">{s.on_time}</td>
+                  <td className="px-2 py-2 font-semibold">{s.staff || "غير مُسندة"}</td><td className="tabular px-2">{s.assigned}</td><td className="tabular px-2">{s.done}</td><td className="tabular px-2">{s.on_time}</td>
                 </tr>
               ))}
             </tbody>
@@ -291,10 +291,10 @@ function ByService({ rows }: { rows: ServiceReportRow[] }) {
   const max = Math.max(1, ...rows.map((s) => s.received));
   return (
     <GlassCard icon="calendar" title="حسب الخدمة">
-      {rows.length === 0 ? <Blank>مفيش حجوزات الشهر ده.</Blank> : (
+      {rows.length === 0 ? <Blank>لا توجد حجوزات هذا الشهر.</Blank> : (
         <div className="soft-scroll overflow-x-auto">
           <table className="w-full min-w-[24rem] text-[13.5px]">
-            <thead><tr className="border-b border-line/70"><th className={TH}>الخدمة</th><th className={TH}>السعر</th><th className={TH}>اتحجز</th><th className={TH}>خلص</th><th className={TH}>وصل (جنيه)</th></tr></thead>
+            <thead><tr className="border-b border-line/70"><th className={TH}>الخدمة</th><th className={TH}>السعر</th><th className={TH}>محجوز</th><th className={TH}>تم</th><th className={TH}>المُستلَم (جنيه)</th></tr></thead>
             <tbody className="divide-y divide-line/60">
               {rows.map((s) => (
                 <tr key={s.key} className="transition hover:bg-card/60">
@@ -321,11 +321,11 @@ function Months() {
   const rows = trend.data?.months ?? [];
   const max = Math.max(1, ...rows.map((m) => m.received));
   const name = (m: string) => new Intl.DateTimeFormat("ar-EG", { month: "short", timeZone: "UTC" }).format(new Date(`${m}-15T00:00:00Z`));
-  const said = (m: TrendRow) => `${name(m.month)} ${m.month.slice(0, 4)}: ${m.received.toLocaleString("en-US")} جنيه، ${m.booked} حجز`;
+  const said = (m: TrendRow) => `${name(m.month)} ${m.month.slice(0, 4)}: ${m.received.toLocaleString("en-US")} جنيه، الحجوزات: ${m.booked}`;
   return (
-    <GlassCard icon="trend-up" title="الفلوس اللي وصلت كل شهر">
+    <GlassCard icon="trend-up" title="المبالغ المُستلَمة كل شهر">
       {trend.isPending ? <Loading /> : trend.isError ? <ErrorState message={errorMessage(trend.error)} onRetry={() => void trend.refetch()} /> : (
-        <ol className="grid h-44 grid-cols-12 items-end gap-1.5" aria-label="آخر 12 شهر">
+        <ol className="grid h-44 grid-cols-12 items-end gap-1.5" aria-label="آخر 12 شهرًا">
           {rows.map((m) => (
             <li key={m.month} className="group relative flex h-full min-w-0 flex-col items-center justify-end gap-1" title={said(m)}>
               <span className="sr-only">{said(m)}</span>
@@ -403,19 +403,19 @@ function Ratings({ ratings }: { ratings: RatingReport }) {
           <p className="tabular text-3xl font-bold">{score(ratings.average)}</p>
           {ratings.average != null ? <Bar share={ratings.average / 5} /> : null}
         </div>
-        <Number icon="mail" title="اتبعت" value={ratings.sent} />
-        <Number icon="check-circle" tone="green" title="اتقيّمت" value={ratings.answered} note={ratings.sent === 0 ? undefined : `${Math.round((ratings.answered / ratings.sent) * 100)}%`} />
+        <Number icon="mail" title="المُرسلة" value={ratings.sent} />
+        <Number icon="check-circle" tone="green" title="المُقيَّمة" value={ratings.answered} note={ratings.sent === 0 ? undefined : `${Math.round((ratings.answered / ratings.sent) * 100)}%`} />
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <GlassCard icon="trend-up" title="المتوسط حسب الخدمة">
-          {ratings.by_service.length === 0 ? <Blank>مفيش تقييمات الشهر ده.</Blank> : (
+          {ratings.by_service.length === 0 ? <Blank>لا توجد تقييمات هذا الشهر.</Blank> : (
             <ul className="grid gap-2.5">
               {ratings.by_service.map((s) => (
                 <li key={s.key} className="grid gap-1">
                   <span className="flex items-baseline justify-between gap-3 text-[13.5px]">
                     <span className="min-w-0">{label(RATED_SERVICES, s.key)}</span>
                     <span className="flex shrink-0 items-baseline gap-2">
-                      <span className="tabular text-[12px] text-ink-soft">{s.count} تقييم</span>
+                      <span className="tabular text-[12px] text-ink-soft">التقييمات: {s.count}</span>
                       <span className="tabular font-bold">{score(s.average)}</span>
                     </span>
                   </span>
@@ -426,14 +426,14 @@ function Ratings({ ratings }: { ratings: RatingReport }) {
           )}
         </GlassCard>
         <GlassCard icon="alert-circle" title="تقييمات «يحتاج للتحسين»">
-          {ratings.low.length === 0 ? <Blank>مفيش تقييمات ضعيفة الشهر ده.</Blank> : (
+          {ratings.low.length === 0 ? <Blank>لا توجد تقييمات ضعيفة هذا الشهر.</Blank> : (
             <div className="soft-scroll overflow-x-auto">
               <table className="w-full min-w-[18rem] text-[13.5px]">
                 <thead><tr className="border-b border-line/70"><th className={TH}>اليوم</th><th className={TH}>الخدمة</th><th className={TH}>العميل</th></tr></thead>
                 <tbody className="divide-y divide-line/60">
                   {ratings.low.map((l, i) => (
                     <tr key={`${l.at}-${i}`} className="transition hover:bg-card/60">
-                      <td className="tabular px-2 py-2">{cairoDay(l.at)}</td><td className="px-2">{label(RATED_SERVICES, l.service)}</td><td className="px-2 font-semibold">{l.client_name ?? "رقم من غير اسم"}</td>
+                      <td className="tabular px-2 py-2">{cairoDay(l.at)}</td><td className="px-2">{label(RATED_SERVICES, l.service)}</td><td className="px-2 font-semibold">{l.client_name ?? "رقم بلا اسم"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -442,7 +442,7 @@ function Ratings({ ratings }: { ratings: RatingReport }) {
           )}
         </GlassCard>
       </div>
-      <Note>التقييمات اللي اتبعتت الشهر ده. «ليس الآن» مش بيتحسب في المتوسط. سبب التقييم الضعيف في مهمته («كلام العميل»).</Note>
+      <Note>التقييمات المُرسلة هذا الشهر. لا يُحتسب «ليس الآن» في المتوسط. سبب التقييم الضعيف موجود في مهمته («رسائل العميل»).</Note>
     </section>
   );
 }
@@ -469,17 +469,17 @@ function AiCostTurns({ personId, month }: { personId: string; month: string }) {
   if (q.isPending) return <Loading />;
   if (q.isError) return <ErrorState message={errorMessage(q.error)} onRetry={() => void q.refetch()} />;
   return (
-    <ul className="grid gap-1.5" aria-label="رسايل المحادثة">
+    <ul className="grid gap-1.5" aria-label="رسائل المحادثة">
       {q.data.turns.map((t, i) => (
         <li key={`${t.at}-${i}`} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 rounded-xl bg-card/60 px-3 py-2 text-[13px]">
           <span className="tabular text-ink-soft">{cairoWhen(t.at)}</span>
           <span className="flex flex-wrap gap-x-3 gap-y-1 text-ink-soft">
             {t.calls.map((c, j) => (
-              <span key={j}>{KIND_LABELS[c.kind] ?? c.kind}: <span className="tabular" dir="ltr">{c.cost_usd === null ? "بدون سعر" : usd(c.cost_usd)}</span></span>
+              <span key={j}>{KIND_LABELS[c.kind] ?? c.kind}: <span className="tabular" dir="ltr">{c.cost_usd === null ? "غير مُسعَّر" : usd(c.cost_usd)}</span></span>
             ))}
           </span>
           <span className="tabular font-bold" dir="ltr">
-            {usd(t.cost_usd)} <span className="font-normal text-ink-soft">· {tokens(t.input_tokens)} دخل / {tokens(t.output_tokens)} خرج</span>
+            {usd(t.cost_usd)} <span className="font-normal text-ink-soft">· {tokens(t.input_tokens)} إدخال / {tokens(t.output_tokens)} إخراج</span>
           </span>
         </li>
       ))}
@@ -502,15 +502,15 @@ function AiCost({ month }: { month: string }) {
       {q.isPending ? <Loading /> : q.isError ? <ErrorState message={errorMessage(q.error)} onRetry={() => void q.refetch()} /> : s ? (
         <>
           <div className="grid gap-3 sm:grid-cols-3">
-            <Number icon="trend-up" title="صرف الشهر ده" value={usd(s.total_usd)} />
-            <Number icon="chat" title="محادثات" value={s.conversations} note={s.conversations > 0 ? `${usd(s.total_usd / s.conversations)} للمحادثة` : undefined} />
-            <Number icon="document" title="نداءات للذكاء الاصطناعي" value={s.calls} note={`${tokens(s.input_tokens)} دخل / ${tokens(s.output_tokens)} خرج`} />
+            <Number icon="trend-up" title="إنفاق هذا الشهر" value={usd(s.total_usd)} />
+            <Number icon="chat" title="المحادثات" value={s.conversations} note={s.conversations > 0 ? `${usd(s.total_usd / s.conversations)} لكل محادثة` : undefined} />
+            <Number icon="document" title="طلبات إلى الذكاء الاصطناعي" value={s.calls} note={`${tokens(s.input_tokens)} إدخال / ${tokens(s.output_tokens)} إخراج`} />
           </div>
           <GlassCard icon="chat" title="حسب المحادثة">
-            {q.data.conversations.length === 0 ? <Blank>مفيش صرف متسجّل الشهر ده.</Blank> : (
+            {q.data.conversations.length === 0 ? <Blank>لا يوجد إنفاق مسجّل هذا الشهر.</Blank> : (
               <div className="soft-scroll overflow-x-auto">
                 <table className="w-full min-w-[22rem] text-[13.5px]">
-                  <thead><tr className="border-b border-line/70"><th className={TH}>العميل</th><th className={TH}>رسايل</th><th className={TH}>توكن</th><th className={TH}>التكلفة</th></tr></thead>
+                  <thead><tr className="border-b border-line/70"><th className={TH}>العميل</th><th className={TH}>الرسائل</th><th className={TH}>التوكنات</th><th className={TH}>التكلفة</th></tr></thead>
                   <tbody className="divide-y divide-line/60">
                     {q.data.conversations.map((c) => (
                       <Fragment key={c.person_id}>
@@ -518,7 +518,7 @@ function AiCost({ month }: { month: string }) {
                           <td className="px-2 py-2 font-semibold">
                             <button type="button" aria-expanded={open === c.person_id} className="text-start underline-offset-2 hover:underline"
                               onClick={() => setOpen(open === c.person_id ? null : c.person_id)}>
-                              {c.client ?? "رقم من غير اسم"}
+                              {c.client ?? "رقم بلا اسم"}
                             </button>
                           </td>
                           <td className="tabular px-2">{c.turns}</td>
@@ -536,8 +536,8 @@ function AiCost({ month }: { month: string }) {
             )}
           </GlassCard>
           <Note>
-            بتتحسب من أول ما الميزة اتفعّلت. فيها فهم الرسالة وكتابة الرد ومراجعته، بسعر Anthropic المنشور. تحويل الرسايل الصوتية لكلام
-            مش محسوب. «+» جنب الرقم = فيه نداء لموديل من غير سعر معروف.
+            تُحتسب منذ تفعيل الميزة، وتشمل فهم الرسالة وكتابة الرد ومراجعته، بسعر Anthropic المُعلَن. ولا يُحتسب تحويل الرسائل الصوتية
+            إلى نص. «+» بجوار الرقم = يوجد طلب إلى نموذج سعره غير معروف.
           </Note>
         </>
       ) : null}
@@ -549,29 +549,29 @@ function AiCost({ month }: { month: string }) {
 
 /** Why a free answer did not go (the approved words went instead). */
 const GUARD_REASONS: Record<string, string> = {
-  review_promise: "وعد المكتب ما يقدرش يضمنه",
-  review_legal: "كلام قانوني",
-  review_not_in_facts: "معلومة مش في حقايق المكتب",
-  review_harmful: "حاجة تضر المكتب",
+  review_promise: "وعد لا يستطيع المكتب ضمانه",
+  review_legal: "محتوى قانوني",
+  review_not_in_facts: "معلومة غير موجودة في حقائق المكتب",
+  review_harmful: "محتوى يضر بالمكتب",
   review_breaks_playbook: "خالف قاعدة في دليل التعامل",
-  review_unavailable: "المراجِع ما ردّش في وقته",
-  review_unavailable_timeout: "المراجِع اتأخر",
-  review_unavailable_error: "المراجِع وقع",
-  review_unavailable_invalid: "المراجِع رد رد مش مفهوم",
-  review_unavailable_nokey: "المراجِع من غير مفتاح",
-  review_unavailable_none: "مفيش مراجِع",
+  review_unavailable: "لم يردّ المراجِع في الوقت المحدد",
+  review_unavailable_timeout: "تأخّر المراجِع",
+  review_unavailable_error: "تعطّل المراجِع",
+  review_unavailable_invalid: "ردّ المراجِع بردّ غير مفهوم",
+  review_unavailable_nokey: "المراجِع بلا مفتاح",
+  review_unavailable_none: "لا يوجد مراجِع",
   legal_word: "كلمة قانونية",
-  self_feminine: "كلمة بصيغة الست عن حازم",
-  repeats_before: "كرر اللي اتبعت قبله",
-  price_dropped: "شال السعر",
+  self_feminine: "كلمة بصيغة المؤنث عن حازم",
+  repeats_before: "كرّر ما أُرسل قبله",
+  price_dropped: "حذف السعر",
   promise: "كلمة وعد",
-  money: "كلام عن الفلوس",
-  number_not_given: "رقم مش في الحقايق",
-  link: "لينك",
+  money: "حديث عن المال",
+  number_not_given: "رقم غير موجود في الحقائق",
+  link: "رابط",
   too_long: "طويل",
-  same_as_previous: "نفس الرد اللي فات",
-  timeout: "الكاتب اتأخر",
-  error: "الكاتب وقع",
+  same_as_previous: "مطابق للرد السابق",
+  timeout: "تأخّر الكاتب",
+  error: "تعطّل الكاتب",
 };
 
 /**
@@ -586,23 +586,23 @@ function FreeAnswers({ rows, written }: { rows: FreeAnswerRow[]; written?: Writt
       <GroupHead id="free-title" icon="alert-circle" title="ردود حازم الحرة" />
       {written && written.total > 0 ? (
         <p className="text-[13.5px]" data-testid="written-summary">
-          كتب حازم <strong>{written.total}</strong> رد الشهر ده، منهم <strong>{written.fallbacks}</strong> رجعوا للنص الثابت ({Math.round((written.fallbacks / written.total) * 100)}%)
-          {written.retried > 0 ? <>، و{written.retried} اتكتبوا مرة تانية بعد الرفض</> : null}.
-          {written.by_reason.length > 0 ? <> أكتر الأسباب: {written.by_reason.slice(0, 3).map((x) => `${GUARD_REASONS[x.key] ?? x.key} (${x.count})`).join("، ")}.</> : null}
+          عدد الردود التي كتبها حازم هذا الشهر: <strong>{written.total}</strong>، عاد منها <strong>{written.fallbacks}</strong> إلى النص الثابت ({Math.round((written.fallbacks / written.total) * 100)}%)
+          {written.retried > 0 ? <>، وأُعيدت كتابة {written.retried} منها بعد الرفض</> : null}.
+          {written.by_reason.length > 0 ? <> أكثر الأسباب: {written.by_reason.slice(0, 3).map((x) => `${GUARD_REASONS[x.key] ?? x.key} (${x.count})`).join("، ")}.</> : null}
         </p>
       ) : null}
-      <GlassCard icon="alert-circle" title="اللي حازم كتبه بنفسه">
-        {rows.length === 0 ? <Blank>مفيش ردود حرة الشهر ده.</Blank> : (
+      <GlassCard icon="alert-circle" title="ما كتبه حازم بنفسه">
+        {rows.length === 0 ? <Blank>لا توجد ردود حرة هذا الشهر.</Blank> : (
           <div className="soft-scroll overflow-x-auto">
             <table className="w-full min-w-[18rem] text-[13.5px]">
-              <thead><tr className="border-b border-line/70"><th className={TH}>إمتى</th><th className={TH}>العميل</th><th className={TH}>الرد</th></tr></thead>
+              <thead><tr className="border-b border-line/70"><th className={TH}>الوقت</th><th className={TH}>العميل</th><th className={TH}>الرد</th></tr></thead>
               <tbody className="divide-y divide-line/60">
                 {rows.map((x, i) => (
                   <tr key={`${x.at}-${i}`} className="transition hover:bg-card/60">
                     <td className="tabular px-2 py-2 align-top">{when(x.at)}</td>
-                    <td className="px-2 py-2 align-top font-semibold">{x.client ?? "رقم من غير اسم"}</td>
+                    <td className="px-2 py-2 align-top font-semibold">{x.client ?? "رقم بلا اسم"}</td>
                     <td className="px-2 py-2">
-                      {x.text ?? <span className="text-bad">اترفض: {GUARD_REASONS[x.guard] ?? x.guard} (اتبعت النص الثابت)</span>}
+                      {x.text ?? <span className="text-bad">رُفض: {GUARD_REASONS[x.guard] ?? x.guard} (أُرسل النص الثابت)</span>}
                     </td>
                   </tr>
                 ))}
@@ -611,7 +611,7 @@ function FreeAnswers({ rows, written }: { rows: FreeAnswerRow[]; written?: Writt
           </div>
         )}
       </GlassCard>
-      <Note>لو رد مش عاجبك، زوّد سطر في «دليل التعامل» من «النصوص»، وحازم هيمشي عليه من الرسالة الجاية.</Note>
+      <Note>إذا لم يعجبك ردّ، فأضف سطرًا في «دليل التعامل» من «النصوص»، وسيلتزم به حازم بدءًا من الرسالة التالية.</Note>
     </section>
   );
 }
@@ -620,11 +620,11 @@ function FreeAnswers({ rows, written }: { rows: FreeAnswerRow[]; written?: Writt
 
 /** Why the system flagged a conversation. */
 const REVIEW_REASONS: Record<ReviewRow["reason"], string> = {
-  offer_after_payment: "عرض مدفوع لعميل دفع (المفروض ما يحصلش)",
-  repeated: "الرد اتكرر",
-  unclear_twice: "مش فاهم مرتين ورا بعض",
-  asked_status: "العميل سأل «فاكرني؟» أو عن ميعاده",
-  left_after_price: "مشي بعد السعر",
+  offer_after_payment: "عرض مدفوع لعميل دفع (لا ينبغي أن يحدث)",
+  repeated: "تكرّر الرد",
+  unclear_twice: "لم يفهم الرسالة مرتين متتاليتين",
+  asked_status: "سأل العميل «فاكرني؟» أو سأل عن موعده",
+  left_after_price: "غادر بعد معرفة السعر",
 };
 
 /**
@@ -638,17 +638,17 @@ function Review({ rows }: { rows: ReviewRow[] }) {
   const sorted = [...rows].sort((a, b) => alarm(b) - alarm(a));
   return (
     <section className="grid gap-3" aria-labelledby="review-title">
-      <GroupHead id="review-title" icon="alert-circle" title="محادثات محتاجة مراجعة" />
-      <GlassCard icon="alert-circle" title="النظام علّم عليها">
-        {sorted.length === 0 ? <Blank>مفيش محادثات محتاجة مراجعة الشهر ده.</Blank> : (
+      <GroupHead id="review-title" icon="alert-circle" title="محادثات تحتاج إلى مراجعة" />
+      <GlassCard icon="alert-circle" title="حدّدها النظام">
+        {sorted.length === 0 ? <Blank>لا توجد محادثات تحتاج إلى مراجعة هذا الشهر.</Blank> : (
           <div className="soft-scroll overflow-x-auto">
             <table className="w-full min-w-[18rem] text-[13.5px]">
-              <thead><tr className="border-b border-line/70"><th className={TH}>إمتى</th><th className={TH}>العميل</th><th className={TH}>السبب</th></tr></thead>
+              <thead><tr className="border-b border-line/70"><th className={TH}>الوقت</th><th className={TH}>العميل</th><th className={TH}>السبب</th></tr></thead>
               <tbody className="divide-y divide-line/60">
                 {sorted.map((x, i) => (
                   <tr key={`${x.at}-${i}`} className="transition hover:bg-card/60">
                     <td className="tabular px-2 py-2">{when(x.at)}</td>
-                    <td className="px-2 font-semibold">{x.client ?? "رقم من غير اسم"}</td>
+                    <td className="px-2 font-semibold">{x.client ?? "رقم بلا اسم"}</td>
                     <td className={x.reason === "offer_after_payment" ? "px-2 font-semibold text-bad" : "px-2"}>{REVIEW_REASONS[x.reason] ?? x.reason}</td>
                   </tr>
                 ))}
@@ -657,7 +657,7 @@ function Review({ rows }: { rows: ReviewRow[] }) {
           </div>
         )}
       </GlassCard>
-      <Note>النظام بيعلّم عليها لوحده. افتح المحادثة من «المحادثات» وشوف حازم رد إزاي.</Note>
+      <Note>يحدّدها النظام تلقائيًا. افتح المحادثة من «المحادثات» وراجع كيف ردّ حازم.</Note>
     </section>
   );
 }

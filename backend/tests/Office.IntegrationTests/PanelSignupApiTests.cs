@@ -147,7 +147,7 @@ public sealed class PanelSignupApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Accepted, r.StatusCode);
         Assert.True((bool)(await Json(r))["mail_sent"]!);
         var mail = Assert.Single(_factory.Mail.To("mona@example.test"));
-        Assert.Contains("كود تأكيد", mail.Subject);
+        Assert.Contains("رمز تأكيد", mail.Subject);
         Assert.Matches(@"^\d{6}$", _factory.Mail.LastCode("mona@example.test"));
         Assert.Contains("dir=\"rtl\"", mail.Html);
 
@@ -161,7 +161,7 @@ public sealed class PanelSignupApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal("invalid_code", await Error(await Post(c, "/auth/register/verify", new { email = "mona@example.test", code = "000000" })));
         Assert.Equal(HttpStatusCode.NoContent, (await Post(c, "/auth/register/verify",
             new { email = "mona@example.test", code = _factory.Mail.LastCode("mona@example.test") })).StatusCode);
-        Assert.Contains(_factory.Mail.To(BossEmail), m => m.Subject.Contains("مستني التفعيل") && m.Text.Contains("mona"));
+        Assert.Contains(_factory.Mail.To(BossEmail), m => m.Subject.Contains("في انتظار التفعيل") && m.Text.Contains("mona"));
 
         login = await Post(c, "/auth/login", new { username = "mona", password = Password });
         Assert.Equal("pending_approval", await Error(login));
@@ -183,7 +183,7 @@ public sealed class PanelSignupApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal("staff", (string)u["role"]!);
         Assert.Equal("منى", (string)u["staff"]!["name"]!);
         Assert.False((bool)u["pending"]!);
-        Assert.Contains(_factory.Mail.To("mona@example.test"), m => m.Subject.Contains("اتفعّل"));
+        Assert.Contains(_factory.Mail.To("mona@example.test"), m => m.Subject.Contains("تم تفعيل حسابك"));
 
         var mona = await SignIn("mona");
         var me = (await mona.GetFromJsonAsync<JsonNode>("/api/panel/auth/me", Ct))!;
@@ -219,7 +219,7 @@ public sealed class PanelSignupApiTests(TestDatabase db) : IAsyncLifetime
         var boss = await SignIn("boss");
         Assert.Equal(HttpStatusCode.NoContent, (await Post(boss, $"/users/{id}/reject", new { })).StatusCode);
         Assert.Equal(0, await db.ScalarAsync<long>($"SELECT count(*) FROM hazem.panel_users WHERE id = '{id}'"));
-        Assert.Contains(_factory.Mail.To("karim@example.test"), m => m.Subject.Contains("ما اتقبلش"));
+        Assert.Contains(_factory.Mail.To("karim@example.test"), m => m.Subject.Contains("لم يُقبل"));
         Assert.Equal(HttpStatusCode.Conflict, (await Post(boss, $"/users/{await db.ScalarAsync<Guid>("SELECT id FROM hazem.panel_users WHERE username = 'boss'")}/reject", new { })).StatusCode);
 
         _clock.Advance(TimeSpan.FromMinutes(2));
@@ -292,7 +292,7 @@ public sealed class PanelSignupApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Unauthorized, (await old.GetAsync("/api/panel/auth/me", Ct)).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await Post(c, "/auth/login", new { username = "boss", password = Password })).StatusCode);
         await SignIn("boss", "a brand new password 2");
-        Assert.Contains(_factory.Mail.To(BossEmail), m => m.Subject.Contains("كلمة السر اتغيرت"));
+        Assert.Contains(_factory.Mail.To(BossEmail), m => m.Subject.Contains("تم تغيير كلمة السر"));
     }
 
     // ---------- the authenticator ----------
@@ -344,7 +344,7 @@ public sealed class PanelSignupApiTests(TestDatabase db) : IAsyncLifetime
         var status = (await boss.GetFromJsonAsync<JsonNode>("/api/panel/auth/2fa", Ct))!;
         Assert.True((bool)status["enabled"]!);
         Assert.Equal(9, (int)status["recovery_codes_left"]!);
-        Assert.Contains(_factory.Mail.To(BossEmail), m => m.Subject.Contains("اتشغّل"));
+        Assert.Contains(_factory.Mail.To(BossEmail), m => m.Subject.Contains("تم تفعيل التحقق بخطوتين"));
     }
 
     [Fact]

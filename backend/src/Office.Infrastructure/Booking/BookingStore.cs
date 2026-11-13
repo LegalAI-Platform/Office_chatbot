@@ -10,7 +10,7 @@ namespace Office.Infrastructure.Booking;
 /// hazem.booking_* and hazem.appointments (migration 0013). Booking and moving go through the SQL
 /// functions (one lock, the buffer, no two confirmed appointments at once); the rest is read here.
 /// </summary>
-public sealed class BookingStore(HazemDbContext db) : IBookingStore
+public sealed class BookingStore(HazemDbContext db, TimeProvider clock) : IBookingStore
 {
     public async Task<Schedule> LoadScheduleAsync(DateOnly from, DateOnly to, CancellationToken ct)
     {
@@ -165,11 +165,15 @@ public sealed class BookingStore(HazemDbContext db) : IBookingStore
         return await db.Appointments.AnyAsync(a => a.Id == id && a.State == "confirmed" && a.AttendanceFor == at, ct);
     }
 
-    /// <summary>A task the booking opens outside a turn (the panel, the calendar worker). Once per key.</summary>
+    /// <summary>
+    /// A task the booking opens outside a turn (the panel, the calendar worker). Once per key. fix/alert-flood (the owner,
+    /// v1.108: no task is born late): due no sooner than 10 minutes from now, so a new task is not overdue (and alerted and
+    /// e-mailed a second time) 3 seconds after it was made.
+    /// </summary>
     public Task AddTaskAsync(Guid personId, string key, string type, DateTimeOffset dueAt, CancellationToken ct) =>
         db.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO hazem.staff_tasks (person_id, turn_id, type, due_at)
-            VALUES ({personId}, {key}, {type}, {dueAt.ToUniversalTime()})
+            VALUES ({personId}, {key}, {type}, GREATEST({dueAt.ToUniversalTime()}, {clock.GetUtcNow().AddMinutes(10).ToUniversalTime()}))
             ON CONFLICT (turn_id, type) DO NOTHING
             """, ct);
 

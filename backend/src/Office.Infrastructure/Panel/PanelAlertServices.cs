@@ -84,17 +84,14 @@ public sealed class PanelAlertStore(HazemDbContext db) : IPanelAlertStore
         return failed + n8n + turns + ai + missed;
     }
 
-    public async Task<IReadOnlyList<string>> ManagersAsync(CancellationToken ct) =>
-        await db.PanelUsers.AsNoTracking()
-            .Where(u => u.Active && u.Approval == PanelUser.ApprovalApproved && (u.Role == Permissions.Manager || u.Role == Permissions.Maintenance)) // v1.100
-            .Select(u => u.Email).ToListAsync(ct);
-
     public async Task<IReadOnlyList<AlertToMail>> UnsentAsync(CancellationToken ct)
     {
         var tasks = await (from a in db.PanelAlerts.AsNoTracking()
                            join t in db.StaffTasks.AsNoTracking() on a.TaskId equals (Guid?)t.Id
                            where a.EmailedAt == null && a.CreatedAt > DateTimeOffset.UtcNow.AddDays(-1)
-                                 && a.Kind != AlertKinds.New // v1.105: the bell and Windows only, an e-mail for every client's message would flood
+                                 // v1.105: never task_new. fix/alert-flood (the owner: «للعاجل والمتأخر بس»): the urgent and the
+                                 // overdue only; a client asking for someone and the rest stay in the bell and Windows.
+                                 && (a.Kind == AlertKinds.Urgent || a.Kind == AlertKinds.Overdue)
                                  && (a.Kind == AlertKinds.Overdue ? t.State == "overdue" : t.State != "done" && t.State != "cancelled")
                            orderby a.Id
                            select new AlertToMail(a.Id, a.Kind, a.TaskId, t.Type, t.DueAt, t.StaffId, null)).ToListAsync(ct);
@@ -116,12 +113,27 @@ public sealed class PanelAlertStore(HazemDbContext db) : IPanelAlertStore
     public Task MarkEmailedAsync(long id, CancellationToken ct) =>
         db.Database.ExecuteSqlInterpolatedAsync($"UPDATE hazem.panel_alerts SET emailed_at = now() WHERE id = {id}", ct);
 
-    public async Task<IReadOnlyList<string>> RecipientsAsync(Guid? staffId, CancellationToken ct) =>
-        await db.PanelUsers.AsNoTracking()
-            .Where(u => u.Active && u.Approval == PanelUser.ApprovalApproved
-                        && (u.Role == Permissions.Manager || u.Role == Permissions.Maintenance || u.Role == Permissions.Lawyer
-                            || (u.Role == Permissions.Staff && (staffId == null || u.StaffId == staffId))))
-            .Select(u => u.Email).ToListAsync(ct);
+    private IQueryable<PanelUserRow> ActiveUsers => db.PanelUsers.AsNoTracking().Where(u => u.Active && u.Approval == PanelUser.ApprovalApproved);
+
+    /// <summary>The office has no active staff account: the staff's alerts are the managers' (nobody would hear them otherwise).</summary>
+    private async Task<bool> NoStaffAsync(CancellationToken ct) => !await ActiveUsers.AnyAsync(u => u.Role == Permissions.Staff, ct);
+
+    public async Task<IReadOnlyList<string>> RecipientsAsync(AlertToMail alert, CancellationToken ct)
+    {
+        var audience = AlertAudience.For(alert.Kind, alert.TaskType);
+        if (alert.StaffId is { } holder && audience != AlertAudience.Managers)
+        {
+            var theirs = await ActiveUsers.Where(u => u.StaffId == holder).Select(u => u.Email).ToListAsync(ct);
+            if (theirs.Count > 0)
+            {
+                return theirs;
+            }
+            // a holder with no active account (left the office): the audience, so the alert is not lost
+        }
+
+        var roles = AlertAudience.Roles(audience, await NoStaffAsync(ct));
+        return await ActiveUsers.Where(u => roles.Contains(u.Role)).Select(u => u.Email).ToListAsync(ct);
+    }
 
     public async Task<IReadOnlyList<PanelAlert>> ListAsync(Viewer viewer, int limit, CancellationToken ct)
     {
@@ -212,21 +224,31 @@ public sealed class PanelAlertStore(HazemDbContext db) : IPanelAlertStore
         }
     }
 
+    /// <summary>
+    /// fix/alert-flood (the owner, v1.108: «التنبيه يروح للي عليه الدور بس»): the alerts that are this person's job
+    /// (<see cref="AlertAudience"/>), not every alert of a task they may see. A held task's alerts are its holder's. A low
+    /// rating's and the system's are the managers' (TASK 13, v1.31). With no active staff account, the staff's are the managers'.
+    /// </summary>
     private IQueryable<PanelAlertRow> Visible(Viewer viewer)
     {
-        var alerts = db.PanelAlerts.AsNoTracking();
-        // TASK 13: a system alert is the managers' (the ones who manage the accounts and the office's machine).
-        var managers = viewer.Can(Permissions.UsersManage);
-        if (viewer.Can(Permissions.TasksViewAll))
-        {
-            // v1.31: a low rating is the managers' too.
-            return managers ? alerts : alerts.Where(a => a.Kind != AlertKinds.System && a.Kind != AlertKinds.Rating);
-        }
-
+        var audience = AlertAudience.Of(viewer.Role);
+        var managers = audience == AlertAudience.Managers;
+        var lawyer = audience == AlertAudience.Lawyer;
+        var office = audience == AlertAudience.Office
+                     || (managers && !db.PanelUsers.Any(u => u.Active && u.Approval == PanelUser.ApprovalApproved && u.Role == Permissions.Staff));
         var staff = viewer.StaffId;
-        return from a in alerts
-               join t in db.StaffTasks.AsNoTracking() on a.TaskId equals (Guid?)t.Id
-               where (t.StaffId == null || (staff != null && t.StaffId == staff)) && a.Kind != AlertKinds.Rating
+        string[] lawyerWork = [.. AlertAudience.LawyerWork];
+        return from a in db.PanelAlerts.AsNoTracking()
+               join t in db.StaffTasks.AsNoTracking() on a.TaskId equals (Guid?)t.Id into ts
+               from t in ts.DefaultIfEmpty()
+               where t == null
+                   ? a.Kind == AlertKinds.System && managers
+                   : a.Kind == AlertKinds.Rating || t.Type == AlertAudience.RatingType
+                       ? managers
+                       : t.StaffId != null && db.PanelUsers.Any(u => u.StaffId == t.StaffId && u.Active)
+                           ? staff != null && t.StaffId == staff
+                           : a.Kind == AlertKinds.Urgent ? lawyer || office
+                           : lawyerWork.Contains(t.Type) ? lawyer : office
                select a;
     }
 }

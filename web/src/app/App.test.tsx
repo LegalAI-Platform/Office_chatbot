@@ -106,7 +106,7 @@ describe("routing and permissions", () => {
     expect(await within(urgent.closest("section")!).findByText("3")).toBeTruthy();
     const late = screen.getByRole("heading", { name: "مهام متأخرة" });
     expect(within(late.closest("section")!).getByText("2")).toBeTruthy();
-    const table = screen.getByRole("heading", { name: "المهام العاجلة والمتأخرة" }).closest("section")!;
+    const table = screen.getByRole("heading", { name: "مطلوب منك" }).closest("section")!; // fix/alert-flood: one card
     expect(within(table).getByText("عاجلة")).toBeTruthy();
     expect(within(table).getByRole("link", { name: "افتح مهمة سارة محمد" }).getAttribute("href")).toBe("/tasks/t1");
   });
@@ -133,11 +133,11 @@ describe("routing and permissions", () => {
     const urgent = await screen.findByRole("heading", { name: "أمور عاجلة" });
     expect(within(urgent.closest("section")!).getByRole("link").getAttribute("href")).toBe("/tasks?state=urgent");
     const calendar = screen.getByRole("heading", { name: "تقويم المواعيد" }).closest("section")!;
-    expect(within(calendar).getByRole("list", { name: "الأسبوع ده" })).toBeTruthy();
-    fireEvent.click(within(calendar).getByRole("button", { name: "الأسبوع الجاي" }));
-    expect(within(calendar).getByRole("list", { name: "أسبوع تاني" })).toBeTruthy();
-    fireEvent.click(within(calendar).getByRole("button", { name: "ارجع للأسبوع ده" }));
-    expect(within(calendar).getByRole("list", { name: "الأسبوع ده" })).toBeTruthy();
+    expect(within(calendar).getByRole("list", { name: "الأسبوع الحالي" })).toBeTruthy();
+    fireEvent.click(within(calendar).getByRole("button", { name: "الأسبوع التالي" }));
+    expect(within(calendar).getByRole("list", { name: "أسبوع آخر" })).toBeTruthy();
+    fireEvent.click(within(calendar).getByRole("button", { name: "العودة إلى الأسبوع الحالي" }));
+    expect(within(calendar).getByRole("list", { name: "الأسبوع الحالي" })).toBeTruthy();
   });
 
   it("opens the overdue tasks from a link", async () => {
@@ -152,7 +152,7 @@ describe("routing and permissions", () => {
     serve(me());
     renderAt("/tasks");
     await screen.findByRole("heading", { name: "المهام" });
-    const who = screen.getByRole("combobox", { name: "مين" }) as HTMLSelectElement;
+    const who = screen.getByRole("combobox", { name: "المسؤول" }) as HTMLSelectElement;
     expect(within(who).queryByRole("option", { name: "كل المسؤولين" })).toBeNull();
     expect(who.value).toBe("mine");
   });
@@ -176,8 +176,25 @@ describe("routing and permissions", () => {
     expect(router.state.location.search).toBe("?state=done&page=2");
     fireEvent.click(link);
     expect(router.state.location.pathname).toBe("/tasks/t7");
-    fireEvent.click(await screen.findByRole("link", { name: /رجوع لكل المهام/ }));
+    fireEvent.click(await screen.findByRole("link", { name: /العودة إلى كل المهام/ }));
     expect(router.state.location.pathname).toBe("/tasks");
     expect(router.state.location.search).toBe("?state=done&page=2");
+  });
+});
+
+// the tester: «when I press the logo it refreshes and gets me back on the main page»
+describe("the office's logo", () => {
+  it("goes back to the home page and asks everything again", async () => {
+    serve(me());
+    const router = renderAt("/tasks");
+    const logo = (await screen.findAllByRole("link", { name: "الرئيسية: تحديث الصفحة" }))[0]!;
+    await screen.findByRole("heading", { level: 1, name: "المهام" });
+    const fetches = vi.mocked(globalThis.fetch);
+    const before = fetches.mock.calls.filter(([u]) => String(u).endsWith("/auth/me")).length;
+    fireEvent.click(logo);
+    expect(await screen.findByRole("heading", { name: "مطلوب منك" })).toBeTruthy();
+    expect(router.state.location.pathname).toBe("/");
+    // everything is asked again (the signed-in person too, not only the home page's own data)
+    await vi.waitFor(() => expect(fetches.mock.calls.filter(([u]) => String(u).endsWith("/auth/me")).length).toBeGreaterThan(before));
   });
 });

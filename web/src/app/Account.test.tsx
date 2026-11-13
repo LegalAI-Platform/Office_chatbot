@@ -68,7 +68,7 @@ describe("«الصورة الشخصية» on «حسابي»", () => {
     await screen.findByRole("heading", { name: "الصورة الشخصية" });
     expect(photos()).toHaveLength(0);
     expect(screen.getAllByText("ي ع").length).toBeGreaterThanOrEqual(2); // the top bar and the page
-    expect(screen.queryByRole("button", { name: "شيل الصورة" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "إزالة الصورة" })).toBeNull();
 
     pick(new File(["x".repeat(5000)], "me.png", { type: "image/png" }));
     await waitFor(() => expect(photos()).toHaveLength(2));
@@ -78,10 +78,10 @@ describe("«الصورة الشخصية» on «حسابي»", () => {
     expect(put.body).toBe(small);
     expect(photos()[0]!.getAttribute("src")).toBe(`/api/panel/users/u1/avatar?v=${encodeURIComponent("2026-10-31T12:00:00.123456+00:00")}`);
 
-    fireEvent.click(screen.getByRole("button", { name: "شيل الصورة" }));
+    fireEvent.click(screen.getByRole("button", { name: "إزالة الصورة" }));
     await waitFor(() => expect(photos()).toHaveLength(0));
     expect(calls.some((c) => c.method === "DELETE" && c.path === "/account/avatar")).toBe(true);
-    expect(screen.queryByRole("button", { name: "شيل الصورة" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "إزالة الصورة" })).toBeNull();
   });
 
   it("refuses another type before any upload, and shows the API's refusal in Arabic", async () => {
@@ -90,12 +90,12 @@ describe("«الصورة الشخصية» on «حسابي»", () => {
     await screen.findByRole("heading", { name: "الصورة الشخصية" });
 
     pick(new File(["GIF89a"], "me.gif", { type: "image/gif" }));
-    expect((await screen.findByText("الصورة لازم تبقى JPG أو PNG أو WebP.")).getAttribute("role")).toBe("alert");
+    expect((await screen.findByText("يجب أن تكون الصورة بصيغة JPG أو PNG أو WebP.")).getAttribute("role")).toBe("alert");
     expect(calls.some((c) => c.method === "PUT")).toBe(false);
 
     pick(new File(["x"], "me.jpg", { type: "image/jpeg" }));
-    expect((await screen.findByText(/أكبر من 300 كيلو/)).getAttribute("role")).toBe("alert");
-    expect(screen.queryByText("الصورة لازم تبقى JPG أو PNG أو WebP.")).toBeNull();
+    expect((await screen.findByText(/أكبر من 300 كيلوبايت/)).getAttribute("role")).toBe("alert");
+    expect(screen.queryByText("يجب أن تكون الصورة بصيغة JPG أو PNG أو WebP.")).toBeNull();
     expect(photos()).toHaveLength(0);
   });
 });

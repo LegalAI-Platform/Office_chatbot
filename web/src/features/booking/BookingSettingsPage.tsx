@@ -21,7 +21,7 @@ export function prefetchData(qc: QueryClient) {
 
 type Section = "hours" | "booking" | "office";
 const SECTIONS: { value: Section; label: string; icon: IconName; needsOffice?: boolean }[] = [
-  { value: "hours", label: "ساعات الشغل", icon: "clock" },
+  { value: "hours", label: "ساعات العمل", icon: "clock" },
   { value: "booking", label: "الحجز من واتساب", icon: "whatsapp" },
   { value: "office", label: "بيانات المكتب والدفع", icon: "office", needsOffice: true },
 ];
@@ -41,7 +41,7 @@ export function BookingSettingsPage() {
       <header className="grid items-center gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
         <div className="grid gap-1.5">
           <Link to="/appointments" className="flex w-fit items-center gap-1.5 rounded-full px-1 text-[13.5px] font-semibold text-gold-ink transition hover:underline">
-            <Icon name="chevron-start" className="size-4" />رجوع للمواعيد
+            <Icon name="chevron-start" className="size-4" />العودة إلى المواعيد
           </Link>
           <TitleTile icon="settings">إعدادات المواعيد</TitleTile>
         </div>
@@ -73,7 +73,7 @@ export function BookingSettingsPage() {
 
 // what each change in the record was (hazem.booking_changes.what)
 const CHANGE_WORDS: Record<string, string> = {
-  weekly: "ساعات الأسبوع", exception_add: "تعديل يوم", exception_remove: "شيل تعديل يوم", settings: "إعدادات الحجز", office: "بيانات المكتب",
+  weekly: "ساعات الأسبوع", exception_add: "تعديل يوم", exception_remove: "إزالة تعديل يوم", settings: "إعدادات الحجز", office: "بيانات المكتب",
 };
 
 /** Puts back the last change; when that would leave bookings outside the hours it asks first, like any change. */
@@ -83,7 +83,7 @@ function Undo() {
   const [affected, setAffected] = useState<Appointment[] | null>(null);
   const undo = useMutation({
     mutationFn: (confirm: boolean) => booking.undo(confirm),
-    onSuccess: () => { setAffected(null); void qc.invalidateQueries({ queryKey: ["booking"] }); toast("رجع زي ما كان ✅"); },
+    onSuccess: () => { setAffected(null); void qc.invalidateQueries({ queryKey: ["booking"] }); toast("تمت استعادة الإعداد السابق ✅"); },
     onError: (e) => { if (e instanceof ApiError && e.code === "has_bookings") setAffected(e.data?.appointments as Appointment[]); },
   });
   const last = changes.data?.find((c) => !c.undone);
@@ -96,7 +96,7 @@ function Undo() {
         آخر تعديل: {what} · {last.by ?? "—"}، {cairoWhen(last.at)}
         <Button variant="ghost" className="!min-h-9 !px-3" busy={undo.isPending && !affected}
           onClick={async () => {
-            if (await confirmAction({ title: `ترجّع «${what}» زي ما كان؟`, body: `التعديل ده عمله ${last.by ?? "—"}، ${cairoWhen(last.at)}.`, yes: "أيوه، رجّعه" })) undo.mutate(false);
+            if (await confirmAction({ title: `استعادة «${what}» كما كان؟`, body: `أجرى هذا التعديل ${last.by ?? "—"}، ${cairoWhen(last.at)}.`, yes: "نعم، استعِده" })) undo.mutate(false);
           }}>
           <Icon name="back" className="size-4" />تراجع
         </Button>
@@ -107,7 +107,7 @@ function Undo() {
   );
 }
 
-// ---------- ساعات الشغل: the default week ----------
+// ---------- ساعات العمل: the default week ----------
 
 function Week() {
   const qc = useQueryClient();
@@ -117,7 +117,7 @@ function Week() {
   const days = draft ?? week.data;
   const save = useMutation({
     mutationFn: (confirm: boolean) => booking.saveWeek(days!, confirm),
-    onSuccess: () => { setDraft(null); setAffected(null); void qc.invalidateQueries({ queryKey: ["booking"] }); toast("المواعيد الثابتة اتحفظت ✅"); },
+    onSuccess: () => { setDraft(null); setAffected(null); void qc.invalidateQueries({ queryKey: ["booking"] }); toast("تم حفظ ساعات الأسبوع ✅"); },
     onError: (e) => { if (e instanceof ApiError && e.code === "has_bookings") setAffected(e.data?.appointments as Appointment[]); },
   });
   if (week.isPending) return <Loading />;
@@ -131,16 +131,16 @@ function Week() {
 
   return (
     <div className="grid gap-4">
-      <Sheet icon="clock" title="ساعات الشغل كل أسبوع" hint="اليوم من غير فترات = إجازة."
+      <Sheet icon="clock" title="ساعات العمل الأسبوعية" hint="اليوم الذي لا فترات فيه يُعد إجازة."
         aside={
           <p className="flex flex-wrap gap-2 text-[13px]" role="status">
             <span className={chip}><strong className="tabular font-bold">{hoursWords(total)}</strong> في الأسبوع</span>
-            <span className={chip}><strong className="tabular font-bold">{working}</strong> {working === 1 ? "يوم" : "أيام"} شغل</span>
+            <span className={chip}><strong className="tabular font-bold">{working}</strong> {working === 1 ? "يوم عمل" : "أيام عمل"}</span>
           </p>
         }>
         {draft ? (
           <p role="status" className="flex items-center gap-2 rounded-[14px] border border-gold-line bg-gold-tint px-3.5 py-2 text-sm font-semibold text-gold-ink">
-            <Icon name="alert-circle" className="size-4 shrink-0" />فيه تعديلات لسه ما اتحفظتش.
+            <Icon name="alert-circle" className="size-4 shrink-0" />توجد تعديلات لم تُحفظ بعد.
           </p>
         ) : null}
         <ul className="grid gap-2">
@@ -156,7 +156,7 @@ function Week() {
                     <TimeSelect label={`بداية فترة ${i + 1} يوم ${DAY_NAMES[w]}`} value={r.start} onChange={(v) => edit(w, d.ranges.map((x, j) => (j === i ? { ...x, start: v } : x)))} />
                     –
                     <TimeSelect label={`نهاية فترة ${i + 1} يوم ${DAY_NAMES[w]}`} value={r.end} min={15} onChange={(v) => edit(w, d.ranges.map((x, j) => (j === i ? { ...x, end: v } : x)))} />
-                    <Button variant="ghost" className="!min-h-9 !px-2" aria-label="شيل الفترة" onClick={() => edit(w, d.ranges.filter((_, j) => j !== i))}><Icon name="x" className="size-4" /></Button>
+                    <Button variant="ghost" className="!min-h-9 !px-2" aria-label="إزالة الفترة" onClick={() => edit(w, d.ranges.filter((_, j) => j !== i))}><Icon name="x" className="size-4" /></Button>
                   </Row>
                 ))}
                 {/* a period that ends at midnight leaves nothing after it */}
@@ -172,8 +172,8 @@ function Week() {
         {save.isError && !affected ? <p className="text-sm text-bad" role="alert">{errorMessage(save.error)}</p> : null}
       </Sheet>
       <SaveBar>
-        <Button variant="primary" busy={save.isPending && !affected} disabled={!draft} onClick={() => save.mutate(false)}>احفظ الأسبوع</Button>
-        {draft ? <Button onClick={() => setDraft(null)}>ارجع زي ما كان</Button> : null}
+        <Button variant="primary" busy={save.isPending && !affected} disabled={!draft} onClick={() => save.mutate(false)}>حفظ الأسبوع</Button>
+        {draft ? <Button onClick={() => setDraft(null)}>تراجع عن التعديلات</Button> : null}
       </SaveBar>
     </div>
   );
@@ -183,7 +183,7 @@ function Week() {
 function hoursWords(minutes: number): string {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
-  const hours = h === 0 ? "" : h === 1 ? "ساعة" : h === 2 ? "ساعتين" : h <= 10 ? `${h} ساعات` : `${h} ساعة`;
+  const hours = h === 0 ? "" : h === 1 ? "ساعة" : h === 2 ? "ساعتان" : h <= 10 ? `${h} ساعات` : `${h} ساعة`;
   if (m === 0) return hours || "0 ساعة";
   return hours ? `${hours} و${m} دقيقة` : `${m} دقيقة`;
 }
@@ -202,7 +202,7 @@ function SettingsForm() {
   const s = useQuery(settingsQuery);
   const [draft, setDraft] = useState<Settings | null>(null);
   const v = draft ?? s.data;
-  const save = useMutation({ mutationFn: (x: Settings) => booking.saveSettings(mayCalendar || !s.data ? x : { ...x, calendar_id: s.data.calendar_id }), onSuccess:() => { setDraft(null); void qc.invalidateQueries({ queryKey: ["booking"] }); toast("إعدادات الحجز اتحفظت ✅"); } });
+  const save = useMutation({ mutationFn: (x: Settings) => booking.saveSettings(mayCalendar || !s.data ? x : { ...x, calendar_id: s.data.calendar_id }), onSuccess:() => { setDraft(null); void qc.invalidateQueries({ queryKey: ["booking"] }); toast("تم حفظ إعدادات الحجز ✅"); } });
   if (s.isPending) return <Loading />;
   if (s.isError || !v) return <ErrorState message={errorMessage(s.error)} onRetry={() => void s.refetch()} />;
   const num = (k: keyof Settings) => (e: { target: { value: string } }) => setDraft({ ...v, [k]: e.target.value === "" ? null : Number(e.target.value) });
@@ -212,55 +212,55 @@ function SettingsForm() {
       <Sheet icon="whatsapp" title="الحجز من واتساب">
         <label className={`flex cursor-pointer items-center gap-3 px-4 py-3 font-semibold transition has-checked:border-gold-line has-checked:bg-gold-tint motion-reduce:transition-none ${ROW}`}>
           <input type="checkbox" className="size-4 accent-[#a87a48]" checked={v.enabled} onChange={(e) => setDraft({ ...v, enabled: e.target.checked })} />
-          حازم يحجز من واتساب
+          يحجز حازم المواعيد عبر واتساب
         </label>
       </Sheet>
       <div className="grid items-start gap-4 2xl:grid-cols-2">
-        <Sheet icon="calendar" title="المواعيد اللي حازم بيعرضها">
+        <Sheet icon="calendar" title="المواعيد التي يعرضها حازم">
           <div className="grid gap-3 md:grid-cols-2">
-            <Field label="الوقت بين كل ميعاد والتاني (دقيقة)" type="number" min={0} max={240} value={v.buffer_minutes} onChange={num("buffer_minutes")} />
-            <Field label="أقل مدة قبل الحجز (ساعة)" hint="ما بتنطبقش على العاجل." type="number" min={0} max={168} value={v.min_notice_hours} onChange={num("min_notice_hours")} />
-            <Field label="أبعد يوم ينفع يتحجز (يوم من النهارده)" type="number" min={1} max={180} value={v.horizon_days} onChange={num("horizon_days")} />
-            <Field label="أقصى عدد مواعيد في اليوم" hint="فاضي = من غير حد." type="number" min={1} max={100} value={v.max_per_day ?? ""} onChange={num("max_per_day")} />
+            <Field label="الفاصل بين كل موعدين (دقيقة)" type="number" min={0} max={240} value={v.buffer_minutes} onChange={num("buffer_minutes")} />
+            <Field label="أقل مهلة قبل الموعد (ساعة)" hint="لا تنطبق على الاستشارة العاجلة." type="number" min={0} max={168} value={v.min_notice_hours} onChange={num("min_notice_hours")} />
+            <Field label="أبعد يوم متاح للحجز (عدد الأيام من اليوم)" type="number" min={1} max={180} value={v.horizon_days} onChange={num("horizon_days")} />
+            <Field label="أقصى عدد للمواعيد في اليوم" hint="اتركه فارغًا لعدم التحديد." type="number" min={1} max={100} value={v.max_per_day ?? ""} onChange={num("max_per_day")} />
             <label className="grid gap-1.5 text-sm font-semibold">
-              الميعاد بيبدأ كل
+              يبدأ الموعد كل
               <select className={`${SELECT} !min-h-11 px-3 font-normal`} value={v.slot_step_minutes} onChange={num("slot_step_minutes")}>
-                {[5, 10, 15, 20, 30, 60].map((m) => <option key={m} value={m}>{m} دقيقة</option>)}
+                {[5, 10, 15, 20, 30, 60].map((m) => <option key={m} value={m}>{m} {m <= 10 ? "دقائق" : "دقيقة"}</option>)}
               </select>
             </label>
-            <Field label="عدد المواعيد اللي حازم يعرضها مرة واحدة" type="number" min={1} max={9} value={v.offer_count} onChange={num("offer_count")} />
+            <Field label="عدد المواعيد التي يعرضها حازم في المرة الواحدة" type="number" min={1} max={9} value={v.offer_count} onChange={num("offer_count")} />
             <div className="md:col-span-2">
-              <Field label="إيميل كالندر المستشار (Google)" dir="ltr" value={v.calendar_id} readOnly={!mayCalendar}
+              <Field label="البريد الإلكتروني لتقويم المستشار (Google)" dir="ltr" value={v.calendar_id} readOnly={!mayCalendar}
                 onChange={(e) => { if (mayCalendar) setDraft({ ...v, calendar_id: e.target.value }); }}
-                hint={`${v.calendar_key ? "مفتاح Google موجود." : "مفتاح Google لسه مش متحط (صاحب المشروع)."}${mayCalendar ? "" : " بيغيّره المدير أو المستشار بس."}`} />
+                hint={`${v.calendar_key ? "مفتاح Google موجود." : "لم يُضف مفتاح Google بعد (يضيفه صاحب المشروع)."}${mayCalendar ? "" : " يغيّره المدير أو المستشار فقط."}`} />
             </div>
           </div>
         </Sheet>
         <div className="grid gap-4">
-          <Sheet icon="receipt" title="الحجز المؤقت لحد صورة التحويل"
-            hint="العميل يختار ميعاد ← الميعاد يتمسك له لحد ساعة محددة. صورة التحويل توصل ← الحجز يتأكد. ما وصلتش ← الميعاد يتفك ويرجع فاضي.">
+          <Sheet icon="receipt" title="الحجز المؤقت حتى وصول صورة التحويل"
+            hint="يختار العميل موعدًا ← يُحجز له الموعد حتى وقت محدد. تصل صورة التحويل ← يتأكد الحجز. لا تصل ← يُلغى الحجز المؤقت ويعود الموعد متاحًا.">
             <div className="grid gap-3 md:grid-cols-2">
               <Field label="مدة الحجز المؤقت (دقيقة)" type="number" min={15} max={1440} value={v.hold_minutes} onChange={num("hold_minutes")} />
-              <Field label="المدة لو الميعاد قريب (دقيقة)" type="number" min={15} max={1440} value={v.hold_short_minutes} onChange={num("hold_short_minutes")} />
-              <Field label="«قريب» يعني بعد أقل من (ساعة)" type="number" min={0} max={72} value={v.hold_short_within_hours} onChange={num("hold_short_within_hours")} />
-              <Field label="الحجز المؤقت يخلص قبل الميعاد بـ (دقيقة)" type="number" min={0} max={240} value={v.hold_gap_minutes} onChange={num("hold_gap_minutes")} />
+              <Field label="المدة إذا كان الموعد قريبًا (دقيقة)" type="number" min={15} max={1440} value={v.hold_short_minutes} onChange={num("hold_short_minutes")} />
+              <Field label="«قريب» تعني بعد أقل من (ساعة)" type="number" min={0} max={72} value={v.hold_short_within_hours} onChange={num("hold_short_within_hours")} />
+              <Field label="ينتهي الحجز المؤقت قبل الموعد بـ (دقيقة)" type="number" min={0} max={240} value={v.hold_gap_minutes} onChange={num("hold_gap_minutes")} />
             </div>
           </Sheet>
           <Sheet icon="document" title="العرفي">
             <div className="grid gap-3 md:grid-cols-2">
-              <Field label="مدة ميعاد العرفي في المكتب (دقيقة)" type="number" min={15} max={480} value={v.urf_minutes} onChange={num("urf_minutes")} />
+              <Field label="مدة موعد العرفي في المكتب (دقيقة)" type="number" min={15} max={480} value={v.urf_minutes} onChange={num("urf_minutes")} />
             </div>
           </Sheet>
-          <Sheet icon="check-circle" title="«خلص» لوحده">
+          <Sheet icon="check-circle" title="تسجيل «تم» تلقائيًا">
             <div className="grid gap-3 md:grid-cols-2">
-              <Field label="بعد الميعاد بـ (ساعة)، لو محدش علّمه والتحويل اتراجع؛ 0 = مقفول" type="number" min={0} max={72} value={v.auto_complete_hours ?? 3} onChange={num("auto_complete_hours")} />
+              <Field label="بعد الموعد بـ (ساعة)، إذا لم يسجّل أحد نتيجته وكان التحويل قد رُوجع؛ 0 = غير مفعّل" type="number" min={0} max={72} value={v.auto_complete_hours ?? 3} onChange={num("auto_complete_hours")} />
             </div>
           </Sheet>
         </div>
       </div>
       {save.isError ? <p className="text-sm text-bad" role="alert">{errorMessage(save.error)}</p> : null}
       <SaveBar dirty={!!draft}>
-        <Button variant="primary" busy={save.isPending} disabled={!draft} onClick={() => save.mutate(v)}>احفظ</Button>
+        <Button variant="primary" busy={save.isPending} disabled={!draft} onClick={() => save.mutate(v)}>حفظ</Button>
       </SaveBar>
     </div>
   );
@@ -273,7 +273,7 @@ function OfficeForm() {
   const o = useQuery({ queryKey: ["booking", "office"], queryFn: booking.office });
   const [draft, setDraft] = useState<Office | null>(null);
   const v = draft ?? o.data;
-  const save = useMutation({ mutationFn: booking.saveOffice, onSuccess: () => { setDraft(null); void qc.invalidateQueries({ queryKey: ["booking"] }); toast("بيانات المكتب اتحفظت ✅"); } });
+  const save = useMutation({ mutationFn: booking.saveOffice, onSuccess: () => { setDraft(null); void qc.invalidateQueries({ queryKey: ["booking"] }); toast("تم حفظ بيانات المكتب ✅"); } });
   if (o.isPending) return <Loading />;
   if (o.isError || !v) return <ErrorState message={errorMessage(o.error)} onRetry={() => void o.refetch()} />;
   const set = (k: keyof Office) => (e: { target: { value: string } }) => setDraft({ ...v, [k]: e.target.value });
@@ -281,7 +281,7 @@ function OfficeForm() {
   const badNumber = (raw: string | null) => {
     const t = (raw ?? "").trim();
     const digits = t.replace(/[^0-9]/g, "").length;
-    return t !== "" && (!/^\+?[0-9 -]{6,20}$/.test(t) || digits < 8 || digits > 15) ? "رقم واتساب مش صحيح (مثلًا 01xxxxxxxxx)" : undefined;
+    return t !== "" && (!/^\+?[0-9 -]{6,20}$/.test(t) || digits < 8 || digits > 15) ? "رقم واتساب غير صحيح (مثلًا 01xxxxxxxxx)" : undefined;
   };
   const lawyerBad = badNumber(v.lawyer_whatsapp);
   const managerBad = badNumber(v.manager_whatsapp);
@@ -289,8 +289,8 @@ function OfficeForm() {
   return (
     <div className="grid gap-4">
       <div className="grid items-start gap-4 2xl:grid-cols-2">
-        <Sheet icon="receipt" title="فين العميل يحوّل"
-          hint="حازم بيكتب البيانات دي في رسالة الحجز المؤقت (فين يحوّل). لو InstaPay أو المحفظة فاضيين، الميعاد بيتمسك للعميل بس الرسالة مش بتتبعت وبتتعمل مهمة.">
+        <Sheet icon="receipt" title="أين يحوّل العميل"
+          hint="يكتب حازم هذه البيانات في رسالة الحجز المؤقت (أين يحوّل العميل). إذا كانت بيانات InstaPay أو المحفظة فارغة، يُحجز الموعد للعميل لكن لا تُرسل الرسالة، وتُنشأ مهمة.">
           <div className="grid gap-3 md:grid-cols-2">
             <Field label="عنوان InstaPay" dir="ltr" value={v.instapay} onChange={set("instapay")} />
             <Field label="رقم المحفظة" dir="ltr" inputMode="tel" value={v.wallet_number} onChange={set("wallet_number")} />
@@ -298,25 +298,25 @@ function OfficeForm() {
           </div>
         </Sheet>
         <Sheet icon="office" title="المكتب والمقابلة"
-          hint="لينك Google Meet: لو فاضي، حازم مش بيعرض Meet على العميل. والعنوان والخريطة ورقم التليفون بيتكتبوا في تأكيد المقابلة في المكتب بعد مراجعة التحويل.">
+          hint="رابط Google Meet: إذا كان فارغًا، لا يعرض حازم Meet على العميل. ويُكتب العنوان والخريطة ورقم الهاتف في تأكيد المقابلة في المكتب بعد مراجعة التحويل.">
           <div className="grid gap-3 md:grid-cols-2">
             <Field label="عنوان المكتب" value={v.address} onChange={set("address")} />
-            <Field label="لينك الخريطة" dir="ltr" placeholder="https://maps.app.goo.gl/…" value={v.map_url} onChange={set("map_url")} />
-            <Field label="لينك Google Meet بتاع المستشار" dir="ltr" placeholder="https://meet.google.com/…" value={v.meet_link ?? ""} onChange={set("meet_link")} />
-            <Field label="رقم تليفون المكتب" dir="ltr" inputMode="tel" value={v.phone ?? ""} onChange={set("phone")} />
+            <Field label="رابط الخريطة" dir="ltr" placeholder="https://maps.app.goo.gl/…" value={v.map_url} onChange={set("map_url")} />
+            <Field label="رابط Google Meet الخاص بالمستشار" dir="ltr" placeholder="https://meet.google.com/…" value={v.meet_link ?? ""} onChange={set("meet_link")} />
+            <Field label="رقم هاتف المكتب" dir="ltr" inputMode="tel" value={v.phone ?? ""} onChange={set("phone")} />
           </div>
         </Sheet>
       </div>
       <Sheet icon="bell" title="تنبيه الاستشارة العاجلة"
-        hint="الاستشارة العاجلة: بعد صورة التحويل، المستشار بيوصله تنبيه واتساب على رقمه بزرار «شوف التحويل» (صورة التحويل، وبعدها «التحويل تمام، هكلمه» أو «فيه مشكلة»). لو ما ردّش في 10 دقايق، التنبيه بيروح لرقم المدير. لو رقم المستشار فاضي، التنبيه في اللوحة بس.">
+        hint="الاستشارة العاجلة: بعد وصول صورة التحويل، يصل إلى المستشار تنبيه واتساب على رقمه بزر «شوف التحويل» (تظهر صورة التحويل، ثم زرا «التحويل تمام، هكلمه» و«فيه مشكلة»). إذا لم يردّ خلال 10 دقائق، يُرسل التنبيه إلى رقم المدير. وإذا كان رقم المستشار فارغًا، يظهر التنبيه في اللوحة فقط.">
         <div className="grid gap-3 md:grid-cols-2">
           <Field label="رقم واتساب المستشار (تنبيه الاستشارة العاجلة)" dir="ltr" inputMode="tel" placeholder="01xxxxxxxxx" value={v.lawyer_whatsapp ?? ""} error={lawyerBad} onChange={set("lawyer_whatsapp")} />
-          <Field label="رقم واتساب المدير (لو المستشار ما ردّش)" dir="ltr" inputMode="tel" placeholder="01xxxxxxxxx" value={v.manager_whatsapp ?? ""} error={managerBad} onChange={set("manager_whatsapp")} />
+          <Field label="رقم واتساب المدير (إذا لم يردّ المستشار)" dir="ltr" inputMode="tel" placeholder="01xxxxxxxxx" value={v.manager_whatsapp ?? ""} error={managerBad} onChange={set("manager_whatsapp")} />
         </div>
       </Sheet>
       {save.isError ? <p className="text-sm text-bad" role="alert">{errorMessage(save.error)}</p> : null}
       <SaveBar dirty={!!draft}>
-        <Button variant="primary" busy={save.isPending} disabled={!draft || !!lawyerBad || !!managerBad} onClick={() => save.mutate(v)}>احفظ</Button>
+        <Button variant="primary" busy={save.isPending} disabled={!draft || !!lawyerBad || !!managerBad} onClick={() => save.mutate(v)}>حفظ</Button>
       </SaveBar>
     </div>
   );

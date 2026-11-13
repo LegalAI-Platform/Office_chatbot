@@ -24,90 +24,90 @@ export class ApiError extends Error {
 
 /** Arabic text for the error codes the API returns (docs/panel-api.md). */
 const MESSAGES: Record<string, string> = {
-  invalid_credentials: "اسم المستخدم أو كلمة السر غلط.",
-  too_many_attempts: "محاولات كتير. استنى شوية وجرّب تاني.",
-  must_change_password: "لازم تغيّر كلمة السر الأول.",
-  wrong_current_password: "كلمة السر الحالية غلط.",
-  weak_password: "كلمة السر لازم تبقى من 12 لـ 128 حرف.",
-  same_password: "كلمة السر الجديدة لازم تبقى مختلفة عن الحالية.",
-  transition_not_allowed: "الحالة دي مش متاحة للمهمة دلوقتي.",
-  actor_not_allowed: "مش مسموح لك تغيّر الحالة دي.",
-  username_taken: "اسم المستخدم ده موجود قبل كده.",
-  email_taken: "الإيميل ده موجود قبل كده.",
-  last_manager: "لازم يفضل مدير واحد على الأقل شغال.",
-  maintenance_only: "ده لحساب الصيانة بس.",
-  two_factor_kept: "حساب الصيانة لازم التحقق بخطوتين يفضل شغال عليه.",
-  cannot_change_self: "ما ينفعش تعمل ده على حسابك.",
-  staff_required: "اختار الموظف المرتبط بالحساب.",
-  invalid_code: "الكود غلط أو انتهى. اطلب كود جديد لو محتاج.",
-  expired_ticket: "الوقت خلص. ادخل بكلمة السر تاني.",
-  email_not_verified: "لسه ما أكدتش الإيميل.",
-  pending_approval: "حسابك مستني المدير يفعّله. هيوصلك إيميل أول ما يتفعّل.",
-  not_configured: "الخدمة دي لسه مش متاحة. كلّم مدير المكتب.",
-  not_pending: "الحساب ده متفعّل خلاص.",
-  already_enabled: "التحقق بخطوتين شغال خلاص.",
-  not_enabled: "التحقق بخطوتين مش شغال.",
-  no_setup: "ابدأ الإعداد من الأول.",
-  invalid_role: "اختار الدور.",
-  two_factor_required: "لازم تشغّل التحقق بخطوتين الأول.",
-  chatwoot_unavailable: "Chatwoot مش بيرد دلوقتي. جرّب تاني بعد شوية.",
+  invalid_credentials: "اسم المستخدم أو كلمة السر غير صحيحة.",
+  too_many_attempts: "محاولات كثيرة. انتظر قليلًا ثم حاول مرة أخرى.",
+  must_change_password: "يجب تغيير كلمة السر أولًا.",
+  wrong_current_password: "كلمة السر الحالية غير صحيحة.",
+  weak_password: "يجب أن تتكون كلمة السر من 12 إلى 128 حرفًا.",
+  same_password: "يجب أن تختلف كلمة السر الجديدة عن الحالية.",
+  transition_not_allowed: "هذه الحالة غير متاحة للمهمة الآن.",
+  actor_not_allowed: "غير مسموح لك بتغيير هذه الحالة.",
+  username_taken: "اسم المستخدم هذا مسجّل من قبل.",
+  email_taken: "هذا البريد الإلكتروني مسجّل من قبل.",
+  last_manager: "يجب أن يبقى مدير واحد على الأقل مفعّلًا.",
+  maintenance_only: "هذا متاح لحساب الصيانة فقط.",
+  two_factor_kept: "يجب أن يبقى التحقق بخطوتين مفعّلًا على حساب الصيانة.",
+  cannot_change_self: "لا يمكنك تنفيذ هذا على حسابك.",
+  staff_required: "اختر الموظف المرتبط بالحساب.",
+  invalid_code: "الرمز غير صحيح أو انتهت صلاحيته. اطلب رمزًا جديدًا عند الحاجة.",
+  expired_ticket: "انتهى الوقت. سجّل الدخول بكلمة السر مرة أخرى.",
+  email_not_verified: "لم تؤكّد بريدك الإلكتروني بعد.",
+  pending_approval: "حسابك في انتظار تفعيل المدير. ستصلك رسالة بالبريد الإلكتروني فور تفعيله.",
+  not_configured: "هذه الخدمة غير متاحة بعد. تواصل مع مدير المكتب.",
+  not_pending: "هذا الحساب مفعّل بالفعل.",
+  already_enabled: "التحقق بخطوتين مفعّل بالفعل.",
+  not_enabled: "التحقق بخطوتين غير مفعّل.",
+  no_setup: "ابدأ الإعداد من البداية.",
+  invalid_role: "اختر الدور.",
+  two_factor_required: "يجب تفعيل التحقق بخطوتين أولًا.",
+  chatwoot_unavailable: "لا يستجيب Chatwoot الآن. حاول مرة أخرى بعد قليل.",
   // TASK 08: the booking
-  overlapping_ranges: "فيه فترتين في نفس اليوم داخلين في بعض.",
-  invalid_range: "نهاية الفترة لازم تبقى بعد بدايتها.",
-  past_day: "اليوم ده عدّى.",
-  nothing_to_undo: "مفيش تعديل تتراجع عنه.",
-  not_confirmed: "الحجز ده مش مؤكد دلوقتي.",
-  calendar_id: "إيميل الكالندر مش صحيح.",
-  buffer_minutes: "الوقت بين المواعيد من 0 لـ 240 دقيقة.",
-  min_notice_hours: "أقل مدة قبل الحجز من 0 لـ 168 ساعة.",
-  horizon_days: "أبعد يوم من 1 لـ 180 يوم.",
-  max_per_day: "أقصى عدد في اليوم من 1 لـ 100، أو سيبه فاضي.",
-  slot_step_minutes: "اختار كل قد إيه يبدأ ميعاد.",
-  offer_count: "عدد المواعيد اللي حازم يعرضها من 1 لـ 9.",
-  invalid: "في حاجة مش مظبوطة في البيانات.",
+  overlapping_ranges: "توجد فترتان متداخلتان في اليوم نفسه.",
+  invalid_range: "يجب أن تكون نهاية الفترة بعد بدايتها.",
+  past_day: "هذا اليوم قد مضى.",
+  nothing_to_undo: "لا يوجد تعديل للتراجع عنه.",
+  not_confirmed: "هذا الحجز غير مؤكد الآن.",
+  calendar_id: "البريد الإلكتروني للتقويم غير صحيح.",
+  buffer_minutes: "الوقت بين المواعيد من 0 إلى 240 دقيقة.",
+  min_notice_hours: "أقل مدة قبل الحجز من 0 إلى 168 ساعة.",
+  horizon_days: "أبعد يوم من 1 إلى 180 يومًا.",
+  max_per_day: "الحد الأقصى في اليوم من 1 إلى 100، أو اتركه فارغًا.",
+  slot_step_minutes: "اختر الفاصل الزمني بين بدايات المواعيد.",
+  offer_count: "عدد المواعيد التي يعرضها حازم من 1 إلى 9.",
+  invalid: "بعض البيانات غير صحيحة.",
   // TASK 09 / 10: payments and the service orders
-  invalid_amount: "المبلغ ده مش مناسب للاختيار ده.",
-  not_allowed: "الطلب ده مش في الحالة اللي تسمح بده دلوقتي.",
-  hold_minutes: "مدة الحجز المؤقت من 15 لـ 1440 دقيقة.",
-  hold_short_minutes: "مدة الميعاد القريب من 15 دقيقة لحد مدة الحجز المؤقت.",
-  hold_short_within_hours: "«قريب» من 0 لـ 72 ساعة.",
-  hold_gap_minutes: "الحجز المؤقت يخلص قبل الميعاد بـ 0 لـ 240 دقيقة.",
-  out_of_range: "السعر برا المدى المعتاد للخدمة دي. علّم «استثناء» لو متأكد.",
-  upload_failed: "رفع الملف ما نجحش. جرّب تاني.",
-  no_file: "الملف ما اترفعش. ارفعه تاني.",
-  too_large: "الملف أكبر من 20 ميجا.",
-  urf_minutes: "مدة ميعاد العرفي من 15 لـ 480 دقيقة.",
+  invalid_amount: "هذا المبلغ غير مناسب لهذا الاختيار.",
+  not_allowed: "حالة هذا الطلب لا تسمح بهذا الإجراء الآن.",
+  hold_minutes: "مدة الحجز المؤقت من 15 إلى 1440 دقيقة.",
+  hold_short_minutes: "مدة الموعد القريب من 15 دقيقة حتى مدة الحجز المؤقت.",
+  hold_short_within_hours: "«قريب» من 0 إلى 72 ساعة.",
+  hold_gap_minutes: "ينتهي الحجز المؤقت قبل الموعد بمدة من 0 إلى 240 دقيقة.",
+  out_of_range: "السعر خارج النطاق المعتاد لهذه الخدمة. حدّد «استثناء» إذا كنت متأكدًا.",
+  upload_failed: "تعذّر رفع الملف. حاول مرة أخرى.",
+  no_file: "لم يُرفع الملف. ارفعه مرة أخرى.",
+  too_large: "حجم الملف أكبر من 20 ميجابايت.",
+  urf_minutes: "مدة موعد العرفي من 15 إلى 480 دقيقة.",
   // the account's photo (migration 0036)
-  avatar_type: "الصورة لازم تبقى JPG أو PNG أو WebP.",
-  avatar_too_large: "الصورة أكبر من 300 كيلو. اختار صورة أصغر.",
-  avatar_not_image: "الملف ده مش صورة سليمة. جرّب صورة تانية.",
+  avatar_type: "يجب أن تكون الصورة بصيغة JPG أو PNG أو WebP.",
+  avatar_too_large: "حجم الصورة أكبر من 300 كيلوبايت. اختر صورة أصغر.",
+  avatar_not_image: "هذا الملف ليس صورة صالحة. جرّب صورة أخرى.",
   // codes that showed in English («Bad Request», «Conflict») before
-  antiforgery: "الصفحة قديمة. اعمل ريفرش وجرّب تاني.",
-  changed_meanwhile: "حد تاني غيّر ده دلوقتي. الصفحة اتحدّثت، بص عليها وجرّب تاني.",
-  has_bookings: "فيه حجوزات هتتأثر بالتعديل ده.",
-  calendar_id_forbidden: "إيميل الكالندر بيغيّره المدير بس.",
-  office_forbidden: "التعديل ده بيرجّعه المدير بس.",
-  invalid_price: "السعر لازم يبقى رقم صحيح من 1 لـ 1,000,000.",
-  review_range: "أقل سعر للمراجعة لازم يبقى أقل من أو قد أعلى سعر.",
-  invalid_month: "اختار شهر من 2024 ولحد دلوقتي.",
-  invalid_phone: "الرقم مش صحيح. اكتبه زي 01012345678 أو +201012345678.",
-  invalid_kind: "النوع ده مش موجود.",
-  invalid_filter: "الفلتر ده مش موجود.",
+  antiforgery: "الصفحة قديمة. حدّث الصفحة ثم حاول مرة أخرى.",
+  changed_meanwhile: "غيّر شخص آخر هذا للتو. تم تحديث الصفحة، فراجعها ثم حاول مرة أخرى.",
+  has_bookings: "توجد حجوزات ستتأثر بهذا التعديل.",
+  calendar_id_forbidden: "تغيير البريد الإلكتروني للتقويم متاح للمدير فقط.",
+  office_forbidden: "التراجع عن هذا التعديل متاح للمدير فقط.",
+  invalid_price: "يجب أن يكون السعر عددًا صحيحًا من 1 إلى 1,000,000.",
+  review_range: "يجب أن يكون أقل سعر للمراجعة أقل من أعلى سعر أو مساويًا له.",
+  invalid_month: "اختر شهرًا من 2024 حتى الآن.",
+  invalid_phone: "الرقم غير صحيح. اكتبه بالشكل 01012345678 أو +201012345678.",
+  invalid_kind: "هذا النوع غير موجود.",
+  invalid_filter: "هذا الفلتر غير موجود.",
 };
 
 export function errorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.code && MESSAGES[error.code]) return MESSAGES[error.code]!;
-    if (error.status === 401) return "انتهت الجلسة. سجّل دخول تاني.";
-    if (error.status === 403) return "مش مسموح لك تشوف ده.";
-    if (error.status === 404) return "مش لاقيين ده. يمكن اتمسح أو مش من حقك تشوفه.";
+    if (error.status === 401) return "انتهت الجلسة. سجّل الدخول مرة أخرى.";
+    if (error.status === 403) return "غير مسموح لك بعرض هذه الصفحة.";
+    if (error.status === 404) return "لم نعثر على المطلوب. ربما حُذف، أو ليس لديك صلاحية عرضه.";
     if (error.status === 429) return MESSAGES.too_many_attempts!;
-    if (error.status >= 500) return "حصلت مشكلة عندنا. جرّب تاني بعد شوية.";
+    if (error.status >= 500) return "تعذّر تنفيذ الطلب بسبب خطأ في الخادم. حاول مرة أخرى بعد قليل.";
     // a code with no Arabic text yet: never the browser's English («Bad Request», «Conflict»)
-    if (error.status === 409) return "اللي بتحاول تعمله ما ينفعش دلوقتي. اعمل ريفرش وجرّب تاني.";
-    return "في حاجة مش مظبوطة في اللي اتكتب. راجعه وجرّب تاني.";
+    if (error.status === 409) return "لا يمكن تنفيذ هذا الإجراء الآن. حدّث الصفحة ثم حاول مرة أخرى.";
+    return "بعض البيانات المُدخلة غير صحيحة. راجعها ثم حاول مرة أخرى.";
   }
-  return "مش قادرين نوصل للسيرفر. اتأكد من الاتصال وجرّب تاني.";
+  return "تعذّر الاتصال بالخادم. تحقّق من الاتصال ثم حاول مرة أخرى.";
 }
 
 let csrfToken: string | null = null;

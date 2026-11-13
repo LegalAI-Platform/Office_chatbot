@@ -78,6 +78,12 @@ export function Notice({ tone = "bad", children }: { tone?: "bad" | "good"; chil
   );
 }
 
+/** «بعد N ثانية» with Arabic number agreement: ثانية واحدة، ثانيتين، 3 ثوانٍ، 11 ثانية. */
+export const secondsText = (n: number) => {
+  const r = n % 100;
+  return n === 1 ? "ثانية واحدة" : n === 2 ? "ثانيتين" : r >= 3 && r <= 10 ? `${n} ثوانٍ` : `${n} ثانية`;
+};
+
 /** Seconds left before another code may be asked for (the server waits a minute too). */
 export function useCountdown(seconds: number, startAt = seconds) {
   const [left, setLeft] = useState(startAt);

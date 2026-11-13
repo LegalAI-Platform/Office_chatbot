@@ -107,7 +107,7 @@ export function Chip({ tone, children }: { tone: string; children: ReactNode }) 
 
 // ---------- loading, empty and error states ----------
 
-export function Loading({ label = "جاري التحميل" }: { label?: string }) {
+export function Loading({ label = "جارٍ التحميل" }: { label?: string }) {
   return (
     <div className="grid gap-3" role="status" aria-live="polite">
       <span className="sr-only">{label}</span>
@@ -137,7 +137,7 @@ export function ErrorState({ message, onRetry }: { message: string; onRetry?: ()
       {onRetry ? (
         <Button onClick={onRetry}>
           <Icon name="refresh" className="size-4" />
-          جرّب تاني
+          حاول مرة أخرى
         </Button>
       ) : null}
     </div>

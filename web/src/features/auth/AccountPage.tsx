@@ -38,11 +38,11 @@ export function AccountPage() {
         onLogout={async () => { await logout(); navigate("/login", { replace: true }); }} />
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        <GlassCard icon="account" title="بيانات الحساب" hint="بياناتك زي ما هي متسجلة في المكتب. لتغيير الاسم أو الإيميل كلّم مدير المكتب.">
+        <GlassCard icon="account" title="بيانات الحساب" hint="بياناتك كما هي مسجّلة في المكتب. لتغيير الاسم أو البريد الإلكتروني تواصل مع مدير المكتب.">
           <dl className="grid gap-2">
             <Detail icon="account" term="الاسم">{me.display_name}</Detail>
             <Detail icon="key" term="اسم المستخدم" ltr>{me.username}</Detail>
-            <Detail icon="mail" term="الإيميل" ltr>{me.email}</Detail>
+            <Detail icon="mail" term="البريد الإلكتروني" ltr>{me.email}</Detail>
             <Detail icon="shield" term="الدور">{label(ROLES, me.role)}</Detail>
           </dl>
         </GlassCard>
@@ -76,7 +76,7 @@ function ProfileHeader({ me, photo, onPassword, onLogout }: { me: Me; photo: Pho
             <span className="rounded-full border border-line bg-card/60 px-3 py-1 text-[12.5px] text-ink-soft" dir="ltr">@{me.username}</span>
             <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[12.5px] font-semibold ${me.two_factor ? "bg-green-bg text-green-ink" : "bg-card-2 text-ink-soft"}`}>
               <span className={`size-1.5 rounded-full ${me.two_factor ? "bg-green" : "bg-ink-soft/60"}`} aria-hidden />
-              {me.two_factor ? "التحقق بخطوتين شغّال" : "التحقق بخطوتين مقفول"}
+              {me.two_factor ? "التحقق بخطوتين مفعّل" : "التحقق بخطوتين غير مفعّل"}
             </span>
           </div>
         </div>
@@ -151,7 +151,7 @@ function usePhoto() {
     setWrongType(!ok);
     if (ok) save.mutate(file);
   };
-  const failed = wrongType ? "الصورة لازم تبقى JPG أو PNG أو WebP." : save.isError ? errorMessage(save.error) : remove.isError ? errorMessage(remove.error) : null;
+  const failed = wrongType ? "يجب أن تكون الصورة بصيغة JPG أو PNG أو WebP." : save.isError ? errorMessage(save.error) : remove.isError ? errorMessage(remove.error) : null;
   return { save, remove, pick, failed };
 }
 
@@ -164,7 +164,7 @@ function PhotoPicker({ me, photo: { save, pick } }: { me: Me; photo: Photo }) {
     <div className="relative shrink-0">
       <span aria-hidden className="absolute -inset-1.5 rounded-full bg-gradient-to-br from-gold/60 via-gold-tint to-transparent blur-[2px]" />
       <Avatar name={me.display_name} photo={avatarUrl(me)} className="relative size-24 text-2xl ring-4 ring-card sm:size-28 sm:text-3xl" />
-      <button type="button" onClick={() => input.current?.click()} disabled={save.isPending} aria-label="غيّر الصورة"
+      <button type="button" onClick={() => input.current?.click()} disabled={save.isPending} aria-label="تغيير الصورة"
         className="btn-gold absolute -bottom-1 -end-1 grid size-9 place-items-center rounded-full border-2 border-card shadow-md transition hover:scale-105 disabled:opacity-60">
         <Icon name="camera" className="size-4" />
       </button>
@@ -177,7 +177,7 @@ function PhotoPicker({ me, photo: { save, pick } }: { me: Me; photo: Photo }) {
 function PhotoCard({ me, photo: { save, remove, pick, failed } }: { me: Me; photo: Photo }) {
   const input = useRef<HTMLInputElement>(null);
   return (
-    <GlassCard icon="camera" title="الصورة الشخصية" hint="بتظهر جنب اسمك فوق. أي صورة هتتقصّ مربع وتصغر لوحدها.">
+    <GlassCard icon="camera" title="الصورة الشخصية" hint="تظهر بجوار اسمك أعلى الصفحة. تُقصّ أي صورة تلقائيًا على شكل مربع وتُصغَّر.">
       <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-dashed border-gold-line/70 bg-card/40 p-4">
         <Avatar name={me.display_name} photo={avatarUrl(me)} className="size-16 text-lg" />
         <div className="flex flex-wrap gap-2">
@@ -188,13 +188,13 @@ function PhotoCard({ me, photo: { save, remove, pick, failed } }: { me: Me; phot
           {me.avatar_at ? (
             <Button variant="ghost" onClick={() => remove.mutate()} busy={remove.isPending} disabled={save.isPending} className="rounded-full">
               <Icon name="x" className="size-4" />
-              شيل الصورة
+              إزالة الصورة
             </Button>
           ) : null}
         </div>
         <input ref={input} type="file" accept="image/*" aria-label="ملف الصورة" className="hidden" onChange={pick} />
       </div>
-      <p className="text-[12px] text-ink-soft">JPG أو PNG أو WebP. الصورة بتتحفظ صغيرة (256 × 256).</p>
+      <p className="text-[12px] text-ink-soft">JPG أو PNG أو WebP. تُحفظ الصورة بحجم صغير (256 × 256).</p>
       {failed ? <Notice>{failed}</Notice> : null}
     </GlassCard>
   );

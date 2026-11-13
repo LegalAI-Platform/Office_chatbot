@@ -1,52 +1,52 @@
 // Arabic names for the codes the API uses (DECISIONS v1.8: S-05, B-14, B-13, B-25).
 
 export const TASK_TYPES: Record<string, string> = {
-  existing_client_message: "موكل حالي بيسأل عن موضوعه",
-  late_reschedule: "تغيير ميعاد متأخر",
+  existing_client_message: "موكّل حالي يستفسر عن قضيته",
+  late_reschedule: "طلب متأخر لتغيير الموعد",
   refund: "استرداد",
   price_quote: "تسعير",
   discount_request: "طلب خصم",
   complaint: "شكوى",
-  human_requested: "طلب يكلم موظف",
+  human_requested: "طلب التحدث مع موظف",
   safety_alert: "تنبيه أمان",
-  lawyer_direct_message: "رسالة لقايمة المستشار",
+  lawyer_direct_message: "رسالة لقائمة المستشار",
   external_contact: "زميل أو صحافة أو مورّد",
-  unclear_message: "رسالة مش واضحة",
+  unclear_message: "رسالة غير واضحة",
   urgent_request: "طلب عاجل",
   service_request: "طلب خدمة",
-  reschedule_or_cancel: "تغيير أو إلغاء ميعاد",
-  booking_unavailable: "حجز: مفيش مواعيد أو الكالندر مش متاح",
-  booking_cancelled: "عميل لغى حجزه",
-  booking_message_failed: "رسالة ما وصلتش للعميل", // v1.44: a booking notice or any reply of Hazem's
-  calendar_conflict: "حدث في الكالندر فوق حجز",
-  office_cancelled: "المكتب لغى حجز: ميعاد تاني أو استرداد",
-  service_pricing: "ورق خدمة وصل: حدّد السعر",
-  service_unpaid: "سعر خدمة عدّى من غير دفع",
-  urf_review: "ورق عرفي وصل: راجعه قبل الميعاد",
-  urf_documents_missing: "عرفي: فاضل 24 ساعة ومفيش ورق",
-  urf_help: "عرفي: محتاج مساعدة في الأسئلة",
-  reminder_failed: "تذكير ما وصلش: فكّر العميل بالتليفون",
-  office_info_missing: "عميل سأل عن المكتب ومعلومته مش مكتوبة: اكتب العنوان والخريطة وأرقام الدفع (إعدادات المواعيد ← بيانات المكتب والدفع) أو أيام الاستشارات",
-  service_question: "عميل عنده سؤال عن خدمة (بنعملها ولا لأ، أو تفاصيلها): رد عليه",
-  payment_review_due: "الميعاد قرّب والتحويل لسه ما اتراجعش: راجعه دلوقتي (الإيصالات والمدفوعات)",
-  appointment_unmarked: "ميعاد عدّى ومحدش علّمه، والتحويل لسه ما اتراجعش: راجعه وعلّم الميعاد (المواعيد)",
-  rating_low: "عميل قيّم الخدمة «يحتاج للتحسين»: كلّمه (سببه في كلام العميل لو كتبه)",
-  urgent_call_failed: "تنبيه الاستشارة العاجلة ما وصلش للمستشار: كلّمه أو كلّم العميل دلوقتي (رقم المستشار في إعدادات المواعيد ← بيانات المكتب والدفع)",
-  urgent_call_unanswered: "المستشار ما ردّش على تنبيه استشارة عاجلة مدفوعة (لا «التحويل تمام» ولا «فيه مشكلة»): اتصرف دلوقتي",
+  reschedule_or_cancel: "تغيير موعد أو إلغاؤه",
+  booking_unavailable: "حجز: لا توجد مواعيد أو التقويم غير متاح",
+  booking_cancelled: "عميل ألغى حجزه",
+  booking_message_failed: "تعذّر وصول رسالة إلى العميل", // v1.44: a booking notice or any reply of Hazem's
+  calendar_conflict: "حدث في التقويم يتعارض مع حجز",
+  office_cancelled: "ألغى المكتب حجزًا: موعد آخر أو استرداد",
+  service_pricing: "وصلت مستندات خدمة: حدّد السعر",
+  service_unpaid: "انقضت مهلة دفع سعر خدمة",
+  urf_review: "وصلت مستندات عقد عرفي: راجعها قبل الموعد",
+  urf_documents_missing: "عقد عرفي: تبقّت 24 ساعة ولم تصل المستندات",
+  urf_help: "عقد عرفي: يحتاج العميل مساعدة في الأسئلة",
+  reminder_failed: "تعذّر وصول التذكير: ذكّر العميل هاتفيًا",
+  office_info_missing: "سأل عميل عن معلومة غير مسجّلة عن المكتب: أضف العنوان والخريطة وبيانات الدفع (إعدادات المواعيد ← بيانات المكتب والدفع) أو أيام الاستشارات",
+  service_question: "استفسار عميل عن خدمة (هل نقدّمها، أو تفاصيلها): رُدّ عليه",
+  payment_review_due: "اقترب الموعد ولم يُراجَع التحويل بعد: راجعه الآن (الإيصالات والمدفوعات)",
+  appointment_unmarked: "انقضى موعد دون تسجيل نتيجته، ولم يُراجَع التحويل بعد: راجعه وسجّل نتيجة الموعد (المواعيد)",
+  rating_low: "قيّم عميل الخدمة بـ«يحتاج للتحسين»: تواصل معه (السبب في رسالة العميل إن كتبه)",
+  urgent_call_failed: "تعذّر وصول تنبيه الاستشارة العاجلة إلى المستشار: تواصل معه أو مع العميل الآن (رقم المستشار في إعدادات المواعيد ← بيانات المكتب والدفع)",
+  urgent_call_unanswered: "لم يردّ المستشار على تنبيه استشارة عاجلة مدفوعة (لم يضغط «التحويل تمام، هكلمه» ولا «فيه مشكلة»): تصرّف الآن",
 };
 
 /** TASK 12 (B-18): the reminders before a confirmed appointment. */
 export const REMINDER_KINDS: Record<string, string> = {
-  day_before: "تذكير اليوم اللي قبله",
-  two_hours: "تذكير قبلها بساعتين",
+  day_before: "تذكير قبل الموعد بيوم",
+  two_hours: "تذكير قبل الموعد بساعتين",
 };
 
 /** Why a reminder never went out (appointment_reminders.skip_reason). */
 export const REMINDER_SKIPS: Record<string, string> = {
-  too_close: "الوقت قريب من الميعاد",
-  passed: "الحجز اتأكد بعد وقته",
-  late: "فات وقته",
-  off: "نصوص التذكير مش متفعّلة",
+  too_close: "الوقت قريب جدًا من الموعد",
+  passed: "تأكّد الحجز بعد موعد التذكير",
+  late: "فات موعد التذكير",
+  off: "نصوص التذكير غير مفعّلة",
 };
 
 /** TASK 10 (v1.14): the written services and their order's states (S-07). */
@@ -58,23 +58,23 @@ export const SERVICE_KINDS: Record<string, string> = {
 };
 
 export const SERVICE_STATES: Record<string, string> = {
-  collecting: "مستني الورق",
-  awaiting_price: "مستني السعر",
-  awaiting_payment: "مستني الدفع",
-  in_progress: "شغال",
-  delivered: "اتسلّم",
-  closed: "اتقفل",
+  collecting: "في انتظار المستندات",
+  awaiting_price: "في انتظار السعر",
+  awaiting_payment: "في انتظار الدفع",
+  in_progress: "قيد التنفيذ",
+  delivered: "تم التسليم",
+  closed: "مغلق",
 };
 
 /** TASK 08: the services booked from the calendar (B-23) and the appointment's states (S-03). */
 export const BOOKING_SERVICES: Record<string, string> = {
-  consultation_phone_video: "تليفون أو فيديو",
+  consultation_phone_video: "هاتفيًا أو بالفيديو",
   consultation_office: "مقابلة في المكتب",
-  consultation_urgent: "عاجلة بالتليفون",
-  urf_marriage_office: "عقد عرفي (شهود المكتب)",
-  urf_marriage_own: "عقد عرفي (شهودهم)",
+  consultation_urgent: "عاجلة هاتفيًا",
+  urf_marriage_office: "عقد زواج عرفي (شهود المكتب)",
+  urf_marriage_own: "عقد زواج عرفي (شهود العميل)",
   urf_divorce_office: "طلاق عرفي (شهود المكتب)",
-  urf_divorce_own: "طلاق عرفي (شهودهم)",
+  urf_divorce_own: "طلاق عرفي (شهود العميل)",
 };
 
 /** 1.25 (B-23): where the lawyer calls for a phone or video consultation. */
@@ -82,58 +82,58 @@ export const CALL_APPS: Record<string, string> = {
   whatsapp: "واتساب",
   facetime: "FaceTime",
   meet: "Google Meet",
-  phone: "مكالمة عادية", // v1.49: a normal phone call from the office's number
+  phone: "مكالمة هاتفية عادية", // v1.49: a normal phone call from the office's number
 };
 
 export const APPOINTMENT_STATES: Record<string, string> = {
-  pending_payment: "مستني الإيصال",
-  expired: "اتفك (الإيصال ما وصلش)",
+  pending_payment: "في انتظار الإيصال",
+  expired: "انتهى (لم يصل الإيصال)",
   confirmed: "مؤكد",
-  completed: "خلص",
-  no_show: "ماحضرش",
-  cancelled_by_client: "العميل لغى",
-  cancelled_by_office: "المكتب لغى",
+  completed: "تم",
+  no_show: "لم يحضر",
+  cancelled_by_client: "ألغاه العميل",
+  cancelled_by_office: "ألغاه المكتب",
 };
 
 /** TASK 09: S-04. The system never says a payment is confirmed: «وصل إيصال» is the image only. */
 export const PAYMENT_STATES: Record<string, string> = {
-  requested: "لسه ما دفعش",
-  proof_received: "وصل إيصال، مستني المراجعة",
-  duplicate_suspected: "وصل إيصال، مستني المراجعة",
-  verified: "اتأكد",
-  partial: "ناقص",
-  not_received: "ما وصلش",
+  requested: "لم يدفع بعد",
+  proof_received: "وصل إيصال، في انتظار المراجعة",
+  duplicate_suspected: "وصل إيصال، في انتظار المراجعة",
+  verified: "تم التأكيد",
+  partial: "مبلغ ناقص",
+  not_received: "لم يصل",
   refund_requested: "استرداد مطلوب",
-  refunded: "اترد",
+  refunded: "تم الاسترداد",
 };
 
 export const REFUND_REASONS: Record<string, string> = {
-  client_within_24h: "العميل لغى خلال 24 ساعة من الدفع",
-  office_cancelled: "المكتب لغى والعميل اختار الاسترداد",
-  overpaid: "دفع زيادة",
+  client_within_24h: "ألغى العميل خلال 24 ساعة من الدفع",
+  office_cancelled: "ألغى المكتب واختار العميل الاسترداد",
+  overpaid: "دفع مبلغًا زائدًا",
 };
 
 export const TASK_STATES: Record<string, string> = {
   open: "مفتوحة",
-  in_progress: "شغال عليها",
-  done: "خلصت",
+  in_progress: "قيد التنفيذ",
+  done: "مكتملة",
   overdue: "متأخرة",
-  cancelled: "اتلغت",
+  cancelled: "ملغاة",
 };
 
 export const CLIENT_TYPES: Record<string, string> = {
   new_client: "عميل جديد",
-  existing_client: "موكل حالي",
-  lawyer_direct: "قايمة المستشار",
-  blocked: "ممنوع",
-  lawyer_colleague: "زميل محامي",
+  existing_client: "موكّل حالي",
+  lawyer_direct: "قائمة المستشار",
+  blocked: "محظور",
+  lawyer_colleague: "زميل محامٍ",
   press: "صحافة",
   vendor: "مورّد",
 };
 
 export const SOURCES: Record<string, string> = {
   ad: "إعلان",
-  link: "لينك",
+  link: "رابط",
   direct: "مباشر",
 };
 
@@ -158,7 +158,7 @@ export const MATTER_SUBTYPES: Record<string, string> = {
   custody: "حضانة",
   visitation: "رؤية",
   marriage: "زواج",
-  urf_marriage: "جواز عرفي",
+  urf_marriage: "زواج عرفي",
   urf_divorce: "طلاق عرفي",
   urf_proof: "إثبات عرفي",
 };
@@ -178,9 +178,9 @@ export const MEDIA_TYPES: Record<string, string> = {
   sticker: "ملصق",
   location: "موقع",
   reaction: "تفاعل",
-  interactive: "اختيار من قايمة",
-  button: "زرار",
-  unsupported: "نوع مش مدعوم",
+  interactive: "اختيار من قائمة",
+  button: "زر",
+  unsupported: "نوع غير مدعوم",
 };
 
 export const label = (map: Record<string, string>, code: string | undefined | null): string =>
@@ -194,51 +194,51 @@ export function matterLabel(type?: string, subtype?: string): string {
 
 /** TASK 07c: the bell's alerts. */
 export const ALERT_KINDS: Record<string, string> = {
-  task_overdue: "مهمة اتأخرت",
+  task_overdue: "مهمة متأخرة",
   task_urgent: "طلب عاجل",
-  task_human: "عميل عايز يكلم حد",
+  task_human: "عميل يطلب التحدث مع موظف",
   task_rating: "تقييم ضعيف من عميل",
-  system: "مشكلة في السيستم",
+  system: "مشكلة في النظام",
   // v1.105: any other task Hazem opened for the office; the line under it says why (its type)
-  task_new: "عميل محتاج موظف",
+  task_new: "عميل يحتاج إلى موظف",
 };
 
 /** TASK 13: what a system alert is about. */
 export const SYSTEM_WHAT: Record<string, string> = {
-  backup: "النسخة الاحتياطية بتاعة الليلة فشلت",
-  healthcheck: "الفحص اليومي لقى حاجة مش شغالة",
-  drill: "تجربة استرجاع النسخة الاحتياطية فشلت",
-  log_scan: "السجلات فيها مفتاح أو رقم كامل",
-  n8n: "فيه حاجات في n8n فشلت",
-  turn: "رسالة عميل وقفت بعد محاولات كتير",
-  ai: "الـ AI اللي بيفهم رسايل العملاء مش شغال",
+  backup: "فشلت النسخة الاحتياطية الليلية",
+  healthcheck: "اكتشف الفحص اليومي خدمة متوقفة",
+  drill: "فشلت تجربة استرجاع النسخة الاحتياطية",
+  log_scan: "تحتوي السجلات على مفتاح أو رقم كامل",
+  n8n: "توجد عمليات فاشلة في n8n",
+  turn: "توقفت معالجة رسالة عميل بعد محاولات عديدة",
+  ai: "الذكاء الاصطناعي الذي يفهم رسائل العملاء متوقف",
 };
 
 /** B-14: the office's lists. */
 export const LIST_KINDS: Record<string, string> = {
-  existing_client: "الموكلين الحاليين",
-  lawyer_direct: "قايمة المستشار المباشرة",
-  blocked: "الممنوعين",
+  existing_client: "الموكّلون الحاليون",
+  lawyer_direct: "قائمة المستشار المباشرة",
+  blocked: "المحظورون",
 };
 
 /** TASK 11 (v1.15): the Urfi cases (S-06) and their answers (B-11). */
-export const URF_KINDS: Record<string, string> = { marriage: "عقد جواز عرفي", divorce: "طلاق عرفي" };
+export const URF_KINDS: Record<string, string> = { marriage: "عقد زواج عرفي", divorce: "طلاق عرفي" };
 
 export const URF_STATES: Record<string, string> = {
-  collecting: "بيجاوب على الأسئلة",
-  documents_pending: "بيختار ميعاد",
-  booked: "محجوز: راجع الورق",
-  approved: "المستشار وافق",
-  lawyer_rejected: "المستشار رفض",
-  rejected_age: "اتقفل: السن أقل من 18",
-  rejected_guardian: "اتقفل: مفيش ولي",
-  redirected_consultation: "اتحوّل لاستشارة",
-  abandoned: "اتقفل: سكت وما كمّلش",
-  completed: "اتقفل: الميعاد خلص", // v1.99: its appointment was marked done
+  collecting: "يجيب عن الأسئلة",
+  documents_pending: "يختار موعدًا",
+  booked: "محجوز: راجع المستندات",
+  approved: "وافق المستشار",
+  lawyer_rejected: "رفض المستشار",
+  rejected_age: "مغلق: السن أقل من 18",
+  rejected_guardian: "مغلق: لا يوجد ولي",
+  redirected_consultation: "حُوِّل إلى استشارة",
+  abandoned: "مغلق: توقف العميل عن الرد",
+  completed: "مغلق: تم الموعد", // v1.99: its appointment was marked done
 };
 
 export const URF_ANSWERS: Record<string, string> = {
-  first: "أول جوازة", divorced: "اتطلقت أو اختلعت", khul: "اختلعت قبل كده", widow: "أرملة",
-  father: "الأب", brother: "الأخ", uncle: "العم", none: "مفيش",
-  office: "من المكتب", own: "من طرفهم",
+  first: "الزواج الأول", divorced: "مطلقة أو مختلعة", khul: "مختلعة سابقًا", widow: "أرملة",
+  father: "الأب", brother: "الأخ", uncle: "العم", none: "لا يوجد",
+  office: "من المكتب", own: "من طرف العميل",
 };

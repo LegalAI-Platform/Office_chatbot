@@ -27,7 +27,7 @@ export function PricesPage() {
   const save = useMutation({
     // Only the lines changed here: a line someone else changed meanwhile keeps their value.
     mutationFn: () => prices.save(Object.fromEntries(changed.map((p) => [p.key, Number(draft[p.key])]))),
-    onSuccess: () => { setDraft({}); void qc.invalidateQueries({ queryKey: ["prices"] }); void qc.invalidateQueries({ queryKey: ["price-changes"] }); toast("الأسعار اتحفظت ✅"); },
+    onSuccess: () => { setDraft({}); void qc.invalidateQueries({ queryKey: ["prices"] }); void qc.invalidateQueries({ queryKey: ["price-changes"] }); toast("تم حفظ الأسعار ✅"); },
   });
   const changed = (list.data ?? []).filter((p) => draft[p.key] !== undefined && Number(draft[p.key]) !== p.value);
   const shown = (key: string): number | undefined => {
@@ -36,8 +36,8 @@ export function PricesPage() {
   };
   const bad = (list.data ?? []).some((p) => draft[p.key] !== undefined && !validPrice(draft[p.key]!));
   const [reviewMin, reviewMax] = [shown("price.review_min"), shown("price.review_max")];
-  const why = bad ? "كل سعر لازم يبقى رقم صحيح من 1 لحد 1,000,000 جنيه."
-    : reviewMin !== undefined && reviewMax !== undefined && reviewMin > reviewMax ? "أقل سعر للمراجعة لازم يبقى أقل من أو قد أعلى سعر."
+  const why = bad ? "يجب أن يكون كل سعر رقمًا صحيحًا من 1 إلى 1,000,000 جنيه."
+    : reviewMin !== undefined && reviewMax !== undefined && reviewMin > reviewMax ? "يجب أن يكون أقل سعر للمراجعة أقل من أعلى سعر أو مساويًا له."
     : null;
 
   return (
@@ -57,7 +57,7 @@ export function PricesPage() {
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-[26px] leading-tight font-bold">الأسعار</h1>
               {list.data ? (
-                <span className="tabular rounded-full border border-gold-line bg-gold-tint px-2.5 py-0.5 text-[12.5px] font-bold text-gold-ink">{list.data.length} سعر</span>
+                <span className="tabular rounded-full border border-gold-line bg-gold-tint px-2.5 py-0.5 text-[12.5px] font-bold text-gold-ink">{list.data.length === 1 ? "سعر واحد" : list.data.length === 2 ? "سعران" : list.data.length >= 3 && list.data.length <= 10 ? `${list.data.length} أسعار` : `${list.data.length} سعرًا`}</span>
               ) : null}
             </div>
           </div>
@@ -69,7 +69,7 @@ export function PricesPage() {
           <span aria-hidden className="pointer-events-none absolute -top-16 -end-10 -z-10 size-48 rounded-full bg-gold/15 blur-3xl" />
           <h2 id="prices-list" className="flex items-center gap-2 text-[16px] font-bold">
             <Icon name="receipt" className="size-4 text-gold-ink" />
-            قايمة الأسعار
+            قائمة الأسعار
           </h2>
           <ul className="grid gap-2">
             {list.data.map((p) => {
@@ -103,9 +103,9 @@ export function PricesPage() {
                 <Button variant="primary" busy={save.isPending} disabled={changed.length === 0 || why !== null}
                   onClick={async () => {
                     const lines = changed.map((p) => `${p.name}: ${p.value.toLocaleString("en-US")} ← ${Number(draft[p.key]).toLocaleString("en-US")}`).join("\n");
-                    if (await confirmAction({ title: "تحفظ الأسعار الجديدة؟", body: `للطلبات الجديدة بس:\n${lines}`, yes: "احفظ الأسعار" })) save.mutate();
+                    if (await confirmAction({ title: "حفظ الأسعار الجديدة؟", body: `تُطبَّق على الطلبات الجديدة فقط:\n${lines}`, yes: "حفظ الأسعار" })) save.mutate();
                   }}>
-                  احفظ الأسعار
+                  حفظ الأسعار
                 </Button>
                 {why ? <span className="text-sm text-bad">{why}</span> : null}
               </div>
@@ -123,7 +123,7 @@ function Changes() {
   const changes = useQuery({ queryKey: ["price-changes"], queryFn: prices.changes });
   const names = Object.fromEntries((usePrices().data ?? []).map((p) => [p.key, p.name]));
   if (changes.isError) {
-    return <ErrorState message={`آخر التغييرات ما اتحمّلتش: ${errorMessage(changes.error)}`} onRetry={() => void changes.refetch()} />;
+    return <ErrorState message={`تعذّر تحميل آخر التغييرات: ${errorMessage(changes.error)}`} onRetry={() => void changes.refetch()} />;
   }
   if (!changes.data || changes.data.length === 0) return null;
   return (

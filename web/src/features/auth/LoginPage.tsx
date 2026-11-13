@@ -75,15 +75,15 @@ export function LoginPage() {
 
   if (ticket) {
     return (
-      <AuthLayout title="التحقق بخطوتين" subtitle="افتح تطبيق الـ Authenticator واكتب الكود اللي ظاهر لحساب المكتب.">
+      <AuthLayout title="التحقق بخطوتين" subtitle="افتح تطبيق Authenticator واكتب الرمز الظاهر لحساب المكتب.">
         <form onSubmit={submitCode} className="grid gap-5" noValidate>
-          <CodeField label="الكود" value={code} onChange={setCode} allowRecovery
-            hint="الموبايل مش معاك؟ اكتب كود من أكواد الاسترجاع (xxxx-xxxx)." />
+          <CodeField label="الرمز" value={code} onChange={setCode} allowRecovery
+            hint="إذا لم يكن هاتفك معك، فاكتب أحد رموز الاسترجاع (xxxx-xxxx)." />
           {error ? <Notice>{error}</Notice> : null}
           <Button type="submit" variant="primary" busy={busy} disabled={code.length < 6}>تأكيد</Button>
           <button type="button" className="text-sm font-semibold text-gold-ink hover:underline"
             onClick={() => { setTicket(undefined); setPassword(""); setError(undefined); }}>
-            ارجع لكلمة السر
+            العودة إلى كلمة السر
           </button>
         </form>
       </AuthLayout>
@@ -91,7 +91,7 @@ export function LoginPage() {
   }
 
   return (
-    <AuthLayout title="تسجيل الدخول" subtitle="لوحة المكتب. ادخل باسم المستخدم وكلمة السر بتوعك.">
+    <AuthLayout title="تسجيل الدخول" subtitle="لوحة المكتب. سجّل الدخول باسم المستخدم وكلمة السر الخاصين بك.">
       <form onSubmit={submit} className="grid gap-5" noValidate>
         {done ? <Notice tone="good">{done}</Notice> : null}
         <Field label="اسم المستخدم" name="username" autoComplete="username" dir="ltr" required
@@ -104,14 +104,14 @@ export function LoginPage() {
             نسيت كلمة السر؟
           </Link>
         </div>
-        {waiting ? <Notice tone="good">حسابك مستني المدير يفعّله. هيوصلك إيميل أول ما يتفعّل.</Notice> : null}
+        {waiting ? <Notice tone="good">حسابك في انتظار تفعيل المدير. ستصلك رسالة على بريدك الإلكتروني فور تفعيله.</Notice> : null}
         {error ? <Notice>{error}</Notice> : null}
         <Button type="submit" variant="primary" busy={busy} disabled={!username || !password}>
           دخول
         </Button>
         <p className="text-center text-sm text-ink-soft">
-          معندكش حساب؟{" "}
-          <Link to="/register" className="font-semibold text-gold-ink hover:underline">اعمل حساب جديد</Link>
+          ليس لديك حساب؟{" "}
+          <Link to="/register" className="font-semibold text-gold-ink hover:underline">أنشئ حسابًا جديدًا</Link>
         </p>
       </form>
     </AuthLayout>

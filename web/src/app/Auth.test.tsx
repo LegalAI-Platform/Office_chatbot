@@ -70,13 +70,13 @@ describe("sign-in, sign-up and the authenticator (v1.9)", () => {
     fireEvent.click(screen.getByRole("button", { name: "دخول" }));
 
     expect(await screen.findByRole("heading", { name: "التحقق بخطوتين" })).toBeTruthy();
-    type(/الكود/, "000000");
+    type(/الرمز/, "000000");
     fireEvent.click(screen.getByRole("button", { name: "تأكيد" }));
-    expect((await screen.findByRole("alert")).textContent).toContain("الكود غلط");
+    expect((await screen.findByRole("alert")).textContent).toContain("الرمز غير صحيح");
 
-    type(/الكود/, "123456");
+    type(/الرمز/, "123456");
     fireEvent.click(screen.getByRole("button", { name: "تأكيد" }));
-    await screen.findByRole("heading", { level: 1, name: /يا/ });
+    await screen.findByRole("heading", { level: 1, name: /المدير/ });
     expect(router.state.location.pathname).toBe("/");
     expect(calls.filter((c) => c.path === "/auth/login/2fa").map((c) => (c.body as { ticket: string }).ticket)).toEqual(["tk", "tk"]);
   });
@@ -89,12 +89,12 @@ describe("sign-in, sign-up and the authenticator (v1.9)", () => {
     type(/اسم المستخدم/, "mona");
     type(/كلمة السر/, "a long test password 1");
     fireEvent.click(screen.getByRole("button", { name: "دخول" }));
-    expect((await screen.findByRole("status")).textContent).toContain("مستني المدير");
+    expect((await screen.findByRole("status")).textContent).toContain("في انتظار تفعيل المدير");
 
     answer = { status: 403, body: { error: "email_not_verified", email: "mona@example.test" } };
     type(/كلمة السر/, "a long test password 1");
     fireEvent.click(screen.getByRole("button", { name: "دخول" }));
-    expect(await screen.findByRole("heading", { name: "أكّد الإيميل" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "تأكيد البريد الإلكتروني" })).toBeTruthy();
     expect(router.state.location.pathname).toBe("/verify-email");
     expect(screen.getByText("mona@example.test")).toBeTruthy();
   });
@@ -107,32 +107,32 @@ describe("sign-in, sign-up and the authenticator (v1.9)", () => {
       "POST /auth/register/verify": { status: 204 },
     });
     renderAt("/register");
-    await screen.findByRole("button", { name: "اعمل الحساب" });
+    await screen.findByRole("button", { name: "إنشاء الحساب" });
     type(/^الاسم/, "منى علي");
     type(/اسم المستخدم/, "Mona");
-    type(/الإيميل/, "mona@example.test");
+    type(/البريد الإلكتروني/, "mona@example.test");
     type(/^كلمة السر/, "a long test password 1");
-    type(/اكتب كلمة السر تاني/, "a long test password 2");
-    expect(screen.getByText("كلمتين السر مش زي بعض.")).toBeTruthy();
-    expect((screen.getByRole("button", { name: "اعمل الحساب" }) as HTMLButtonElement).disabled).toBe(true);
-    type(/اكتب كلمة السر تاني/, "a long test password 1");
-    fireEvent.click(screen.getByRole("button", { name: "اعمل الحساب" }));
+    type(/أعد كتابة كلمة السر/, "a long test password 2");
+    expect(screen.getByText("كلمتا السر غير متطابقتين.")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "إنشاء الحساب" }) as HTMLButtonElement).disabled).toBe(true);
+    type(/أعد كتابة كلمة السر/, "a long test password 1");
+    fireEvent.click(screen.getByRole("button", { name: "إنشاء الحساب" }));
 
-    expect(await screen.findByRole("heading", { name: "أكّد الإيميل" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "تأكيد البريد الإلكتروني" })).toBeTruthy();
     expect(calls.find((c) => c.path === "/auth/register")!.body).toEqual({
       display_name: "منى علي", username: "mona", email: "mona@example.test", password: "a long test password 1",
     });
-    expect((screen.getByRole("button", { name: /ابعت كود تاني بعد/ }) as HTMLButtonElement).disabled).toBe(true);
-    type(/الكود/, "12a34 56");
-    expect((screen.getByLabelText(/الكود/) as HTMLInputElement).value).toBe("123456");
+    expect((screen.getByRole("button", { name: /أرسل رمزًا آخر بعد/ }) as HTMLButtonElement).disabled).toBe(true);
+    type(/الرمز/, "12a34 56");
+    expect((screen.getByLabelText(/الرمز/) as HTMLInputElement).value).toBe("123456");
     fireEvent.click(screen.getByRole("button", { name: "تأكيد" }));
-    expect(await screen.findByRole("heading", { name: "الإيميل اتأكد" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "تم تأكيد البريد الإلكتروني" })).toBeTruthy();
   });
 
   it("says sign-up is not available when the server has no mail set up", async () => {
     serve({ "GET /auth/me": { status: 401 }, "GET /auth/signup": { body: { available: false } } });
     renderAt("/register");
-    expect((await screen.findByRole("alert")).textContent).toContain("لسه مش متاح");
+    expect((await screen.findByRole("alert")).textContent).toContain("غير متاح بعد");
   });
 
   it("sends a manager without the authenticator to turn it on first", async () => {
@@ -141,9 +141,9 @@ describe("sign-in, sign-up and the authenticator (v1.9)", () => {
       "GET /auth/2fa": { body: { enabled: false, recovery_codes_left: 0, available: true } },
     });
     const router = renderAt("/tasks");
-    expect(await screen.findByRole("heading", { name: "شغّل التحقق بخطوتين" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "تفعيل التحقق بخطوتين" })).toBeTruthy();
     expect(router.state.location.pathname).toBe("/setup-2fa");
-    expect((screen.getByRole("button", { name: "كمّل للوحة" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "المتابعة إلى اللوحة" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("lets the manager approve a waiting account with a role", async () => {
@@ -159,7 +159,7 @@ describe("sign-in, sign-up and the authenticator (v1.9)", () => {
       "GET /dashboard": { body: { urgent: 0, overdue: 0, unassigned: 0, active: 0, urgent_by_day: [], overdue_by_day: [], recent: [], priority: [] } },
     });
     renderAt("/users");
-    const pending = await screen.findByRole("list", { name: "حسابات مستنية التفعيل" });
+    const pending = await screen.findByRole("list", { name: "حسابات في انتظار التفعيل" });
     expect(within(pending).getByText("منى علي")).toBeTruthy();
     fireEvent.change(within(pending).getByRole("combobox"), { target: { value: "lawyer" } });
     fireEvent.click(within(pending).getByRole("button", { name: /فعّل الحساب/ }));
@@ -183,14 +183,14 @@ describe("sign-in, sign-up and the authenticator (v1.9)", () => {
     const role = (await screen.findByRole("combobox", { name: "دور سارة" })) as HTMLSelectElement;
     fireEvent.change(role, { target: { value: "lawyer" } });
     const dialog = await screen.findByRole("alertdialog");
-    expect(dialog.textContent).toContain("هيخرج من اللوحة");
-    fireEvent.click(within(dialog).getByRole("button", { name: "لأ، ارجع" }));
+    expect(dialog.textContent).toContain("سيُسجَّل خروجه من اللوحة");
+    fireEvent.click(within(dialog).getByRole("button", { name: "إلغاء" }));
     await vi.waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
     expect(role.value).toBe("staff");
     expect(calls.some((c) => c.path === "/users/s1/role")).toBe(false);
 
     fireEvent.change(role, { target: { value: "lawyer" } });
-    fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "أيوه، غيّره" }));
+    fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "نعم، غيّره" }));
     await vi.waitFor(() => expect(calls.find((c) => c.path === "/users/s1/role")?.body).toEqual({ role: "lawyer" }));
   });
 
@@ -200,16 +200,16 @@ describe("sign-in, sign-up and the authenticator (v1.9)", () => {
       "POST /auth/change-password": { status: 204 },
     });
     renderAt("/change-password");
-    expect(await screen.findByText(/أهلًا يا منى/)).toBeTruthy();
+    expect(await screen.findByText(/مرحبًا منى/)).toBeTruthy();
     const submit = screen.getByRole("button", { name: "غيّر كلمة السر" }) as HTMLButtonElement;
     expect(submit.disabled).toBe(true);
     type(/^كلمة السر المؤقتة/, "Temp-123");
     type(/^كلمة السر الجديدة/, "a long new password");
     expect(submit.disabled).toBe(true); // the repeat is still empty
     const rules = screen.getByRole("list", { name: "شروط كلمة السر الجديدة" });
-    expect(within(rules).getByText("12 حرف على الأقل").closest("li")!.textContent).toContain("تمام");
-    expect(within(rules).getByText("الاتنين زي بعض").closest("li")!.textContent).toContain("لسه");
-    type(/^اكتبها تاني/, "a long new password");
+    expect(within(rules).getByText("12 حرفًا على الأقل").closest("li")!.textContent).toContain("مستوفى");
+    expect(within(rules).getByText("الكلمتان متطابقتان").closest("li")!.textContent).toContain("غير مستوفى");
+    type(/^أعد كتابتها/, "a long new password");
     expect(submit.disabled).toBe(false);
     fireEvent.click(screen.getByRole("button", { name: "إظهار كلمة السر الجديدة" }));
     expect((screen.getByLabelText(/^كلمة السر الجديدة/) as HTMLInputElement).type).toBe("text");
@@ -228,15 +228,15 @@ describe("sign-in, sign-up and the authenticator (v1.9)", () => {
       "GET /dashboard": { body: { urgent: 0, overdue: 0, unassigned: 0, active: 0, urgent_by_day: [], overdue_by_day: [], recent: [], priority: [] } },
     });
     renderAt("/users");
-    fireEvent.click(await screen.findByRole("button", { name: "ضيف حساب" }));
-    type(/الاسم اللي هيظهر/, "أحمد سمير");
+    fireEvent.click(await screen.findByRole("button", { name: "إضافة حساب" }));
+    type(/الاسم الظاهر/, "أحمد سمير");
     type(/اسم المستخدم/, "ahmed.samir");
-    type(/الإيميل/, "a@example.test");
-    fireEvent.click(screen.getByRole("button", { name: "اعمل الحساب" }));
-    const message = await screen.findByLabelText("الرسالة اللي هتبعتها");
+    type(/البريد الإلكتروني/, "a@example.test");
+    fireEvent.click(screen.getByRole("button", { name: "إنشاء الحساب" }));
+    const message = await screen.findByLabelText("الرسالة التي سترسلها");
     expect(message.textContent).toContain("اسم المستخدم: ahmed.samir");
     expect(message.textContent).toContain("كلمة السر المؤقتة: Tmp-Kz9-4pQ-xT7m");
-    expect(message.textContent).toContain("أهلًا أحمد");
+    expect(message.textContent).toContain("مرحبًا أحمد");
     expect(screen.getByRole("button", { name: "انسخ الرسالة كاملة" })).toBeTruthy();
   });
 
@@ -248,14 +248,14 @@ describe("sign-in, sign-up and the authenticator (v1.9)", () => {
       "GET /dashboard": { body: { urgent: 0, overdue: 0, unassigned: 0, active: 0, urgent_by_day: [], overdue_by_day: [], recent: [], priority: [] } },
     });
     renderAt("/users");
-    fireEvent.click(await screen.findByRole("button", { name: /ضيف حساب/ }));
-    type(/الاسم اللي هيظهر/, "منى");
+    fireEvent.click(await screen.findByRole("button", { name: /إضافة حساب/ }));
+    type(/الاسم الظاهر/, "منى");
     type(/اسم المستخدم/, "mona");
-    type(/الإيميل/, "mona@x");
-    fireEvent.click(screen.getByRole("button", { name: "اعمل الحساب" }));
-    expect(await screen.findByText("اسم المستخدم ده موجود قبل كده.")).toBeTruthy();
-    expect(screen.getByText("اكتب إيميل صحيح.")).toBeTruthy();
+    type(/البريد الإلكتروني/, "mona@x");
+    fireEvent.click(screen.getByRole("button", { name: "إنشاء الحساب" }));
+    expect(await screen.findByText("اسم المستخدم هذا مسجّل من قبل.")).toBeTruthy();
+    expect(screen.getByText("اكتب بريدًا إلكترونيًا صحيحًا.")).toBeTruthy();
     expect(screen.queryByText("username_taken")).toBeNull();
-    expect(screen.queryByText("في حاجة مش مظبوطة في اللي اتكتب. راجعه وجرّب تاني.")).toBeNull();
+    expect(screen.queryByText("بعض البيانات المُدخلة غير صحيحة. راجعها ثم حاول مرة أخرى.")).toBeNull();
   });
 });
