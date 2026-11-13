@@ -1,7 +1,7 @@
 {
   "uid": "hazem-logs",
-  "title": "حازم — اللوجز",
-  "description": "لوجز كل الـ containers 7 أيام، متخفي منها أرقام الموبايل والـ passwords والـ tokens قبل ما تتخزن.",
+  "title": "Hazem · Logs",
+  "description": "Every container's log for 7 days, phone numbers, passwords and keys masked before they are kept.",
   "tags": [
     "hazem",
     "logs"
@@ -10,18 +10,28 @@
   "editable": false,
   "graphTooltip": 1,
   "refresh": "30s",
+  "liveNow": false,
   "schemaVersion": 41,
   "version": 1,
+  "fiscalYearStartMonth": 0,
+  "weekStart": "saturday",
   "time": {
     "from": "now-1h",
     "to": "now"
   },
-  "timepicker": {},
+  "timepicker": {
+    "refresh_intervals": [
+      "30s",
+      "1m",
+      "5m",
+      "15m"
+    ]
+  },
   "templating": {
     "list": [
       {
         "name": "service",
-        "label": "الخدمة",
+        "label": "Service",
         "type": "query",
         "datasource": {
           "type": "loki",
@@ -30,7 +40,8 @@
         "query": {
           "label": "service",
           "stream": "",
-          "type": 1
+          "type": 1,
+          "refId": "LokiVariableQueryEditor-VariableQuery"
         },
         "definition": "label_values(service)",
         "refresh": 2,
@@ -46,17 +57,19 @@
             "$__all"
           ]
         },
-        "sort": 1
+        "sort": 1,
+        "options": []
       },
       {
         "name": "search",
-        "label": "فيها",
+        "label": "Search",
         "type": "textbox",
         "query": "",
         "current": {
           "text": "",
           "value": ""
-        }
+        },
+        "options": []
       }
     ]
   },
@@ -65,135 +78,184 @@
   },
   "links": [
     {
-      "title": "كل الـ dashboards",
+      "title": "Dashboards",
       "type": "dashboards",
       "tags": [
         "hazem"
       ],
       "asDropdown": true,
       "includeVars": false,
-      "keepTime": true
+      "keepTime": true,
+      "icon": "external link",
+      "targetBlank": false
     }
   ],
   "panels": [
     {
-      "type": "timeseries",
-      "title": "عدد الأسطر لكل خدمة",
-      "description": "",
-      "datasource": {
-        "type": "loki",
-        "uid": "loki"
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "loki"
-          },
-          "expr": "sum by (service) (count_over_time({service=~\"$service\"} [$__auto]))",
-          "refId": "A",
-          "legendFormat": "{{service}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 10,
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "mode": "normal",
-              "group": "A"
-            }
-          },
-          "min": 0
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "sum"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
+      "type": "row",
+      "title": "Volume",
+      "collapsed": false,
+      "panels": [],
       "id": 1,
       "gridPos": {
+        "h": 1,
+        "w": 24,
         "x": 0,
-        "y": 0,
-        "w": 12,
-        "h": 7
-      }
-    },
-    {
-      "type": "timeseries",
-      "title": "أسطر فيها خطأ",
-      "description": "",
-      "datasource": {
-        "type": "loki",
-        "uid": "loki"
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "loki"
-          },
-          "expr": "sum by (service) (count_over_time({service=~\"$service\"} |~ \"(?i)(error|fatal|panic|exception)\" [$__auto]))",
-          "refId": "A",
-          "legendFormat": "{{service}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "custom": {
-            "lineWidth": 1,
-            "fillOpacity": 10,
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "mode": "normal",
-              "group": "A"
-            }
-          },
-          "min": 0
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "sum"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "id": 2,
-      "gridPos": {
-        "x": 12,
-        "y": 0,
-        "w": 12,
-        "h": 7
+        "y": 0
       }
     },
     {
       "type": "stat",
-      "title": "أسطر كان فيها رقم كامل (24 ساعة)",
-      "description": "اتخفت قبل Loki، بس Docker لسه شايلها، ففحص الليل هيفشل. التنبيه LogsHavePhoneNumber.",
+      "title": "Lines (1h)",
+      "description": "",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum(count_over_time({service=~\"$service\"} [1h]))",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 12,
+          "valueSize": 26
+        }
+      },
+      "id": 2,
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 1
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Error lines (1h)",
+      "description": "error, fatal, panic or exception.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum(count_over_time({service=~\"$service\"} |~ \"(?i)(error|fatal|panic|exception)\" [1h]))",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 50
+              },
+              {
+                "color": "red",
+                "value": 500
+              }
+            ]
+          },
+          "mappings": [],
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 12,
+          "valueSize": 26
+        }
+      },
+      "id": 3,
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 1
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Lines with a number (24h)",
+      "description": "Masked before Loki, but Docker keeps the line: the night's log-scan fails (LogsHavePhoneNumber).",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -205,15 +267,19 @@
             "uid": "prometheus"
           },
           "expr": "(sum(increase(loki_process_custom_log_lines_with_phone_total[24h]) and loki_process_custom_log_lines_with_phone_total offset 24h) or vector(0)) + (sum(loki_process_custom_log_lines_with_phone_total unless loki_process_custom_log_lines_with_phone_total offset 24h) or vector(0))",
-          "refId": "A",
-          "legendFormat": "__auto"
+          "legendFormat": "__auto",
+          "range": true,
+          "instant": false,
+          "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "short",
           "noValue": "0",
-          "mappings": [],
+          "color": {
+            "mode": "thresholds"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -222,15 +288,12 @@
                 "value": null
               },
               {
-                "color": "orange",
-                "value": 1
-              },
-              {
                 "color": "red",
                 "value": 1
               }
             ]
           },
+          "mappings": [],
           "decimals": 0
         },
         "overrides": []
@@ -243,26 +306,30 @@
           "fields": "",
           "values": false
         },
-        "colorMode": "background",
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "value",
         "graphMode": "none",
         "justifyMode": "center",
-        "textMode": "auto",
-        "orientation": "auto",
         "wideLayout": true,
-        "showPercentChange": false
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 12,
+          "valueSize": 26
+        }
       },
-      "id": 3,
+      "id": 4,
       "gridPos": {
-        "x": 0,
-        "y": 7,
-        "w": 6,
-        "h": 4
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 1
       }
     },
     {
       "type": "stat",
-      "title": "أسطر كان فيها مفتاح (24 ساعة)",
-      "description": "التنبيه LogsHaveSecret: اعتبر المفتاح اتكشف.",
+      "title": "Lines with a key (24h)",
+      "description": "Treat the key as seen and change it (LogsHaveSecret).",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -274,15 +341,19 @@
             "uid": "prometheus"
           },
           "expr": "(sum(increase(loki_process_custom_log_lines_with_secret_total[24h]) and loki_process_custom_log_lines_with_secret_total offset 24h) or vector(0)) + (sum(loki_process_custom_log_lines_with_secret_total unless loki_process_custom_log_lines_with_secret_total offset 24h) or vector(0))",
-          "refId": "A",
-          "legendFormat": "__auto"
+          "legendFormat": "__auto",
+          "range": true,
+          "instant": false,
+          "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "short",
           "noValue": "0",
-          "mappings": [],
+          "color": {
+            "mode": "thresholds"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -291,15 +362,12 @@
                 "value": null
               },
               {
-                "color": "orange",
-                "value": 1
-              },
-              {
                 "color": "red",
                 "value": 1
               }
             ]
           },
+          "mappings": [],
           "decimals": 0
         },
         "overrides": []
@@ -312,26 +380,30 @@
           "fields": "",
           "values": false
         },
-        "colorMode": "background",
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "value",
         "graphMode": "none",
         "justifyMode": "center",
-        "textMode": "auto",
-        "orientation": "auto",
         "wideLayout": true,
-        "showPercentChange": false
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 12,
+          "valueSize": 26
+        }
       },
-      "id": 4,
+      "id": 5,
       "gridPos": {
-        "x": 6,
-        "y": 7,
-        "w": 6,
-        "h": 4
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 1
       }
     },
     {
       "type": "stat",
-      "title": "أسطر اترمت قبل Loki (24 ساعة)",
-      "description": "",
+      "title": "Dropped lines (24h)",
+      "description": "Lines Alloy could not send to Loki.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -342,16 +414,20 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(loki_write_dropped_entries_total{job=\"alloy\"}[24h]))",
-          "refId": "A",
-          "legendFormat": "__auto"
+          "expr": "sum(increase(loki_write_dropped_entries_total{job=\"alloy\"}[24h])) or vector(0)",
+          "legendFormat": "__auto",
+          "range": true,
+          "instant": false,
+          "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "short",
           "noValue": "0",
-          "mappings": [],
+          "color": {
+            "mode": "thresholds"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -369,6 +445,7 @@
               }
             ]
           },
+          "mappings": [],
           "decimals": 0
         },
         "overrides": []
@@ -381,26 +458,30 @@
           "fields": "",
           "values": false
         },
-        "colorMode": "background",
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "value",
         "graphMode": "none",
         "justifyMode": "center",
-        "textMode": "auto",
-        "orientation": "auto",
         "wideLayout": true,
-        "showPercentChange": false
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 12,
+          "valueSize": 26
+        }
       },
-      "id": 5,
+      "id": 6,
       "gridPos": {
-        "x": 12,
-        "y": 7,
-        "w": 6,
-        "h": 4
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 1
       }
     },
     {
       "type": "stat",
-      "title": "Loki شغال؟",
-      "description": "",
+      "title": "Loki",
+      "description": "Loki answers Prometheus.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -411,41 +492,58 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "up{job=\"loki\"}",
-          "refId": "A",
-          "legendFormat": "__auto"
+          "expr": "max(up{job=\"loki\"})",
+          "legendFormat": "Loki",
+          "range": true,
+          "instant": false,
+          "refId": "A"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
-          "noValue": "مفيش بيانات",
+          "unit": "none",
+          "decimals": 0,
           "mappings": [
             {
               "type": "value",
               "options": {
                 "0": {
-                  "text": "واقف",
-                  "color": "red",
-                  "index": 1
+                  "text": "DOWN",
+                  "color": "semi-dark-red",
+                  "index": 0
                 },
                 "1": {
-                  "text": "شغال",
-                  "color": "green",
-                  "index": 0
+                  "text": "UP",
+                  "color": "semi-dark-green",
+                  "index": 1
+                }
+              }
+            },
+            {
+              "type": "special",
+              "options": {
+                "match": "null+nan",
+                "result": {
+                  "text": "NO DATA",
+                  "color": "gray",
+                  "index": 2
                 }
               }
             }
           ],
+          "noValue": "NO DATA",
+          "color": {
+            "mode": "thresholds"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
+                "color": "semi-dark-red",
                 "value": null
               },
               {
-                "color": "green",
+                "color": "semi-dark-green",
                 "value": 1
               }
             ]
@@ -461,25 +559,200 @@
           "fields": "",
           "values": false
         },
-        "colorMode": "background",
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "background_solid",
         "graphMode": "none",
         "justifyMode": "center",
-        "textMode": "auto",
-        "orientation": "auto",
         "wideLayout": true,
-        "showPercentChange": false
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 12,
+          "valueSize": 18
+        }
       },
-      "id": 6,
+      "id": 7,
       "gridPos": {
-        "x": 18,
-        "y": 7,
-        "w": 6,
-        "h": 4
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 1
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Lines by service",
+      "description": "",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (service) (count_over_time({service=~\"$service\"} [$__auto]))",
+          "legendFormat": "{{service}}",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "gradientMode": "opacity",
+            "showPoints": "never",
+            "spanNulls": true,
+            "pointSize": 4,
+            "axisBorderShow": false,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "sum"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 8,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 5
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Error lines by service",
+      "description": "",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum by (service) (count_over_time({service=~\"$service\"} |~ \"(?i)(error|fatal|panic|exception)\" [$__auto]))",
+          "legendFormat": "{{service}}",
+          "range": true,
+          "instant": false,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "gradientMode": "opacity",
+            "showPoints": "never",
+            "spanNulls": true,
+            "pointSize": 4,
+            "axisBorderShow": false,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "sum"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 9,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 5
+      }
+    },
+    {
+      "type": "row",
+      "title": "Lines",
+      "collapsed": false,
+      "panels": [],
+      "id": 10,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 13
       }
     },
     {
       "type": "logs",
-      "title": "اللوجز",
+      "title": "Logs",
       "datasource": {
         "type": "loki",
         "uid": "loki"
@@ -491,8 +764,10 @@
             "uid": "loki"
           },
           "expr": "{service=~\"$service\"} |~ \"(?i)$search\"",
-          "refId": "A",
-          "legendFormat": "__auto"
+          "legendFormat": "__auto",
+          "range": true,
+          "instant": false,
+          "refId": "A"
         }
       ],
       "options": {
@@ -505,12 +780,12 @@
         "showLabels": false,
         "showCommonLabels": false
       },
-      "id": 7,
+      "id": 11,
       "gridPos": {
-        "x": 0,
-        "y": 11,
+        "h": 18,
         "w": 24,
-        "h": 18
+        "x": 0,
+        "y": 14
       }
     }
   ]

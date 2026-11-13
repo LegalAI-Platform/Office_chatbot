@@ -3,11 +3,13 @@
 groups:
   - name: containers
     rules:
-      # One-shot jobs exit when done (preflight, storage-init, monitoring-init, chatwoot-init), and so do `docker compose run`s.
+      # v1.109: only the services the office runs on (the default profile, the edge and the Named Tunnel). A profile's container
+      # stopped on purpose never pages: the old Quick Tunnel (tunnel), WAHA, the test stub. Neither does a one-shot job that
+      # finished (preflight, storage-init, …) or a `docker compose run`. The monitoring's own are TargetDown's.
       - alert: ContainerExited
         expr: |
           max by (service) (docker_container_status_exitcode{container_status=~"exited|dead", oneoff!="True",
-            service!~"preflight|storage-init|monitoring-init|chatwoot-init|tools|migrate|meta-stub"} >= 0)
+            service=~"postgres|redis|garage|n8n|api|web|chatwoot|chatwoot-sidekiq|chatwoot-db|chatwoot-redis|edge|tunnel-named"} >= 0)
         for: 2m
         labels: { severity: critical }
         annotations:

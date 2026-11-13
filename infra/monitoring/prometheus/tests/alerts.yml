@@ -157,7 +157,8 @@ tests:
               description: 'Meta مش هتقدر توصّل رسايل واتساب: الـ tunnel أو الـ edge أو Cloudflare.'
               runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#publicendpointdown
 
-  # ---------- A container that stopped; a one-shot job that finished is not one ----------
+  # ---------- A container that stopped; a one-shot job that finished is not one, nor a profile's container stopped on
+  # purpose (v1.109: the old Quick Tunnel, stopped for weeks since the Named Tunnel took over; WAHA) ----------
   - interval: 15s
     input_series:
       - series: 'docker_container_status_exitcode{job="docker",service="api",container="office-api-1",container_status="exited",oneoff="False"}'
@@ -166,6 +167,10 @@ tests:
         values: '0x20'
       - series: 'docker_container_status_exitcode{job="docker",service="tools",container="office-tools-run-1a2b",container_status="exited",oneoff="True"}'
         values: '1x20'
+      - series: 'docker_container_status_exitcode{job="docker",service="tunnel",container="office-tunnel-1",container_status="exited",oneoff="False"}'
+        values: '0x20'
+      - series: 'docker_container_status_exitcode{job="docker",service="waha",container="office-waha-1",container_status="exited",oneoff="False"}'
+        values: '0x20'
     alert_rule_test:
       - eval_time: 3m
         alertname: ContainerExited

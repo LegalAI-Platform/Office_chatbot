@@ -80,7 +80,10 @@ case "${1:-}" in
       "$tele" telegraf config check --config /etc/telegraf/telegraf.conf
     echo "== Blackbox"
     docker run --rm -v "$root/infra/monitoring/blackbox:/etc/blackbox:ro" "$bb" --config.file=/etc/blackbox/blackbox.yml --config.check
-    echo "== Grafana: the dashboards are JSON with a unique uid each, on the provisioned data sources only"
+    echo "== Grafana: the dashboards are what make-dashboards.py writes, a unique uid each, on the provisioned data sources only"
+    py="$(command -v python3 || command -v python || true)"
+    [[ -n "$py" ]] || die "python3 is needed to check the dashboards against make-dashboards.py"
+    "$py" infra/monitoring/grafana/make-dashboards.py --check
     for f in infra/monitoring/grafana/dashboards/*.json; do
       jq -e '.uid and .title and (.panels | length > 0)' "$f" >/dev/null || die "$f is not a dashboard"
     done
