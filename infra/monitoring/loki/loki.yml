@@ -1,0 +1,56 @@
+# Loki (v1.107, docs/runbooks/monitoring.md): the containers' logs, as Alloy sends them already masked (no full phone number,
+# no password, token or key). One node on this disk; 7 days kept, then the compactor deletes them. No sign-in of its own:
+# only the monitoring's network (monitoring_net, no way out) reaches it, and nothing is sent to Grafana Labs.
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+  log_level: warn
+
+common:
+  instance_addr: 127.0.0.1
+  path_prefix: /loki
+  replication_factor: 1
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: "2026-11-01"
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+limits_config:
+  retention_period: 168h # 7 days
+  reject_old_samples: true
+  reject_old_samples_max_age: 168h
+  max_query_lookback: 168h
+  ingestion_rate_mb: 4
+  ingestion_burst_size_mb: 8
+  max_line_size: 256KB
+  max_line_size_truncate: true
+  allow_structured_metadata: true
+  volume_enabled: true
+
+compactor:
+  working_directory: /loki/compactor
+  compaction_interval: 10m
+  retention_enabled: true
+  retention_delete_delay: 2h
+  delete_request_store: filesystem
+
+ruler:
+  enable_api: false
+
+analytics:
+  reporting_enabled: false

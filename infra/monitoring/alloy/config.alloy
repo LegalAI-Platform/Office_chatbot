@@ -1,0 +1,69 @@
+// Alloy (v1.107, docs/runbooks/monitoring.md): the logs of this compose project's containers, masked (mask.alloy), to Loki.
+// Docker is reached through docker-proxy, which answers reads only; Alloy never has Docker's socket.
+logging {
+  level  = "warn"
+  format = "logfmt"
+}
+
+import.file "mask" {
+  filename = "/etc/alloy/mask.alloy"
+}
+
+// The containers of this project (COMPOSE_PROJECT_NAME, "office"), one-off runs (tools, migrate) included.
+discovery.docker "containers" {
+  host             = "tcp://docker-proxy:2375"
+  refresh_interval = "15s"
+
+  filter {
+    name   = "label"
+    values = ["com.docker.compose.project=" + sys.env("COMPOSE_PROJECT_NAME")]
+  }
+}
+
+// Each stream is known by its compose service (api, n8n, postgres…), its container and stdout/stderr.
+discovery.relabel "containers" {
+  targets = []
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_log_stream"]
+    target_label  = "stream"
+  }
+}
+
+loki.source.docker "containers" {
+  host          = "tcp://docker-proxy:2375"
+  targets       = discovery.docker.containers.targets
+  relabel_rules = discovery.relabel.containers.rules
+  forward_to    = [loki.process.recent.receiver]
+}
+
+// On a first start Docker hands over each container's whole log: the last 6 hours are enough (Docker keeps the rest).
+loki.process "recent" {
+  stage.drop {
+    older_than          = "6h"
+    drop_counter_reason = "older_than_6h"
+  }
+
+  forward_to = [mask.mask.logs.receiver]
+}
+
+mask.mask "logs" {
+  forward_to = [loki.write.loki.receiver]
+}
+
+loki.write "loki" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

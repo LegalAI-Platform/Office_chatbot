@@ -1,0 +1,45 @@
+# The HTTP checks (v1.107, docs/runbooks/monitoring.md): which answer counts as healthy. prometheus.yml names the pages
+# (job probe: from inside; job probe_public: from outside through Cloudflare). Redirects are never followed.
+modules:
+  # A 200, whatever the body (the landing page, Garage's /health).
+  http_2xx:
+    prober: http
+    timeout: 10s
+    http:
+      preferred_ip_protocol: ip4
+      ip_protocol_fallback: false
+      follow_redirects: false
+      valid_status_codes: [200]
+
+  # A 200 that says ok: nginx's /healthz (the panel, the edge) and n8n's readiness ({"status":"ok"}).
+  http_ok:
+    prober: http
+    timeout: 10s
+    http:
+      preferred_ip_protocol: ip4
+      ip_protocol_fallback: false
+      follow_redirects: false
+      valid_status_codes: [200]
+      fail_if_body_not_matches_regexp: ["ok"]
+
+  # The API's /health/ready: the database answers as office_api and schema hazem is there.
+  http_healthy:
+    prober: http
+    timeout: 10s
+    http:
+      preferred_ip_protocol: ip4
+      ip_protocol_fallback: false
+      follow_redirects: false
+      valid_status_codes: [200]
+      fail_if_body_not_matches_regexp: ["Healthy"]
+
+  # Chatwoot's /api: its version (the same check as its container's).
+  http_chatwoot:
+    prober: http
+    timeout: 10s
+    http:
+      preferred_ip_protocol: ip4
+      ip_protocol_fallback: false
+      follow_redirects: false
+      valid_status_codes: [200]
+      fail_if_body_not_matches_regexp: ["version"]

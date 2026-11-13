@@ -1,0 +1,154 @@
+# Prometheus (v1.107, docs/runbooks/monitoring.md): what it reads every 15 seconds and where its alerts go.
+# Every target is a service on the Docker networks; nothing here is reachable from the internet. The alert rules are in
+# rules/, their tests in tests/ (promtool test rules, CI "Monitoring config").
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+scrape_configs:
+  # ---------- The server and its containers ----------
+  - job_name: node
+    static_configs:
+      - targets: ["node-exporter:9100"]
+        labels: { service: host }
+
+  # Every container (Telegraf, from Docker's API through docker-proxy): CPU (100 = one CPU), memory, network, disk, restarts,
+  # the healthcheck's state, and the containers that stopped.
+  - job_name: docker
+    static_configs:
+      - targets: ["telegraf:9273"]
+        labels: { service: telegraf }
+    metric_relabel_configs:
+      # only what the dashboards and the alerts use
+      - source_labels: [__name__]
+        regex: docker_container_(cpu_usage_percent|mem_usage|mem_limit|mem_usage_percent|net_rx_bytes|net_tx_bytes|blkio_io_service_bytes_recursive_read|blkio_io_service_bytes_recursive_write|status_restart_count|status_started_at|status_exitcode|status_uptime_ns|health_failing_streak)
+        action: keep
+      # a container is known by its compose service (api, n8n, …); oneoff="True" is a `docker compose run` (tools, migrate)
+      - source_labels: [com_docker_compose_service]
+        target_label: service
+      - source_labels: [container_name]
+        target_label: container
+      - source_labels: [com_docker_compose_oneoff]
+        target_label: oneoff
+      - regex: com_docker_compose_(service|project|oneoff)|container_name|container_id|engine_host|server_version
+        action: labeldrop
+
+  # ---------- The office's services ----------
+  # The .NET API: OpenTelemetry on its own port (Program.cs), never through nginx or the edge.
+  - job_name: api
+    static_configs:
+      - targets: ["api:9464"]
+        labels: { service: api }
+    metric_relabel_configs:
+      - regex: otel_scope_version|telemetry_sdk_.+
+        action: labeldrop
+
+  # n8n (N8N_METRICS): Node.js and the workflows' counts.
+  - job_name: n8n
+    static_configs:
+      - targets: ["n8n:5678"]
+        labels: { service: n8n }
+
+  # Both databases, each as its own monitor role (pg_monitor only).
+  - job_name: postgres
+    static_configs:
+      - targets: ["postgres-exporter:9187"]
+        labels: { cluster: office, service: postgres }
+      - targets: ["chatwoot-db-exporter:9187"]
+        labels: { cluster: chatwoot, service: chatwoot-db }
+    metric_relabel_configs:
+      # of Postgres' ~300 settings, only the ceiling on connections (an alert divides by it)
+      - source_labels: [__name__]
+        regex: pg_settings_(max_connections|superuser_reserved_connections)
+        target_label: __tmp_keep
+        replacement: "yes"
+      - source_labels: [__name__, __tmp_keep]
+        regex: pg_settings_.+;
+        action: drop
+      - regex: __tmp_keep
+        action: labeldrop
+
+  # Both Redis (Chatwoot's with Sidekiq's queues).
+  - job_name: redis
+    static_configs:
+      - targets: ["redis-exporter:9121"]
+        labels: { cluster: office, service: redis }
+      - targets: ["chatwoot-redis-exporter:9121"]
+        labels: { cluster: chatwoot, service: chatwoot-redis }
+
+  # ---------- The HTTP checks (blackbox) ----------
+  # From inside: each service's own health page. `service` is the compose service the check is about.
+  - job_name: probe
+    metrics_path: /probe
+    static_configs:
+      - targets: ["http://api:8080/health/ready"]
+        labels: { service: api, module: http_healthy }
+      - targets: ["http://web:8080/healthz"]
+        labels: { service: web, module: http_ok }
+      - targets: ["http://n8n:5678/healthz/readiness"]
+        labels: { service: n8n, module: http_ok }
+      - targets: ["http://chatwoot:3000/api"]
+        labels: { service: chatwoot, module: http_chatwoot }
+      - targets: ["http://garage:3903/health"]
+        labels: { service: garage, module: http_2xx }
+    relabel_configs: &probe_relabel
+      - source_labels: [module]
+        target_label: __param_module
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__address__]
+        target_label: target
+      - source_labels: [__address__]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115
+
+  # From outside, as Meta and a visitor reach the server: Cloudflare, the Named Tunnel, the edge (and the panel's web for the
+  # landing page). panel. and chat. are left out: Cloudflare lets Egypt only reach them, and this server is in France.
+  - job_name: probe_public
+    metrics_path: /probe
+    scrape_interval: 60s
+    static_configs:
+      - targets: ["https://wa.hazem-office.tech/healthz"]
+        labels: { service: edge, scope: public, module: http_ok }
+      - targets: ["https://hazem-office.tech/"]
+        labels: { service: web, scope: public, module: http_2xx }
+    relabel_configs: *probe_relabel
+
+  # ---------- The monitoring itself ----------
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+        labels: { service: prometheus }
+  - job_name: alertmanager
+    static_configs:
+      - targets: ["alertmanager:9093"]
+        labels: { service: alertmanager }
+  - job_name: loki
+    static_configs:
+      - targets: ["loki:3100"]
+        labels: { service: loki }
+  # honor_labels: the masked lines' counters carry the service whose log it was (postgres, api…), which must win over this
+  # target's own service="alloy".
+  - job_name: alloy
+    honor_labels: true
+    static_configs:
+      - targets: ["alloy:12345"]
+        labels: { service: alloy }
+  - job_name: grafana
+    static_configs:
+      - targets: ["grafana:3000"]
+        labels: { service: grafana }
+  - job_name: blackbox
+    static_configs:
+      - targets: ["blackbox:9115"]
+        labels: { service: blackbox }

@@ -1,0 +1,4 @@
+# v1.107: no plugin is installed or provisioned (nothing is downloaded from grafana.com). The file is here so Grafana finds
+# the folder it looks for.
+apiVersion: 1
+apps: []

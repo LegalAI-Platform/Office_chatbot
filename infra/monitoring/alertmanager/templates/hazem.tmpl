@@ -1,0 +1,43 @@
+{{/* The alerts' e-mails (v1.107), in Arabic, right to left. Each alert says what is wrong (summary), what it means
+     (description) and where to read what to do (runbook_url, docs/runbooks/monitoring.md). Labels and annotations hold no
+     client's name, number or words: the rules never put one there. Times are Cairo's (the container's TZ). */}}
+
+{{ define "hazem.subject" -}}
+{{ if eq .Status "firing" }}{{ if eq .CommonLabels.severity "critical" }}🔴{{ else }}🟠{{ end }} مشكلة{{ if gt (len .Alerts.Firing) 1 }} ({{ len .Alerts.Firing }}){{ end }}{{ else }}✅ اتحلت{{ end }}: {{ .CommonLabels.alertname }}{{ with .CommonLabels.service }} ({{ . }}){{ end }}{{ with .CommonAnnotations.summary }} — {{ . }}{{ end }}
+{{- end }}
+
+{{ define "hazem.when" }}{{ .StartsAt.Local.Format "2006-01-02 15:04" }}{{ if eq .Status "resolved" }} ← {{ .EndsAt.Local.Format "15:04" }}{{ end }}{{ end }}
+
+{{ define "hazem.html" -}}
+<!doctype html>
+<html lang="ar" dir="rtl">
+<body style="margin:0;padding:16px;background:#f4f4f4;font-family:Tahoma,Arial,sans-serif;direction:rtl;text-align:right;color:#1b1b1b">
+<div style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:8px;padding:16px 20px">
+<h2 style="margin:0 0 4px;font-size:18px">{{ if eq .Status "firing" }}فيه مشكلة في سيرفر حازم{{ else }}المشكلة اتحلت{{ end }}</h2>
+<p style="margin:0 0 16px;color:#555;font-size:13px">{{ if eq .Status "firing" }}{{ len .Alerts.Firing }} تنبيه شغال{{ else }}كل التنبيهات دي رجعت طبيعي{{ end }}</p>
+{{ range .Alerts -}}
+<div style="border-right:4px solid {{ if eq .Status "resolved" }}#1e8449{{ else if eq .Labels.severity "critical" }}#c0392b{{ else }}#d68910{{ end }};background:#fafafa;padding:10px 12px;margin:0 0 12px">
+<div style="font-weight:bold;font-size:15px">{{ if eq .Status "resolved" }}✅ {{ end }}{{ .Annotations.summary }}</div>
+<div style="margin:6px 0;font-size:14px;line-height:1.6">{{ .Annotations.description }}</div>
+<div style="font-size:12px;color:#666" dir="ltr">{{ .Labels.alertname }} · {{ .Labels.severity }}{{ with .Labels.service }} · {{ . }}{{ end }}{{ with .Labels.cluster }} · {{ . }}{{ end }} · {{ template "hazem.when" . }}</div>
+{{ with .Annotations.runbook_url }}<div style="margin-top:6px;font-size:13px"><a href="{{ . }}">اعمل إيه (الـ runbook)</a></div>{{ end }}
+</div>
+{{ end -}}
+<p style="margin:16px 0 0;font-size:12px;color:#666;line-height:1.8">من الـ SSH tunnel (docs/runbooks/monitoring.md):<br>
+الـ dashboards (Grafana): <span dir="ltr">http://127.0.0.1:3300</span><br>
+التنبيهات والسكوت (Alertmanager): <span dir="ltr">http://127.0.0.1:9093</span></p>
+</div>
+</body>
+</html>
+{{- end }}
+
+{{ define "hazem.text" -}}
+{{ if eq .Status "firing" }}فيه مشكلة في سيرفر حازم{{ else }}المشكلة اتحلت{{ end }}
+{{ range .Alerts }}
+- {{ if eq .Status "resolved" }}[اتحلت] {{ end }}{{ .Annotations.summary }}
+  {{ .Annotations.description }}
+  {{ .Labels.alertname }} / {{ .Labels.severity }}{{ with .Labels.service }} / {{ . }}{{ end }} / {{ template "hazem.when" . }}
+  {{ with .Annotations.runbook_url }}{{ . }}{{ end }}
+{{ end }}
+Grafana: http://127.0.0.1:3300 — Alertmanager: http://127.0.0.1:9093 (SSH tunnel)
+{{- end }}

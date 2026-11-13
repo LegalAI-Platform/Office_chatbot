@@ -1,0 +1,89 @@
+# n8n, the panel's web, Chatwoot and its Sidekiq, Garage (blackbox from inside, and Sidekiq's keys in Chatwoot's Redis).
+groups:
+  - name: apps
+    rules:
+      - alert: N8nDown
+        expr: probe_success{job="probe", service="n8n"} == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: n8n واقف
+          description: رسايل واتساب الجديدة مش بتوصل، وردود حازم مش بتتبعت. Meta بتبعت الرسالة تاني لما n8n يرجع.
+          runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#n8ndown
+
+      - alert: N8nEventLoopLag
+        expr: max by (service) (n8n_nodejs_eventloop_lag_p99_seconds{job="n8n"}) > 1
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: n8n مزنوق (event loop بيتأخر أكتر من ثانية)
+          description: 'التأخير {{ $value | humanizeDuration }}. كل الـ workflows هتبطأ.'
+          runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#n8neventlooplag
+
+      - alert: WebDown
+        expr: probe_success{job="probe", service="web"} == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: البانل مش بيفتح
+          description: الـ container بتاع البانل (web) مش بيرد على /healthz.
+          runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#webdown
+
+      - alert: ChatwootDown
+        expr: probe_success{job="probe", service="chatwoot"} == 0
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: Chatwoot (شاشة المحادثات) مش بيفتح
+          description: الموظفين مش هيقدروا يردوا على العملاء. حازم نفسه شغال عادي.
+          runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#chatwootdown
+
+      # Sidekiq lists itself in "processes" while it runs; Chatwoot's scheduled jobs make it work every few minutes.
+      - alert: SidekiqNotRunning
+        expr: |
+          max by (cluster) (redis_key_size{cluster="chatwoot", key="processes"}) == 0
+          or max by (cluster) (increase(redis_key_value{cluster="chatwoot", key="stat:processed"}[30m])) == 0
+        for: 5m
+        labels: { severity: critical, service: chatwoot-sidekiq }
+        annotations:
+          summary: Sidekiq بتاع Chatwoot مش شغال
+          description: رسايل العملاء وردود الموظفين مش بتتنقل بين Chatwoot والـ API، والإيميلات بتاعته واقفة.
+          runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#sidekiqnotrunning
+
+      - alert: SidekiqBacklog
+        expr: sum by (cluster) (redis_key_size{cluster="chatwoot", key=~"queue:.+"}) > 100
+        for: 15m
+        labels: { severity: warning, service: chatwoot-sidekiq }
+        annotations:
+          summary: شغل Chatwoot متأخر (أكتر من 100 في الطابور)
+          description: '{{ $value | printf "%.0f" }} شغلانة مستنية بقالها ربع ساعة. Sidekiq مش ملاحق.'
+          runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#sidekiqbacklog
+
+      - alert: SidekiqDeadJobs
+        expr: max by (cluster) (delta(redis_key_size{cluster="chatwoot", key="dead"}[1h])) > 0
+        labels: { severity: warning, service: chatwoot-sidekiq }
+        annotations:
+          summary: شغل في Chatwoot فشل نهائي (dead jobs)
+          description: '{{ $value | printf "%.0f" }} شغلانة جديدة في dead في آخر ساعة، يعني فشلت بعد كل المحاولات.'
+          runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#sidekiqdeadjobs
+
+      - alert: GarageDown
+        expr: probe_success{job="probe", service="garage"} == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: التخزين (Garage) مش بيرد
+          description: صور ومستندات العملاء والـ backup بيتخزنوا فيه. n8n مش هيقدر يحفظ الملفات الجديدة.
+          runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#garagedown
+
+  - name: public
+    rules:
+      # From outside, through Cloudflare and the Named Tunnel: as Meta (wa.) and a visitor (the landing page) reach it.
+      - alert: PublicEndpointDown
+        expr: probe_success{job="probe_public"} == 0
+        for: 3m
+        labels: { severity: critical }
+        annotations:
+          summary: '{{ $labels.target }} مش بيفتح من برّه'
+          description: '{{ if eq $labels.service "edge" }}Meta مش هتقدر توصّل رسايل واتساب: الـ tunnel أو الـ edge أو Cloudflare.{{ else }}صفحة المكتب مش بتفتح من النت: الـ tunnel أو الـ edge أو البانل.{{ end }}'
+          runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#publicendpointdown

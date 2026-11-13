@@ -1,0 +1,90 @@
+// The masking (v1.107, docs/runbooks/monitoring.md). Every log line goes through this before Loki keeps it: the containers'
+// logs (config.alloy) and the CI's test lines (test/run.sh) use this same module, so what the test proves is what runs.
+//
+// 1. It counts, before masking, the lines the nightly log-scan (infra/tools/bin/log-scan) would fail on: its own two patterns,
+//    on the services it reads. The counts become alerts (LogsHavePhoneNumber, LogsHaveSecret) within minutes.
+// 2. It masks, in every service's lines:
+//    - a full Egyptian mobile number: all but its last 3 digits, like the API's own LogMask.Phone (*********678);
+//    - private keys, bearer and basic tokens, the known key shapes (Meta, OpenAI/Anthropic, Resend, GitHub, Google, JWTs,
+//      Telegram), the value after password/secret/token/key/cookie/authorization, and a password inside a URL: ****.
+declare "mask" {
+  argument "forward_to" {
+    comment = "Where the masked lines go."
+  }
+
+  loki.process "mask" {
+    // ---------- 1. Count (the log-scan's patterns, the log-scan's services) ----------
+    stage.match {
+      selector = `{service=~"api|n8n|chatwoot|chatwoot-sidekiq|postgres|chatwoot-db"} |~ "(^|[^0-9])(20|0)1[0125][0-9]{8}([^0-9]|$)"`
+
+      stage.metrics {
+        metric.counter {
+          name              = "log_lines_with_phone_total"
+          description       = "Log lines with a full Egyptian mobile number, before they were masked (the nightly log-scan's pattern)"
+          match_all         = true
+          action            = "inc"
+          max_idle_duration = "24h"
+        }
+      }
+    }
+
+    stage.match {
+      selector = `{service=~"api|n8n|chatwoot|chatwoot-sidekiq|postgres|chatwoot-db"} |~ "EAA[A-Za-z0-9]{40,}|sk-[A-Za-z0-9_-]{24,}|[Bb]earer [A-Za-z0-9._~+/-]{24,}|BEGIN PRIVATE KEY"`
+
+      stage.metrics {
+        metric.counter {
+          name              = "log_lines_with_secret_total"
+          description       = "Log lines with an access token or a private key, before they were masked (the nightly log-scan's pattern)"
+          match_all         = true
+          action            = "inc"
+          max_idle_duration = "24h"
+        }
+      }
+    }
+
+    // ---------- 2. Mask (every capture group is replaced) ----------
+    // A private key, from its first line to its last (or to the end of the line).
+    stage.replace {
+      expression = `(-----BEGIN [A-Z ]*PRIVATE KEY-----.*?(?:-----END [A-Z ]*PRIVATE KEY-----|$))`
+      replace    = "[private key masked]"
+    }
+
+    // Bearer and basic tokens.
+    stage.replace {
+      expression = `(?i)\b(?:bearer|basic)\s+([A-Za-z0-9._~+/=-]{8,})`
+      replace    = "****"
+    }
+
+    // The known shapes of keys, wherever they are.
+    stage.replace {
+      expression = `(\bEAA[A-Za-z0-9]{20,}|\bsk-[A-Za-z0-9_-]{16,}|\bre_[A-Za-z0-9_]{16,}|\bgh[pousr]_[A-Za-z0-9]{20,}|\bgithub_pat_[A-Za-z0-9_]{20,}|\bAIza[0-9A-Za-z_-]{30,}|\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|\beyJ[A-Za-z0-9+/=_-]{40,}|\b[0-9]{8,10}:[A-Za-z0-9_-]{35}\b)`
+      replace    = "****"
+    }
+
+    // The value after a name that says it is secret: password=…, "token":"…", Authorization: …, X-Hazem-Token: …, Cookie: …
+    // (after "Authorization:" a scheme word, Bearer or Basic, stays readable; its token was masked above).
+    stage.replace {
+      expression = `(?i)(?:password|passwd|pwd|secret|token|api[_-]?key|apikey|access[_-]?key|secret[_-]?key|private[_-]?key|encryption[_-]?key|client[_-]?secret|authorization|set-cookie|cookie)["']?\s*[:=]\s*["']?(?:(?:bearer|basic)\s+)?([^"'\s,;&<>]+)`
+      replace    = "****"
+    }
+
+    // A password inside a URL (postgres://user:password@host).
+    stage.replace {
+      expression = `[a-zA-Z][a-zA-Z0-9+.-]*://[^/\s:@]+:([^/\s@]+)@`
+      replace    = "****"
+    }
+
+    // A full Egyptian mobile number: every run of 11 digits or more is looked at, and only one that is exactly a number
+    // (01x…, 11 digits, or 201x…, 12 digits; +20 too) keeps its last 3 digits. A longer run (an id) is left alone.
+    stage.replace {
+      expression = `([0-9]{11,})`
+      replace    = `{{ regexReplaceAll "^01[0125][0-9]{5}([0-9]{3})$" (regexReplaceAll "^201[0125][0-9]{5}([0-9]{3})$" .Value "*********${1}") "********${1}" }}`
+    }
+
+    forward_to = argument.forward_to.value
+  }
+
+  export "receiver" {
+    value = loki.process.mask.receiver
+  }
+}

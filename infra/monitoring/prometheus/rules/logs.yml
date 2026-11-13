@@ -1,0 +1,37 @@
+# The logs (Alloy). Alloy masks a full phone number and every key before Loki keeps a line, and counts the lines that had
+# one: the same patterns as the nightly log-scan (infra/tools/bin/log-scan), on the same services. Docker still holds the line
+# itself, so the night's scan will fail: the code that logged it is what has to change.
+# Alloy makes a counter at its first line (with 1), and increase() needs two readings: the "unless … offset" half is that
+# first line, a service whose counter did not exist 15 minutes ago.
+groups:
+  - name: logs
+    rules:
+      - alert: LogsHavePhoneNumber
+        expr: |
+          sum by (service) (increase(loki_process_custom_log_lines_with_phone_total[15m])) > 0
+          or (sum by (service) (loki_process_custom_log_lines_with_phone_total)
+              unless sum by (service) (loki_process_custom_log_lines_with_phone_total offset 15m))
+        labels: { severity: warning }
+        annotations:
+          summary: 'لوجز {{ $labels.service }} فيها رقم موبايل كامل'
+          description: '{{ $value | printf "%.0f" }} سطر في ربع ساعة. اتخفى قبل Loki، بس Docker لسه شايله، ففحص الليل (log-scan) هيفشل.'
+          runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#logshavephonenumber
+
+      - alert: LogsHaveSecret
+        expr: |
+          sum by (service) (increase(loki_process_custom_log_lines_with_secret_total[15m])) > 0
+          or (sum by (service) (loki_process_custom_log_lines_with_secret_total)
+              unless sum by (service) (loki_process_custom_log_lines_with_secret_total offset 15m))
+        labels: { severity: critical }
+        annotations:
+          summary: 'لوجز {{ $labels.service }} فيها مفتاح أو توكن'
+          description: '{{ $value | printf "%.0f" }} سطر في ربع ساعة. اتخفى قبل Loki، بس Docker لسه شايله: اعتبر المفتاح ده اتكشف وغيّره.'
+          runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#logshavesecret
+
+      - alert: LogShippingFailing
+        expr: sum by (service) (increase(loki_write_dropped_entries_total{job="alloy"}[15m])) > 0
+        labels: { severity: warning }
+        annotations:
+          summary: لوجز مش بتوصل لـ Loki
+          description: 'Alloy رمى {{ $value | printf "%.0f" }} سطر في ربع ساعة (Loki واقف أو رافض).'
+          runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#logshippingfailing

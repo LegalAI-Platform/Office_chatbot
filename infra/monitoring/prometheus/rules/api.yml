@@ -1,0 +1,95 @@
+# The .NET API (OpenTelemetry on api:9464, and blackbox on /health/ready). The bell's own system alerts (backups, n8n
+# failures, the AI) stay in the panel; these are what the bell cannot see: the API itself, and the bell's own rounds.
+groups:
+  - name: api
+    rules:
+      - alert: ApiDown
+        expr: probe_success{job="probe", service="api"} == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: الـ API (حازم) مش بيرد
+          description: رسايل واتساب مش هتتجاوب، والبانل مش هيفتح بياناته. n8n بيحتفظ بالرسايل ويحاول تاني كل دقيقة (T-20).
+          runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#apidown
+
+      - alert: ApiHighErrorRate
+        expr: |
+          sum by (service) (rate(http_server_request_duration_seconds_count{job="api", http_response_status_code=~"5.."}[10m]))
+            / sum by (service) (rate(http_server_request_duration_seconds_count{job="api"}[10m])) > 0.05
+          and sum by (service) (increase(http_server_request_duration_seconds_count{job="api"}[10m])) > 20
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: أكتر من 5% من طلبات الـ API بترجع خطأ (5xx)
+          description: 'النسبة {{ $value | humanizePercentage }} في آخر 10 دقايق. شوف لوجز الـ api في Grafana.'
+          runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#apihigherrorrate
+
+      # The panel's pages (not Hazem's turns, which wait for the AI, nor the bell's live stream, which stays open minutes).
+      - alert: ApiSlowRequests
+        expr: |
+          histogram_quantile(0.95, sum by (service, le) (rate(http_server_request_duration_seconds_bucket{job="api", http_route=~"/api/panel/.+", http_route!="/api/panel/alerts/stream"}[10m]))) > 3
+          and sum by (service) (rate(http_server_request_duration_seconds_count{job="api", http_route=~"/api/panel/.+", http_route!="/api/panel/alerts/stream"}[10m])) > 0.02
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: البانل بطيء (95% من الطلبات فوق 3 ثواني)
+          description: 'الـ p95 {{ $value | humanizeDuration }}. شوف أبطأ الـ routes في dashboard الـ API.'
+          runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#apislowrequests
+
+      - alert: HazemTurnsSlow
+        expr: |
+          histogram_quantile(0.95, sum by (service, le) (rate(http_server_request_duration_seconds_bucket{job="api", http_route="/api/hazem/turns"}[15m]))) > 45
+          and sum by (service) (increase(http_server_request_duration_seconds_count{job="api", http_route="/api/hazem/turns"}[15m])) > 3
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: حازم بياخد أكتر من 45 ثانية علشان يرد
+          description: 'الـ p95 {{ $value | humanizeDuration }}. غالبًا الـ AI بطيء (شوف «الطلبات اللي خارجة» في dashboard الـ API).'
+          runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#hazemturnsslow
+
+      - alert: ApiDbPoolNearFull
+        expr: |
+          sum by (service, db_client_connection_pool_name) (db_client_connection_count{job="api", db_client_connection_state="used"})
+            / max by (service, db_client_connection_pool_name) (db_client_connection_max{job="api"}) > 0.8
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: اتصالات الـ API بالداتابيز قرّبت تخلص (Npgsql pool)
+          description: 'مستخدم {{ $value | humanizePercentage }} من الـ pool. الطلبات الجديدة هتستنى اتصال يفضى.'
+          runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#apidbpoolnearfull
+
+      - alert: ApiThreadPoolQueue
+        expr: max by (service) (dotnet_thread_pool_queue_length_total{job="api"}) > 50
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: الـ API عنده شغل مستني في الـ thread pool
+          description: '{{ $value | printf "%.0f" }} شغلانة مستنية. ده معناه إن حاجة بتعطّل الـ threads (طلب بيستنى من غير async).'
+          runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#apithreadpoolqueue
+
+      # The bell's own worker (AlertMetrics): it makes the alerts every 3 seconds and mails them. When it stops, the bell and
+      # its e-mails stop with it, and only the monitoring can say so.
+      - alert: AlertWorkerStalled
+        expr: |
+          max by (service) (time() - office_alerts_last_ok_round_timestamp_seconds{job="api"}) > 180
+          or
+          max by (service) (rate(office_alerts_rounds_total{job="api", result="failed"}[5m])) > 0
+            unless max by (service) (rate(office_alerts_rounds_total{job="api", result="ok"}[5m])) > 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: تنبيهات الجرس واقفة
+          description: الجرس وإيميلات التنبيهات (العاجل، والمتأخر، ومشاكل السيستم) مش بتتعمل دلوقتي. شوف لوجز الـ api.
+          runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#alertworkerstalled
+
+      # (the counter starts at its first failure: the "unless … offset" half is that first one)
+      - alert: AlertEmailsFailing
+        expr: |
+          max by (service) (increase(office_alerts_emails_total{job="api", result="failed"}[30m])) > 0
+          or (max by (service) (office_alerts_emails_total{job="api", result="failed"})
+              unless max by (service) (office_alerts_emails_total{job="api", result="failed"} offset 30m))
+        labels: { severity: warning }
+        annotations:
+          summary: إيميلات البانل مش بتتبعت
+          description: 'فشل {{ $value | printf "%.0f" }} إيميل تنبيه في نص ساعة. نفس الإيميل (Resend) بيبعت أكواد الدخول، فممكن تكون واقفة هي كمان.'
+          runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#alertemailsfailing

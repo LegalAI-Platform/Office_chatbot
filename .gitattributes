@@ -9,6 +9,8 @@
 Dockerfile      text eol=lf
 infra/tools/bin/* text eol=lf
 .env.example    text eol=lf
+# v1.107: the monitoring's configs, templates and dashboards are read inside its containers.
+infra/monitoring/** text eol=lf
 
 # PowerShell scripts use Windows line endings.
 *.ps1           text eol=crlf

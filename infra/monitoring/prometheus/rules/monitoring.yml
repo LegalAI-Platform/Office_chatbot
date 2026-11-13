@@ -1,0 +1,31 @@
+# The monitoring itself. When the e-mail is what fails, the alert may not reach anyone by e-mail: the healthcheck (the
+# nightly job's and the deploy's) checks Alertmanager's sending too, and a failed healthcheck reaches the bell.
+groups:
+  - name: monitoring
+    rules:
+      # Every scrape that fails. The HTTP checks' own scrapes are left out: a dead blackbox is its own target here, and the
+      # checks it runs would only repeat it. A critical alert of the same service (ApiDown) silences this one.
+      - alert: TargetDown
+        expr: up{job!~"probe|probe_public"} == 0
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: 'Prometheus مش قادر يقرا من {{ $labels.job }}'
+          description: 'الـ exporter أو الخدمة ({{ $labels.instance }}) مش بترد بقالها 5 دقايق، فالأرقام بتاعتها مش ظاهرة والتنبيهات المبنية عليها مش شغالة.'
+          runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#targetdown
+
+      - alert: PrometheusRuleFailures
+        expr: increase(prometheus_rule_evaluation_failures_total[10m]) > 0
+        labels: { severity: warning, service: prometheus }
+        annotations:
+          summary: Prometheus مش قادر يحسب بعض التنبيهات
+          description: 'المجموعة {{ $labels.rule_group }} فشلت {{ $value | printf "%.0f" }} مرة. التنبيهات اللي فيها مش شغالة.'
+          runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#prometheusrulefailures
+
+      - alert: AlertmanagerEmailFailing
+        expr: sum by (service) (increase(alertmanager_notifications_failed_total{job="alertmanager", integration="email"}[15m])) > 0
+        labels: { severity: critical }
+        annotations:
+          summary: إيميلات المراقبة مش بتتبعت
+          description: 'Alertmanager فشل يبعت {{ $value | printf "%.0f" }} مرة في ربع ساعة. شوف لوجز alertmanager.'
+          runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#alertmanageremailfailing
