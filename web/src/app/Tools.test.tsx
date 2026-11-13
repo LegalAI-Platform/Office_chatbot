@@ -231,6 +231,28 @@ describe("TASK 07c tools", () => {
     expect(link.getAttribute("rel")).toContain("noopener");
   });
 
+  // v1.108 (the owner: «مليون حاجة بتحصل»): the call's one task says its booking, and the lawyer may press «هكلمه» there
+  it("shows an urgent call's booking on its task and presses «هكلمه» from the panel", async () => {
+    const booking = { id: "a1", service: "consultation_urgent", starts_at: "2026-10-23T10:30:00Z", state: "confirmed", payment_state: "proof_received",
+      urgent_alerted: true, urgent_alert_failed: false, urgent_acked: false };
+    const task = { id: "t2", type: "urgent_request", state: "open", due_at: "2026-10-23T10:00:00Z", created_at: "2026-10-23T09:00:00Z",
+      client: { phone: "201000000001" }, client_words: [], booking, can: { start: true, done: true, cancel: false, assign: true, urgent_ack: true } };
+    const calls = serve({
+      "GET /auth/me": { body: person({ role: "lawyer", permissions: [...lawyer.permissions, "urgent.ack"] }) },
+      "GET /tasks/t2": { body: task },
+      "GET /staff": { body: [] },
+      "POST /tasks/t2/urgent-ack": { body: { ...task, booking: { ...booking, urgent_acked: true }, can: { ...task.can, urgent_ack: false } } },
+    });
+    renderAt("/tasks/t2");
+    expect(await screen.findByText("عاجلة بالتليفون")).toBeTruthy();
+    expect(screen.getByText("وصل إيصال، مستني المراجعة")).toBeTruthy();
+    expect(screen.getByText("اتبعت للمستشار على واتساب، ولسه ما ردّش.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "هكلمه" }));
+    expect(await screen.findByText(/المستشار داس «هكلمه»/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "هكلمه" })).toBeNull();
+    expect(calls.filter((c) => c.method === "POST").map((c) => c.path)).toEqual(["/tasks/t2/urgent-ack"]);
+  });
+
   it("asks before removing a number from a list", async () => {
     const calls = serve({
       "GET /auth/me": { body: lawyer },

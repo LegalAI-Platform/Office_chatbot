@@ -83,7 +83,7 @@ and it asks the API for nothing.
 
 | Endpoint | Permission | What |
 |---|---|---|
-| `GET /alerts` | view_own | `{ unread, unread_system, items[30] }`: the alerts this person may see (overdue, urgent, a client asking for someone, and since v1.105 `task_new`: any other task Hazem opened for the office; a low rating and the system's for the managers), newest first, with `read`. v1.104: `unread_system` is the system alerts among `unread`. A task's alert also has `phone_last3` (never the number), `matter_type` and `staff_name` (absent: nobody yet), never the client's words |
+| `GET /alerts` | view_own | `{ unread, unread_system, items[30] }`: the alerts whose job they are for this person (overdue, urgent, a client asking for someone, since v1.105 `task_new`: any other task Hazem opened for the office, and since v1.108 `task_escalated`: an urgent call the lawyer did not answer in time; a low rating and the system's for the managers; v1.108: whose job each is, below), newest first, with `read`. v1.104: `unread_system` is the system alerts among `unread`. A task's alert also has `phone_last3` (never the number), `matter_type` and `staff_name` (absent: nobody yet), never the client's words |
 | `GET /alerts/stream` | view_own | v1.104: `text/event-stream`. `event: alerts` the moment alerts are made or read (it carries nothing: the page asks `/alerts`); v1.106: `event: data` with the names of the areas of the office's data that changed (`data: tasks,payments`; never a row), whoever changed them: the pages on the screen that show them ask again; `: ping` every 25 s, closed after 5 minutes (`retry: 5000`: the browser opens it again) and when the API stops. Not buffered by nginx (the panel's and the edge's) |
 | `POST /alerts/read` | view_own | `{ ids }` or `{ ids: null }` (all) |
 | `GET /tasks/{id}/files/{n}` | view_own (and may see the task) | the file of the task turn's n-th message, from storage (read-only key). Pictures, sound, video and PDF open in the browser; anything else downloads as `client-file-<n>.<ext>`. `Content-Security-Policy: sandbox`, never cached. Every opening → `panel_audit task.file_open` (no file name) |
@@ -103,8 +103,20 @@ checks run once a minute. v1.106: the same round looks which areas of the office
 `event: data`. The areas are `PanelAlertStore.DataAreas`: `tasks`, `appointments`, `payments`, `services`, `urf`,
 `clients`, `ai`, `lists`, `muted`, `texts`, `settings`, `booking` and `users`, each read from its tables' row count and
 `xmin` (the clients and the AI's use by their count only). The panel's `AREAS` (`web/src/shared/api/alerts.ts`) says
-which pages each one asks again. The first round after a start only notes them. Tasks past their due time become `overdue` first. Each alert is e-mailed once to everyone
-who may see the task (but a `task_new`, which stays in the bell and Windows, v1.105); the e-mail holds the task's kind, due time and a link, never the client's name, number or words. A `task_new` is made only for a task of the last 10 minutes, so a deploy brings no backlog.
+which pages each one asks again. The first round after a start only notes them. Tasks past their due time become `overdue` first. A `task_new` is made only for a task of the last 10 minutes, so a deploy brings no backlog.
+
+v1.108 (the owner: «مليون حاجة بتحصل ومليون مكان يتبعت فيه»): an alert is the job of one audience only (`AlertAudience`), in
+the bell and in the e-mail:
+
+- a task someone holds: its holder's accounts only;
+- the lawyer's work nobody holds (`urgent_request`, `safety_alert`, `service_pricing`, `urf_review`, and the old
+  `urgent_call_failed` and `urgent_call_unanswered`): the lawyer's;
+- an escalated urgent call (`task_escalated`, or an `urgent_request` with `escalated_at`) and any other task nobody holds: the staff's;
+- a low rating and the system's: the manager's and the maintenance account's.
+
+Only `task_urgent`, `task_escalated`, `task_overdue` and the system's alerts are e-mailed (the owner: «للعاجل والمتأخر بس،
+وللشخص المسؤول بس»), once, to that audience; the others stay in the bell and Windows. The e-mail holds the task's kind, due
+time and a link, never the client's name, number or words.
 
 ## The booking (TASK 08, DECISIONS v1.12 B-24)
 
@@ -242,6 +254,7 @@ The code checks permissions, never role names. A role is a set of permissions, d
 | `prices.manage` (TASK 06: change the price list of B-23) | ✅ | ✅ | ✅ | |
 | `testing.forget` («أدوات التجربة»; v1.100: the maintenance role's only) | ✅ | | | |
 | `maintenance.manage` (v1.100: make a maintenance account, give the role, change, disable or reset one) | ✅ | | | |
+| `urgent.ack` (v1.108: «هكلمه» on a paid urgent call's task, as the lawyer's WhatsApp button) | ✅ | ✅ | ✅ | |
 
 v1.100: a maintenance account opens nothing until its authenticator is on (`403 two_factor_required`), and cannot turn it off
 (`409 two_factor_kept`). An office account asking for the maintenance role or touching a maintenance account gets `403 maintenance_only`.
@@ -253,9 +266,10 @@ No permission → `403`. Not signed in → `401`. A task the user may not see �
 | Endpoint | Permission | What |
 |---|---|---|
 | `GET /tasks?scope=mine\|unassigned\|all&state=active\|overdue\|done\|cancelled&page=1` | view_own (`all` needs view_all) | 25 per page. `active` = open, in progress, overdue (by due time); done / cancelled by last change |
-| `GET /tasks/{id}` | view_own | the task, the client (name as written, full number, client type, source B-13, Hazem's state S-01), the topic (B-25), the **client's own words** from the turn that opened it (text, caption, finished transcript, and only the *type* of any file — never a bucket, key or file name), and `can { start, done, cancel, assign }` |
+| `GET /tasks/{id}` | view_own | the task, the client (name as written, full number, client type, source B-13, Hazem's state S-01), the topic (B-25), the **client's own words** from the turn that opened it (text, caption, finished transcript, and only the *type* of any file — never a bucket, key or file name), and `can { start, done, cancel, assign, urgent_ack }`. v1.108: `booking { id, service, starts_at, state, payment_state, urgent_alerted, urgent_alert_failed, urgent_acked }` when the task is about a booking (`staff_tasks.appointment_id`, migration 0077), and `escalated_at` when the lawyer did not answer its urgent call in time |
 | `POST /tasks/{id}/start` · `/done` · `/cancel` | update | through the S-05 machine. A move it refuses, or a task someone else changed a moment ago → `409 { error }`. A staff member who starts or finishes an unassigned task gets it |
 | `POST /tasks/{id}/assign` | assign | `{ staff_id }` (`null` = unassigned) |
+| `POST /tasks/{id}/urgent-ack` | urgent.ack | v1.108: «هكلمه» from the panel on an `urgent_request` of a confirmed, paid urgent call nobody answered yet: the same as the WhatsApp button (the client gets `urgent_seen`, «المستشار شاف طلب حضرتك، وهيكلمك دلوقتي.», and the call is never escalated) → the task. Once: `409 nothing_to_decide` when nothing is left to answer, `409 changed_meanwhile` when it was answered a moment ago. Audit `task.urgent_ack` |
 | `GET /staff` | assign | active staff members `[{ id, name }]` |
 
 ## Accounts (`users.manage`: the manager)

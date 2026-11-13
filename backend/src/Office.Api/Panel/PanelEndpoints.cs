@@ -251,6 +251,11 @@ public static class PanelEndpoints
                 .RequireAuthorization(PanelAuth.Policy(Permissions.TasksUpdate));
         }
 
+        // v1.108: «هكلمه» on an urgent call's task, as the WhatsApp button (the lawyer may not be on WhatsApp)
+        tasks.MapPost("/{id:guid}/urgent-ack", async (Guid id, HttpContext ctx, PanelTasks use, CancellationToken ct) =>
+            Answer(await use.UrgentAckAsync(ctx.CurrentUser().AsViewer(), id, ct)))
+            .RequireAuthorization(PanelAuth.Policy(Permissions.UrgentAck));
+
         // TASK 07c: a file the client sent, for whoever may see the task. Shown in the browser only
         // when it is a picture, a sound, a video or a PDF; anything else downloads. Never cached.
         tasks.MapGet("/{id:guid}/files/{index:int}", async (Guid id, int index, HttpContext ctx, PanelTasks use, IClientFiles files,
@@ -583,10 +588,15 @@ public sealed record ClientDto(string? Name, string Phone, string? ClientType, s
 
 public sealed record ClientWordDto(string Type, string? Text, string? Caption, string? Transcript, string? MediaStatus, DateTimeOffset? SentAt);
 
-public sealed record CanDto(bool Start, bool Done, bool Cancel, bool Assign);
+public sealed record CanDto(bool Start, bool Done, bool Cancel, bool Assign, bool UrgentAck);
+
+/// <summary>v1.108: the booking a task belongs to. Its client is the task's client: no name or number here.</summary>
+public sealed record TaskBookingDto(Guid Id, string Service, DateTimeOffset StartsAt, string State, string? PaymentState,
+    bool UrgentAlerted, bool UrgentAlertFailed, bool UrgentAcked);
 
 public sealed record TaskDetailDto(Guid Id, string Type, string State, DateTimeOffset DueAt, DateTimeOffset CreatedAt, StaffDto? Staff,
-    ClientDto Client, string? MatterType, string? MatterSubtype, IReadOnlyList<ClientWordDto> ClientWords, CanDto Can)
+    ClientDto Client, string? MatterType, string? MatterSubtype, IReadOnlyList<ClientWordDto> ClientWords, CanDto Can,
+    TaskBookingDto? Booking, DateTimeOffset? EscalatedAt)
 {
     public static TaskDetailDto From(TaskView v)
     {
@@ -594,7 +604,12 @@ public sealed record TaskDetailDto(Guid Id, string Type, string State, DateTimeO
         return new(t.Id, t.Type, t.State, t.DueAt, t.CreatedAt, t.Staff is { } s ? new StaffDto(s.Id, s.Name) : null,
             new ClientDto(t.ClientName, t.WaId, t.ClientType, t.Source, t.ConversationState), t.MatterType, t.MatterSubtype,
             t.ClientWords.Select(w => new ClientWordDto(w.Type, w.Text, w.Caption, w.Transcript, w.MediaStatus, w.SentAt)).ToList(),
-            new CanDto(v.Can.Start, v.Can.Done, v.Can.Cancel, v.Can.Assign));
+            new CanDto(v.Can.Start, v.Can.Done, v.Can.Cancel, v.Can.Assign, v.Can.UrgentAck),
+            t.Booking is { } b
+                ? new TaskBookingDto(b.Id, b.Service, b.StartsAt, b.State, b.PaymentState, b.UrgentAlertedAt is not null,
+                    b.UrgentAlertFailedAt is not null, b.UrgentAckedAt is not null)
+                : null,
+            t.EscalatedAt);
     }
 }
 

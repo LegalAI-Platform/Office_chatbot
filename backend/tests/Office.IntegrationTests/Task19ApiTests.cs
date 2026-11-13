@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Office.Application.Ratings;
+using Office.Domain.Tasks;
 using Office.Infrastructure.Booking;
 
 namespace Office.IntegrationTests;
@@ -88,6 +89,21 @@ public sealed class Task19ApiTests(TestDatabase db) : IAsyncLifetime
         await Worker();
         Assert.Equal("confirmed|-", await State(id));
         Assert.Equal(1, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.staff_tasks WHERE type = 'appointment_unmarked'"));
+    }
+
+    // v1.108 (the owner: «مليون حاجة بتحصل»): due by the office's hours, never born late; linked to its booking; and done by
+    // itself once the booking is marked.
+    [Fact]
+    public async Task V1108_the_unmarked_task_is_never_born_late_and_is_done_once_the_appointment_is_marked()
+    {
+        var id = await Appointment(4, "proof_received");
+        await Worker();
+        Assert.Equal($"open|{OfficeHours.DueAt(Now).ToUniversalTime():yyyy-MM-dd HH:mm}|{id}", await db.ScalarAsync<string>(
+            "SELECT state || '|' || to_char(due_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI') || '|' || appointment_id FROM hazem.staff_tasks WHERE type = 'appointment_unmarked'"));
+
+        await db.ExecAsync($"UPDATE hazem.appointments SET state = 'completed', completed_at = now(), completed_by = 'staff' WHERE id = '{id}'");
+        await Worker();
+        Assert.Equal("done", await db.ScalarAsync<string>("SELECT state FROM hazem.staff_tasks WHERE type = 'appointment_unmarked'"));
     }
 
     [Fact]

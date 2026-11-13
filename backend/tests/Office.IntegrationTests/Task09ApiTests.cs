@@ -316,6 +316,30 @@ public sealed class Task09ApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal("confirmed|whatsapp", await db.ScalarAsync<string>($"SELECT state || '|' || call_app FROM hazem.appointments WHERE id = '{id}'"));
     }
 
+    // v1.108 (the owner: «مليون حاجة بتحصل»): the review task opens as soon as the receipt waits, so the staff hear it once,
+    // then; it is due an hour before the appointment (never born late), linked to its booking, and it closes by itself once
+    // the transfer is reviewed.
+    [Fact]
+    public async Task V1108_the_review_task_opens_with_the_receipt_and_closes_by_itself_once_the_transfer_is_reviewed()
+    {
+        await BookingOn();
+        var id = await HeldTomorrow();
+        await Receipt();
+        Assert.Equal(0L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.staff_tasks WHERE type = 'payment_review_due'"));
+        await Notices();
+        await Notices(); // once
+        Assert.Equal("open|1|1", await db.ScalarAsync<string>($"""
+            SELECT t.state || '|' || count(*) OVER () || '|' || (t.appointment_id = '{id}' AND t.due_at = a.starts_at - interval '60 minutes')::int
+              FROM hazem.staff_tasks t JOIN hazem.appointments a ON a.id = '{id}' WHERE t.type = 'payment_review_due'
+            """));
+
+        var staff = await SignIn("yasmin", Permissions.Staff, "ياسمين");
+        Assert.Equal(HttpStatusCode.NoContent, (await staff.PostAsJsonAsync($"/api/panel/payments/{id}/review",
+            new { state = "verified", received = 1000 }, Ct)).StatusCode);
+        await Notices();
+        Assert.Equal("done", await db.ScalarAsync<string>("SELECT state FROM hazem.staff_tasks WHERE type = 'payment_review_due'"));
+    }
+
     // ---------- the review and the refund (P1, P2, P4) ----------
 
     [Fact]
