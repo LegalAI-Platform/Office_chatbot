@@ -111,6 +111,13 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
         return (r.Made, r.Mailed);
     }
 
+    /// <summary>v1.106: the worker's look at the office's data (off in tests, like the alerts): the areas it woke the streams for.</summary>
+    private async Task<IReadOnlyList<string>> WatchData()
+    {
+        using var scope = _factory.Services.CreateScope();
+        return await scope.ServiceProvider.GetRequiredService<PanelAlerts>().WatchDataAsync(Ct);
+    }
+
     // ---------- alerts ----------
 
     [Fact]
@@ -227,6 +234,62 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
         await RunAlerts();
         Assert.Equal("event: alerts", await body.ReadLineAsync(wait.Token)); // no client data in it: the page asks /alerts
         Assert.Equal("data: new", await body.ReadLineAsync(wait.Token));
+    }
+
+    // v1.106 (the owner: «الداش بورد كلها ريل تايم ؟» … «عايزين كله يشتغل بنفس الطريقه دي»): the same stream names the areas
+    // of the office's data that changed, whoever changed them (here the database itself, as Hazem and n8n do), so every
+    // page on the screen that shows them asks again at once. Nothing changed, nothing said; and it carries no row.
+    [Fact]
+    public async Task The_stream_names_the_areas_of_the_office_s_data_that_changed_and_says_nothing_when_nothing_did()
+    {
+        var yasmin = await SignIn("yasmin");
+        using var r = await yasmin.GetAsync("/api/panel/alerts/stream", HttpCompletionOption.ResponseHeadersRead, Ct);
+        using var wait = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        wait.CancelAfter(TimeSpan.FromSeconds(20));
+        using var body = new StreamReader(await r.Content.ReadAsStreamAsync(wait.Token));
+        Assert.Equal("retry: 5000", await body.ReadLineAsync(wait.Token));
+        Assert.Equal("", await body.ReadLineAsync(wait.Token));
+        async Task Said(string areas)
+        {
+            Assert.Equal("event: data", await body.ReadLineAsync(wait.Token));
+            Assert.Equal("data: " + areas, await body.ReadLineAsync(wait.Token));
+            Assert.Equal("", await body.ReadLineAsync(wait.Token));
+        }
+
+        Assert.Empty(await WatchData()); // the first look only notes where things are
+        Assert.Empty(await WatchData()); // nothing changed
+
+        var task = await NewTask("complaint"); // a new client with a new task
+        Assert.Equal(["clients", "tasks"], await WatchData());
+        await Said("clients,tasks");
+        Assert.Empty(await WatchData()); // once
+
+        await db.ExecAsync($"UPDATE hazem.staff_tasks SET staff_id = '{_staffA}' WHERE id = '{task}'"); // the same task, assigned
+        Assert.Equal(["tasks"], await WatchData());
+        await Said("tasks");
+
+        var appointment = Guid.NewGuid();
+        await db.ExecAsync($"""
+            INSERT INTO hazem.appointments (id, person_id, service, starts_at, ends_at, amount, booked_turn_id)
+            VALUES ('{appointment}', '{task}', 'consultation_office', now() + interval '300 days', now() + interval '300 days 30 minutes', 1000, 'wt:live')
+            """);
+        try
+        {
+            Assert.Equal(["appointments"], await WatchData()); // a booking
+            await Said("appointments");
+        }
+        finally
+        {
+            await db.ExecAsync($"DELETE FROM hazem.appointments WHERE id = '{appointment}'");
+        }
+
+        Assert.Equal(["appointments"], await WatchData()); // and gone
+        await Said("appointments");
+
+        // any change counts, even one that writes the same values: here Hazem's texts (their settings page)
+        await db.ExecAsync("UPDATE hazem.approved_texts SET active = active WHERE key = (SELECT min(key) FROM hazem.approved_texts)");
+        Assert.Equal(["texts"], await WatchData());
+        await Said("texts");
     }
 
     // ---------- TASK 13: the system's own alerts ----------
@@ -489,9 +552,30 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
 
     // ---------- reports ----------
 
-    /// <summary>v1.58: the AI cost by conversation and by message (hazem.ai_usage), for the manager and the lawyer only.</summary>
+    /// <summary>
+    /// v1.106 (the owner: «التقارير ما يشوفهاش اكونت المستشار … اكونت صيانه بس»): the reports are the maintenance account's
+    /// only, signed in with its authenticator on (it opens nothing without it). No office role reads them, the manager too.
+    /// </summary>
+    private async Task<HttpClient> Reader()
+    {
+        await NewUser("keeper", Permissions.Maintenance);
+        var keeper = await SignIn("keeper");
+        await MaintenanceTwoFactor.TurnOnAsync(keeper, Ct);
+        foreach (var office in new[] { "boss", "lawyer", "karim" })
+        {
+            var c = await SignIn(office);
+            foreach (var path in new[] { "/api/panel/reports", "/api/panel/reports/trend", "/api/panel/reports/ai-cost" })
+            {
+                Assert.Equal(HttpStatusCode.Forbidden, (await c.GetAsync(path, Ct)).StatusCode);
+            }
+        }
+
+        return keeper;
+    }
+
+    /// <summary>v1.58: the AI cost by conversation and by message (hazem.ai_usage); v1.106: for the maintenance account only.</summary>
     [Fact]
-    public async Task V158_the_ai_cost_by_conversation_and_by_message_for_the_lawyer_only()
+    public async Task V158_the_ai_cost_by_conversation_and_by_message_for_the_maintenance_account_only()
     {
         var person = await NewTask();
         var turn = await db.ScalarAsync<string>(
@@ -502,9 +586,9 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
               ('{turn}', 'write', 'claude-haiku-5-5', 4400, 0, 0, 110, 0.000495),
               ('{turn}', 'review', 'some-other-model', 1500, 0, 0, 20, NULL);
             """);
-        var lawyer = await SignIn("lawyer");
+        var keeper = await Reader(); // v1.106: the maintenance account
 
-        var all = (await lawyer.GetFromJsonAsync<JsonNode>("/api/panel/reports/ai-cost", Ct))!;
+        var all = (await keeper.GetFromJsonAsync<JsonNode>("/api/panel/reports/ai-cost", Ct))!;
         Assert.Equal(3, (int)all["summary"]!["calls"]!);
         Assert.Equal(1, (int)all["summary"]!["conversations"]!);
         Assert.Equal(1, (int)all["summary"]!["unpriced"]!);
@@ -515,17 +599,17 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal(1, (int)row["turns"]!);
         Assert.Equal(person, (Guid)row["person_id"]!);
 
-        var turns = (await lawyer.GetFromJsonAsync<JsonNode>($"/api/panel/reports/ai-cost/{person}", Ct))!["turns"]!.AsArray();
+        var turns = (await keeper.GetFromJsonAsync<JsonNode>($"/api/panel/reports/ai-cost/{person}", Ct))!["turns"]!.AsArray();
         var calls = Assert.Single(turns)!["calls"]!.AsArray();
         Assert.Equal(["classify", "write", "review"], calls.Select(c => (string)c!["kind"]!).ToArray());
         Assert.Equal(14000, (int)calls[0]!["cache_read_tokens"]!);
         Assert.Null(calls[2]!["cost_usd"]);
 
         // the month's report carries the number the dashboard shows
-        var month = (await lawyer.GetFromJsonAsync<JsonNode>("/api/panel/reports", Ct))!;
+        var month = (await keeper.GetFromJsonAsync<JsonNode>("/api/panel/reports", Ct))!;
         Assert.Equal(0.009295m, (decimal)month["ai_cost"]!["total_usd"]!);
 
-        Assert.Equal(HttpStatusCode.BadRequest, (await lawyer.GetAsync("/api/panel/reports/ai-cost?month=2026-13", Ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await keeper.GetAsync("/api/panel/reports/ai-cost?month=2026-13", Ct)).StatusCode);
         var karim = await SignIn("karim");
         Assert.Equal(HttpStatusCode.Forbidden, (await karim.GetAsync("/api/panel/reports/ai-cost", Ct)).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await karim.GetAsync($"/api/panel/reports/ai-cost/{person}", Ct)).StatusCode);
@@ -537,24 +621,24 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
         await NewTask("urgent_request", staff: _staffA);
         var done = await NewTask("service_request", staff: _staffA);
         await db.ExecAsync($"UPDATE hazem.staff_tasks SET state = 'done' WHERE id = '{done}'");
-        var lawyer = await SignIn("lawyer");
-        var r = (await lawyer.GetFromJsonAsync<JsonNode>("/api/panel/reports", Ct))!;
+        var keeper = await Reader(); // v1.106: the maintenance account
+        var r = (await keeper.GetFromJsonAsync<JsonNode>("/api/panel/reports", Ct))!;
         Assert.Equal(2, (int)r["tasks"]!);
         Assert.Equal(1, (int)r["done"]!);
         Assert.Equal(1, (int)r["done_on_time"]!);
         Assert.Equal(2, (int)r["new_clients"]!);
         Assert.Equal("ad", (string)r["by_source"]![0]!["key"]!);
         Assert.Equal(2, (int)r["by_staff"]!.AsArray().Single(s => (string)s!["staff"]! == "ياسمين")!["assigned"]!);
-        Assert.Equal(HttpStatusCode.BadRequest, (await lawyer.GetAsync("/api/panel/reports?month=2026-13", Ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await keeper.GetAsync("/api/panel/reports?month=2026-13", Ct)).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await (await SignIn("karim")).GetAsync("/api/panel/reports", Ct)).StatusCode);
 
         // the owner (2026-11-07): a day, a range or a year too, and the money of the last 12 months
         var today = DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(2)).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
-        var day = (await lawyer.GetFromJsonAsync<JsonNode>($"/api/panel/reports?from={today}&to={today}", Ct))!;
+        var day = (await keeper.GetFromJsonAsync<JsonNode>($"/api/panel/reports?from={today}&to={today}", Ct))!;
         Assert.Equal((today, 2), ((string)day["month"]!, (int)day["new_clients"]!)); // both clients came today
-        Assert.Equal(HttpStatusCode.BadRequest, (await lawyer.GetAsync("/api/panel/reports?from=2026-11-07&to=2026-11-01", Ct)).StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, (await lawyer.GetAsync("/api/panel/reports?from=2025-01-01&to=2026-11-07", Ct)).StatusCode); // over a year
-        var trend = (await lawyer.GetFromJsonAsync<JsonNode>("/api/panel/reports/trend", Ct))!["months"]!.AsArray();
+        Assert.Equal(HttpStatusCode.BadRequest, (await keeper.GetAsync("/api/panel/reports?from=2026-11-07&to=2026-11-01", Ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await keeper.GetAsync("/api/panel/reports?from=2025-01-01&to=2026-11-07", Ct)).StatusCode); // over a year
+        var trend = (await keeper.GetFromJsonAsync<JsonNode>("/api/panel/reports/trend", Ct))!["months"]!.AsArray();
         Assert.Equal(12, trend.Count);
         Assert.Equal(today[..7], (string)trend[^1]!["month"]!); // up to this month
     }

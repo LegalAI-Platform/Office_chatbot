@@ -10,7 +10,9 @@ const person = (over: Partial<Me>): Me => ({
   permissions: ["tasks.view_own", "tasks.update", "account.self"], must_change_password: false, two_factor: false,
   two_factor_required: false, avatar_at: null, ...over,
 });
-const lawyer = person({ role: "lawyer", permissions: ["tasks.view_own", "tasks.view_all", "tasks.update", "tasks.assign", "account.self", "lists.manage", "texts.manage", "reports.view"] });
+const lawyer = person({ role: "lawyer", permissions: ["tasks.view_own", "tasks.view_all", "tasks.update", "tasks.assign", "account.self", "lists.manage", "texts.manage"] });
+// v1.106: the reports are the maintenance account's only
+const keeper = person({ role: "maintenance", permissions: ["tasks.view_own", "tasks.view_all", "tasks.update", "tasks.assign", "account.self", "lists.manage", "texts.manage", "reports.view"] });
 const emptyDash = { urgent: 0, overdue: 0, unassigned: 0, active: 0, urgent_by_day: [], overdue_by_day: [], recent: [], priority: [] };
 
 type Answer = { status?: number; body?: unknown };
@@ -76,18 +78,20 @@ describe("TASK 07c tools", () => {
     expect(router.state.location.search).toBe(`?q=${encodeURIComponent("سارة")}`);
   });
 
-  it("hides the reports from a staff member and shows them to the lawyer", async () => {
-    serve({ "GET /auth/me": { body: person({}) } });
-    const router = renderAt("/reports");
-    await screen.findByRole("heading", { level: 1, name: /يا/ });
-    expect(router.state.location.pathname).toBe("/");
-    for (const nav of screen.getAllByRole("navigation", { name: "التنقل" })) {
-      expect(within(nav).queryByText("التقارير")).toBeNull();
+  it("hides the reports from the office (a staff member, the lawyer) and shows them to the maintenance account", async () => {
+    for (const office of [person({}), lawyer]) {
+      serve({ "GET /auth/me": { body: office } });
+      const router = renderAt("/reports");
+      await screen.findByRole("heading", { level: 1, name: /يا/ });
+      expect(router.state.location.pathname).toBe("/");
+      for (const nav of screen.getAllByRole("navigation", { name: "التنقل" })) {
+        expect(within(nav).queryByText("التقارير")).toBeNull();
+      }
+      cleanup();
+      vi.restoreAllMocks();
     }
-    cleanup();
-    vi.restoreAllMocks();
     serve({
-      "GET /auth/me": { body: lawyer },
+      "GET /auth/me": { body: keeper },
       "GET /reports": { body: { month: "2026-10", tasks: 4, done: 2, done_on_time: 1, late: 1, by_type: [{ key: "urgent_request", count: 2 }], by_staff: [], new_clients: 3, by_source: [{ key: "ad", count: 3 }], by_matter: [], by_client_type: [], by_booking: [], received: 0, missing: 0, refunded: 0,
         ratings: { sent: 3, answered: 2, average: 3.5, by_service: [{ key: "consultation_office", count: 1, average: 5 }, { key: "document_review", count: 1, average: 2 }],
           low: [{ at: "2026-10-12T09:00:00Z", service: "document_review", client_name: "منى سعيد" }] },
@@ -127,7 +131,7 @@ describe("TASK 07c tools", () => {
 
   it("v1.58: the AI cost by conversation, and by message when a row is opened", async () => {
     const calls = serve({
-      "GET /auth/me": { body: lawyer },
+      "GET /auth/me": { body: keeper },
       "GET /reports": { body: { month: "2026-11", tasks: 0, done: 0, done_on_time: 0, late: 0, by_type: [], by_staff: [], new_clients: 0, by_source: [], by_matter: [], by_client_type: [], by_booking: [], received: 0, missing: 0, refunded: 0,
         ratings: { sent: 0, answered: 0, by_service: [], low: [] }, ai_cost: { total_usd: 0.42, calls: 30, conversations: 2, input_tokens: 400000, output_tokens: 6000, unpriced: 0 } } },
       "GET /reports/ai-cost": { body: { month: "2026-11", summary: { total_usd: 0.42, calls: 30, conversations: 2, input_tokens: 400000, output_tokens: 6000, unpriced: 0 },
@@ -156,7 +160,7 @@ describe("TASK 07c tools", () => {
 
   it("shows a month with no rating yet (the API leaves the average out) without breaking", async () => {
     serve({
-      "GET /auth/me": { body: lawyer },
+      "GET /auth/me": { body: keeper },
       "GET /reports": { body: { month: "2026-11", tasks: 0, done: 0, done_on_time: 0, late: 0, by_type: [], by_staff: [], new_clients: 0, by_source: [], by_matter: [], by_client_type: [], by_booking: [], received: 0, missing: 0, refunded: 0,
         ratings: { sent: 0, answered: 0, by_service: [], low: [] } } },
     });
@@ -167,7 +171,7 @@ describe("TASK 07c tools", () => {
 
   it("shows each service's price, its bookings, the ones done and its money", async () => {
     serve({
-      "GET /auth/me": { body: lawyer },
+      "GET /auth/me": { body: keeper },
       "GET /reports": { body: { month: "2026-11", tasks: 0, done: 0, done_on_time: 0, late: 0, by_type: [], by_staff: [], new_clients: 0, by_source: [], by_matter: [], by_client_type: [], by_booking: [], received: 9500, missing: 0, refunded: 0,
         ratings: { sent: 0, answered: 0, by_service: [], low: [] },
         by_service: [{ key: "urf_marriage_office", booked: 1, completed: 1, received: 5000, price: 5000 },
@@ -190,7 +194,7 @@ describe("TASK 07c tools", () => {
     const empty = { tasks: 0, done: 0, done_on_time: 0, late: 0, by_type: [], by_staff: [], new_clients: 0, by_source: [], by_matter: [], by_client_type: [], by_booking: [], received: 0, missing: 0, refunded: 0,
       ratings: { sent: 0, answered: 0, by_service: [], low: [] } };
     const calls = serve({
-      "GET /auth/me": { body: lawyer },
+      "GET /auth/me": { body: keeper },
       "GET /reports": { body: { month: "2026-11", ...empty } },
       "GET /reports/trend": { body: { months: Array.from({ length: 12 }, (_, i) => ({ month: `2026-${String(i + 1).padStart(2, "0")}`, received: i === 10 ? 9500 : 0, booked: i === 10 ? 7 : 0 })) } },
     });

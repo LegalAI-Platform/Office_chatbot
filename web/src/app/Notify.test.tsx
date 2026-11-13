@@ -139,15 +139,26 @@ const emptyDash = { urgent: 0, overdue: 0, unassigned: 0, active: 0, urgent_by_d
 
 let alertsBody: unknown = { unread: 0, items: [] };
 let alertsAsked = 0;
+let dashAsked = 0;
+let bookingAsked = 0;
 
 function openBell(bellName = "التنبيهات", body: unknown = { unread: 0, items: [] }) {
   alertsBody = body;
   alertsAsked = 0;
+  dashAsked = 0;
+  bookingAsked = 0;
   vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
     const path = String(url).replace("/api/panel", "").split("?")[0]!;
     if (path === "/auth/csrf") return Response.json({ token: "t" });
     if (path === "/auth/me") return Response.json(person);
-    if (path === "/dashboard") return Response.json(emptyDash);
+    if (path === "/dashboard") {
+      dashAsked++;
+      return Response.json(emptyDash);
+    }
+    if (path === "/booking/appointments") {
+      bookingAsked++; // the home's today and next
+      return Response.json([]);
+    }
     if (path === "/alerts") {
       alertsAsked++;
       return Response.json(alertsBody);
@@ -166,18 +177,18 @@ function openBell(bellName = "التنبيهات", body: unknown = { unread: 0, 
 class FakeEventSource {
   static all: FakeEventSource[] = [];
   closed = false;
-  private listeners: Record<string, (() => void)[]> = {};
+  private listeners: Record<string, ((e: { data?: string }) => void)[]> = {};
   constructor(public url: string) {
     FakeEventSource.all.push(this);
   }
-  addEventListener(type: string, fn: () => void) {
+  addEventListener(type: string, fn: (e: { data?: string }) => void) {
     (this.listeners[type] ??= []).push(fn);
   }
   close() {
     this.closed = true;
   }
-  emit(type: string) {
-    for (const fn of this.listeners[type] ?? []) fn();
+  emit(type: string, data?: string) {
+    for (const fn of this.listeners[type] ?? []) fn({ data });
   }
 }
 
@@ -251,5 +262,30 @@ describe("v1.104 the clients' requests first, the system's problems below", () =
     const { next } = watch([]);
     next([sys(10, "backup"), alert({ id: 11, kind: "task_urgent", task_type: "urgent_request" }), sys(12, "n8n")]);
     expect(made.map((m) => [m.title, m.stay])).toEqual([["طلب عاجل · سارة", true], ["مشكلة في السيستم", false], ["مشكلة في السيستم", false]]);
+  });
+});
+
+// v1.106 (the owner: «الداش بورد كلها ريل تايم ؟» … «عايزين كله يشتغل بنفس الطريقه دي»)
+describe("v1.106 every page at once", () => {
+  it("the stream's «data» asks again only what its areas show, each once, with no minute's wait", async () => {
+    FakeEventSource.all = [];
+    vi.stubGlobal("EventSource", FakeEventSource);
+    await openBell();
+    const stream = FakeEventSource.all.at(-1)!;
+    await vi.waitFor(() => expect([dashAsked, bookingAsked]).toEqual([1, 2])); // the home: its numbers, today and next
+    const bell = alertsAsked;
+
+    stream.emit("data", "lists"); // an office list: not on the home
+    await new Promise((r) => setTimeout(r, 50));
+    expect([dashAsked, bookingAsked]).toEqual([1, 2]);
+
+    stream.emit("data", "clients,tasks"); // a new client with a new task: the home's numbers
+    await vi.waitFor(() => expect(dashAsked).toBe(2));
+
+    stream.emit("data", "appointments,payments"); // both show the appointments: asked once each, not twice
+    await vi.waitFor(() => expect(bookingAsked).toBe(4));
+    await new Promise((r) => setTimeout(r, 50));
+    expect([dashAsked, bookingAsked]).toEqual([2, 4]);
+    expect(alertsAsked).toBe(bell); // the bell's list is the «alerts» event's
   });
 });

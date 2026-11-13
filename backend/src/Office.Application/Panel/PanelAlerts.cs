@@ -1,3 +1,5 @@
+using System.Collections.Immutable;
+
 namespace Office.Application.Panel;
 
 // TASK 07c (DECISIONS v1.11): the office's alerts. A task that went overdue (S-05), an urgent one
@@ -5,6 +7,8 @@ namespace Office.Application.Panel;
 // may see that task; an e-mail from the no-reply sender tells them once. No client's words, name or
 // number ever goes into an e-mail: the kind of task, its due time and a link to the panel.
 // v1.105: every other new task makes a «task_new» alert too (the bell and Windows, no e-mail).
+// v1.106: the bell's stream also names the areas of the office's data that changed (DataSignal), so every page on the
+// screen asks again at once.
 
 public static class AlertKinds
 {
@@ -80,16 +84,22 @@ public interface IPanelAlertStore
     /// <summary>v1.104: the unread system alerts among them (the bell puts the clients' requests first).</summary>
     Task<int> UnreadSystemAsync(Viewer viewer, CancellationToken ct);
 
+    /// <summary>
+    /// v1.106: a stamp for each area of the office's data the panel shows (the tasks, the appointments, the payments…): it
+    /// changes whenever a row of the area is added, changed or removed. Counts only, never client data.
+    /// </summary>
+    Task<IReadOnlyDictionary<string, string>> DataStampsAsync(CancellationToken ct);
+
     /// <summary>Marks these (or, with null, every alert the viewer may see) read.</summary>
     Task MarkReadAsync(Viewer viewer, IReadOnlyList<long>? ids, CancellationToken ct);
 }
 
 /// <summary>
-/// v1.104: wakes the open panels' alert streams the moment alerts are made or read, so the bell and Windows'
-/// notification hear at once (the owner: real time). It says only that something changed; each panel then asks for the
-/// alerts it may see.
+/// v1.104: wakes the open panels' streams at once (the owner: real time). It says only that something changed; each panel
+/// then asks for what it may see. v1.106: two of them on the same stream, the bell's (<see cref="AlertSignal"/>) and the
+/// home's (<see cref="DataSignal"/>).
 /// </summary>
-public sealed class AlertSignal
+public abstract class PanelSignal
 {
     private long _version;
     private TaskCompletionSource _next = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -107,7 +117,52 @@ public sealed class AlertSignal
     }
 }
 
-public sealed class PanelAlerts(IPanelAlertStore store, IPanelMailer mailer, AlertSignal signal)
+/// <summary>v1.104: alerts were made or read, so the bell and Windows' notification hear at once.</summary>
+public sealed class AlertSignal : PanelSignal
+{
+}
+
+/// <summary>
+/// v1.106 (the owner: «الداش بورد كلها ريل تايم ؟» … «عايزين كله يشتغل بنفس الطريقه دي»): an area of the office's data
+/// the panel shows changed (the tasks, the appointments, the payments, the clients…), so the pages on the screen that
+/// show it ask again at once instead of at their minute. The stream names the areas, never a row.
+/// </summary>
+public sealed class DataSignal : PanelSignal
+{
+    private IReadOnlyDictionary<string, string>? _stamps;
+    private ImmutableDictionary<string, long> _changedAt = ImmutableDictionary.Create<string, long>(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Wakes the streams for the areas whose stamp differs from the last look; the first look only notes them. Returns the
+    /// areas it woke them for (none: nothing changed). Only the worker looks, one round at a time.
+    /// </summary>
+    public IReadOnlyList<string> Observe(IReadOnlyDictionary<string, string> stamps)
+    {
+        var last = Interlocked.Exchange(ref _stamps, stamps);
+        if (last is null)
+        {
+            return [];
+        }
+
+        string[] changed = [.. stamps.Where(s => !last.TryGetValue(s.Key, out var was) || was != s.Value).Select(s => s.Key).Order(StringComparer.Ordinal)];
+        if (changed.Length == 0)
+        {
+            return [];
+        }
+
+        // noted before the pulse, so a stream that wakes always finds its areas
+        var at = Version + 1;
+        ImmutableInterlocked.Update(ref _changedAt, d => d.SetItems(changed.Select(a => KeyValuePair.Create(a, at))));
+        Pulse();
+        return changed;
+    }
+
+    /// <summary>The areas that changed after this version: a stream that missed a wake still hears every one.</summary>
+    public IReadOnlyList<string> ChangedSince(long version) =>
+        [.. Volatile.Read(ref _changedAt).Where(a => a.Value > version).Select(a => a.Key).Order(StringComparer.Ordinal)];
+}
+
+public sealed class PanelAlerts(IPanelAlertStore store, IPanelMailer mailer, AlertSignal signal, DataSignal data)
 {
     public const int Shown = 30;
 
@@ -175,4 +230,11 @@ public sealed class PanelAlerts(IPanelAlertStore store, IPanelMailer mailer, Ale
         await store.MarkReadAsync(viewer, ids, ct);
         signal.Pulse();
     }
+
+    /// <summary>
+    /// v1.106: the worker looks every round which areas of the office's data changed, whoever changed them (the panel,
+    /// Hazem, n8n or a job), and wakes the same stream with their names. The first look only notes where things are.
+    /// Returns the areas it woke them for.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> WatchDataAsync(CancellationToken ct) => data.Observe(await store.DataStampsAsync(ct));
 }

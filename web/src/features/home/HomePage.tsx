@@ -21,7 +21,8 @@ interface Appointment {
 }
 const who = (t: DashboardTask) => t.client_name ?? "رقم من غير اسم";
 // every card of the page asks again each minute, like the tasks and the bell, so a booking made on WhatsApp shows up
-// on a screen left open
+// on a screen left open. v1.106: and at once when the bell's stream says the office's data changed (shared/api/alerts);
+// the minute stays as the fallback
 const LIVE = 60_000;
 
 /**

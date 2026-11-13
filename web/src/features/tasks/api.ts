@@ -1,5 +1,6 @@
 import { keepPreviousData, queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../shared/api/client";
+import { dashboardKey } from "../../shared/api/dashboard";
 import type { StaffRef, TaskDetail, TaskPage } from "../../shared/api/types";
 
 export type Scope = "mine" | "unassigned" | "all";
@@ -53,6 +54,7 @@ export function useTaskAction(id: string) {
     onSuccess: (detail) => {
       qc.setQueryData(taskKey(id), detail);
       void qc.invalidateQueries({ queryKey: tasksKey() });
+      void qc.invalidateQueries({ queryKey: dashboardKey }); // v1.106: the home's numbers and the side bar's dot at once
     },
     // e.g. 409 changed_meanwhile: show the task as it is now, not the old buttons
     onError: () => void qc.invalidateQueries({ queryKey: taskKey(id) }),
@@ -66,6 +68,7 @@ export function useAssign(id: string) {
     onSuccess: (detail) => {
       qc.setQueryData(taskKey(id), detail);
       void qc.invalidateQueries({ queryKey: tasksKey() });
+      void qc.invalidateQueries({ queryKey: dashboardKey }); // v1.106: the home's unassigned count at once
     },
     // e.g. 409 changed_meanwhile: show the task as it is now, not the old buttons
     onError: () => void qc.invalidateQueries({ queryKey: taskKey(id) }),

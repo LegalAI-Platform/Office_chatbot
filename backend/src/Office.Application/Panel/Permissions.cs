@@ -17,6 +17,11 @@ public static class Permissions
     // texts and read the reports; only the manager unmutes a conversation (S-01).
     public const string ListsManage = "lists.manage";
     public const string TextsManage = "texts.manage";
+
+    /// <summary>
+    /// v1.106 (the owner, 2026-11-13: «التقارير ما يشوفهاش اكونت المستشار، اللي يقدر يشوف التقارير هو الصيانه، اكونت صيانه
+    /// بس»): «التقارير» and the home's «الشهر ده» are the maintenance role's only.
+    /// </summary>
     public const string ReportsView = "reports.view";
     public const string ConversationsUnmute = "conversations.unmute";
 
@@ -62,10 +67,10 @@ public static class Permissions
     private static readonly Dictionary<string, string[]> ByRole = new(StringComparer.Ordinal)
     {
         [Maintenance] = [.. All],
-        // v1.100: without TextsManage and TestingForget (the maintenance role's)
-        [Manager] = [TasksViewOwn, TasksViewAll, TasksUpdate, TasksAssign, UsersManage, AccountSelf, ListsManage, ReportsView,
+        // v1.100: without TextsManage and TestingForget (the maintenance role's); v1.106: and without ReportsView
+        [Manager] = [TasksViewOwn, TasksViewAll, TasksUpdate, TasksAssign, UsersManage, AccountSelf, ListsManage,
             ConversationsUnmute, ScheduleManage, OfficeManage, PaymentsVerify, PaymentsRefund, ServicesManage, ServicesPrice, UrfManage, UrfReview, PricesManage],
-        [Lawyer] = [TasksViewOwn, TasksViewAll, TasksUpdate, TasksAssign, AccountSelf, ListsManage, ReportsView, ScheduleManage,
+        [Lawyer] = [TasksViewOwn, TasksViewAll, TasksUpdate, TasksAssign, AccountSelf, ListsManage, ScheduleManage,
             OfficeManage, PaymentsVerify, PaymentsRefund, ServicesManage, ServicesPrice, UrfManage, UrfReview, PricesManage],
         [Staff] = [TasksViewOwn, TasksUpdate, AccountSelf, ScheduleManage, PaymentsVerify, PaymentsRefund, ServicesManage, UrfManage],
     };

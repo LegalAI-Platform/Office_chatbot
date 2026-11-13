@@ -7,10 +7,11 @@ public sealed class PanelRulesTests
 {
     // The whole table, cell by cell: a change to a role must change this test on purpose.
     // v1.100: texts.manage and testing.forget are the maintenance role's only (with maintenance.manage).
+    // v1.106: reports.view too (the owner: «اكونت صيانه بس»).
     [Theory]
     [InlineData("maintenance", "tasks.view_own tasks.view_all tasks.update tasks.assign users.manage account.self lists.manage texts.manage reports.view conversations.unmute schedule.manage office.manage payments.verify payments.refund services.manage services.price urf.manage urf.review prices.manage testing.forget maintenance.manage")]
-    [InlineData("manager", "tasks.view_own tasks.view_all tasks.update tasks.assign users.manage account.self lists.manage reports.view conversations.unmute schedule.manage office.manage payments.verify payments.refund services.manage services.price urf.manage urf.review prices.manage")]
-    [InlineData("lawyer", "tasks.view_own tasks.view_all tasks.update tasks.assign account.self lists.manage reports.view schedule.manage office.manage payments.verify payments.refund services.manage services.price urf.manage urf.review prices.manage")]
+    [InlineData("manager", "tasks.view_own tasks.view_all tasks.update tasks.assign users.manage account.self lists.manage conversations.unmute schedule.manage office.manage payments.verify payments.refund services.manage services.price urf.manage urf.review prices.manage")]
+    [InlineData("lawyer", "tasks.view_own tasks.view_all tasks.update tasks.assign account.self lists.manage schedule.manage office.manage payments.verify payments.refund services.manage services.price urf.manage urf.review prices.manage")]
     [InlineData("staff", "tasks.view_own tasks.update account.self schedule.manage payments.verify payments.refund services.manage urf.manage")]
     public void Each_role_has_exactly_its_permissions(string role, string expected)
     {
