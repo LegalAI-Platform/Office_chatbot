@@ -19,7 +19,8 @@ RUN dotnet publish src/Office.Api/Office.Api.csproj -c Release --no-restore -o /
 # "-extra" variant includes ICU and tzdata (Africa/Cairo).
 FROM mcr.microsoft.com/dotnet/aspnet:10.0.13-alpine3.24-extra AS runtime
 WORKDIR /app
-ENV TZ=Africa/Cairo ASPNETCORE_HTTP_PORTS=8080 DOTNET_CLI_TELEMETRY_OPTOUT=1
+# v1.107: 9464 is the monitoring's port (/metrics and nothing else, Program.cs); no host port, never through nginx or the edge.
+ENV TZ=Africa/Cairo ASPNETCORE_HTTP_PORTS="8080;9464" DOTNET_CLI_TELEMETRY_OPTOUT=1
 # Npgsql loads GSSAPI at connect time; without it every connection logs an error.
 RUN apk add --no-cache krb5-libs
 COPY --from=build /out/api /app/api
@@ -27,6 +28,6 @@ COPY --from=build /out/cli /app/cli
 # The panel's Data Protection keys (Panel:KeysPath): the volume mounted here takes this owner.
 RUN mkdir -p /app/keys && chown $APP_UID /app/keys
 USER $APP_UID
-EXPOSE 8080
+EXPOSE 8080 9464
 WORKDIR /app/api
 ENTRYPOINT ["dotnet", "/app/api/Office.Api.dll"]

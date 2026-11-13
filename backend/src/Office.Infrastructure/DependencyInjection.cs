@@ -113,6 +113,8 @@ public static class DependencyInjection
         services.AddScoped<Application.Panel.PanelAlerts>();
         services.AddSingleton<Application.Panel.AlertSignal>(); // v1.104: wakes the bell's live stream
         services.AddSingleton<Application.Panel.DataSignal>(); // v1.106: wakes the same stream when the home's data changed
+        services.AddMetrics(); // v1.107: IMeterFactory (the host adds it too; the CLI's host may not)
+        services.AddSingleton<Monitoring.AlertMetrics>(); // v1.107: the alerts' rounds and e-mails, for the monitoring
         services.AddScoped<Panel.PanelTools>();
         services.AddScoped<Panel.PanelTesting>();
         services.AddScoped<Panel.PanelPrices>(); // TASK 06

@@ -47,6 +47,7 @@ and OpenAI).
 | meta-stub (.NET, test only) | none | Stand-in for Meta media and OpenAI transcription during `hazem-e2e` | `tests` profile, started by `hazem-e2e` only |
 | WAHA noweb-2026.9.2 (test channel) | http://127.0.0.1:3010 (dashboard, QR code) | TASK 02b: WhatsApp on a **spare number** until Meta approves; n8n uses it only while `whatsapp.provider` = `waha` (docs/runbooks/waha.md) | `waha` profile, by hand only |
 | cloudflared 2026.10.4 | public https URL | Exposes **only Meta's webhook** (through `edge`) | `tunnel` / `tunnel-named` profile |
+| The monitoring (v1.107): Prometheus 3.15.1, Alertmanager 0.34.2, Loki 3.7.9, Alloy 1.21.3, Grafana 13.3.0, Telegraf, node-exporter, postgres- / redis- / blackbox-exporter | Grafana http://127.0.0.1:3300, Prometheus :9090, Alertmanager :9093 | The server's and the services' numbers (every 15 s, 30 days), the logs (masked, 7 days), alert e-mails (docs/runbooks/monitoring.md) | `monitoring` profile, `scripts/linux/monitoring.sh up` |
 
 Every port is bound to `127.0.0.1`. Nothing is reachable from the network except n8n,
 and only while a tunnel profile is running. Appsmith was removed in TASK 07a (the panel is React).

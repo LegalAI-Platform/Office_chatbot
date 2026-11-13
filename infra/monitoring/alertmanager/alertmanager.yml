@@ -1,0 +1,66 @@
+# Alertmanager (v1.107, docs/runbooks/monitoring.md): who hears an alert, how often, and which alert silences another.
+# start.sh fills the __NAMES__ from .env at start (ALERT_EMAIL_TO, and the panel's own SMTP_*): this file holds no address
+# and no key, so it can live in this public repo.
+#
+# Resend's free plan sends 100 e-mails a day, the panel's sign-in codes included, so an alert is repeated rarely: a critical
+# one every 4 hours while it lasts, a warning once a day; each one says once more when it is resolved.
+global:
+  resolve_timeout: 5m
+  smtp_smarthost: "__SMTP_HOST__:__SMTP_PORT__"
+  smtp_from: "Hazem monitoring <__SMTP_FROM__>"
+  smtp_auth_username: "__SMTP_USERNAME__"
+  smtp_auth_password_file: /tmp/smtp_password
+  smtp_require_tls: __SMTP_REQUIRE_TLS__ # SMTP_SSL, as the panel's mail: STARTTLS on 587
+
+templates:
+  - /etc/alertmanager/templates/*.tmpl
+
+route:
+  receiver: email
+  # one e-mail per kind of alert and service: a disk and a database never share one
+  group_by: [alertname, service]
+  group_wait: 1m
+  group_interval: 15m
+  repeat_interval: 24h
+  routes:
+    - receiver: email
+      matchers: ['severity="critical"']
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h
+
+receivers:
+  - name: email
+    email_configs:
+      - to: "__ALERT_EMAIL_TO__"
+        send_resolved: true
+        headers:
+          Subject: '{{ template "hazem.subject" . }}'
+        html: '{{ template "hazem.html" . }}'
+        text: '{{ template "hazem.text" . }}'
+
+# An alert that explains another silences it, so one problem is one e-mail.
+inhibit_rules:
+  # The same service: a critical alert silences its warnings (ApiDown silences ApiSlowRequests).
+  - source_matchers: ['severity="critical"']
+    target_matchers: ['severity="warning"']
+    equal: [service]
+  # A container that stopped: its service's own check (ApiDown, PostgresDown…) says the same, so one e-mail says it.
+  - source_matchers: ['alertname="ContainerExited"']
+    target_matchers: ['severity="critical"', 'alertname!="ContainerExited"']
+    equal: [service]
+  # The office's database down: the API, n8n and the bell fail because of it.
+  - source_matchers: ['alertname="PostgresDown"', 'cluster="office"']
+    target_matchers: ['service=~"api|n8n"']
+  # Chatwoot's database or Redis down: Chatwoot and Sidekiq fail because of it.
+  - source_matchers: ['alertname=~"PostgresDown|RedisDown"', 'cluster="chatwoot"']
+    target_matchers: ['service=~"chatwoot|chatwoot-sidekiq"']
+  # The API down: what is measured inside it (the bell's rounds, its database pool) is down with it.
+  - source_matchers: ['alertname="ApiDown"']
+    target_matchers: ['alertname=~"AlertWorkerStalled|AlertEmailsFailing|ApiDbPoolNearFull|ApiThreadPoolQueue"']
+  # The panel's web down: the landing page from outside is the same web.
+  - source_matchers: ['alertname="WebDown"']
+    target_matchers: ['alertname="PublicEndpointDown"', 'service="web"']
+  # The server nearly out of memory: the restarts and the slow answers are its effect.
+  - source_matchers: ['alertname="HostOutOfMemory"']
+    target_matchers: ['alertname=~"ContainerRestarting|ContainerMemoryNearLimit|ApiSlowRequests|HazemTurnsSlow|N8nEventLoopLag"']

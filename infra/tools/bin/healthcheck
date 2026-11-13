@@ -398,8 +398,59 @@ if curl -fsS -m 5 http://edge:8081/healthz >/dev/null 2>&1; then
     bash -c '[[ "$(curl -s -o /dev/null -w "%{http_code}" -m 10 http://edge:8081/rest/login)" == "404" && "$(curl -s -o /dev/null -w "%{http_code}" -m 10 http://edge:8081/)" == "404" ]]'
   check "the edge hides the internal send webhook (404)" \
     bash -c '[[ "$(curl -s -o /dev/null -w "%{http_code}" -m 10 -X POST http://edge:8081/webhook/hazem-internal-send)" == "404" ]]'
+  # v1.107: n8n's /metrics (N8N_METRICS) is for Prometheus on office_net only
+  check "the edge hides n8n's metrics (404)" \
+    bash -c '[[ "$(curl -s -o /dev/null -w "%{http_code}" -m 10 http://edge:8081/metrics)" == "404" ]]'
 else
   echo "SKIP  the edge is not running (no tunnel up): its checks run when the tunnel is up"
+fi
+
+echo "== The monitoring (v1.107, docs/runbooks/monitoring.md)"
+# The API's numbers are on its own port only, inside the Docker networks: with or without the monitoring up.
+check "the API's metrics answer on their own port (9464), with no password in them" \
+  bash -c 'b="$(curl -fsS -m 10 http://api:9464/metrics)" && [[ "$b" == *dotnet_* && "$b" != *"$OFFICE_API_PASSWORD"* ]] && ! grep -qi "password=" <<< "$b"'
+check "the API's own port (8080) has no /metrics (404)" \
+  bash -c '[[ "$(curl -s -o /dev/null -w "%{http_code}" -m 10 http://api:8080/metrics)" == "404" ]]'
+check "the panel's nginx never passes /metrics to the API" \
+  bash -c '! curl -s -m 10 http://web:8080/metrics | grep -q "^# TYPE"'
+prom_value() {  # prom_value QUERY -> the first result's value, or "none"
+  curl -fsS -m 10 http://prometheus:9090/api/v1/query --data-urlencode "query=$1" | jq -r '.data.result[0].value[1] // "none"'
+}
+prom_is() { [[ "$(prom_value "$1")" == "$2" ]]; }
+prom_above() { awk -v v="$(prom_value "$1")" -v m="$2" 'BEGIN { exit !(v != "none" && v + 0 > m + 0) }'; }
+prom_rules_ok() {  # every rule group loaded, none failing
+  curl -fsS -m 10 http://prometheus:9090/api/v1/rules \
+    | jq -e '(.data.groups | length) >= 7 and ([.data.groups[].rules[] | select(.health == "err")] | length) == 0' >/dev/null
+}
+mail_ok() {  # Alertmanager's e-mails: a failure in the last day only counts when none went out at all
+  local failed sent
+  failed="$(prom_value 'sum(increase(alertmanager_notifications_failed_total{integration="email"}[24h]))')"
+  sent="$(prom_value 'sum(increase(alertmanager_notifications_total{integration="email"}[24h])) - sum(increase(alertmanager_notifications_failed_total{integration="email"}[24h]))')"
+  awk -v f="$failed" -v s="$sent" 'BEGIN { exit !(f == "none" || f + 0 < 1 || (s != "none" && s + 0 >= 1)) }'
+}
+logs_ok() {  # Alloy sent lines to Loki in the last hour (Postgres alone logs every few minutes) and dropped none
+  prom_above 'sum(increase(loki_write_sent_entries_total[1h]))' 0 && ! prom_above 'sum(increase(loki_write_dropped_entries_total[1h]))' 0
+}
+prom_ready() {  # up to 30 seconds: a deploy may have just recreated it
+  local _
+  for _ in 1 2 3 4 5 6; do curl -fsS -m 5 http://prometheus:9090/-/ready >/dev/null 2>&1 && return 0; sleep 5; done
+  return 1
+}
+# Started (monitoring.sh up) = one of its containers answers on the network; stopped (monitoring.sh down) = none does.
+if getent hosts prometheus >/dev/null 2>&1 || getent hosts alertmanager >/dev/null 2>&1 || getent hosts grafana >/dev/null 2>&1; then
+  check "Prometheus is ready" prom_ready
+  check "Prometheus loaded every rule group and none is failing" prom_rules_ok
+  # Down = no answer for 2 minutes (a target a deploy recreated misses one scrape at most), after it answered in the last day
+  # (node-exporter never runs on Docker Desktop, monitoring.ps1).
+  check "every scrape target answered in the last 2 minutes" \
+    prom_is 'count(max_over_time(up[2m]) == 0 and on(job, instance) max_over_time(up[1d]) == 1)' none
+  check "Prometheus sends its alerts to Alertmanager" prom_is 'max(prometheus_notifications_alertmanagers_discovered)' 1
+  check "Alertmanager's alert e-mails go out (no failure in the last day without one sent)" mail_ok
+  check "the logs reach Loki (Alloy sent lines in the last hour, none dropped)" logs_ok
+  check "the bell's alert rounds run (the last one worked under 3 minutes ago)" \
+    prom_is 'max(time() - office_alerts_last_ok_round_timestamp_seconds) < bool 180' 1
+else
+  echo "SKIP  the monitoring is not running (scripts/linux/monitoring.sh up): its checks run when it is"
 fi
 
 echo "== The WAHA test channel (TASK 02b, DECISIONS v1.19 T-03)"

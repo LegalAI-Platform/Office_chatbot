@@ -9,6 +9,9 @@
 
   <ItemGroup>
     <PackageReference Include="Serilog.AspNetCore" />
+    <!-- v1.107: the monitoring's numbers (docs/runbooks/monitoring.md) -->
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
+    <PackageReference Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,0 +1,86 @@
+# The server itself (node-exporter). Every alert: severity (critical: now; warning: today), service (what it is about),
+# an Arabic summary and description, and its entry in docs/runbooks/monitoring.md.
+groups:
+  - name: host
+    rules:
+      - alert: HostHighCpu
+        expr: 100 * (1 - avg by (service) (rate(node_cpu_seconds_total{mode="idle"}[5m]))) > 85
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: الـ CPU بتاع السيرفر فوق 85%
+          description: 'بقاله 15 دقيقة على {{ $value | printf "%.0f" }}%. الردود هتبقى أبطأ لو فضل كده.'
+          runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#hosthighcpu
+
+      - alert: HostLowMemory
+        expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes < 0.15
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: الرام الفاضية في السيرفر أقل من 15%
+          description: 'الفاضي {{ $value | humanizePercentage }} بس. لو وصل لـ 5% هيبقى تنبيه critical.'
+          runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#hostlowmemory
+
+      - alert: HostOutOfMemory
+        expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes < 0.05
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: السيرفر قرّب يخلص الرام
+          description: 'الفاضي {{ $value | humanizePercentage }} بس. Linux ممكن يقفل أي container (OOM)، حتى الداتابيز.'
+          runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#hostoutofmemory
+
+      - alert: HostOomKill
+        expr: increase(node_vmstat_oom_kill[15m]) > 0
+        labels: { severity: warning }
+        annotations:
+          summary: Linux قفل برنامج عشان الرام خلصت (OOM)
+          description: 'حصل {{ $value | printf "%.0f" }} مرة في آخر ربع ساعة. شوف أنهي container عمل restart في Grafana.'
+          runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#hostoomkill
+
+      - alert: HostDiskSpaceLow
+        expr: node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"} < 0.15
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: الديسك فاضي فيه أقل من 15%
+          description: 'الفاضي {{ $value | humanizePercentage }}. الـ images القديمة بتاخد مكان كبير (docker image prune).'
+          runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#hostdiskspacelow
+
+      - alert: HostDiskSpaceCritical
+        expr: node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"} < 0.05
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: الديسك قرّب يتملي
+          description: 'الفاضي {{ $value | humanizePercentage }} بس. لو اتملي، الداتابيز والـ backup هيقفوا.'
+          runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#hostdiskspacecritical
+
+      - alert: HostDiskWillFillIn24h
+        expr: |
+          predict_linear(node_filesystem_avail_bytes{mountpoint="/"}[6h], 24 * 3600) < 0
+          and node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"} < 0.4
+        for: 30m
+        labels: { severity: warning }
+        annotations:
+          summary: الديسك هيتملي في خلال يوم بالسرعة دي
+          description: حاجة بتكتب كتير على الديسك من 6 ساعات (لوجز، أو backup، أو ملفات). شوف الديسك في Grafana.
+          runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#hostdiskwillfillin24h
+
+      - alert: HostInodesLow
+        expr: node_filesystem_files_free{mountpoint="/"} / node_filesystem_files{mountpoint="/"} < 0.10
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: عدد الملفات على الديسك قرّب يخلص (inodes)
+          description: 'الفاضي {{ $value | humanizePercentage }}. ده بيحصل من ملفات صغيرة كتير، مش من الحجم.'
+          runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#hostinodeslow
+
+      - alert: HostClockNotSynced
+        expr: abs(node_timex_offset_seconds) > 0.5 or node_timex_sync_status == 0
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: ساعة السيرفر مش مظبوطة
+          description: أكواد التحقق بخطوتين (Authenticator) ومواعيد الحجز معتمدة على الساعة. الساعة لازم تتظبط من الإنترنت (NTP).
+          runbook_url: https://github.com/LegalAI-Platform/Office_chatbot/blob/main/docs/runbooks/monitoring.md#hostclocknotsynced

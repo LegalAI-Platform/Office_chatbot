@@ -1,0 +1,26 @@
+// The masking's test (v1.107, test/run.sh): made-up lines from a file, through the very module Alloy runs (mask.alloy), to
+// Alloy's own output (loki.echo). Never used by the stack.
+logging {
+  level  = "info"
+  format = "logfmt"
+}
+
+import.file "mask" {
+  filename = "/etc/alloy/mask.alloy"
+}
+
+local.file_match "fixture" {
+  path_targets = [{"__path__" = "/fixture/lines.log", "service" = "api"}]
+}
+
+loki.source.file "fixture" {
+  targets       = local.file_match.fixture.targets
+  tail_from_end = false
+  forward_to    = [mask.mask.test.receiver]
+}
+
+mask.mask "test" {
+  forward_to = [loki.echo.out.receiver]
+}
+
+loki.echo "out" { }

@@ -5,7 +5,8 @@
 # .NET backend (api), the panel (web, TASK 07a; Appsmith was removed) and Chatwoot for the
 # staff's conversations (TASK 07b, T-24: chatwoot, chatwoot-sidekiq, its own database and redis).
 # Optional profiles: tests (meta-stub for hazem-e2e), tunnel (Cloudflare Quick Tunnel),
-#                    tunnel-named (Cloudflare Named Tunnel), tools (one-off commands).
+#                    tunnel-named (Cloudflare Named Tunnel), tools (one-off commands),
+#                    monitoring (v1.107: Prometheus, Alertmanager, Loki, Alloy, Grafana; scripts/linux/monitoring.sh).
 # Every port is bound to 127.0.0.1 only. n8n is the only service ever exposed
 # to the internet, and only through the tunnel profile. The api has no host port at all;
 # the panel reaches it through the web container (/api/panel only).
@@ -78,6 +79,17 @@ x-tools: &tools
     TZ: Africa/Cairo
   networks: [office_net, chatwoot_net]
   restart: "no"
+
+# v1.107 (the monitoring, docs/runbooks/monitoring.md): profile "monitoring", never started by `up`. Nothing of it is on the
+# internet: none joins tunnel_net, and its only host ports (Grafana, Prometheus, Alertmanager) are on 127.0.0.1, reached through
+# an SSH tunnel. Locked down like the api: read-only, no Linux capabilities, a ceiling on memory and processes.
+x-monitoring: &monitoring
+  profiles: ["monitoring"]
+  restart: unless-stopped
+  logging: *logging
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
 
 services:
   # Refuses to let the stack start while .env still has CHANGE_ME values,
@@ -209,6 +221,13 @@ services:
       DB_POSTGRESDB_DATABASE: n8n
       DB_POSTGRESDB_USER: n8n_user
       DB_POSTGRESDB_PASSWORD: ${N8N_DB_PASSWORD}
+      # v1.107: Prometheus reads /metrics on n8n's own port (inside office_net; the edge lets the webhook through only).
+      # Node.js and the workflows' counts, no workflow id, no path, no credential.
+      N8N_METRICS: "true"
+      N8N_METRICS_INCLUDE_DEFAULT_METRICS: "true"
+      N8N_METRICS_INCLUDE_MESSAGE_EVENT_BUS_METRICS: "true"
+      N8N_METRICS_INCLUDE_API_ENDPOINTS: "false"
+      N8N_METRICS_INCLUDE_WORKFLOW_ID_LABEL: "false"
       # If this key changes or is lost, every credential stored in n8n becomes unreadable.
       N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
       N8N_HOST: ${N8N_HOST}
@@ -570,6 +589,306 @@ services:
       - ./database/migrations:/db/migrations:ro
     networks: [office_net]
 
+  # ---------- The monitoring (v1.107, docs/runbooks/monitoring.md): profile "monitoring" ----------
+  # One-shot, on every `monitoring.sh up`: checks the monitoring's settings in .env (the alert e-mails, Grafana's password) and
+  # makes the exporters' database roles, office_monitor and chatwoot_monitor (pg_monitor only, never a superuser). Their
+  # passwords are made here once, at random, into the monitoring_secrets volume: never in .env, never printed. Idempotent.
+  monitoring-init:
+    <<: *tools
+    profiles: ["monitoring"]
+    command: ["monitoring-init"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      chatwoot-db:
+        condition: service_healthy
+    volumes:
+      - monitoring_secrets:/secrets
+
+  # Every 15 seconds: the server, the containers, the API, n8n, both databases, both Redis, and the HTTP checks. It keeps
+  # PROMETHEUS_RETENTION (30 days) within PROMETHEUS_RETENTION_SIZE. No admin API, no remote write: it only reads.
+  # On office_net to read the api (9464) and n8n; Alertmanager, Loki and Grafana stay off office_net, where n8n is.
+  prometheus:
+    <<: *monitoring
+    image: prom/prometheus:v3.15.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-30d}
+      - --storage.tsdb.retention.size=${PROMETHEUS_RETENTION_SIZE:-8GB}
+      - --web.listen-address=:9090
+      - --web.external-url=http://127.0.0.1:9090/
+    volumes:
+      - ./infra/monitoring/prometheus:/etc/prometheus:ro
+      - prometheus_data:/prometheus
+    tmpfs: [/tmp]
+    ports:
+      - "127.0.0.1:9090:9090"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9090/-/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    mem_limit: 1g
+    pids_limit: 256
+    networks: [monitoring_net, office_net]
+
+  # The alerts' e-mails, through the panel's own SMTP (SMTP_* in .env: Resend), to ALERT_EMAIL_TO, and again when one is
+  # resolved. start.sh fills the address and the server into its config at start; the key goes to a file on /tmp (memory)
+  # and is never written into the config. monitoring_out is its way out to the mail server.
+  alertmanager:
+    <<: *monitoring
+    image: prom/alertmanager:v0.34.2
+    entrypoint: ["/bin/sh", "/etc/alertmanager/start.sh"]
+    environment:
+      TZ: Africa/Cairo # the times in its e-mails
+      ALERT_EMAIL_TO: ${ALERT_EMAIL_TO:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SSL: ${SMTP_SSL:-true}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+    depends_on:
+      monitoring-init:
+        condition: service_completed_successfully
+    volumes:
+      - ./infra/monitoring/alertmanager:/etc/alertmanager:ro
+      - alertmanager_data:/alertmanager
+    tmpfs: [/tmp]
+    ports:
+      - "127.0.0.1:9093:9093"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9093/-/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    mem_limit: 128m
+    pids_limit: 64
+    networks: [monitoring_net, monitoring_out]
+
+  # The logs of every container, 7 days, then deleted (infra/monitoring/loki/loki.yml). No password of its own: only the
+  # monitoring's own network reaches it.
+  loki:
+    <<: *monitoring
+    image: grafana/loki:3.7.9
+    command: ["-config.file=/etc/loki/loki.yml"]
+    volumes:
+      - ./infra/monitoring/loki/loki.yml:/etc/loki/loki.yml:ro
+      - loki_data:/loki
+    tmpfs: [/tmp]
+    mem_limit: 768m
+    pids_limit: 256
+    networks: [monitoring_net]
+
+  # Reads every container's log through docker-proxy and masks phone numbers, passwords, tokens and keys before Loki keeps
+  # anything (infra/monitoring/alloy/mask.alloy). It also counts the lines that had one, so a leak is an alert within minutes.
+  alloy:
+    <<: *monitoring
+    image: grafana/alloy:v1.21.3
+    user: "473:473" # the image's own alloy user, not root: Docker comes through docker-proxy, no socket to own
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - --disable-reporting
+      - /etc/alloy/config.alloy
+    environment:
+      COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-office}
+    depends_on: [loki, docker-proxy]
+    volumes:
+      - ./infra/monitoring/alloy:/etc/alloy:ro
+      - alloy_data:/var/lib/alloy/data
+    tmpfs: [/tmp]
+    mem_limit: 384m
+    pids_limit: 256
+    networks: [monitoring_net, docker_proxy_net]
+
+  # Docker's socket is root on this machine, so nothing of the monitoring gets it: this proxy answers reads of the containers
+  # (their list, details, stats and logs) and Docker's info, and refuses everything else (every POST: start, stop, exec, …).
+  # Its only clients are Alloy (the logs) and Telegraf (the numbers), on docker_proxy_net alone.
+  docker-proxy:
+    <<: *monitoring
+    image: tecnativa/docker-socket-proxy:v0.5.0
+    environment:
+      CONTAINERS: "1" # GET /containers/…: the list, details, stats and logs
+      INFO: "1" # GET /info (Telegraf)
+      NETWORKS: "1" # GET /networks: Alloy's discovery reads the networks' names with the containers
+      POST: "0" # nothing that changes anything
+      LOG_LEVEL: warning # not a line for each of Telegraf's and Alloy's reads
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    tmpfs: [/run, /tmp]
+    mem_limit: 64m
+    pids_limit: 64
+    networks: [docker_proxy_net]
+
+  # The server itself: CPU, memory, disk, load, the clock. Reads the host's / read-only.
+  node-exporter:
+    <<: *monitoring
+    image: prom/node-exporter:v1.12.1
+    command:
+      - --path.rootfs=/host
+      - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|run|boot|snap|var/lib/docker/.+|var/lib/containerd/.+|var/snap/.+)($$|/)
+      - --no-collector.wifi
+      - --no-collector.infiniband
+      - --no-collector.nfs
+      - --no-collector.nfsd
+      - --web.listen-address=:9100
+    # rslave: Docker refuses a mount of / that would pin other containers' mounts (and Docker Desktop has no rslave at all:
+    # monitoring.ps1 starts the monitoring without node-exporter there).
+    volumes:
+      - type: bind
+        source: /
+        target: /host
+        read_only: true
+        bind:
+          propagation: rslave
+    mem_limit: 64m
+    pids_limit: 64
+    networks: [monitoring_net]
+
+  # Every container's CPU, memory, network, disk, healthcheck and restarts, by its compose service, from Docker's own API
+  # through docker-proxy: no mount of this machine, no socket (infra/monitoring/telegraf/telegraf.conf). Runs as its own user.
+  telegraf:
+    <<: *monitoring
+    image: telegraf:1.40.2-alpine
+    user: "100:101"
+    environment:
+      COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-office}
+    depends_on: [docker-proxy]
+    volumes:
+      - ./infra/monitoring/telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro
+    tmpfs: [/tmp]
+    mem_limit: 128m
+    pids_limit: 64
+    networks: [monitoring_net, docker_proxy_net]
+
+  # The office's Postgres, as office_monitor (pg_monitor only; its password from monitoring-init's volume).
+  postgres-exporter:
+    <<: *monitoring
+    image: prometheuscommunity/postgres-exporter:v0.20.1
+    command: ["--collector.long_running_transactions"]
+    environment:
+      DATA_SOURCE_URI: postgres:5432/postgres?sslmode=disable
+      DATA_SOURCE_USER: office_monitor
+      DATA_SOURCE_PASS_FILE: /secrets/office_monitor
+    depends_on:
+      monitoring-init:
+        condition: service_completed_successfully
+    volumes:
+      - monitoring_secrets:/secrets:ro
+    mem_limit: 64m
+    pids_limit: 64
+    networks: [monitoring_net, office_net]
+
+  # Chatwoot's Postgres, as chatwoot_monitor (pg_monitor only).
+  chatwoot-db-exporter:
+    <<: *monitoring
+    image: prometheuscommunity/postgres-exporter:v0.20.1
+    command: ["--collector.long_running_transactions"]
+    environment:
+      DATA_SOURCE_URI: chatwoot-db:5432/postgres?sslmode=disable
+      DATA_SOURCE_USER: chatwoot_monitor
+      DATA_SOURCE_PASS_FILE: /secrets/chatwoot_monitor
+    depends_on:
+      monitoring-init:
+        condition: service_completed_successfully
+    volumes:
+      - monitoring_secrets:/secrets:ro
+    mem_limit: 64m
+    pids_limit: 64
+    networks: [monitoring_net, chatwoot_net]
+
+  # The office's Redis. CONFIG is renamed away there (infra/redis/redis.conf), so the exporter does not ask for it.
+  redis-exporter:
+    <<: *monitoring
+    image: oliver006/redis_exporter:v1.96.0
+    environment:
+      REDIS_ADDR: redis://redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_EXPORTER_CONFIG_COMMAND: "-"
+      REDIS_EXPORTER_INCL_SYSTEM_METRICS: "false"
+    mem_limit: 48m
+    pids_limit: 64
+    networks: [monitoring_net, office_net]
+
+  # Chatwoot's Redis, and Sidekiq's queues in it: their sizes, the retries, the dead jobs and the running Sidekiq processes.
+  chatwoot-redis-exporter:
+    <<: *monitoring
+    image: oliver006/redis_exporter:v1.96.0
+    environment:
+      REDIS_ADDR: redis://chatwoot-redis:6379
+      REDIS_PASSWORD: ${CHATWOOT_REDIS_PASSWORD}
+      REDIS_EXPORTER_INCL_SYSTEM_METRICS: "false"
+      REDIS_EXPORTER_CHECK_KEYS: "queue:*"
+      REDIS_EXPORTER_CHECK_SINGLE_KEYS: "processes,retry,dead,schedule,stat:processed,stat:failed"
+    mem_limit: 48m
+    pids_limit: 64
+    networks: [monitoring_net, chatwoot_net]
+
+  # The HTTP checks: each service's own health page from inside, and the domain's webhook and landing page from outside
+  # (Cloudflare, the tunnel and the edge), as Meta and a visitor reach them (infra/monitoring/blackbox/blackbox.yml).
+  blackbox:
+    <<: *monitoring
+    image: prom/blackbox-exporter:v0.29.1
+    command: ["--config.file=/etc/blackbox/blackbox.yml"]
+    volumes:
+      - ./infra/monitoring/blackbox:/etc/blackbox:ro
+    mem_limit: 64m
+    pids_limit: 64
+    networks: [monitoring_net, office_net, chatwoot_net]
+
+  # The dashboards (infra/monitoring/grafana), on 127.0.0.1:3300 only (an SSH tunnel). Its own sign-in: GRAFANA_ADMIN_USER and
+  # GRAFANA_ADMIN_PASSWORD (monitoring-init refuses to start it without a strong one). No sign-up, no anonymous access, nothing
+  # sent to grafana.com (no usage report, no update or news check, no plugin installed from the internet).
+  grafana:
+    <<: *monitoring
+    image: grafana/grafana:13.3.0
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-}
+      GF_SECURITY_DISABLE_GRAVATAR: "true"
+      GF_SECURITY_COOKIE_SAMESITE: strict
+      GF_SECURITY_DISABLE_INITIAL_ADMIN_CREATION: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_USERS_ALLOW_ORG_CREATE: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_AUTH_BASIC_ENABLED: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      GF_ANALYTICS_FEEDBACK_LINKS_ENABLED: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+      GF_SNAPSHOTS_EXTERNAL_ENABLED: "false"
+      GF_PUBLIC_DASHBOARDS_ENABLED: "false"
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
+      GF_SERVER_ROOT_URL: http://127.0.0.1:${GRAFANA_PORT:-3300}/
+      GF_DATE_FORMATS_DEFAULT_TIMEZONE: Africa/Cairo
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/dashboards/overview.json
+      GF_LOG_LEVEL: warn
+    depends_on:
+      monitoring-init:
+        condition: service_completed_successfully
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infra/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/monitoring/grafana/dashboards:/etc/grafana/dashboards:ro
+    tmpfs: [/tmp]
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3300}:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    mem_limit: 512m # Grafana 13 and its data-source plugins (separate processes) take ~320 MB
+    pids_limit: 512
+    networks: [monitoring_net, monitoring_out]
+
 networks:
   office_net:
     name: office_net
@@ -579,6 +898,17 @@ networks:
   # TASK 13: the tunnels and the edge only. Whatever the Cloudflare dashboard says, cloudflared reaches nothing else.
   tunnel_net:
     name: tunnel_net
+  # v1.107: the monitoring's own network, with no way out to the internet.
+  monitoring_net:
+    name: monitoring_net
+    internal: true
+  # v1.107: Alertmanager's way out to the mail server, and Grafana's to its 127.0.0.1 port.
+  monitoring_out:
+    name: monitoring_out
+  # v1.107: docker-proxy with Alloy and cAdvisor only, no way out.
+  docker_proxy_net:
+    name: docker_proxy_net
+    internal: true
 
 volumes:
   api_keys:
@@ -591,3 +921,10 @@ volumes:
   garage_meta:
   garage_data:
   n8n_data:
+  # v1.107: the monitoring's data (none of it is in the backups: it is not the office's data)
+  prometheus_data:
+  alertmanager_data:
+  loki_data:
+  alloy_data:
+  grafana_data:
+  monitoring_secrets: # the exporters' database passwords (monitoring-init); delete it to make new ones
