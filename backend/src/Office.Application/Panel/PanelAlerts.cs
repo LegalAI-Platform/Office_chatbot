@@ -30,6 +30,14 @@ public static class AlertKinds
     public const string New = "task_new";
 
     /// <summary>
+    /// v1.111 (the owner: «الاشعارات اللي فوق … عاوزك تضيف فيها لو عميل بعت صوره الايصال وعاوز تأكيد الدفع»; migration 0082):
+    /// a receipt waits for the office's review (as «الإيصالات» lists it). No task: the alert is the receipt's, read for everyone
+    /// once the payment is reviewed. The bell and Windows, never an e-mail; the staff's (a written service's: the lawyer's,
+    /// who confirms it himself, B-16). The urgent call's receipt has its own urgent alert.
+    /// </summary>
+    public const string Receipt = "receipt_review";
+
+    /// <summary>
     /// fix/alert-flood (the owner, v1.108: «الإيميل للعاجل والمتأخر بس»): the kinds that are also e-mailed. The others (a new
     /// task, a client asking for someone, a low rating) are the bell's and Windows' only.
     /// </summary>
@@ -120,7 +128,14 @@ public static class SystemWhat
 /// </summary>
 public sealed record PanelAlert(long Id, string Kind, Guid? TaskId, string? TaskType, string? ClientName, DateTimeOffset? DueAt,
     DateTimeOffset CreatedAt, bool Read, string? SystemWhat = null, string? PhoneLast3 = null, string? MatterType = null,
-    string? StaffName = null);
+    string? StaffName = null)
+{
+    /// <summary>v1.111, a receipt's alert: what it pays for (the appointment's service, or the written service's kind).</summary>
+    public string? ReceiptFor { get; init; }
+
+    /// <summary>v1.111, a receipt's alert: the amount due, in pounds.</summary>
+    public int? Amount { get; init; }
+}
 
 /// <summary>An alert whose e-mail has not gone out yet.</summary>
 public sealed record AlertToMail(long Id, string Kind, Guid? TaskId, string? TaskType, DateTimeOffset? DueAt, Guid? StaffId, string? SystemWhat = null);

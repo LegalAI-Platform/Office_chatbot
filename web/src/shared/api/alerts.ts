@@ -14,11 +14,13 @@ export const alertsKey = ["alerts"] as const;
  * one goes in both. Only the pages on the screen ask at once; the rest when they open. Plain keys: shared code imports
  * no feature.
  */
+// v1.111: the bell too, with the tasks and the payments: a finished task's alert and a reviewed receipt's are read for
+// everyone (v1.110, v1.111), and the bell says so at once, not at its minute's fallback
 const AREAS: Record<string, readonly (readonly string[])[]> = {
-  tasks: [dashboardKey, ["tasks"], ["task"], ["report"]],
+  tasks: [dashboardKey, ["tasks"], ["task"], ["report"], alertsKey],
   appointments: [["booking", "appointments"], ["booking", "month"], ["booking", "preview"], ["urf"], ["report"], ["report-trend"]],
   // v1.110: «المستندات» («documents») with every area a client's file comes with
-  payments: [["payments"], ["booking", "appointments"], ["booking", "month"], ["services"], ["urf"], ["report"], ["report-trend"], ["documents"]],
+  payments: [["payments"], ["booking", "appointments"], ["booking", "month"], ["services"], ["urf"], ["report"], ["report-trend"], ["documents"], alertsKey],
   services: [["services"], ["payments"], ["report"], ["report-trend"], ["documents"]],
   urf: [["urf"], ["payments"], ["documents"]],
   clients: [["report"], ["ai-cost"], ["documents"]],

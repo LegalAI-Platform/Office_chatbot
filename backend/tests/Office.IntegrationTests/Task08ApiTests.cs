@@ -309,6 +309,59 @@ public sealed class Task08ApiTests(TestDatabase db) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task V111_the_office_s_cancellation_closes_the_booking_s_own_tasks_and_keeps_the_office_s_other_work()
+    {
+        // v1.111 (the owner: «لما انا لغيت الحجز من هنا في بانتظار اجرائك تشالش ليه» … «Yes, add it»)
+        await BookingOn();
+        await UpToTheOffer();
+        await Press("bk:s:pv:" + new DateTimeOffset(2026, 11, 20, 12, 0, 0, TimeSpan.FromHours(2)).ToUnixTimeSeconds());
+        await Receipt();
+        // what the booking's workers make for it alone (keyed by its id), and two that are the office's work all the same
+        await db.ExecAsync("""
+            INSERT INTO hazem.staff_tasks (person_id, turn_id, type, due_at)
+            SELECT a.person_id, k.key, k.type, now() + interval '1 hour'
+              FROM hazem.appointments a,
+                   LATERAL (VALUES ('booking:' || replace(a.id::text, '-', '') || ':review', 'payment_review_due'),
+                                   ('booking:' || replace(a.id::text, '-', '') || ':conflict:1', 'calendar_conflict'),
+                                   ('reminder:' || replace(a.id::text, '-', '') || ':day_before:1', 'reminder_failed'),
+                                   ('payment:' || replace(a.id::text, '-', '') || ':overpaid', 'refund'),
+                                   ('v111-unclear', 'unclear_message')) AS k(key, type)
+            """);
+        const string Mine = "SELECT string_agg(type || '=' || state, '|' ORDER BY type) FROM hazem.staff_tasks WHERE turn_id LIKE 'booking:%' OR turn_id LIKE 'reminder:%' OR turn_id LIKE 'payment:%' OR turn_id = 'v111-unclear'";
+        Assert.Equal("calendar_conflict=open|payment_review_due=open|refund=open|reminder_failed=open|unclear_message=open", await db.ScalarAsync<string>(Mine));
+
+        var staff = await SignIn("yasmin", Permissions.Staff, "ياسمين");
+        var id = await db.ScalarAsync<Guid>("SELECT id FROM hazem.appointments");
+        Assert.Equal(HttpStatusCode.OK, (await staff.PostAsync($"/api/panel/booking/appointments/{id}/cancel", null, Ct)).StatusCode);
+        Assert.Equal("calendar_conflict=cancelled|payment_review_due=cancelled|refund=open|reminder_failed=cancelled|unclear_message=open",
+            await db.ScalarAsync<string>(Mine));
+    }
+
+    [Fact]
+    public async Task V111_a_hold_that_runs_out_or_a_client_s_cancellation_closes_them_too_and_another_booking_s_stay()
+    {
+        await db.ExecAsync("""
+            INSERT INTO hazem.persons (id, wa_id) VALUES ('00000000-0000-0000-0000-000000011101', '201000000911');
+            INSERT INTO hazem.appointments (id, person_id, service, starts_at, ends_at, amount, booked_turn_id, state, hold_until)
+            VALUES ('00000000-0000-0000-0000-0000000111a1', '00000000-0000-0000-0000-000000011101', 'consultation_phone_video',
+                    '2026-12-02 14:00+02', '2026-12-02 14:15+02', 500, 'v111-a', 'pending_payment', '2026-12-02 13:00+02'),
+                   ('00000000-0000-0000-0000-0000000111a2', '00000000-0000-0000-0000-000000011101', 'consultation_phone_video',
+                    '2026-12-03 14:00+02', '2026-12-03 14:15+02', 500, 'v111-b', 'confirmed', NULL),
+                   ('00000000-0000-0000-0000-0000000111a3', '00000000-0000-0000-0000-000000011101', 'consultation_phone_video',
+                    '2026-12-04 14:00+02', '2026-12-04 14:15+02', 500, 'v111-c', 'confirmed', NULL);
+            INSERT INTO hazem.staff_tasks (person_id, turn_id, type, due_at)
+            SELECT '00000000-0000-0000-0000-000000011101', 'booking:' || replace(a.id::text, '-', '') || ':review', 'payment_review_due', now()
+              FROM hazem.appointments a WHERE a.person_id = '00000000-0000-0000-0000-000000011101';
+            """);
+        await db.ExecAsync("UPDATE hazem.appointments SET state = 'expired' WHERE id = '00000000-0000-0000-0000-0000000111a1'");
+        await db.ExecAsync("UPDATE hazem.appointments SET state = 'cancelled_by_client' WHERE id = '00000000-0000-0000-0000-0000000111a2'");
+        Assert.Equal("111a1=cancelled|111a2=cancelled|111a3=open", await db.ScalarAsync<string>("""
+            SELECT string_agg(right(split_part(turn_id, ':', 2), 5) || '=' || state, '|' ORDER BY turn_id)
+              FROM hazem.staff_tasks WHERE person_id = '00000000-0000-0000-0000-000000011101'
+            """)); // the third booking is still on: its task stays
+    }
+
+    [Fact]
     public async Task The_week_and_the_settings_change_what_hazem_offers_at_once()
     {
         await BookingOn();

@@ -163,8 +163,11 @@ export interface Dashboard {
 
 // ---------- TASK 07c ----------
 
-/** v1.105: `task_new`, any other task Hazem opened for the office (a client's answer needs someone). */
-export type AlertKind = "task_overdue" | "task_urgent" | "task_human" | "task_rating" | "system" | "task_new";
+/**
+ * v1.105: `task_new`, any other task Hazem opened for the office (a client's answer needs someone). v1.111: `receipt_review`,
+ * a receipt waiting for the office's review (no task: it opens «الإيصالات»).
+ */
+export type AlertKind = "task_overdue" | "task_urgent" | "task_human" | "task_rating" | "system" | "task_new" | "receipt_review";
 
 /** TASK 13: a system alert (the managers only) has no task: `system_what` says what failed. */
 export interface PanelAlert {
@@ -184,6 +187,9 @@ export interface PanelAlert {
   phone_last3?: string;
   matter_type?: string;
   staff_name?: string;
+  /** v1.111, a receipt's alert: what it pays for (an appointment's service, or a written service's kind) and the amount due. */
+  receipt_for?: string;
+  amount?: number;
 }
 
 export interface AlertList {

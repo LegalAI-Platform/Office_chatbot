@@ -111,6 +111,69 @@ public sealed class Task09ApiTests(TestDatabase db) : IAsyncLifetime
         return await scope.ServiceProvider.GetRequiredService<BookingNotices>().RunAsync(Ct);
     }
 
+    /// <summary>v1.111: one round of the bell's worker (off in tests): the alerts it made.</summary>
+    private async Task<int> RunAlerts()
+    {
+        using var scope = _factory.Services.CreateScope();
+        return (await scope.ServiceProvider.GetRequiredService<PanelAlerts>().RunAsync("http://127.0.0.1:8080", Ct)).Made;
+    }
+
+    // ---------- v1.111: the bell ----------
+
+    [Fact]
+    public async Task V111_a_receipt_waiting_for_its_review_is_in_the_staff_s_bell_once_until_it_is_reviewed()
+    {
+        // the owner: «الاشعارات اللي فوق … عاوزك تضيف فيها لو عميل بعت صوره الايصال وعاوز تأكيد الدفع»
+        await BookingOn();
+        var id = await HeldTomorrow();
+        await Receipt();
+        await Receipt("r2"); // a second photo of the same transfer: still one alert
+        Assert.Equal("proof_received", await db.ScalarAsync<string>("SELECT state FROM hazem.payments"));
+        var staff = await SignIn("yasmin", Permissions.Staff, "ياسمين");
+        var lawyer = await SignIn("saad", Permissions.Lawyer);
+        await RunAlerts();
+        await RunAlerts(); // once
+        Assert.Equal(1L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.panel_alerts WHERE kind = 'receipt_review'"));
+
+        async Task<JsonNode> Bell(HttpClient who) => (await who.GetFromJsonAsync<JsonNode>("/api/panel/alerts", Ct))!;
+        static bool IsReceipt(JsonNode? x) => (string?)x!["kind"] == "receipt_review";
+        var bell = await Bell(staff);
+        var a = Assert.Single(bell["items"]!.AsArray(), IsReceipt)!;
+        Assert.Equal("محمد أحمد علي حسن", (string?)a["client_name"]);
+        Assert.Equal("092", (string?)a["phone_last3"]); // the number's end only
+        Assert.Equal("consultation_phone_video", (string?)a["receipt_for"]);
+        Assert.Equal(500, (int)a["amount"]!);
+        Assert.False((bool)a["read"]!);
+        Assert.Null(a["task_id"]); // no task: «الإيصالات» is the office's list of them
+        var unread = (int)bell["unread"]!;
+        Assert.DoesNotContain((await Bell(lawyer))["items"]!.AsArray(), IsReceipt); // the staff's job (B-05)
+        Assert.DoesNotContain(_factory.Mail.Sent, m => m.Text.Contains("إيصال", StringComparison.Ordinal)); // never an e-mail
+
+        // reviewed: read for everyone, out of the red count
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await staff.PostAsJsonAsync($"/api/panel/payments/{id}/review", new { state = "verified", received = 500 }, Ct)).StatusCode);
+        bell = await Bell(staff);
+        Assert.True((bool)Assert.Single(bell["items"]!.AsArray(), IsReceipt)!["read"]!);
+        Assert.Equal(unread - 1, (int)bell["unread"]!);
+    }
+
+    [Fact]
+    public async Task V111_the_urgent_call_s_receipt_has_its_own_urgent_alert_and_none_here()
+    {
+        await db.ExecAsync("""
+            INSERT INTO hazem.persons (id, wa_id) VALUES ('00000000-0000-0000-0000-000000011201', '201000000913');
+            INSERT INTO hazem.appointments (id, person_id, service, starts_at, ends_at, amount, booked_turn_id, state)
+            VALUES ('00000000-0000-0000-0000-0000000112a1', '00000000-0000-0000-0000-000000011201', 'consultation_urgent',
+                    now() + interval '5 minutes', now() + interval '20 minutes', 1000, 'v111-u', 'confirmed');
+            INSERT INTO hazem.payments (id, appointment_id, state, amount_due, proof_at)
+            VALUES ('00000000-0000-0000-0000-0000000112b1', '00000000-0000-0000-0000-0000000112a1', 'proof_received', 1000, now());
+            INSERT INTO hazem.payment_receipts (payment_id, wamid, bucket, key, sha256, mime, received_at)
+            VALUES ('00000000-0000-0000-0000-0000000112b1', 'wamid.v111-u', 'office-sensitive', 'wa/v111-u.jpg', 'v111u', 'image/jpeg', now());
+            """);
+        await RunAlerts();
+        Assert.Equal(0L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.panel_alerts WHERE kind = 'receipt_review'"));
+    }
+
     /// <summary>The texts of what the worker sent since <paramref name="from"/>.</summary>
     private List<string> SentSince(int from) =>
         _factory.N8n.Requests.Skip(from).Select(r => (string)JsonNode.Parse(r.Body)!["text"]!).ToList();

@@ -99,24 +99,38 @@ public sealed class HazemResponder(
     /// <summary>v1.90: a greeting opens a reply; it answers nothing he asked («السلام عليكم، لازم شهود؟»).</summary>
     private static bool IsGreeting(string key) => key.StartsWith("greet_", StringComparison.Ordinal);
 
-    private static readonly HashSet<string> RepeatWatched =
-    [
-        TextKeys.Greeting, TextKeys.Greeting2, TextKeys.Greeting3, TextKeys.Unclear, TextKeys.ConsultationOffer, TextKeys.CaseOffer, TextKeys.ConsultationOfferUrgentDay, TextKeys.ConsultationOfferUrgentNight,
-        TextKeys.LegalQuestion, TextKeys.ServicesMenu, TextKeys.Welcome, TextKeys.WelcomeChoose, TextKeys.AboutHazem, TextKeys.OffTopic,
-        TextKeys.ServicesTell, TextKeys.OfficePracticeAreas, TextKeys.OfficePrices,
-        TextKeys.SituationUrgent, TextKeys.SituationHeld, TextKeys.SituationConfirmed, TextKeys.SituationOrder,
-    ];
+    /// <summary>
+    /// v1.39: the office's lists that are never said in the writer's words (the services, its practice areas, its prices),
+    /// watched as the everyday texts are (v1.111: these are the everyday texts, <see cref="Conversational.MayWrite"/>).
+    /// </summary>
+    private static readonly HashSet<string> OfficeLists = [TextKeys.ServicesMenu, TextKeys.OfficePracticeAreas, TextKeys.OfficePrices];
+
+    /// <summary>v1.111: an everyday text: one the writer may say in its words, or one of the office's lists.</summary>
+    private static bool Everyday(string key) => Conversational.MayWrite(key) || OfficeLists.Contains(key);
 
     /// <summary>
-    /// v1.39 (TASK 16, the forbidden rule 2): a typed message whose answer is exactly what the client got last time (the same
-    /// approved texts) gets «معلش لو مش واضح…» with the services and a person instead, never the same words again. A client
-    /// asking his situation («فاكرني؟») is told it again: he asked for it.
+    /// v1.39 (TASK 16, the forbidden rule 2): a typed message whose whole answer (the greeting in kind aside) is what the
+    /// client got last time is never answered with the same words again; a new part (the address he asked) makes a new answer.
+    /// v1.111 (Ahmed Amin's chat, 2026-11-14: «عقد ايجار هكتب عقد ايجار» under «صياغة العقد بتبدأ من 3,000 جنيه… ابعتلي أي
+    /// تفاصيل» got that very text again, four times in all; the owner: «General fix»): it watched a list of 20 texts and the
+    /// contract's was not on it. Now every everyday text (each one the writer may say in its words, and the office's lists),
+    /// and the AI's reading leads: with the writer on, the same step is said in new words that first answer what he just wrote
+    /// (<see cref="Plan.Repeated"/>, the same buttons under it); the writer off, or a list → «معلش لو مش واضح…» with the
+    /// services and a person (v1.39), as when the writer cannot say it anew. Told again as it is: his situation when he asks it
+    /// («فاكرني؟», the caller), the offer's buttons after «عايز احجز» (v1.45), a question the flow asks again on purpose (its
+    /// «again» words, a question of choices: v1.46, v1.47, v1.66), and a turn whose words reached the office (a task: his
+    /// question or his matter is new). The texts that go as approved (where to pay, a confirmation, the questions the flow
+    /// reads) are told again when the flow needs them, as before.
     /// </summary>
-    private static void NotTwiceInARow(Plan plan, ClientSituation situation, IReadOnlyDictionary<string, ApprovedText> texts, bool wantsToBook = false)
+    private static void NotTwiceInARow(Plan plan, ClientSituation situation, IReadOnlyDictionary<string, ApprovedText> texts,
+        bool wantsToBook, bool writes)
     {
-        // The whole answer (the greeting in kind aside) is what he got last time, and it is a general answer: a new part (the
-        // address he asked) makes it a new answer.
-        var said = plan.Steps.Where(s => !s.Key.StartsWith("greet_", StringComparison.Ordinal)).ToList();
+        var said = plan.Steps.Where(s => !IsGreeting(s.Key)).ToList();
+        if (said.Count == 0 || !said.All(s => situation.RepliedLast(s.Key)) || !said.Any(s => Everyday(s.Key)) || plan.Tasks.Count > 0)
+        {
+            return;
+        }
+
         // v1.45 (TASK 18): «عايز احجز» after the offer wants its two buttons again (the writer says them differently), not the
         // services-or-a-person question
         if (wantsToBook && said.Any(s => IsOffer(s.Key)))
@@ -124,18 +138,36 @@ public sealed class HazemResponder(
             return;
         }
 
-        if (!said.Any(s => RepeatWatched.Contains(s.Key)) || !said.All(s => situation.RepliedLast(s.Key))
-            || !texts.TryGetValue(TextKeys.RepeatChoice, out var t) || !t.Active)
+        if (said.Any(s => s.Key.EndsWith("_again", StringComparison.Ordinal) || Conversational.IsChoiceQuestion(s.Key)))
         {
+            return; // asked again on purpose: the flow's own words for it
+        }
+
+        if (writes && said.All(s => Conversational.MayWrite(s.Key)))
+        {
+            plan.Repeated = true;
             return;
         }
 
-        plan.Steps.RemoveAll(s => RepeatWatched.Contains(s.Key));
+        RepeatChoice(plan, texts);
+    }
+
+    /// <summary>v1.39: «معلش لو مش واضح، تحب تشوف خدمات المكتب، ولا تكلم حد من المكتب؟» in place of the answer (the greeting in kind kept).</summary>
+    private static bool RepeatChoice(Plan plan, IReadOnlyDictionary<string, ApprovedText> texts)
+    {
+        if (!texts.TryGetValue(TextKeys.RepeatChoice, out var t) || !t.Active)
+        {
+            return false;
+        }
+
+        plan.Repeated = false;
+        plan.Steps.RemoveAll(s => !IsGreeting(s.Key) && Everyday(s.Key)); // a text that goes as approved stays (where to pay)
         plan.Ask(TextKeys.RepeatChoice, new ReplyChoices(InteractivePayload.Buttons,
         [
             new ReplyChoice(ServiceRow.Id(ServiceRow.Menu), TextKeys.BtnServicesList),
             new ReplyChoice(ServiceRow.Id(ServiceRow.Human), TextKeys.BtnTalkToOffice),
         ]));
+        return true;
     }
 
     /// <summary>v1.39 (3.6): the next of a text's wordings after the one the client got last (the first one otherwise).</summary>
@@ -612,7 +644,8 @@ public sealed class HazemResponder(
 
             if (freeText && !flow.AskedStatus)
             {
-                NotTwiceInARow(plan, situation, texts, classification is { Intent: Intent.ConsultationRequest });
+                NotTwiceInARow(plan, situation, texts, classification is { Intent: Intent.ConsultationRequest },
+                    writes: writer is not null && chat is not null && settings.Flag(Conversational.SwitchKey));
             }
 
             state = flow.State;
@@ -637,6 +670,7 @@ public sealed class HazemResponder(
 
         // v1.41 (TASK 17): the everyday reply in the writer's words, checked by code; off, down or doubtful → as approved.
         WrittenReply? written = null;
+        string? repeatNote = null;
         if (writer is not null && chat is not null && settings.Flag(Conversational.SwitchKey) && composed.Actions.Count > 0)
         {
             // v1.45 (TASK 18 §3.2): «حقايق المكتب» with the panel's prices; the writer answers his question from them
@@ -651,12 +685,27 @@ public sealed class HazemResponder(
                 .Append(pastWords is null ? null : "عن العميل (متتكلمش عنه غير لو سأل عن ميعاده): " + pastWords + ".") // v1.91: never «قبل الميعاد» once it passed; v1.92: only when he asks
                 .Where(t => t is not null));
             var rewritten = await Conversational.RewriteAsync(composed, writer, chat, turn, Salutation.Call(state.Person), settings, ct,
-                facts, state.Person.NameGender, reviewer, lastReplyKeys);
+                facts, state.Person.NameGender, reviewer, lastReplyKeys, repeated: plan.Repeated);
             (composed, written) = (rewritten.Composed, rewritten.Written);
             if (rewritten.Usage is { } writing)
             {
                 usage.AddRange(writing);
             }
+
+            // v1.111: the same answer again could not be said in new words (refused, down, or nothing written): never the same
+            // words: «معلش لو مش واضح…» with the services and a person (v1.39), itself in the writer's words when it can
+            if (plan.Repeated && written is not { Guard: WrittenReply.Passed } && RepeatChoice(plan, texts))
+            {
+                repeatNote = $"repeat not written anew ({written?.Guard ?? "nothing written"}): repeat_choice";
+                var choice = await Conversational.RewriteAsync(ReplyComposer.Compose(turn.TurnId, turn.Messages[^1].Wamid, plan.Steps, texts),
+                    writer, chat, turn, Salutation.Call(state.Person), settings, ct, facts, state.Person.NameGender, reviewer, lastReplyKeys);
+                (composed, written) = (choice.Composed, choice.Written ?? written);
+                if (choice.Usage is { } again)
+                {
+                    usage.AddRange(again);
+                }
+            }
+
             if (written is { Guard: WrittenReply.Passed, FromFacts: true }) // set only when the message held service_detail
             {
                 // v1.48: his question was answered from «حقايق المكتب»: the office has nothing to answer, so no task for it
@@ -669,6 +718,10 @@ public sealed class HazemResponder(
         if (written is { } w)
         {
             notes.Add($"written {w.Purpose}: {w.Guard}");
+        }
+        if (repeatNote is not null)
+        {
+            notes.Add(repeatNote);
         }
         if (classification is { IsFallback: true })
         {
@@ -3786,11 +3839,36 @@ public sealed class HazemResponder(
                 return;
             }
 
+            var open = situation.Facts.Order is { } o && o.Kind == kind.Code; // v1.111: its order is open already
             if (ServiceRow.In(turn) is { IsMenu: false, IsTell: false })
             {
-                plan.Say(key, TextKeys.ConsultationOffer); // he pressed it: started
+                // he pressed it: started. v1.111 (Ahmed Amin's chat: «✅ ابدأ الطلب» got the text he had just read, word for word,
+                // and nothing said the request had started): under its text, or with its order open, he is told it is open
+                // and what to send; from the services list (its text not read yet), its text as before.
+                if (open || situation.RepliedRecently(key))
+                {
+                    plan.Say(TextKeys.ServiceOrderOpened, key, new Dictionary<string, string> { ["service"] = kind.Name });
+                }
+                else
+                {
+                    plan.Say(key, TextKeys.ConsultationOffer);
+                }
+
                 plan.Task(PendingTask.ServiceRequest);
                 ServiceToOpen = kind;
+                return;
+            }
+
+            // v1.111 (the same chat: «ورق زي ايه مش معايا ورق انا» after it opened got its answer, then the service's text and
+            // «✅ ابدأ الطلب» again): its order is open, so nothing is started again. Named again with nothing else said: where
+            // the request stands («مستني الورق»).
+            if (open)
+            {
+                if (!plan.Steps.Any(s => !IsGreeting(s.Key)))
+                {
+                    SaySituation();
+                }
+
                 return;
             }
 
@@ -3984,6 +4062,12 @@ public sealed class HazemResponder(
 
         /// <summary>v1.99: «ميعاد حضرتك ({{service}}) كان {{day}} الساعة {{time}}، وعدّى خلاص.» is approved and active.</summary>
         public bool PastTimeOn { get; set; }
+
+        /// <summary>
+        /// v1.111: the whole answer is what the client got last time (the forbidden rule 2), and the writer says it in new words
+        /// that first answer what he just wrote; not written → «معلش لو مش واضح…» (v1.39).
+        /// </summary>
+        public bool Repeated { get; set; }
 
         public void Say(string key, string? fallback = null, IReadOnlyDictionary<string, string>? Fill = null) =>
             Steps.Add(new ReplyStep(key, fallback, Fill));

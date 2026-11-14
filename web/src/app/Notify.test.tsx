@@ -66,7 +66,7 @@ describe("v1.104 Windows notifications", () => {
     expect(when).toMatch(/^موعدها (اليوم|غدًا)\s\d{1,2}:\d{2}\s[صم] · مُسندة إلى: منى$/);
     expect(n.raw.startsWith("‏") && n.raw.endsWith("‏")).toBe(true); // right to left on an English Windows too
     n.click();
-    expect(open).toHaveBeenCalledWith("t2");
+    expect(open).toHaveBeenCalledWith("/tasks/t2");
   });
 
   it("each kind's details: the title's own kind is not said twice; a system's says what failed; an urgent request stays", () => {
@@ -153,7 +153,37 @@ describe("v1.104 Windows notifications", () => {
     expect(booking!.stay).toBe(true); // one of them is urgent
     expect(other!.title).toContain("منى");
     booking!.click();
-    expect(open).toHaveBeenCalledWith("c"); // the urgent one first
+    expect(open).toHaveBeenCalledWith("/tasks/c"); // the urgent one first
+  });
+
+  // v1.111 (the owner: «الاشعارات اللي فوق … عاوزك تضيف فيها لو عميل بعت صوره الايصال وعاوز تأكيد الدفع»)
+  const receipt = (over: Partial<PanelAlert>) =>
+    alert({ kind: "receipt_review", task_id: undefined, task_type: undefined, receipt_for: "consultation_phone_video", amount: 1500, ...over });
+
+  it("a receipt waiting for its review: what it pays for, the amount, the number's end, and a click opens «الإيصالات»", () => {
+    away();
+    const { next, open } = watch([]);
+    next([receipt({ id: 40, client_name: "محمد أحمد", phone_last3: "092" })]);
+    expect(made).toEqual([expect.objectContaining({
+      title: "إيصال تحويل بانتظار التأكيد · محمد أحمد",
+      body: "استشارة هاتفيًا أو بالفيديو · المبلغ المطلوب: 1,500 جنيه · رقمه ينتهي بـ 092\nيمكن تأكيده من صفحة «الإيصالات»",
+      stay: false,
+    })]);
+    made[0]!.click();
+    expect(open).toHaveBeenCalledWith("/receipts");
+  });
+
+  it("a receipt for a written service or an Urfi contract says which; with the client's task at once, one notification names both", () => {
+    away();
+    const { next } = watch([]);
+    next([receipt({ id: 41, receipt_for: "document_review", amount: 3000, phone_last3: "019" })]);
+    expect(made[0]!.body).toContain("مراجعة عقد · المبلغ المطلوب: 3,000 جنيه");
+    made.length = 0;
+    next([receipt({ id: 43, receipt_for: "urf_marriage_own", phone_last3: "019" }),
+      alert({ id: 44, kind: "task_new", task_id: "e", task_type: "booking_message_failed", phone_last3: "019" })]);
+    expect(made).toHaveLength(1);
+    expect(made[0]!.title).toBe("عنصران جديدان · سارة");
+    expect(made[0]!.body).toContain("• إيصال تحويل بانتظار التأكيد");
   });
 });
 
@@ -310,11 +340,23 @@ describe("v1.106 every page at once", () => {
 
     stream.emit("data", "clients,tasks"); // a new client with a new task: the home's numbers
     await vi.waitFor(() => expect(dashAsked).toBe(2));
+    // v1.111: the bell too: a finished task's alert is read for everyone, and the bell says so at once
+    await vi.waitFor(() => expect(alertsAsked).toBe(bell + 1));
 
     stream.emit("data", "appointments,payments"); // both show the appointments: asked once each, not twice
     await vi.waitFor(() => expect(bookingAsked).toBe(4));
     await new Promise((r) => setTimeout(r, 50));
     expect([dashAsked, bookingAsked]).toEqual([2, 4]);
-    expect(alertsAsked).toBe(bell); // the bell's list is the «alerts» event's
+    expect(alertsAsked).toBe(bell + 2); // v1.111: a reviewed receipt's alert is read for everyone too
+  });
+
+  it("v1.111: a receipt waiting is in the bell with what it pays for and its client", async () => {
+    const bell = await openBell("تنبيه جديد", {
+      unread: 1,
+      items: [alert({ id: 50, kind: "receipt_review", task_id: undefined, task_type: undefined, client_name: "محمد", receipt_for: "consultation_office", amount: 1000 })],
+    });
+    const row = within(within(bell).getByRole("list", { name: "الطلبات" })).getByRole("button");
+    expect(row.textContent).toContain("إيصال تحويل بانتظار التأكيد");
+    expect(row.textContent).toContain("استشارة مقابلة في المكتب · محمد");
   });
 });

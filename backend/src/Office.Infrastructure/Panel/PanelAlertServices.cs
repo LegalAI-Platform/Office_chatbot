@@ -31,9 +31,14 @@ public sealed class PanelAlertStore(HazemDbContext db) : IPanelAlertStore
     /// <summary>The types whose own alert already says a new task came (urgent, a client asking for someone, a low rating).</summary>
     private static readonly string[] OwnAlert = [.. Urgent, "human_requested", "rating_low"];
 
+    /// <summary>v1.111: a receipt the office has not reviewed yet (as «الإيصالات» lists them).</summary>
+    private static readonly string[] Waiting = [Office.Application.Booking.PaymentInfo.ProofReceived, Office.Application.Booking.PaymentInfo.DuplicateSuspected];
+
+    public async Task<int> MakeAsync(CancellationToken ct) => await MakeForTasksAsync(ct) + await MakeForReceiptsAsync(ct);
+
     // v1.105: every other new task makes a «task_new» alert, whatever its type (a general rule, not a list). Only a task
     // of the last 10 minutes: a deploy never floods the bell with the old ones.
-    public Task<int> MakeAsync(CancellationToken ct) => db.Database.ExecuteSqlInterpolatedAsync($"""
+    private Task<int> MakeForTasksAsync(CancellationToken ct) => db.Database.ExecuteSqlInterpolatedAsync($"""
         INSERT INTO hazem.panel_alerts (kind, task_id)
         SELECT k.kind, t.id
           FROM hazem.staff_tasks t
@@ -47,6 +52,28 @@ public sealed class PanelAlertStore(HazemDbContext db) : IPanelAlertStore
          WHERE k.kind IS NOT NULL
            AND t.created_at >= (SELECT value::timestamptz FROM hazem.settings WHERE key = 'alerts.since')
         ON CONFLICT (kind, task_id) DO NOTHING
+        """, ct);
+
+    /// <summary>
+    /// v1.111 (the owner: «لو عميل بعت صوره الايصال وعاوز تأكيد الدفع»): a payment waiting for its review gets one alert, from
+    /// its first receipt since it was last reviewed (more photos of it, one alert); a receipt of the last 10 minutes only, as a
+    /// new task's (a deploy never floods the bell). The urgent call's receipt has its own urgent alert (B-09).
+    /// </summary>
+    private Task<int> MakeForReceiptsAsync(CancellationToken ct) => db.Database.ExecuteSqlInterpolatedAsync($"""
+        INSERT INTO hazem.panel_alerts (kind, receipt_id)
+        SELECT DISTINCT ON (p.id) {AlertKinds.Receipt}, r.id
+          FROM hazem.payment_receipts r
+          JOIN hazem.payments p ON p.id = r.payment_id
+          LEFT JOIN hazem.appointments a ON a.id = p.appointment_id
+         WHERE p.state = ANY({Waiting})
+           AND a.service IS DISTINCT FROM {Office.Application.Booking.BookingService.Urgent.Code}
+           AND r.received_at >= now() - interval '10 minutes'
+           AND r.received_at >= (SELECT value::timestamptz FROM hazem.settings WHERE key = 'alerts.since')
+           AND r.received_at >= COALESCE(p.reviewed_at, '-infinity'::timestamptz)
+           AND NOT EXISTS (SELECT 1 FROM hazem.panel_alerts x JOIN hazem.payment_receipts y ON y.id = x.receipt_id
+                            WHERE y.payment_id = p.id AND y.received_at >= COALESCE(p.reviewed_at, '-infinity'::timestamptz))
+         ORDER BY p.id, r.received_at
+        ON CONFLICT DO NOTHING
         """, ct);
 
     public async Task<int> MakeSystemAsync(CancellationToken ct)
@@ -168,15 +195,76 @@ public sealed class PanelAlertStore(HazemDbContext db) : IPanelAlertStore
                               // v1.110: a finished task's alert is read for everyone (Finished)
                               Read = t != null && Finished.Contains(t.State) || db.PanelAlertReads.Any(r => r.AlertId == a.Id && r.UserId == viewer.UserId),
                               WaId = p == null ? null : p.WaId, StaffName = s == null ? null : s.Name, Matter = i == null ? null : i.MatterType,
+                              a.ReceiptId,
                           }).Take(limit).ToListAsync(ct);
+        var receipts = await ReceiptsAsync([.. rows.Where(r => r.ReceiptId != null).Select(r => r.ReceiptId!.Value)], ct);
         // the Windows notification's details (v1.104): the number's last 3 digits only, as the task list shows them
-        return rows.Select(r => new PanelAlert(r.Id, r.Kind, r.TaskId, r.Type, r.Name, r.DueAt, r.CreatedAt, r.Read, r.SystemWhat,
-            r.WaId is { Length: >= 3 } wa ? wa[^3..] : null, r.Matter, r.StaffName)).ToList();
+        return rows.Select(r =>
+        {
+            var alert = new PanelAlert(r.Id, r.Kind, r.TaskId, r.Type, r.Name, r.DueAt, r.CreatedAt, r.Read, r.SystemWhat,
+                r.WaId is { Length: >= 3 } wa ? wa[^3..] : null, r.Matter, r.StaffName);
+            // v1.111: a receipt's alert, its client and what it pays for; read for everyone once it is reviewed
+            return r.ReceiptId is { } id && receipts.TryGetValue(id, out var x)
+                ? alert with
+                {
+                    ClientName = x.Name, PhoneLast3 = x.WaId is { Length: >= 3 } w ? w[^3..] : null, ReceiptFor = x.For, Amount = x.Amount,
+                    Read = r.Read || x.ReviewedSince(r.CreatedAt),
+                }
+                : alert;
+        }).ToList();
     }
 
-    public Task<int> UnreadAsync(Viewer viewer, CancellationToken ct) =>
-        Visible(viewer).CountAsync(a => !db.PanelAlertReads.Any(r => r.AlertId == a.Id && r.UserId == viewer.UserId)
-                                        && !db.StaffTasks.Any(t => t.Id == a.TaskId && Finished.Contains(t.State)), ct);
+    private sealed record ReceiptAbout(string? Name, string? WaId, string? For, int Amount, string State, DateTimeOffset? ReviewedAt)
+    {
+        /// <summary>Reviewed since the alert was made, or no longer waiting (refunded, the booking cancelled…).</summary>
+        public bool ReviewedSince(DateTimeOffset made) => ReviewedAt >= made || !Waiting.Contains(State);
+    }
+
+    /// <summary>v1.111: who sent each receipt and what it pays for (an appointment, or a written service).</summary>
+    private async Task<Dictionary<Guid, ReceiptAbout>> ReceiptsAsync(Guid[] ids, CancellationToken ct)
+    {
+        if (ids.Length == 0)
+        {
+            return [];
+        }
+
+        var rows = await (from r in db.PaymentReceipts.AsNoTracking()
+                          join pay in db.Payments.AsNoTracking() on r.PaymentId equals pay.Id
+                          join ap in db.Appointments.AsNoTracking() on pay.AppointmentId equals (Guid?)ap.Id into aps
+                          from ap in aps.DefaultIfEmpty()
+                          join so in db.ServiceOrders.AsNoTracking() on pay.ServiceOrderId equals (Guid?)so.Id into sos
+                          from so in sos.DefaultIfEmpty()
+                          where ids.Contains(r.Id)
+                          select new
+                          {
+                              r.Id, Person = ap != null ? (Guid?)ap.PersonId : so != null ? (Guid?)so.PersonId : null,
+                              For = ap != null ? ap.Service : so != null ? so.Kind : null, pay.AmountDue, pay.State, pay.ReviewedAt,
+                          }).ToListAsync(ct);
+        var people = rows.Where(r => r.Person != null).Select(r => r.Person!.Value).Distinct().ToArray();
+        var who = await db.Persons.AsNoTracking().Where(p => people.Contains(p.Id))
+            .Select(p => new { p.Id, p.OfficeName, p.WaId }).ToDictionaryAsync(p => p.Id, ct);
+        return rows.ToDictionary(r => r.Id, r =>
+        {
+            var p = r.Person is { } id && who.TryGetValue(id, out var found) ? found : null;
+            return new ReceiptAbout(p?.OfficeName, p?.WaId, r.For, r.AmountDue, r.State, r.ReviewedAt);
+        });
+    }
+
+    /// <summary>v1.111: the receipt alerts whose payment was reviewed since they were made (read for everyone).</summary>
+    private IQueryable<long> ReviewedReceiptAlerts() =>
+        from a in db.PanelAlerts.AsNoTracking()
+        join r in db.PaymentReceipts.AsNoTracking() on a.ReceiptId equals (Guid?)r.Id
+        join pay in db.Payments.AsNoTracking() on r.PaymentId equals pay.Id
+        where pay.ReviewedAt >= a.CreatedAt || !Waiting.Contains(pay.State)
+        select a.Id;
+
+    public Task<int> UnreadAsync(Viewer viewer, CancellationToken ct)
+    {
+        var reviewed = ReviewedReceiptAlerts(); // v1.111
+        return Visible(viewer).CountAsync(a => !db.PanelAlertReads.Any(r => r.AlertId == a.Id && r.UserId == viewer.UserId)
+                                               && !db.StaffTasks.Any(t => t.Id == a.TaskId && Finished.Contains(t.State))
+                                               && !reviewed.Contains(a.Id), ct);
+    }
 
     public Task<int> UnreadSystemAsync(Viewer viewer, CancellationToken ct) =>
         Visible(viewer).CountAsync(a => a.Kind == AlertKinds.System && !db.PanelAlertReads.Any(r => r.AlertId == a.Id && r.UserId == viewer.UserId), ct);
@@ -254,10 +342,17 @@ public sealed class PanelAlertStore(HazemDbContext db) : IPanelAlertStore
                      || (managers && !db.PanelUsers.Any(u => u.Active && u.Approval == PanelUser.ApprovalApproved && u.Role == Permissions.Staff));
         var staff = viewer.StaffId;
         string[] lawyerWork = [.. AlertAudience.LawyerWork];
+        // v1.111: a receipt's alert is the staff's (B-05), a written service's the lawyer's, who confirms it himself (B-16)
+        var services = from r in db.PaymentReceipts.AsNoTracking()
+                       join pay in db.Payments.AsNoTracking() on r.PaymentId equals pay.Id
+                       where pay.ServiceOrderId != null
+                       select (Guid?)r.Id;
         return from a in db.PanelAlerts.AsNoTracking()
                join t in db.StaffTasks.AsNoTracking() on a.TaskId equals (Guid?)t.Id into ts
                from t in ts.DefaultIfEmpty()
-               where t == null
+               where a.Kind == AlertKinds.Receipt
+                   ? services.Contains(a.ReceiptId) ? lawyer : office
+                   : t == null
                    ? a.Kind == AlertKinds.System && managers
                    : a.Kind == AlertKinds.Rating || t.Type == AlertAudience.RatingType
                        ? managers

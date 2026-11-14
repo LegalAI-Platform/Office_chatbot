@@ -6,7 +6,7 @@ import { useDashboard } from "../shared/api/dashboard";
 import { avatarUrl, can, useLogout, useMe } from "../shared/api/session";
 import { ALERT_KINDS, label, ROLES } from "../shared/lib/labels";
 import { countWords, firstAndMore, groupByClient, LATE_TASKS, NEW_ALERTS, thingsWords } from "../shared/lib/group";
-import { alertLine, notifyState, testNotification, useAlertNotifications } from "../shared/lib/notify";
+import { alertLine, alertTarget, notifyState, testNotification, useAlertNotifications } from "../shared/lib/notify";
 import { reloadAt } from "../shared/lib/reload";
 import { cairoLongDate, cairoTime, timeAgo } from "../shared/lib/time";
 import { Avatar } from "../shared/ui/Avatar";
@@ -311,11 +311,12 @@ function Bell({ late }: { late: number }) {
   const requests = items.filter((a) => a.kind !== "system");
   const system = items.filter((a) => a.kind === "system");
   const now = new Date();
-  const openTask = useCallback((id: string) => void navigate(`/tasks/${id}`), [navigate]);
-  useAlertNotifications(alerts.data?.items, unreadRequests, openTask);
+  // a task's page, or «الإيصالات» for a receipt waiting (v1.111)
+  const openPage = useCallback((to: string) => void navigate(to), [navigate]);
+  useAlertNotifications(alerts.data?.items, unreadRequests, openPage);
   const row = (a: PanelAlert) => (
     <li key={a.id}>
-      <button type="button" onClick={() => { if (!a.read) read.mutate([a.id]); setOpen(false); if (a.task_id) navigate(`/tasks/${a.task_id}`); }}
+      <button type="button" onClick={() => { if (!a.read) read.mutate([a.id]); setOpen(false); const to = alertTarget(a); if (to) navigate(to); }}
         className={`grid w-full gap-0.5 rounded-lg px-2.5 py-2 text-start hover:bg-muted ${a.read ? "opacity-70" : ""}`}>
         <span className={`flex items-center gap-2 font-bold ${a.kind === "system" ? "text-[13px] text-ink-soft" : "text-sm"}`}>
           {!a.read ? <span className={`size-2 shrink-0 rounded-full ${a.kind === "system" ? "bg-gold" : "bg-red"}`} aria-label="جديد" role="img" /> : null}
