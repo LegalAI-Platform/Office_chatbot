@@ -12,6 +12,8 @@ WhatsApp or Meta: every reply goes Chatwoot → api → n8n → Meta, with every
 | A staff member's reply | Chatwoot's webhook (signed) → api → n8n → WhatsApp, once (`hazem.chatwoot_replies`). Hazem then stays quiet with that client (B-12) |
 | A reply n8n refuses (outside the 24 hours, not a test number…) | a private note in the conversation, in Arabic |
 | **Resolve** in Chatwoot | the client goes back to Hazem (the owner's choice), with a private note |
+| **(1.113)** The macro «🤖 رجّع لحازم» (the conversation's side panel → Macros → ▶) | the same as Resolve: its only action is `resolve_conversation`. The owner asked for a named button on 2026-11-14 («اعمله»). It is global, made by «حازم (النظام)» (the account's only administrator), and every agent may run it. It lives in Chatwoot's database, so a new install makes it again: Settings → Macros → one action «Resolve conversation», visible to everyone |
+| Assigning a conversation to someone | changes nothing for Hazem: he stays quiet only after a staff member writes to the client |
 | A file or photo sent from Chatwoot | not sent (text only); a private note says so |
 
 ## Accounts
