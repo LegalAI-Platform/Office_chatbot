@@ -165,6 +165,40 @@ public sealed class ChatwootApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal(actions.Count, said.Count(m => (string)m["message_type"]! == "outgoing"));
     }
 
+    /// <summary>
+    /// v1.113 (the owner, 2026-11-14, of one message 8 times in Chatwoot: «الرساله بتاعتها جت اكتر من مره»): a client with a
+    /// WhatsApp username has a BSUID for a key (0039). hazem.chatwoot_inbound refused it (0072's digits-only check), so the words
+    /// were posted again every round until their turn came, and once more with it. Migration 0084 takes the key.
+    /// </summary>
+    [Fact]
+    public async Task A_username_clients_words_reach_chatwoot_once()
+    {
+        const string bsuid = "EG.13131313131313131313";
+        await db.SetAsync("hazem.recipients", $"{Client},{bsuid}");
+        var wamid = $"wamid.CW-{++_n}";
+        await db.ExecAsync("INSERT INTO app.wa_inbound_messages (wamid, wa_id, contact_name, phone_number_id, message_type, sent_at, raw) VALUES ('"
+                           + wamid + "', '" + bsuid + "', 'عميل', 'test', 'text', now(), '{\"text\": {\"body\": \"ممكن نحجز معاد؟\"}}'::jsonb)");
+        Assert.Equal(0, await Sync());
+        Assert.Equal(0, await Sync());
+        Assert.Equal(0, await Sync());
+        Assert.Equal(1, await db.ScalarAsync<long>($"SELECT count(*) FROM hazem.chatwoot_inbound WHERE wa_id = '{bsuid}'"));
+        var conversation = await db.ScalarAsync<long>($"SELECT conversation_id FROM hazem.chatwoot_threads WHERE wa_id = '{bsuid}'");
+        Assert.Equal("ممكن نحجز معاد؟", (string)Assert.Single(_factory.Chatwoot.Messages(conversation))["content"]!);
+
+        var r = await _n8n.PostAsJsonAsync("/api/hazem/turns", new JsonObject
+        {
+            ["turn_id"] = $"wt:00000000-0000-0000-0070-{++_n:D12}", ["wa_id"] = bsuid, ["contact_name"] = "عميل",
+            ["messages"] = new JsonArray(new JsonObject { ["wamid"] = wamid, ["type"] = "text", ["text"] = "ممكن نحجز معاد؟" }),
+        }, Ct);
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        var actions = (await r.Content.ReadFromJsonAsync<JsonNode>(Ct))!["actions"]!.AsArray();
+        Assert.NotEmpty(actions);
+        Assert.Equal(1, await Sync());
+        var said = _factory.Chatwoot.Messages(conversation);
+        Assert.Single(said, m => (string)m["message_type"]! == "incoming");
+        Assert.Equal(actions.Count, said.Count(m => (string)m["message_type"]! == "outgoing"));
+    }
+
     [Fact]
     public async Task Chatwoot_down_keeps_the_turn_for_later_and_the_clients_order()
     {

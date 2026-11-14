@@ -83,8 +83,14 @@ public interface IChatwootStore
     /// <summary>The clients' messages of the last minutes not in Chatwoot yet and whose turn is not done, oldest first.</summary>
     Task<IReadOnlyList<EarlyMessage>> EarlyMessagesAsync(int limit, CancellationToken ct) => Task.FromResult<IReadOnlyList<EarlyMessage>>([]);
 
-    /// <summary>This message is in Chatwoot: its turn will not post it again.</summary>
-    Task MarkEarlyAsync(string wamid, string waId, CancellationToken ct) => Task.CompletedTask;
+    /// <summary>
+    /// This message is taken for Chatwoot before it is posted, so its turn will not post it again; false if it was taken
+    /// before. v1.113: taken first, so a record that cannot be kept never posts it again every round.
+    /// </summary>
+    Task<bool> ClaimEarlyAsync(string wamid, string waId, CancellationToken ct) => Task.FromResult(true);
+
+    /// <summary>v1.113: its post failed, so the message goes back to its turn (posted with Hazem's answer).</summary>
+    Task ReleaseEarlyAsync(string wamid, CancellationToken ct) => Task.CompletedTask;
 
     /// <summary>False if this message was seen before (a webhook delivered twice).</summary>
     Task<bool> ClaimReplyAsync(long messageId, long conversationId, string waId, long? userId, CancellationToken ct);
@@ -100,6 +106,14 @@ public sealed class ChatwootMirror(IChatwootApi api, IChatwootStore store, TimeP
     /// <summary>After this many tries a turn is left (healthcheck shows it); its client's later turns go on.</summary>
     public const int MaxAttempts = 30;
 
+    private readonly List<string> earlyFailures = [];
+
+    /// <summary>
+    /// v1.113: the clients' early words that failed this round, for the worker's log: where, the kind of error and the first
+    /// line of its message. Never a number or the words themselves.
+    /// </summary>
+    public IReadOnlyList<string> EarlyFailures => earlyFailures;
+
     /// <summary>How many turns were copied this round.</summary>
     public async Task<int> SyncAsync(CancellationToken ct)
     {
@@ -112,6 +126,9 @@ public sealed class ChatwootMirror(IChatwootApi api, IChatwootStore store, TimeP
         var failedClients = new HashSet<string>(StringComparer.Ordinal);
         // The client's words first, the moment they are stored: the staff see them while Hazem is still answering. One that fails
         // here is left to its turn (posted with Hazem's answer, as before).
+        // v1.113: taken before it is posted. It used to be recorded after the post, and a record that could not be kept (a
+        // username client's key, migration 0084) posted the same words again every round: 8 copies of one message. Now a
+        // message that cannot be taken waits for its turn, and one whose post fails is given back to its turn.
         foreach (var early in await store.EarlyMessagesAsync(Batch, ct))
         {
             if (failedClients.Contains(early.WaId))
@@ -119,15 +136,26 @@ public sealed class ChatwootMirror(IChatwootApi api, IChatwootStore store, TimeP
                 continue;
             }
 
+            var taken = false;
             try
             {
+                if (!await store.ClaimEarlyAsync(early.Message.Wamid, early.WaId, ct))
+                {
+                    continue; // taken before: already in Chatwoot
+                }
+
+                taken = true;
                 var thread = await ThreadAsync(early.WaId, early.ContactName, ct);
                 await api.PostAsync(thread.ConversationId, ChatwootText.Client(early.Message), ChatwootPost.Incoming, ct);
-                await store.MarkEarlyAsync(early.Message.Wamid, early.WaId, ct);
             }
-            catch (Exception) when (!ct.IsCancellationRequested)
+            catch (Exception e) when (!ct.IsCancellationRequested)
             {
                 failedClients.Add(early.WaId);
+                earlyFailures.Add(Failure("early", e));
+                if (taken)
+                {
+                    await GiveBackAsync(early.Message.Wamid, ct);
+                }
             }
         }
 
@@ -189,6 +217,22 @@ public sealed class ChatwootMirror(IChatwootApi api, IChatwootStore store, TimeP
     }
 
     internal static string Short(string s) => s.Length <= 300 ? s : s[..300];
+
+    /// <summary>Where, the kind of error and the first line of its message (a database error's details come on later lines).</summary>
+    internal static string Failure(string where, Exception e) => Short($"{where}: {e.GetType().Name}: {e.Message.Split('\n', 2)[0].Trim()}");
+
+    /// <summary>A post that failed gives its message back to its turn. If even that fails, the words miss Chatwoot: the log says so.</summary>
+    private async Task GiveBackAsync(string wamid, CancellationToken ct)
+    {
+        try
+        {
+            await store.ReleaseEarlyAsync(wamid, ct);
+        }
+        catch (Exception e) when (!ct.IsCancellationRequested)
+        {
+            earlyFailures.Add(Failure("early give-back", e));
+        }
+    }
 }
 
 /// <summary>
