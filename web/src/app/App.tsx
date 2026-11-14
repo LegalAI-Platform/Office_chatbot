@@ -75,7 +75,7 @@ export const routes = [
             ],
           },
           { path: "/chats", element: <LazyPage path="/chats" /> },
-          { path: "/documents", element: <ComingSoon title="المستندات" icon="document" what="العقود والصور والمستندات التي أرسلها العملاء، مرتبةً حسب العميل." when="بعد المحادثات" /> },
+          { path: "/documents", element: <LazyPage path="/documents" /> }, // v1.110: every file a client sent, by client
           {
             element: <RequirePermission permission="reports.view" />,
             children: [{ path: "/reports", element: <LazyPage path="/reports" /> }],

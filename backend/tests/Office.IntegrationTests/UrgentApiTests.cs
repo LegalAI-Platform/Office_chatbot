@@ -175,10 +175,10 @@ public sealed class UrgentApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Empty(SentSince(before));
         Assert.Equal("ok", await db.ScalarAsync<string>($"SELECT urgent_decision FROM hazem.payment_receipts WHERE id = '{receipt}'"));
 
-        // No escalation after a decision.
+        // No escalation after a decision: the call's one task (v1.110) stays where the payment opened it.
         _clock.Advance(TimeSpan.FromMinutes(30));
         Assert.Equal(0, await Worker());
-        Assert.Equal(0L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.staff_tasks WHERE type LIKE 'urgent_call%'"));
+        Assert.Equal("urgent_call", await db.ScalarAsync<string>("SELECT string_agg(type, ',') FROM hazem.staff_tasks WHERE type LIKE 'urgent%'"));
         // The numbers never reach the logs.
         Assert.DoesNotContain(_factory.Logs.Lines, l => l.Contains(Lawyer, StringComparison.Ordinal) || l.Contains("01000000113", StringComparison.Ordinal));
     }
@@ -212,6 +212,8 @@ public sealed class UrgentApiTests(TestDatabase db) : IAsyncLifetime
         before = _factory.N8n.Requests.Count;
         Assert.Equal(1, await Worker());
         IsAlert(Assert.Single(SentSince(before)), Lawyer, call, "12:08 م"); // the call set again from receipt 2
+        // v1.110: still one task for the call, whatever receipts follow
+        Assert.Equal("urgent_call", await db.ScalarAsync<string>("SELECT string_agg(type, ',') FROM hazem.staff_tasks WHERE type LIKE 'urgent%'"));
 
         // «تمام» on receipt 1 (the owner's friend's case): refused, nothing to the client, receipt 2 is sent to the presser instead.
         before = _factory.N8n.Requests.Count;
@@ -229,7 +231,7 @@ public sealed class UrgentApiTests(TestDatabase db) : IAsyncLifetime
     }
 
     [Fact]
-    public async Task No_decision_in_time_goes_to_the_manager_the_client_hears_urgent_waiting_once_and_the_managers_get_an_urgent_task()
+    public async Task No_decision_in_time_goes_to_the_manager_the_client_hears_urgent_waiting_once_and_the_call_s_task_goes_to_the_staff()
     {
         var call = await Paid();
         await Worker();
@@ -243,7 +245,8 @@ public sealed class UrgentApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal(2, sent.Count);
         IsAlert(sent[0], Manager, call);
         Assert.Equal((Client, "بنتواصل مع المستشار دلوقتي، وهيكلم حضرتك."), ((string)sent[1]["wa_id"]!, (string)sent[1]["text"]!));
-        Assert.Equal(1L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.staff_tasks WHERE type = 'urgent_call_unanswered'"));
+        // v1.110: the call's one task moved on (no task of its own), so the staff get its alert
+        Assert.Equal("urgent_call_unanswered", await db.ScalarAsync<string>("SELECT string_agg(type, ',') FROM hazem.staff_tasks WHERE type LIKE 'urgent%'"));
         using (var scope = _factory.Services.CreateScope())
         {
             await scope.ServiceProvider.GetRequiredService<Office.Application.Panel.IPanelAlertStore>().MakeAsync(Ct);
@@ -264,16 +267,23 @@ public sealed class UrgentApiTests(TestDatabase db) : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Without_the_lawyer_s_number_or_with_the_template_refused_the_office_gets_an_urgent_task_once()
+    public async Task Without_the_lawyer_s_number_or_with_the_template_refused_the_call_s_one_task_says_so_once_then_goes_to_the_staff()
     {
         await db.SetAsync("office.lawyer_whatsapp", "");
         await Paid();
         var before = _factory.N8n.Requests.Count;
         Assert.Equal(1, await Worker());
         Assert.Empty(SentSince(before)); // nothing to send to
-        Assert.Equal(1L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.staff_tasks WHERE type = 'urgent_call_failed'"));
+        // v1.110: the call's own task (urgent_call) moved on, never a task of its own
+        Task<string?> Urgent() => db.ScalarAsync<string>("SELECT string_agg(type, ',') FROM hazem.staff_tasks WHERE type LIKE 'urgent%'");
+        Assert.Equal("urgent_call_failed", await Urgent());
         Assert.Equal(0, await Worker()); // never a retry in a loop
-        Assert.Equal(1L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.staff_tasks WHERE type = 'urgent_call_failed'"));
+        Assert.Equal("urgent_call_failed", await Urgent());
+
+        // nobody's decision in time: the same task goes to the staff
+        _clock.Advance(TimeSpan.FromMinutes(11));
+        Assert.Equal(1, await Worker());
+        Assert.Equal("urgent_call_unanswered", await Urgent());
     }
 
     [Fact]
@@ -365,11 +375,12 @@ public sealed class UrgentApiTests(TestDatabase db) : IAsyncLifetime
         await Turn(new JsonObject { ["type"] = "text", ["text"] = "السلام عليكم" });
         await Press("sv:urgent");
         await Turn(new JsonObject { ["type"] = "text", ["text"] = "محمد أحمد علي حسن" });
-        Assert.Equal(0L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.staff_tasks WHERE type = 'urgent_request'")); // pressed, not paid
+        Assert.Equal(0L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.staff_tasks WHERE type LIKE 'urgent%'")); // pressed, not paid
 
         _clock.Advance(TimeSpan.FromMinutes(5));
         await Receipt();
-        Assert.Equal(1L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.staff_tasks WHERE type = 'urgent_request'")); // paid
+        // paid: v1.110, the call's one task
+        Assert.Equal("urgent_call", await db.ScalarAsync<string>("SELECT string_agg(type, ',') FROM hazem.staff_tasks WHERE type LIKE 'urgent%'"));
 
         using (var scope = _factory.Services.CreateScope())
         {

@@ -8,10 +8,12 @@ public sealed class PanelRulesTests
     // The whole table, cell by cell: a change to a role must change this test on purpose.
     // v1.100: texts.manage and testing.forget are the maintenance role's only (with maintenance.manage).
     // v1.106: reports.view too (the owner: «اكونت صيانه بس»).
+    // v1.110: the lawyer has users.manage («الحسابات»), as the manager (the owner: «خلي المستشار يشوفها»).
+    // v1.110: and reports.view again (the owner: «تكون ظاهره للمستشار»), without Hazem's own parts (maintenance.manage)
     [Theory]
     [InlineData("maintenance", "tasks.view_own tasks.view_all tasks.update tasks.assign users.manage account.self lists.manage texts.manage reports.view conversations.unmute schedule.manage office.manage payments.verify payments.refund services.manage services.price urf.manage urf.review prices.manage testing.forget maintenance.manage")]
     [InlineData("manager", "tasks.view_own tasks.view_all tasks.update tasks.assign users.manage account.self lists.manage conversations.unmute schedule.manage office.manage payments.verify payments.refund services.manage services.price urf.manage urf.review prices.manage")]
-    [InlineData("lawyer", "tasks.view_own tasks.view_all tasks.update tasks.assign account.self lists.manage schedule.manage office.manage payments.verify payments.refund services.manage services.price urf.manage urf.review prices.manage")]
+    [InlineData("lawyer", "tasks.view_own tasks.view_all tasks.update tasks.assign users.manage account.self lists.manage reports.view schedule.manage office.manage payments.verify payments.refund services.manage services.price urf.manage urf.review prices.manage")]
     [InlineData("staff", "tasks.view_own tasks.update account.self schedule.manage payments.verify payments.refund services.manage urf.manage")]
     public void Each_role_has_exactly_its_permissions(string role, string expected)
     {
@@ -96,4 +98,62 @@ public sealed class PanelRulesTests
     public void An_alert_email_builds_with_no_culture_data() =>
         Assert.Contains("المطلوب قبل:", PanelMails.Alert("a@example.test",
             new AlertToMail(1, AlertKinds.Urgent, Guid.NewGuid(), "urgent_request", DateTimeOffset.UtcNow, null), "http://x").Text);
+
+    // v1.110 (the owner: «كميه ايميلات كتيره اوي» … «موافق»): a paid urgent call is one task. Its alerts e-mail whose turn
+    // it is: nobody while the lawyer's WhatsApp alert is his, the lawyer when it did not reach him, the staff when nobody
+    // took it in time, and never «late». Every other urgent alert, as before (the lawyer and the staff both).
+    [Theory]
+    [InlineData("task_urgent", "urgent_call", true, "urgent")]
+    [InlineData("task_urgent", "urgent_call_failed", false, "lawyer")]
+    [InlineData("task_urgent", "urgent_call_unanswered", false, "office")]
+    [InlineData("task_overdue", "urgent_call", true, "office")]
+    [InlineData("task_overdue", "urgent_call_failed", true, "office")]
+    [InlineData("task_overdue", "urgent_call_unanswered", true, "office")]
+    [InlineData("task_urgent", "urgent_request", false, "urgent")]
+    [InlineData("task_urgent", "safety_alert", false, "urgent")]
+    [InlineData("task_overdue", "urgent_request", false, "office")]
+    [InlineData("task_overdue", "service_pricing", false, "lawyer")]
+    public void A_paid_urgent_call_emails_only_whose_turn_it_is(string kind, string type, bool bellOnly, string audience)
+    {
+        Assert.Equal(bellOnly, AlertKinds.BellOnly(kind, type));
+        Assert.Equal(audience, AlertAudience.For(kind, type));
+    }
+
+    // v1.110 (the owner: «السيرش بار هنا حاسه بيسرش غلط» … «اعمل بحث شامل»): the search's term is the name's words, and a
+    // number's end however it was typed (Arabic digits, spaces, «+», brackets); under 3 digits is no number
+    [Theory]
+    [InlineData("احمد مصطفي", "احمد|مصطفي", "")]
+    [InlineData("  ٠١٠٠ ٠٠٠ ٠٧١٣ ", "", "01000000713")]
+    [InlineData("+20 (100) 000-0713", "", "201000000713")]
+    [InlineData("احمد ٧١٣", "احمد", "713")]
+    [InlineData("احمد 71", "احمد", "")]
+    [InlineData("71", "", "")]
+    [InlineData("", "", "")]
+    public void The_search_term_is_the_name_s_words_and_the_number_s_end(string q, string words, string digits)
+    {
+        var term = SearchTerm.Parse(q);
+        Assert.Equal(words, string.Join('|', term.Words));
+        Assert.Equal(digits, string.Join('|', term.Digits));
+        Assert.Equal(words.Length == 0 && digits.Length == 0, term.IsEmpty);
+    }
+
+    [Fact]
+    public void A_paid_urgent_call_s_two_emails_say_what_happened_and_never_the_client()
+    {
+        var task = Guid.NewGuid();
+        var failed = PanelMails.Alert("lawyer@example.test",
+            new AlertToMail(1, AlertKinds.Urgent, task, "urgent_call_failed", DateTimeOffset.UtcNow, null), "http://x");
+        Assert.StartsWith("لم يصلك تنبيه استشارة عاجلة على واتساب |", failed.Subject, StringComparison.Ordinal); // then the office's name
+        Assert.Contains("النوع: استشارة عاجلة مدفوعة: لم يصل تنبيهها إلى المستشار", failed.Text);
+        Assert.Contains($"http://x/tasks/{task}", failed.Text);
+
+        var unanswered = PanelMails.Alert("staff@example.test",
+            new AlertToMail(2, AlertKinds.Urgent, task, "urgent_call_unanswered", DateTimeOffset.UtcNow, null), "http://x");
+        Assert.StartsWith("استشارة عاجلة مدفوعة لم يتولّها أحد |", unanswered.Subject, StringComparison.Ordinal);
+        Assert.Contains("تواصل مع المستشار أو مع العميل الآن.", unanswered.Text);
+
+        // any other urgent alert, as before
+        Assert.StartsWith("طلب عاجل |", PanelMails.Alert("a@example.test",
+            new AlertToMail(3, AlertKinds.Urgent, task, "safety_alert", DateTimeOffset.UtcNow, null), "http://x").Subject, StringComparison.Ordinal);
+    }
 }

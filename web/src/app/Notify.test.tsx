@@ -93,7 +93,7 @@ describe("v1.104 Windows notifications", () => {
     const { next } = watch([]);
     next([alert({ id: 6, kind: "task_new", task_type: "existing_client_message", client_name: "محمد عماد", phone_last3: "589" })]);
     expect(made).toEqual([expect.objectContaining({
-      title: "عميل يحتاج إلى موظف · محمد عماد", body: "موكّل حالي يستفسر عن قضيته · رقمه ينتهي بـ 589\nغير مُسندة لأحد", stay: false,
+      title: "عميل بحاجة إلى متابعة من المكتب · محمد عماد", body: "موكّل حالي يستفسر عن قضيته · رقمه ينتهي بـ 589\nغير مُسندة لأحد", stay: false,
     })]);
   });
 

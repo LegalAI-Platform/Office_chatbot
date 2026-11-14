@@ -136,7 +136,9 @@ function Row({ icon, term, children }: { icon: IconName; term: string; children:
 }
 
 const hazemState = (s?: string) =>
-  s === "human_handoff" ? "متوقف: موظف يتولى المحادثة" : s === "muted" ? "مكتوم" : s === "ignored" ? "مجموعة، يتجاهلها" : "يعمل";
+  // v1.110 (the owner: «عاوز جمل معبره بالعربيه الفصحي»)
+  s === "human_handoff" ? "متوقف: أحد موظفي المكتب يتولى المحادثة" : s === "muted" ? "مكتوم: لا يردّ على هذا العميل"
+    : s === "ignored" ? "محادثة جماعية: لا يردّ عليها" : "يردّ تلقائيًا";
 
 const MEDIA_ICON: Record<string, IconName> = { image: "camera", video: "video", audio: "phone", document: "document" };
 

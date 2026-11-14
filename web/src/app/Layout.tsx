@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router";
 import { useAlerts, useAlertStream, useMarkAlertsRead } from "../shared/api/alerts";
 import type { PanelAlert } from "../shared/api/types";
@@ -8,11 +7,12 @@ import { avatarUrl, can, useLogout, useMe } from "../shared/api/session";
 import { ALERT_KINDS, label, ROLES } from "../shared/lib/labels";
 import { countWords, firstAndMore, groupByClient, LATE_TASKS, NEW_ALERTS, thingsWords } from "../shared/lib/group";
 import { alertLine, notifyState, testNotification, useAlertNotifications } from "../shared/lib/notify";
+import { reloadAt } from "../shared/lib/reload";
 import { cairoLongDate, cairoTime, timeAgo } from "../shared/lib/time";
 import { Avatar } from "../shared/ui/Avatar";
 import { Icon, type IconName } from "../shared/ui/Icon";
 import { ConfirmHost, Toaster } from "../shared/ui/feedback";
-import { CommandPalette } from "./CommandPalette";
+import { SearchBar } from "./SearchBar";
 import { prefetchAll, usePrefetch } from "./lazyPages";
 import { Tour } from "./Tour";
 import { TOUR_REPLAY } from "./tourSteps";
@@ -261,7 +261,7 @@ function TopBar({ late }: { late: number }) {
         </HomeLogo>
         <Clock />
         <Bell late={late} />
-        <Search />
+        <SearchBar />
         <UserMenu />
       </div>
     </header>
@@ -270,22 +270,17 @@ function TopBar({ late }: { late: number }) {
 
 /** TASK 07c: the office's alerts (overdue, urgent, a client asking for someone) that this person may see. */
 /**
- * The office's logo (the side bar's seal and name, the phone's top bar): back to the home page with everything asked again,
- * like a refresh without reloading the page (the tester: «when I press the logo it refreshes and gets me back on the main
- * page»). On the home page already, it only asks again and goes back to the top.
+ * The office's logo (the side bar's seal and name, the phone's top bar): the home page, reloaded (the tester: «when I press
+ * the logo it refreshes and gets me back on the main page»). v1.110 (the owner: «لما يدوس علي اللوجو يعمل ريلود»): a real
+ * reload, as the browser's own button, not only everything asked again in place.
  */
 function HomeLogo({ className, children }: { className: string; children: ReactNode }) {
-  const qc = useQueryClient();
-  const navigate = useNavigate();
-  const { pathname } = useLocation();
-  const refresh = (e: ReactMouseEvent) => {
+  const reload = (e: ReactMouseEvent) => {
     if (e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return; // a new tab or window: the browser's own
     e.preventDefault();
-    if (pathname !== "/") void navigate("/");
-    window.scrollTo({ top: 0 });
-    void qc.invalidateQueries();
+    reloadAt("/");
   };
-  return <Link to="/" onClick={refresh} aria-label="الرئيسية: تحديث الصفحة" title="الرئيسية" className={className}>{children}</Link>;
+  return <Link to="/" onClick={reload} aria-label="الرئيسية: تحديث الصفحة" title="الرئيسية" className={className}>{children}</Link>;
 }
 
 function Bell({ late }: { late: number }) {
@@ -545,40 +540,3 @@ function Clock() {
   );
 }
 
-/** Finds tasks by the client's name or the last digits of the number; Ctrl K opens the quick search (CommandPalette). */
-function Search() {
-  const navigate = useNavigate();
-  const input = useRef<HTMLInputElement>(null);
-  const [palette, setPalette] = useState(false);
-  useEffect(() => {
-    const key = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        setPalette(true);
-      }
-    };
-    document.addEventListener("keydown", key);
-    return () => document.removeEventListener("keydown", key);
-  }, []);
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    const q = input.current?.value.trim() ?? "";
-    navigate(q ? `/tasks?q=${encodeURIComponent(q)}` : "/tasks");
-  };
-  return (
-    <form role="search" data-tour="search" onSubmit={submit}
-      className="group/search flex min-h-[2.9rem] min-w-0 flex-1 items-center gap-2.5 rounded-full border border-line/80 bg-card/70 ps-4 pe-2 shadow-[inset_0_1px_2px_rgb(0_0_0/0.04)] transition duration-200
-        hover:border-gold-line focus-within:border-gold focus-within:bg-card focus-within:shadow-[0_0_0_4px_rgb(176_133_82/0.16)] lg:max-w-[36rem]">
-      <Icon name="search" className="size-[18px] shrink-0 text-ink-soft transition-colors group-focus-within/search:text-gold-ink" />
-      {/* a phone shows the start of the hint, ending in «…» */}
-      <input ref={input} type="search" aria-label="بحث" placeholder="ابحث عن عميل أو موعد أو مهمة أو رقم قضية..."
-        className="min-h-10 min-w-0 flex-1 bg-transparent text-[14px] outline-none placeholder:text-ink-soft/80 max-lg:text-ellipsis" />
-      <button type="button" onClick={() => setPalette(true)} aria-label="اختصارات وبحث (Ctrl K)"
-        className="hidden shrink-0 items-center gap-1 rounded-full px-1.5 py-1 font-sans text-[11px] font-semibold text-ink-soft transition hover:bg-card-2 sm:flex" dir="ltr">
-        <kbd className="rounded-md border border-line border-b-2 bg-card px-1.5 py-0.5 font-sans">Ctrl</kbd>
-        <kbd className="rounded-md border border-line border-b-2 bg-card px-1.5 py-0.5 font-sans">K</kbd>
-      </button>
-      <CommandPalette open={palette} onClose={() => setPalette(false)} />
-    </form>
-  );
-}

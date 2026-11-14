@@ -193,6 +193,43 @@ export interface AlertList {
   items: PanelAlert[];
 }
 
+/**
+ * v1.110 (the owner: «اعمل بحث شامل»): the search bar's one search (POST /search). A client found, with where the panel
+ * opens him (his task, else the day of his appointment); his number's last 3 digits only, never the number.
+ */
+export interface SearchClient {
+  id: string;
+  name: string | null;
+  phone_last3: string | null;
+  open_tasks: number;
+  task_id: string | null;
+  appointment_at: string | null;
+}
+
+export interface SearchAppointment {
+  id: string;
+  name: string | null;
+  phone_last3: string | null;
+  service: string;
+  state: string;
+  starts_at: string;
+}
+
+export interface SearchTask {
+  id: string;
+  name: string | null;
+  phone_last3: string | null;
+  type: string;
+  state: string;
+  due_at: string;
+}
+
+export interface SearchResults {
+  clients: SearchClient[];
+  appointments: SearchAppointment[];
+  tasks: SearchTask[];
+}
+
 export type ListKind = "existing_client" | "lawyer_direct" | "blocked";
 
 export interface ListEntry {

@@ -159,7 +159,7 @@ public sealed partial class BookingFlowTests
         UrgentOn();
         var row = await UrgentPressed();
         Assert.Equal([TextKeys.UrgentPrice, TextKeys.AskNameBooking], Keys(row)); // v1.35: the name first, nothing held yet
-        Assert.DoesNotContain(PendingTask.UrgentRequest, TaskKinds(row)); // v1.38: the office's urgent task waits for the payment
+        Assert.DoesNotContain(TaskKinds(row), k => k is PendingTask.UrgentRequest or PendingTask.UrgentCall); // v1.38: the office's urgent task waits for the payment
         Assert.Empty(_booking.Appointments);
         _script["محمد أحمد"] = new("provide_name", null, "unknown", "محمد أحمد", 0.95);
         var d = await Say("محمد أحمد");
@@ -214,7 +214,9 @@ public sealed partial class BookingFlowTests
         _now = Now.AddMinutes(7).AddSeconds(30);
         var d = await Receipt();
         Assert.Equal([TextKeys.UrgentNow], Keys(d));
-        Assert.Contains(PendingTask.UrgentRequest, TaskKinds(d)); // v1.38: the office's urgent task once he has paid
+        // v1.38: the office's urgent task once he has paid. v1.110: the call's one task (no urgent_request beside it).
+        Assert.Contains(PendingTask.UrgentCall, TaskKinds(d));
+        Assert.DoesNotContain(PendingTask.UrgentRequest, TaskKinds(d));
         Assert.Equal((AppointmentInfo.Confirmed, Now.AddMinutes(8)), (TheCall.State, TheCall.Start)); // now, rounded up to the minute
         Assert.Equal(PaymentInfo.ProofReceived, _booking.Payments[TheCall.Id].State); // the review stays the panel's
     }
@@ -273,7 +275,7 @@ public sealed partial class BookingFlowTests
         var paid = await Receipt();
         Assert.Equal([TextKeys.UrgentLater], Keys(paid)); // not urgent_after («المستشار في مكالمة دلوقتي»)
         Assert.Equal("هيكلم حضرتك النهارده الساعة 10:00 ص", Assert.Single(paid.Actions).Text);
-        Assert.Contains(PendingTask.UrgentRequest, TaskKinds(paid));
+        Assert.Contains(PendingTask.UrgentCall, TaskKinds(paid)); // v1.110: the call's one task
     }
 
     [Fact]
@@ -286,7 +288,8 @@ public sealed partial class BookingFlowTests
         await Receipt(); // the one urgent task, with the receipt
         _now = AvailabilityTests.At(20, 1, 33);
         _script["خليه يكلمني ضروري ناو"] = new("urgent", null, "unknown", null, 0.95);
-        Assert.DoesNotContain(PendingTask.UrgentRequest, TaskKinds(await Say("خليه يكلمني ضروري ناو"))); // one bell, one e-mail
+        // one task, one bell (v1.110: and no e-mail while the lawyer's WhatsApp alert is his)
+        Assert.DoesNotContain(TaskKinds(await Say("خليه يكلمني ضروري ناو")), k => k is PendingTask.UrgentRequest or PendingTask.UrgentCall);
     }
 
     [Fact]

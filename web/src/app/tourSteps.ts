@@ -85,7 +85,9 @@ export function tourSteps(me: Me): TourStep[] {
     },
     {
       id: "search", icon: "search", targets: ["search"], title: "البحث",
-      body: (on) => "ابحث في المهام باسم العميل أو بآخر أرقام هاتفه." + (on.wide ? " ويفتح Ctrl K اختصارات لكل صفحة." : ""),
+      // v1.110 (the owner: «اعمل بحث شامل»): the clients, their appointments and the tasks, as it is typed
+      body: (on) => "ابحث عن عميل أو موعد أو مهمة باسم العميل أو بآخر أرقام هاتفه، والنتائج تظهر أثناء الكتابة."
+        + (on.wide ? " ويفتح Ctrl K اختصارات لكل صفحة." : ""),
     },
     {
       // a phone: «المزيد» too, whose sheet ends with «الإعدادات» (v1.101: no tab of its own), and it says so

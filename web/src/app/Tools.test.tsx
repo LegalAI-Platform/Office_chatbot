@@ -10,9 +10,11 @@ const person = (over: Partial<Me>): Me => ({
   permissions: ["tasks.view_own", "tasks.update", "account.self"], must_change_password: false, two_factor: false,
   two_factor_required: false, avatar_at: null, ...over,
 });
-const lawyer = person({ role: "lawyer", permissions: ["tasks.view_own", "tasks.view_all", "tasks.update", "tasks.assign", "account.self", "lists.manage", "texts.manage"] });
-// v1.106: the reports are the maintenance account's only
-const keeper = person({ role: "maintenance", permissions: ["tasks.view_own", "tasks.view_all", "tasks.update", "tasks.assign", "account.self", "lists.manage", "texts.manage", "reports.view"] });
+// v1.110 (the owner: «تكون ظاهره للمستشار»): the lawyer reads the reports again (without Hazem's own parts)
+const lawyer = person({ role: "lawyer", permissions: ["tasks.view_own", "tasks.view_all", "tasks.update", "tasks.assign", "account.self", "lists.manage", "reports.view"] });
+const manager = person({ role: "manager", permissions: ["tasks.view_own", "tasks.view_all", "tasks.update", "tasks.assign", "account.self", "lists.manage"] });
+// v1.106: Hazem's own parts of the reports are the maintenance account's only
+const keeper = person({ role: "maintenance", permissions: ["tasks.view_own", "tasks.view_all", "tasks.update", "tasks.assign", "account.self", "lists.manage", "texts.manage", "reports.view", "maintenance.manage"] });
 const emptyDash = { urgent: 0, overdue: 0, unassigned: 0, active: 0, urgent_by_day: [], overdue_by_day: [], recent: [], priority: [] };
 
 type Answer = { status?: number; body?: unknown };
@@ -78,8 +80,8 @@ describe("TASK 07c tools", () => {
     expect(router.state.location.search).toBe(`?q=${encodeURIComponent("سارة")}`);
   });
 
-  it("hides the reports from the office (a staff member, the lawyer) and shows them to the maintenance account", async () => {
-    for (const office of [person({}), lawyer]) {
+  it("hides the reports from a staff member and the manager, and shows them to the maintenance account (v1.110: and the lawyer)", async () => {
+    for (const office of [person({}), manager]) {
       serve({ "GET /auth/me": { body: office } });
       const router = renderAt("/reports");
       await screen.findByRole("heading", { level: 1, name: /يا/ });
@@ -103,7 +105,7 @@ describe("TASK 07c tools", () => {
     });
     renderAt("/reports");
     expect(await screen.findByRole("heading", { name: "التقارير" })).toBeTruthy();
-    expect(await screen.findAllByText("50%")).toHaveLength(2); // done of all, and on time of done
+    expect(await screen.findAllByText("50%")).toHaveLength(3); // done of all (in «ملخص الفترة» and in the tasks' report), and on time of done
     // v1.31 (B-26): «تقييمات العملاء»: the average, sent and answered, by service, and the low ones with the client's name
     const ratings = screen.getByRole("region", { name: "تقييمات العملاء" });
     expect(within(ratings).getByText("3.5")).toBeTruthy();
@@ -209,7 +211,7 @@ describe("TASK 07c tools", () => {
 
   it("will not save a text longer than its limit", async () => {
     const calls = serve({
-      "GET /auth/me": { body: lawyer },
+      "GET /auth/me": { body: keeper }, // texts.manage is the maintenance account's (v1.100)
       "GET /texts": { body: [{ key: "welcome_ask_name", version: 1, text: "أهلًا", max_chars: 10, source: "DECISIONS", updated_at: "2026-10-20T10:00:00Z", versions: 1 }] },
     });
     renderAt("/texts");

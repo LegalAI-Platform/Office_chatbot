@@ -12,11 +12,12 @@ import { tourSteps } from "./tourSteps";
 // The roles' permissions as backend/src/Office.Application/Panel/Permissions.cs gives them.
 const STAFF: Permission[] = ["tasks.view_own", "tasks.update", "account.self", "schedule.manage", "payments.verify", "payments.refund",
   "services.manage", "urf.manage"];
-const LAWYER: Permission[] = ["tasks.view_own", "tasks.view_all", "tasks.update", "tasks.assign", "account.self", "lists.manage",
-  "schedule.manage", "office.manage", "payments.verify", "payments.refund", "services.manage", "services.price",
-  "urf.manage", "urf.review", "prices.manage"];
-const MANAGER: Permission[] = [...LAWYER, "users.manage", "conversations.unmute"];
-// v1.106: the reports are the maintenance role's only
+// v1.110: the lawyer has «الحسابات» (users.manage) too, as the manager (the owner: «خلي المستشار يشوفها»)
+const LAWYER: Permission[] = ["tasks.view_own", "tasks.view_all", "tasks.update", "tasks.assign", "users.manage", "account.self",
+  "lists.manage", "schedule.manage", "office.manage", "payments.verify", "payments.refund", "services.manage", "services.price",
+  "urf.manage", "urf.review", "prices.manage", "reports.view"];
+// v1.106: the reports were the maintenance role's only; v1.110 (the owner: «تكون ظاهره للمستشار»): the lawyer's too, not the manager's
+const MANAGER: Permission[] = [...LAWYER.filter((p) => p !== "reports.view"), "conversations.unmute"];
 const MAINTENANCE: Permission[] = [...MANAGER, "texts.manage", "reports.view", "testing.forget", "maintenance.manage"];
 
 const account = (over: Partial<Me> = {}): Me => ({
@@ -66,17 +67,19 @@ describe("the tour's steps (the owner's words)", () => {
 
   it("shows each role only the pages it can open", () => {
     // v1.106: the reports are the maintenance account's only («اكونت صيانه بس»)
-    for (const me of [account(), lawyer, manager]) {
+    for (const me of [account(), manager]) {
       expect(tourSteps(me).map((s) => s.id)).toEqual(
         ["welcome", "kpis", "tasks", "appointments", "chats", "money", "bell", "search", "settings", "account"]);
     }
-    expect(tourSteps(maintenance).map((s) => s.id)).toEqual(
-      ["welcome", "kpis", "tasks", "appointments", "chats", "money", "reports", "bell", "search", "settings", "account"]);
+    for (const me of [lawyer, maintenance]) {
+      expect(tourSteps(me).map((s) => s.id)).toEqual(
+        ["welcome", "kpis", "tasks", "appointments", "chats", "money", "reports", "bell", "search", "settings", "account"]);
+    }
   });
 
   it("says what each role has in «الإعدادات» and in «المهام»", () => {
     expect(body(account(), "settings")).toBe("فيها حسابك، وكلمة السر، والأسعار.");
-    expect(body(lawyer, "settings")).toBe("فيها حسابك، وكلمة السر، وقوائم المكتب، والأسعار.");
+    expect(body(lawyer, "settings")).toBe("فيها حسابك، وكلمة السر، وحسابات المكتب، وقوائم المكتب، والأسعار.");
     expect(body(manager, "settings")).toBe("فيها حسابك، وكلمة السر، وحسابات المكتب، وقوائم المكتب، والأسعار.");
     expect(body(maintenance, "settings")).toBe("فيها حسابك، وكلمة السر، وحسابات المكتب، وقوائم المكتب، ونصوص حازم وأدوات التجربة، والأسعار.");
     expect(body(account(), "tasks")).toBe("عندما يحتاج عميل على واتساب إلى أحد من المكتب، يفتح له حازم مهمة هنا. اضغط «ابدأ العمل عليها»، وعند الانتهاء «تحديد كمكتملة».");
@@ -86,8 +89,9 @@ describe("the tour's steps (the owner's words)", () => {
   it("greets by the first name, and says Ctrl K only where there is a keyboard", () => {
     expect(tourSteps(maintenance)[0]!.title).toBe("مرحبًا بك يا محمد");
     expect(tourSteps(account({ display_name: " " }))[0]!.title).toBe("مرحبًا بك");
-    expect(body(account(), "search")).toBe("ابحث في المهام باسم العميل أو بآخر أرقام هاتفه.");
-    expect(body(account(), "search", true)).toBe("ابحث في المهام باسم العميل أو بآخر أرقام هاتفه. ويفتح Ctrl K اختصارات لكل صفحة.");
+    expect(body(account(), "search")).toBe("ابحث عن عميل أو موعد أو مهمة باسم العميل أو بآخر أرقام هاتفه، والنتائج تظهر أثناء الكتابة.");
+    expect(body(account(), "search", true)).toBe(
+      "ابحث عن عميل أو موعد أو مهمة باسم العميل أو بآخر أرقام هاتفه، والنتائج تظهر أثناء الكتابة. ويفتح Ctrl K اختصارات لكل صفحة.");
   });
 
   it("says «المزيد» only when it points at «المزيد» (a phone's tab bar)", () => {
@@ -125,7 +129,7 @@ describe("the tour on the screen", () => {
     const { saved } = show(lawyer);
     await screen.findByRole("dialog");
     fireEvent.click(screen.getByRole("button", { name: "لنبدأ" }));
-    expect(screen.getByText("2 من 10")).toBeTruthy(); // v1.106: the lawyer's tour has no reports
+    expect(screen.getByText("2 من 11")).toBeTruthy(); // v1.110: the lawyer's tour has the reports
     fireEvent.click(screen.getByRole("button", { name: "تخطّي" }));
     expect(screen.queryByRole("dialog")).toBeNull();
     await waitFor(() => expect(saved()).toBe(1));
@@ -249,7 +253,7 @@ describe("the tour in the whole panel (the real shell and pages)", () => {
     expect(link.getAttribute("href")).toBe("/?tour=1");
     fireEvent.click(link);
     expect(await screen.findByRole("dialog", { name: "مرحبًا بك يا أحمد" })).toBeTruthy();
-    expect(screen.getByText("1 من 10")).toBeTruthy(); // v1.106: the lawyer's tour has no reports
+    expect(screen.getByText("1 من 11")).toBeTruthy(); // v1.110: the lawyer's tour has the reports
   });
 });
 

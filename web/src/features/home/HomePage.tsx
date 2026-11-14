@@ -6,14 +6,12 @@ import { openChatwoot } from "../../shared/api/chatwoot";
 import { useDashboard } from "../../shared/api/dashboard";
 import { can, useMe } from "../../shared/api/session";
 import type { DashboardTask, MonthReport } from "../../shared/api/types";
-import { BOOKING_SERVICES, label } from "../../shared/lib/labels";
+import { BOOKING_SERVICES, label, URGENT_TYPES as URGENT } from "../../shared/lib/labels";
 import { CONVERSATIONS, countWords, firstAndMore, groupByClient, shortType, thingsWords } from "../../shared/lib/group";
 import { cairoDate, cairoDayWord, cairoHour, cairoMonth, cairoWeek, timeAgo } from "../../shared/lib/time";
 import { Icon, type IconName } from "../../shared/ui/Icon";
 import { OwnerImg, type OwnerImage } from "../../shared/ui/Owner";
 import { ErrorState } from "../../shared/ui/ui";
-
-const URGENT = new Set(["urgent_request", "safety_alert"]);
 
 /** The fields of /booking/appointments this page shows (the booking feature has the whole type; features stay apart). */
 interface Appointment {
@@ -453,9 +451,10 @@ function NeedsYouPanel({ recent, priority: top, pending, now }: { recent?: Dashb
     .sort((x, y) => (RANK[priority(x).tone] ?? 3) - (RANK[priority(y).tone] ?? 3) || x.due_at.localeCompare(y.due_at));
   const groups = groupByClient(items, (t) => t.client_name);
   return (
-    <Panel title="مطلوب منك" icon="tasks" count={groups.length} action={<SeeAll to="/tasks" />} flush>
+    // v1.110 (the owner: «عاوز جمل معبره بالعربيه الفصحي سيتيم مكتب محاماه»): not «مطلوب منك»
+    <Panel title="بانتظار إجرائك" icon="tasks" count={groups.length} action={<SeeAll to="/tasks" />} flush>
       {pending ? <Rows n={4} /> : !items.length ? (
-        <Quiet icon="alert_receipt_green" title="لا يوجد ما ينتظرك">ستظهر هنا أي مهمة يفتحها حازم.</Quiet>
+        <Quiet icon="alert_receipt_green" title="لا توجد مهام بانتظار إجرائك">ستظهر هنا المهام التي يفتحها حازم للمكتب.</Quiet>
       ) : (
         <ul className={LIST}>
           {groups.map((g) => (g.items.length === 1

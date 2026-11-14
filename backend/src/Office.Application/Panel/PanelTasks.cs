@@ -244,7 +244,8 @@ public sealed class PanelTasks(IPanelTaskStore store, TimeProvider clock)
 
     public Task<IReadOnlyList<StaffRef>> StaffAsync(CancellationToken ct) => store.ActiveStaffAsync(ct);
 
-    public static readonly string[] UrgentTypes = ["urgent_request", "safety_alert"];
+    // v1.110: a paid urgent call's one task stays urgent at each of its steps (PendingTask.UrgentCallSteps)
+    public static readonly string[] UrgentTypes = ["urgent_request", "safety_alert", "urgent_call", "urgent_call_failed", "urgent_call_unanswered"];
     private static readonly string[] Unfinished = ["open", "in_progress", "overdue"];
     public const int DashboardDays = 7;
 

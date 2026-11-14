@@ -161,7 +161,8 @@ public sealed partial class BookingFlowTests
         var urgent = await Say("مستعجل جدا");
         Assert.Contains(TextKeys.SituationUrgent, Keys(urgent));
         Assert.DoesNotContain(TextKeys.UrgentPrice, Keys(urgent)); // never a second paid call
-        Assert.DoesNotContain(PendingTask.UrgentRequest, TaskKinds(urgent)); // v1.40: the task of his receipt is the one (one bell, one e-mail)
+        // v1.40: the task of his receipt is the one (one bell). v1.110: urgent_call, and it is not opened twice.
+        Assert.DoesNotContain(TaskKinds(urgent), k => k is PendingTask.UrgentRequest or PendingTask.UrgentCall);
     }
 
     [Fact]

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Office.Application.Booking;
+using Office.Application.Conversations;
 using Office.Domain.Booking;
 using Office.Infrastructure.Persistence;
 
@@ -176,6 +177,37 @@ public sealed class BookingStore(HazemDbContext db, TimeProvider clock) : IBooki
             VALUES ({personId}, {key}, {type}, GREATEST({dueAt.ToUniversalTime()}, {clock.GetUtcNow().AddMinutes(10).ToUniversalTime()}))
             ON CONFLICT (turn_id, type) DO NOTHING
             """, ct);
+
+    /// <summary>
+    /// v1.110 (the owner: «كميه ايميلات كتيره اوي» … «موافق»): a paid urgent call is one task. Its task (urgent_call, opened
+    /// with the payment) moves on to <paramref name="type"/> (urgent_call_failed, urgent_call_unanswered) instead of a new
+    /// task, and its urgent alert is made again by the next round: a new line in the bell and Windows, and the e-mail of whose
+    /// turn it is now (AlertAudience). The call's task is the person's latest of the last week, at any step; already at that
+    /// step: nothing more. None (a call paid before v1.110), or closed by the office: a task of that type, as before.
+    /// </summary>
+    public async Task UrgentStepAsync(Guid personId, string key, string type, CancellationToken ct)
+    {
+        var now = clock.GetUtcNow();
+        var week = now.AddDays(-7);
+        string[] steps = [.. PendingTask.UrgentCallSteps];
+        var task = await db.StaffTasks.AsNoTracking()
+            .Where(t => t.PersonId == personId && steps.Contains(t.Type) && t.CreatedAt >= week)
+            .OrderByDescending(t => t.CreatedAt).Select(t => new { t.Id, t.Type, t.State }).FirstOrDefaultAsync(ct);
+        if (task is null || task.State is "done" or "cancelled")
+        {
+            await AddTaskAsync(personId, key, type, now, ct);
+            return;
+        }
+
+        if (task.Type != type)
+        {
+            // One statement: no round sees the new step with the old step's alert (and mails it, then its new one again).
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                WITH moved AS (UPDATE hazem.staff_tasks SET type = {type} WHERE id = {task.Id} RETURNING id)
+                DELETE FROM hazem.panel_alerts a USING moved WHERE a.task_id = moved.id AND a.kind = 'task_urgent'
+                """, ct);
+        }
+    }
 
     internal static AppointmentInfo ToInfo(AppointmentRow a) =>
         new(a.Id, a.PersonId, a.Service, a.StartsAt, a.EndsAt, a.State, a.Reschedules, a.Amount, a.MatterType, a.HoldUntil, a.CallApp);

@@ -75,11 +75,16 @@ public static class PanelMails
     /// </summary>
     public static PanelMail Alert(string to, AlertToMail a, string panelUrl)
     {
-        var (subject, line) = a.Kind switch
+        var (subject, line) = (a.Kind, a.TaskType) switch
         {
-            AlertKinds.Overdue => ("مهمة متأخرة", "توجد مهمة تجاوزت موعدها ولم تكتمل بعد."),
-            AlertKinds.Urgent => ("طلب عاجل", "يوجد طلب عاجل جديد يحتاج إلى من يتولّاه الآن."),
-            AlertKinds.Rating => ("تقييم ضعيف من عميل", "قيّم أحد العملاء الخدمة بـ«يحتاج للتحسين»، ووعدناه بأن يتواصل معه أحد من المكتب."),
+            // v1.110: a paid urgent call's two e-mails, each to whose turn it is (AlertAudience)
+            (AlertKinds.Urgent, "urgent_call_failed") => ("لم يصلك تنبيه استشارة عاجلة على واتساب",
+                "دفع أحد العملاء استشارة عاجلة، ولم يصل تنبيهها إليك على واتساب، فوصلك هذا البريد بدلًا منه. موعد المكالمة ورقم العميل في المهمة."),
+            (AlertKinds.Urgent, "urgent_call_unanswered") => ("استشارة عاجلة مدفوعة لم يتولّها أحد",
+                "لم يردّ المستشار على تنبيه استشارة عاجلة مدفوعة في الوقت المحدد. تواصل مع المستشار أو مع العميل الآن."),
+            (AlertKinds.Overdue, _) => ("مهمة متأخرة", "توجد مهمة تجاوزت موعدها ولم تكتمل بعد."),
+            (AlertKinds.Urgent, _) => ("طلب عاجل", "يوجد طلب عاجل جديد يحتاج إلى من يتولّاه الآن."),
+            (AlertKinds.Rating, _) => ("تقييم ضعيف من عميل", "قيّم أحد العملاء الخدمة بـ«يحتاج للتحسين»، ووعدناه بأن يتواصل معه أحد من المكتب."),
             _ => ("عميل يطلب التحدث مع موظف", "طلب أحد العملاء التحدث مع أحد موظفي المكتب."),
         };
         var due = a.DueAt is { } d ? ArabicTime(TimeZoneInfo.ConvertTime(d, Cairo)) : "";
@@ -137,6 +142,9 @@ public static class PanelMails
         "payment_review_due" => "اقترب الموعد ولم يُراجَع التحويل بعد",
         "appointment_unmarked" => "انقضى موعد دون تسجيل نتيجته، ولم يُراجَع التحويل بعد",
         "urgent_request" => "طلب عاجل",
+        "urgent_call" => "استشارة عاجلة مدفوعة", // v1.110: the call's one task
+        "urgent_call_failed" => "استشارة عاجلة مدفوعة: لم يصل تنبيهها إلى المستشار",
+        "urgent_call_unanswered" => "استشارة عاجلة مدفوعة: لم يردّ المستشار في الوقت المحدد",
         "service_request" => "طلب خدمة",
         "reschedule_or_cancel" => "تغيير موعد أو إلغاؤه",
         "booking_unavailable" => "حجز: لا توجد مواعيد أو التقويم غير متاح",

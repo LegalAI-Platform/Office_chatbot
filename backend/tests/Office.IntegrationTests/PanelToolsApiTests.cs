@@ -186,6 +186,199 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal(new[] { urgent, asking }.Order(), await Bell("boss"));
     }
 
+    // v1.110 (the owner: «كميه ايميلات كتيره اوي» … «موافق» … «سيبهم»): a paid urgent call is one task. While the lawyer's
+    // WhatsApp alert is his, its urgent alert is the bell's and Windows' only; when that alert did not reach him, the lawyer's
+    // e-mail; when nobody took it in time, the staff's; never a «late» e-mail for it. The bell shows its urgent line to the
+    // lawyer and the staff, as any urgent one.
+    [Fact]
+    public async Task A_paid_urgent_call_emails_the_lawyer_only_when_whatsapp_failed_and_the_staff_only_when_nobody_took_it()
+    {
+        var waiting = await NewTask("urgent_call");
+        var failed = await NewTask("urgent_call_failed");
+        var unanswered = await NewTask("urgent_call_unanswered");
+        var late = await NewTask("urgent_call", due: "-5 minutes");
+        await RunAlerts();
+        string[] To(Guid task) => [.. _factory.Mail.Sent.Where(m => m.Text.Contains(task.ToString(), StringComparison.Ordinal)).Select(m => m.To).Distinct().Order(StringComparer.Ordinal)];
+        Assert.Empty(To(waiting));
+        Assert.Equal(["lawyer@example.test"], To(failed));
+        Assert.Equal(["karim@example.test", "yasmin@example.test"], To(unanswered));
+        Assert.Empty(To(late)); // neither its urgent alert nor its late one
+        Assert.Equal("task_overdue,task_urgent", await db.ScalarAsync<string>(
+            $"SELECT string_agg(kind, ',' ORDER BY kind) FROM hazem.panel_alerts WHERE task_id = '{late}'")); // the bell has both
+
+        async Task<Guid[]> Bell(string who) =>
+            [.. (await (await SignIn(who)).GetFromJsonAsync<JsonNode>("/api/panel/alerts", Ct))!["items"]!.AsArray().Select(a => (Guid)a!["task_id"]!).Distinct().Order()];
+        Guid[] all = [.. new[] { waiting, failed, unanswered, late }.Order()];
+        Assert.Equal(all, await Bell("lawyer"));
+        Assert.Equal(all, await Bell("yasmin"));
+    }
+
+    /// <summary>v1.110: a client of this name and number, for the search's tests.</summary>
+    private async Task<Guid> Client(string name, string wa)
+    {
+        var person = Guid.NewGuid();
+        await db.ExecAsync($"""
+            INSERT INTO hazem.persons (id, wa_id, name_raw, full_name_provided, source, first_seen_at)
+            VALUES ('{person}', '{wa}', '{name}', true, 'ad', now());
+            """);
+        return person;
+    }
+
+    private async Task<Guid> TaskOf(Guid person, string type, Guid? staff = null, string state = "open")
+    {
+        var id = Guid.NewGuid();
+        await db.ExecAsync($"""
+            INSERT INTO hazem.staff_tasks (id, person_id, turn_id, type, state, staff_id, due_at)
+            VALUES ('{id}', '{person}', 'wt:{id}', '{type}', '{state}', {(staff is null ? "NULL" : $"'{staff}'")}, now() + interval '1 hour');
+            """);
+        return id;
+    }
+
+    // v1.110 (the owner: «السيرش بار هنا حاسه بيسرش غلط» … «اعمل بحث شامل»): the search bar's one search finds the clients,
+    // their appointments and the tasks: a part of the name in any order, through one form of the letters, or the end of the
+    // number, in Arabic digits or with spaces too. A staff member finds only the tasks she may see, and the number never
+    // comes back whole. The tasks page's own search finds the same clients.
+    [Fact]
+    public async Task The_search_bar_finds_clients_appointments_and_tasks_by_any_form_of_the_name_or_the_number_s_end()
+    {
+        var ahmed = await Client("أحمد مصطفى العمدة", "201000000713");
+        var fatma = await Client("فاطمة علي", "201000000824");
+        var other = await Client("كريم سامي", "201000000935");
+        var open = await TaskOf(ahmed, "complaint");
+        var done = await TaskOf(ahmed, "human_requested", state: "done");
+        var karims = await TaskOf(fatma, "service_request", staff: _staffB);
+        await TaskOf(other, "complaint");
+        var visit = Guid.NewGuid();
+        await db.ExecAsync($"""
+            INSERT INTO hazem.appointments (id, person_id, service, starts_at, ends_at, state, amount, booked_turn_id)
+            VALUES ('{visit}', '{ahmed}', 'consultation_office', now() + interval '1 day', now() + interval '1 day 30 minutes',
+                    'confirmed', 500, 'wt:{visit}');
+            """);
+        try
+        {
+            var boss = await SignIn("boss");
+            async Task<JsonNode> Search(HttpClient c, string q)
+            {
+                var r = await c.PostAsJsonAsync("/api/panel/search", new { q }, Ct);
+                Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+                return (await r.Content.ReadFromJsonAsync<JsonNode>(Ct))!;
+            }
+
+            static Guid[] Ids(JsonNode r, string kind) => [.. r[kind]!.AsArray().Select(x => (Guid)x!["id"]!)];
+
+            // one form of the letters, the words in any order
+            foreach (var q in new[] { "احمد", "مصطفي العمده", "العمدة أحمد" })
+            {
+                var r = await Search(boss, q);
+                Assert.Equal([ahmed], Ids(r, "clients"));
+                Assert.Equal([visit], Ids(r, "appointments"));
+                Assert.Equal([open, done], Ids(r, "tasks")); // the unfinished first, a finished one too
+            }
+
+            Assert.Equal([fatma], Ids(await Search(boss, "فاطمه"), "clients"));
+            // the number's end: Arabic digits, spaces, the whole number as WhatsApp or as written in Egypt
+            foreach (var q in new[] { "713", "٧١٣", "0100 000 0713", "+20 100 000 0713" })
+            {
+                Assert.Equal([ahmed], Ids(await Search(boss, q), "clients"));
+            }
+
+            Assert.Equal([ahmed], Ids(await Search(boss, "احمد 713"), "clients")); // a name and a number together
+            Assert.Empty(Ids(await Search(boss, "احمد 824"), "clients"));
+
+            // the client: his number's last 3 digits only, and where the panel opens him (his unfinished task)
+            var found = await Search(boss, "713");
+            var client = found["clients"]![0]!;
+            Assert.Equal(("713", open, 1), ((string)client["phone_last3"]!, (Guid)client["task_id"]!, (int)client["open_tasks"]!));
+            Assert.DoesNotContain("201000000713", found.ToJsonString(), StringComparison.Ordinal);
+
+            // yasmin: her tasks and the unassigned, never karim's; a client with nothing for her to open is not listed
+            var yasmin = await SignIn("yasmin");
+            var forYasmin = await Search(yasmin, "فاطمه");
+            Assert.Empty(Ids(forYasmin, "tasks"));
+            Assert.Empty(Ids(forYasmin, "clients"));
+            Assert.Equal([karims], Ids(await Search(boss, "فاطمه"), "tasks"));
+
+            // too short, or no one
+            Assert.Empty(Ids(await Search(boss, "71"), "clients"));
+            Assert.Empty(Ids(await Search(boss, "لا يوجد اسم كهذا"), "clients"));
+
+            // the tasks page's search finds the same clients
+            var page = (await boss.GetFromJsonAsync<JsonNode>($"/api/panel/tasks?scope=all&state=active&q={Uri.EscapeDataString("مصطفي")}", Ct))!;
+            Assert.Equal([open], page["items"]!.AsArray().Select(x => (Guid)x!["id"]!));
+        }
+        finally
+        {
+            await db.ExecAsync($"DELETE FROM hazem.appointments WHERE id = '{visit}'"); // before the next test empties the persons
+        }
+    }
+
+    // v1.110 (the owner: «…/documents شوف دي عاوز تعملها» … «اعمل كله مع بعض»): «المستندات» lists every file a client sent,
+    // by client, for whoever may see his tasks (a staff member: hers and the unassigned), and opens one through the panel
+    // only, recorded; never another staff member's client's.
+    [Fact]
+    public async Task The_documents_page_lists_each_client_s_files_for_whoever_may_see_him_and_opens_them_recorded()
+    {
+        var mine = await NewTask("complaint", staff: _staffA);                              // yasmin's client: a picture
+        var others = await NewTask("complaint", staff: _staffB, mime: "application/pdf");   // karim's client: a PDF
+        var boss = await SignIn("boss");
+        var yasmin = await SignIn("yasmin");
+        async Task<JsonNode> List(HttpClient c, object body)
+        {
+            var r = await c.PostAsJsonAsync("/api/panel/documents", body, Ct);
+            Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+            return (await r.Content.ReadFromJsonAsync<JsonNode>(Ct))!;
+        }
+
+        static Guid[] Clients(JsonNode p) => [.. p["clients"]!.AsArray().Select(c => (Guid)c!["id"]!).Order()];
+        static JsonNode FirstFile(JsonNode p, Guid client) => p["clients"]!.AsArray().Single(c => (Guid)c!["id"]! == client)!["files"]![0]!;
+
+        var all = await List(boss, new { });
+        Assert.Equal(new[] { mine, others }.Order(), Clients(all));
+        Assert.Equal(2, (int)all["total"]!);
+        var picture = FirstFile(all, mine);
+        // the picture of the turn's second message, with the task opened from it (NewTask: the task id is the person's)
+        Assert.Equal(("message", "image", 1, mine), ((string)picture["source"]!, (string)picture["kind"]!, (int)picture["index"]!, (Guid)picture["task_id"]!));
+        Assert.Equal(1, (int)all["clients"]!.AsArray().Single(c => (Guid)c!["id"]! == mine)!["count"]!);
+
+        Assert.Equal([mine], Clients(await List(yasmin, new { })));                // not karim's client
+        Assert.Equal([others], Clients(await List(boss, new { kind = "document" })));
+        Assert.Empty(Clients(await List(boss, new { source = "receipt" })));
+        Assert.Equal(new[] { mine, others }.Order(), Clients(await List(boss, new { q = "ساره" }))); // «سارة محمد علي حسن»
+        Assert.Empty(Clients(await List(boss, new { q = "71" })));                   // names no one: nothing, never everyone
+
+        // opening: through the panel, recorded
+        var opened = await yasmin.GetAsync($"/api/panel/documents/message/{(Guid)picture["id"]!}/1", Ct);
+        Assert.Equal(HttpStatusCode.OK, opened.StatusCode);
+        Assert.Equal("image/jpeg", opened.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(1L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.panel_audit WHERE action = 'document.open'"));
+        var pdf = FirstFile(all, others);
+        Assert.Equal(HttpStatusCode.NotFound, (await yasmin.GetAsync($"/api/panel/documents/message/{(Guid)pdf["id"]!}/1", Ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await boss.GetAsync($"/api/panel/documents/message/{(Guid)pdf["id"]!}/1", Ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await boss.GetAsync($"/api/panel/documents/message/{(Guid)pdf["id"]!}/0", Ct)).StatusCode); // a text
+        Assert.Equal(HttpStatusCode.NotFound, (await boss.GetAsync($"/api/panel/documents/elsewhere/{(Guid)pdf["id"]!}/1", Ct)).StatusCode);
+    }
+
+    // v1.110 (the owner, of the bell's red count: «أيوه، ضيفها»): a finished task (done, cancelled) leaves its alerts read
+    // for everyone: out of the red count, and still in the list, dimmed.
+    [Fact]
+    public async Task A_finished_task_s_alerts_are_read_for_everyone_and_stay_in_the_list()
+    {
+        var urgent = await NewTask("urgent_request");
+        var complaint = await NewTask("complaint");
+        await RunAlerts();
+        var yasmin = await SignIn("yasmin");
+        async Task<JsonNode> Bell() => (await yasmin.GetFromJsonAsync<JsonNode>("/api/panel/alerts", Ct))!;
+        Assert.Equal(2, (int)(await Bell())["unread"]!);
+
+        await db.ExecAsync($"UPDATE hazem.staff_tasks SET state = 'done' WHERE id = '{urgent}'");
+        Assert.Equal(1, (int)(await Bell())["unread"]!);
+        await db.ExecAsync($"UPDATE hazem.staff_tasks SET state = 'cancelled' WHERE id = '{complaint}'");
+        var bell = await Bell();
+        Assert.Equal(0, (int)bell["unread"]!);
+        Assert.Equal(2, bell["items"]!.AsArray().Count);
+        Assert.All(bell["items"]!.AsArray(), a => Assert.True((bool)a!["read"]!));
+    }
+
     // v1.105 (the owner: «العميل … اجابته لازم موظف يتدخل ليه فيها … الحاجات دي انا عايزها تيجي في النوتيفيكيشن … نشوف
     // حل عام»): every task Hazem opens for the office alerts at once, whatever its type; never by e-mail.
     [Fact]
@@ -593,7 +786,7 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
         await NewUser("keeper", Permissions.Maintenance);
         var keeper = await SignIn("keeper");
         await MaintenanceTwoFactor.TurnOnAsync(keeper, Ct);
-        foreach (var office in new[] { "boss", "lawyer", "karim" })
+        foreach (var office in new[] { "boss", "karim" })
         {
             var c = await SignIn(office);
             foreach (var path in new[] { "/api/panel/reports", "/api/panel/reports/trend", "/api/panel/reports/ai-cost" })
@@ -602,6 +795,13 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
             }
         }
 
+        // v1.110 (the owner: «تكون ظاهره للمستشار»): the lawyer reads the office's reports, never Hazem's own parts
+        var lawyer = await SignIn("lawyer");
+        Assert.Equal(HttpStatusCode.OK, (await lawyer.GetAsync("/api/panel/reports/trend", Ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await lawyer.GetAsync("/api/panel/reports/ai-cost", Ct)).StatusCode);
+        var his = (await lawyer.GetFromJsonAsync<JsonNode>("/api/panel/reports", Ct))!;
+        Assert.Empty(his["review"]!.AsArray());
+        Assert.Equal(0m, (decimal)his["ai_cost"]!["total_usd"]!);
         return keeper;
     }
 

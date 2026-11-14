@@ -4,7 +4,7 @@ import { Link, useLocation, useSearchParams } from "react-router";
 import { errorMessage } from "../../shared/api/client";
 import { can, useMe } from "../../shared/api/session";
 import type { Me, TaskListItem } from "../../shared/api/types";
-import { label, matterLabel, TASK_STATES, TASK_TYPES } from "../../shared/lib/labels";
+import { label, matterLabel, TASK_STATES, TASK_TYPES, URGENT_TYPES } from "../../shared/lib/labels";
 import { cairoWhen } from "../../shared/lib/time";
 import { useUrlState } from "../../shared/lib/url";
 import { Icon, type IconName } from "../../shared/ui/Icon";
@@ -25,7 +25,7 @@ const STATES: { value: StateFilter; label: string; icon: IconName }[] = [
   { value: "cancelled", label: "ملغاة", icon: "x" },
 ];
 
-export const isUrgent = (t: { type: string }) => t.type === "urgent_request" || t.type === "safety_alert";
+export const isUrgent = (t: { type: string }) => URGENT_TYPES.has(t.type);
 
 /** The list the page opens on, fetched while the pointer is still on the link (idea from PR #14). */
 export function prefetchData(qc: QueryClient, me: Me | null | undefined) {
@@ -269,7 +269,7 @@ function TaskRow({ task: t }: { task: TaskListItem }) {
       {/* who has it */}
       <Cell term="المسؤول">
         {t.staff ? <span className="font-semibold">{t.staff.name}</span>
-          : <span className="font-semibold text-orange-ink">{live ? "لم يستلمها أحد بعد" : "غير مُسندة"}</span>}
+          : <span className="font-semibold text-orange-ink">{live ? "لم تُسند إلى أحد بعد" : "غير مُسندة"}</span>}
       </Cell>
 
       {/* by when */}

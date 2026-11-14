@@ -3,7 +3,11 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Dashboard, Me, TaskPage } from "../shared/api/types";
+import { reloadAt } from "../shared/lib/reload";
 import { makeQueryClient, routes } from "./App";
+
+// jsdom cannot load a page: the logo's reload is only noted
+vi.mock("../shared/lib/reload", () => ({ reloadAt: vi.fn() }));
 
 const me = (over: Partial<Me> = {}): Me => ({
   id: "u1",
@@ -106,7 +110,7 @@ describe("routing and permissions", () => {
     expect(await within(urgent.closest("section")!).findByText("3")).toBeTruthy();
     const late = screen.getByRole("heading", { name: "مهام متأخرة" });
     expect(within(late.closest("section")!).getByText("2")).toBeTruthy();
-    const table = screen.getByRole("heading", { name: "مطلوب منك" }).closest("section")!; // fix/alert-flood: one card
+    const table = screen.getByRole("heading", { name: "بانتظار إجرائك" }).closest("section")!; // fix/alert-flood: one card
     expect(within(table).getByText("عاجلة")).toBeTruthy();
     expect(within(table).getByRole("link", { name: "افتح مهمة سارة محمد" }).getAttribute("href")).toBe("/tasks/t1");
   });
@@ -182,19 +186,15 @@ describe("routing and permissions", () => {
   });
 });
 
-// the tester: «when I press the logo it refreshes and gets me back on the main page»
+// the tester: «when I press the logo it refreshes and gets me back on the main page»; v1.110 (the owner: «لما يدوس علي
+// اللوجو يعمل ريلود»): a real reload of the home page, as the browser's own button
 describe("the office's logo", () => {
-  it("goes back to the home page and asks everything again", async () => {
+  it("reloads the panel on the home page", async () => {
     serve(me());
-    const router = renderAt("/tasks");
+    renderAt("/tasks");
     const logo = (await screen.findAllByRole("link", { name: "الرئيسية: تحديث الصفحة" }))[0]!;
     await screen.findByRole("heading", { level: 1, name: "المهام" });
-    const fetches = vi.mocked(globalThis.fetch);
-    const before = fetches.mock.calls.filter(([u]) => String(u).endsWith("/auth/me")).length;
-    fireEvent.click(logo);
-    expect(await screen.findByRole("heading", { name: "مطلوب منك" })).toBeTruthy();
-    expect(router.state.location.pathname).toBe("/");
-    // everything is asked again (the signed-in person too, not only the home page's own data)
-    await vi.waitFor(() => expect(fetches.mock.calls.filter(([u]) => String(u).endsWith("/auth/me")).length).toBeGreaterThan(before));
+    expect(fireEvent.click(logo)).toBe(false); // the panel's reload, not the router's move in place
+    expect(vi.mocked(reloadAt)).toHaveBeenCalledWith("/");
   });
 });

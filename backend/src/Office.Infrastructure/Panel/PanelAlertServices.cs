@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Office.Application.Conversations;
 using Office.Application.Panel;
 using Office.Infrastructure.Monitoring;
 using Office.Infrastructure.Persistence;
@@ -16,7 +17,16 @@ namespace Office.Infrastructure.Panel;
 /// </summary>
 public sealed class PanelAlertStore(HazemDbContext db) : IPanelAlertStore
 {
-    private static readonly string[] Urgent = ["urgent_request", "safety_alert", "urgent_call_failed", "urgent_call_unanswered"]; // 1.33 (B-09)
+    // 1.33 (B-09). v1.110: a paid urgent call's one task, at each of its steps (PendingTask.UrgentCallSteps).
+    private static readonly string[] Urgent = ["urgent_request", "safety_alert", "urgent_call", "urgent_call_failed", "urgent_call_unanswered"];
+
+    private static readonly string[] UrgentCall = [.. PendingTask.UrgentCallSteps];
+
+    /// <summary>
+    /// v1.110 (the owner, of the bell's red count: «أيوه، ضيفها»): a task that was finished (done, cancelled) leaves its alerts
+    /// read for everyone: out of the red count and the tab's title, dimmed in the list, whoever finished it.
+    /// </summary>
+    private static readonly string[] Finished = ["done", "cancelled"];
 
     /// <summary>The types whose own alert already says a new task came (urgent, a client asking for someone, a low rating).</summary>
     private static readonly string[] OwnAlert = [.. Urgent, "human_requested", "rating_low"];
@@ -93,6 +103,10 @@ public sealed class PanelAlertStore(HazemDbContext db) : IPanelAlertStore
                                  // overdue only; a client asking for someone and the rest stay in the bell and Windows.
                                  && (a.Kind == AlertKinds.Urgent || a.Kind == AlertKinds.Overdue)
                                  && (a.Kind == AlertKinds.Overdue ? t.State == "overdue" : t.State != "done" && t.State != "cancelled")
+                                 // v1.110 (AlertKinds.BellOnly): a paid urgent call's urgent alert while the lawyer's WhatsApp
+                                 // alert is his, and its «late» one at every step
+                                 && !(a.Kind == AlertKinds.Urgent && t.Type == PendingTask.UrgentCall)
+                                 && !(a.Kind == AlertKinds.Overdue && UrgentCall.Contains(t.Type))
                            orderby a.Id
                            select new AlertToMail(a.Id, a.Kind, a.TaskId, t.Type, t.DueAt, t.StaffId, null)).ToListAsync(ct);
         var system = await db.PanelAlerts.AsNoTracking()
@@ -151,7 +165,8 @@ public sealed class PanelAlertStore(HazemDbContext db) : IPanelAlertStore
                           {
                               a.Id, a.Kind, a.TaskId, Type = t == null ? null : t.Type, Name = p == null ? null : p.OfficeName,
                               DueAt = t == null ? (DateTimeOffset?)null : t.DueAt, a.CreatedAt, a.SystemWhat,
-                              Read = db.PanelAlertReads.Any(r => r.AlertId == a.Id && r.UserId == viewer.UserId),
+                              // v1.110: a finished task's alert is read for everyone (Finished)
+                              Read = t != null && Finished.Contains(t.State) || db.PanelAlertReads.Any(r => r.AlertId == a.Id && r.UserId == viewer.UserId),
                               WaId = p == null ? null : p.WaId, StaffName = s == null ? null : s.Name, Matter = i == null ? null : i.MatterType,
                           }).Take(limit).ToListAsync(ct);
         // the Windows notification's details (v1.104): the number's last 3 digits only, as the task list shows them
@@ -160,7 +175,8 @@ public sealed class PanelAlertStore(HazemDbContext db) : IPanelAlertStore
     }
 
     public Task<int> UnreadAsync(Viewer viewer, CancellationToken ct) =>
-        Visible(viewer).CountAsync(a => !db.PanelAlertReads.Any(r => r.AlertId == a.Id && r.UserId == viewer.UserId), ct);
+        Visible(viewer).CountAsync(a => !db.PanelAlertReads.Any(r => r.AlertId == a.Id && r.UserId == viewer.UserId)
+                                        && !db.StaffTasks.Any(t => t.Id == a.TaskId && Finished.Contains(t.State)), ct);
 
     public Task<int> UnreadSystemAsync(Viewer viewer, CancellationToken ct) =>
         Visible(viewer).CountAsync(a => a.Kind == AlertKinds.System && !db.PanelAlertReads.Any(r => r.AlertId == a.Id && r.UserId == viewer.UserId), ct);

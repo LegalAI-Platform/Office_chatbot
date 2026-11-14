@@ -217,11 +217,11 @@ public sealed class PanelTaskStore(HazemDbContext db, TimeProvider clock) : IPan
 
         if (!string.IsNullOrWhiteSpace(q.Search))
         {
-            var term = q.Search.Trim().Replace("%", "", StringComparison.Ordinal).Replace("_", "", StringComparison.Ordinal);
-            var digits = new string(term.Where(char.IsAsciiDigit).ToArray());
-            rows = digits.Length >= 3 && digits.Length == term.Length
-                ? rows.Where(x => x.WaId.EndsWith(digits))
-                : rows.Where(x => x.NameRaw != null && EF.Functions.ILike(x.NameRaw, "%" + term + "%"));
+            // v1.110: the same clients as the search bar finds (PanelSearchStore): every word in the name through
+            // hazem.search_text («احمد» finds «أحمد»), a number as the end of his number (Arabic digits and spaces too)
+            var term = SearchTerm.Parse(q.Search);
+            Guid[] persons = term.IsEmpty ? [] : [.. await PanelSearchStore.PersonIdsAsync(db, term, ct)];
+            rows = rows.Where(x => persons.Contains(x.t.PersonId));
         }
 
         var now = clock.GetUtcNow();
