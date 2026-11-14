@@ -271,6 +271,10 @@ public static partial class ReplyGuard
 
     private static string Normal(string s) => Space().Replace(s, " ").Trim();
 
+    /// <summary>v1.111: the reply holds the whole of the message before it (a word or two put in front of the same text).</summary>
+    public static bool HoldsWhole(string reply, string previous) =>
+        Normal(previous) is { Length: > 0 } before && Normal(reply).Contains(before, StringComparison.Ordinal);
+
     /// <summary>v1.79: the words say something is or will be registered or booked («سجلت»، «هسجلها»، «أسجلك»، «حجزتلك»، «اتحجز»).</summary>
     public static bool SaysBooked(string text) => Booked().IsMatch((text ?? "").Replace("ّ", "", StringComparison.Ordinal));
 
@@ -415,6 +419,11 @@ public static class Conversational
         [TextKeys.PriceDocumentReview] = "tell him the price of reviewing a contract or papers, and that the lawyer sets the final price before payment",
         [TextKeys.PriceContractDrafting] = "tell him the starting price of drafting a contract, and that the lawyer sets the final price",
         [TextKeys.PriceFormalNotice] = "tell him the price of a formal notice",
+        // v1.111 (Ahmed Amin's chat: «عقد ايجار» under the drafting text got it again, word for word): a written service's text
+        // answers what he asked about it (its price kept to the letter), and the button under it, when there is one, starts it
+        [TextKeys.DocumentReviewRequest] = "tell him the price of reviewing a contract as given, and ask him to send the contract here (when a button follows your sentence, it starts the request; never say it is started)",
+        [TextKeys.ContractDraftingRequest] = "tell him drafting a contract starts from the price given, depending on its kind, and ask him for any details or papers he has (when a button follows your sentence, it starts the request; never say it is started)",
+        [TextKeys.FormalNoticeRequest] = "tell him the formal notice's price as given, and ask him for the papers he has (when a button follows your sentence, it starts the request; never say it is started)",
         [TextKeys.PriceUrf] = "tell him the Urfi contract's prices",
         [TextKeys.WrittenOpinion] = "tell him a written opinion comes after the consultation and its price",
         [TextKeys.PriceCaseRepresentation] = "tell him the lawyer sets a case's fees after hearing the matter (never a number for them)",
@@ -443,7 +452,14 @@ public static class Conversational
     [
         TextKeys.UrgentPrice, TextKeys.PriceDocumentReview, TextKeys.PriceContractDrafting, TextKeys.PriceFormalNotice, TextKeys.PriceUrf,
         TextKeys.WrittenOpinion, TextKeys.ConsultationOfferUrgentDay, TextKeys.ConsultationOfferUrgentNight,
+        TextKeys.DocumentReviewRequest, TextKeys.ContractDraftingRequest, TextKeys.FormalNoticeRequest, // v1.111
     ];
+
+    /// <summary>
+    /// v1.111 (the forbidden rule 2, led by the AI's reading): the whole answer is what he got from Hazem last time and he has
+    /// written back, so the same step is said anew: what he wrote is answered first.
+    /// </summary>
+    private const string RepeatPurpose = "he got this very answer from you in your last message and has just written back (see the chat): FIRST answer what he just wrote, in a few words (if he gave a detail, say it back so he knows it was understood); THEN say the same next step in NEW words, shorter; never reuse the sentences of your last message";
 
     /// <summary>v1.45 (TASK 18 §3.2): the texts of «حقايق المكتب», in the order the writer reads them.</summary>
     public static readonly string[] FactKeys = [TextKeys.OfficeFacts, TextKeys.OfficeFactsMore, TextKeys.OfficeFactsOther];
@@ -461,6 +477,9 @@ public static class Conversational
     private static readonly HashSet<string> ChoiceQuestions =
         [TextKeys.AskCallApp, TextKeys.AskCallAppPhone, TextKeys.BookingStepAgain, TextKeys.BookingChooseSlot];
 
+    /// <summary>v1.111: a question of choices the flow asks again on purpose (v1.66): told again as approved, never a repeat.</summary>
+    public static bool IsChoiceQuestion(string key) => ChoiceQuestions.Contains(key);
+
     /// <summary>The turn's answer with its first run of everyday texts said by the writer, and what became of it.</summary>
     public sealed record Rewritten(ReplyComposer.Composed Composed, WrittenReply? Written, IReadOnlyList<Office.Application.Costs.AiUsage>? Usage = null);
 
@@ -471,7 +490,7 @@ public static class Conversational
     /// </summary>
     public static async Task<Rewritten> RewriteAsync(ReplyComposer.Composed composed, IReplyWriter writer, IConversationHistory history,
         Turn turn, string call, HazemSettings settings, CancellationToken ct, string facts = "", string? nameGender = null,
-        IReplyReviewer? reviewer = null, IReadOnlyCollection<string>? lastReplyKeys = null)
+        IReplyReviewer? reviewer = null, IReadOnlyCollection<string>? lastReplyKeys = null, bool repeated = false)
     {
         var lines = (await history.RecentAsync(turn.WaId, HistoryTurns, ct)).ToList();
         if (AiInput.Build(turn) is { } now)
@@ -480,7 +499,7 @@ public static class Conversational
         }
 
         var client = ClientGender.Of(nameGender, lines);
-        var r = await WriteRunAsync(composed, writer, turn, call, settings, ct, facts, lines, client, reviewer, lastReplyKeys);
+        var r = await WriteRunAsync(composed, writer, turn, call, settings, ct, facts, lines, client, reviewer, lastReplyKeys, repeated);
         if (client != ClientGender.Woman)
         {
             return r;
@@ -495,7 +514,7 @@ public static class Conversational
 
     private static async Task<Rewritten> WriteRunAsync(ReplyComposer.Composed composed, IReplyWriter writer, Turn turn, string call,
         HazemSettings settings, CancellationToken ct, string facts, List<ChatLine> lines, string client, IReplyReviewer? reviewer = null,
-        IReadOnlyCollection<string>? lastReplyKeys = null)
+        IReadOnlyCollection<string>? lastReplyKeys = null, bool repeated = false)
     {
         var keyOf = composed.Records.GroupBy(r => r.IdempotencyKey).ToDictionary(g => g.Key, g => g.First().Key, StringComparer.Ordinal);
         // v1.61: the address and the hours join the writable texts only when nothing else of the turn is written
@@ -544,6 +563,10 @@ public static class Conversational
         var approved = string.Join("\n", run.Select(a => a.Text));
         var previous = lines.LastOrDefault(l => !l.FromClient)?.Text;
         var purpose = string.Join("; then ", run.Select(a => keyOf[a.IdempotencyKey]).Where(Has).Select(k => Purposes.TryGetValue(k, out var p) ? p : TailPurpose).Distinct());
+        if (repeated)
+        {
+            purpose = RepeatPurpose + ". The step: " + purpose; // v1.111
+        }
         var request = new WriteRequest(purpose, approved, call.Trim(), lines)
         {
             Facts = facts, Client = client,
@@ -552,7 +575,9 @@ public static class Conversational
         // v1.45 (the owner): a price the client asked goes out to the letter, and the legal refusal always says the lawyer
         // answers it in the consultation; otherwise the approved texts go as they are
         var keys = run.Select(a => keyOf[a.IdempotencyKey]).ToList();
-        var kept = run.Where(a => Locked.Contains(keyOf[a.IdempotencyKey])).SelectMany(a => ReplyGuard.Numbers(a.Text ?? "")).ToHashSet(StringComparer.Ordinal);
+        // v1.111: said anew, the price he got word for word last time may stay out (any number said is still one given)
+        var kept = repeated ? new HashSet<string>(StringComparer.Ordinal)
+            : run.Where(a => Locked.Contains(keyOf[a.IdempotencyKey])).SelectMany(a => ReplyGuard.Numbers(a.Text ?? "")).ToHashSet(StringComparer.Ordinal);
         var understanding = settings.Flag(UnderstandingV2.SwitchKey);
 
         // v1.58: every AI call of this reply (the writer, its retry, the reviewer) is counted
@@ -577,6 +602,12 @@ public static class Conversational
             {
                 problem = "price_dropped";
                 detail = string.Join("، ", lost);
+            }
+
+            // v1.111: said anew, it never carries his last message whole (a «تمام 👍» put in front of the same words)
+            if (problem is null && repeated && previous is not null && ReplyGuard.HoldsWhole(o.Reply!, previous))
+            {
+                problem = "same_as_previous";
             }
 
             if (problem is null && keys.Contains(TextKeys.LegalQuestion)

@@ -324,6 +324,12 @@ public sealed class Task11ApiTests(TestDatabase db) : IAsyncLifetime
 
         // The hold runs out: the case goes back to picking a time, and no longer takes files.
         await db.ExecAsync("UPDATE hazem.appointments SET state = 'expired'");
+        // v1.111 (the owner: «لما انا لغيت الحجز … تشالش ليه» … «Yes, add it»): its documents' task went with that time; the
+        // case may book again and have its own (the key keeps the time it was for)
+        Assert.Equal("cancelled|true|true", await db.ScalarAsync<string>("""
+            SELECT t.state || '|' || (t.turn_id LIKE 'urf:%:documents:%') || '|' || (SELECT docs_task_at IS NULL FROM hazem.urf_cases)
+              FROM hazem.staff_tasks t WHERE t.type = 'urf_documents_missing'
+            """));
         await Notices();
         Assert.Equal("documents_pending|true", await db.ScalarAsync<string>("SELECT state || '|' || (appointment_id IS NULL) FROM hazem.urf_cases"));
         Assert.Equal(0L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.urf_cases c, hazem.file_target(c.person_id, false) t WHERE t.kind = 'urf_documents'"));

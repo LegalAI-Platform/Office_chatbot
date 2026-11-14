@@ -185,6 +185,7 @@ public static class TextKeys
 
     // Proposed in TASK 10 (DECISIONS v1.14: written services, B-16 / B-17; inactive until approved).
     public const string ServiceFilesReceived = "service_files_received";    // B-16.2
+    public const string ServiceOrderOpened = "service_order_opened";        // v1.111: «✅ ابدأ الطلب» pressed: {{service}} is open
     public const string ServicePriced = "service_priced";                   // B-16.4, the worker
     public const string ServicePriceReminder = "service_price_reminder";    // v1.14, the worker
     public const string ServicePriceExpired = "service_price_expired";      // v1.14, the worker
