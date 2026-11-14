@@ -351,10 +351,13 @@ public sealed class ChatwootStore(HazemDbContext db, TimeProvider clock) : IChat
         })).ToList();
     }
 
-    public Task MarkEarlyAsync(string wamid, string waId, CancellationToken ct) =>
-        db.Database.ExecuteSqlInterpolatedAsync($"""
+    public async Task<bool> ClaimEarlyAsync(string wamid, string waId, CancellationToken ct) =>
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO hazem.chatwoot_inbound (wamid, wa_id) VALUES ({wamid}, {waId}) ON CONFLICT (wamid) DO NOTHING
-            """, ct);
+            """, ct) == 1;
+
+    public Task ReleaseEarlyAsync(string wamid, CancellationToken ct) =>
+        db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM hazem.chatwoot_inbound WHERE wamid = {wamid}", ct);
 
     public Task MarkTurnAsync(string turnId, bool done, int attempts, int posted, DateTimeOffset? nextAt, string? error, CancellationToken ct) =>
         db.Database.ExecuteSqlInterpolatedAsync($"""
@@ -426,10 +429,18 @@ public sealed class ChatwootWorker(IServiceScopeFactory scopes, IOptions<Chatwoo
             try
             {
                 using var scope = scopes.CreateScope();
-                var copied = await scope.ServiceProvider.GetRequiredService<ChatwootMirror>().SyncAsync(stop);
+                var mirror = scope.ServiceProvider.GetRequiredService<ChatwootMirror>();
+                var copied = await mirror.SyncAsync(stop);
                 if (copied > 0)
                 {
                     log.LogInformation("Chatwoot: {Count} turn(s) copied", copied);
+                }
+
+                // v1.113: one line a round, never a number or the client's words (a username client's 8 copies left no trace)
+                if (mirror.EarlyFailures.Count > 0)
+                {
+                    log.LogWarning("Chatwoot: {Count} early post(s) failed, left to their turn: {First}",
+                        mirror.EarlyFailures.Count, mirror.EarlyFailures[0]);
                 }
             }
             catch (Exception e) when (e is not OperationCanceledException)

@@ -937,7 +937,7 @@ public sealed class HazemResponder(
         Add("wallet", o.WalletNumber.Length > 0 ? o.Wallet : null);
         if (hours && booking is not null)
         {
-            Add("hours", await booking.WeekHoursAsync(now, ct));
+            Add("hours", await booking.WeekHoursAsync(now, ct, BookingSettings.OfficeWindowFrom(settings))); // v1.113: the office's too
         }
 
         return details;

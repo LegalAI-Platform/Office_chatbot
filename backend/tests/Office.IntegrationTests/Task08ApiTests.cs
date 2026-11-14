@@ -394,6 +394,48 @@ public sealed class Task08ApiTests(TestDatabase db) : IAsyncLifetime
             .Select(s => TimeZoneInfo.ConvertTime(DateTimeOffset.Parse((string)s!), Office.Domain.Tasks.OfficeHours.Cairo).ToString("HH:mm")));
     }
 
+    /// <summary>
+    /// v1.113 (the owner, 2026-11-14: «انا عايز الاستشارات تبقى لغايه 12 بالليل عادي. المقابلات في المكتب من 10 الصبح ل 8 بالليل»):
+    /// the week stays the consultations' hours; the office's meetings and Urfi signings keep inside the office's hours of the day,
+    /// which the settings take only as a range of one day, both or neither.
+    /// </summary>
+    [Fact]
+    public async Task V113_the_office_keeps_its_own_hours_inside_the_week()
+    {
+        await BookingOn();
+        var staff = await SignIn("karim", Permissions.Staff, "كريم");
+        var settings = (await staff.GetFromJsonAsync<JsonNode>("/api/panel/booking/settings", Ct))!.AsObject();
+        Assert.Null(settings["office_start_minute"]); // unset: the week's hours for the office too
+
+        async Task<string?> Refused(JsonObject body)
+        {
+            var r = await staff.PutAsJsonAsync("/api/panel/booking/settings", body, Ct);
+            Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
+            return (string?)(await r.Content.ReadFromJsonAsync<JsonNode>(Ct))!["error"];
+        }
+
+        settings["office_start_minute"] = 600;
+        Assert.Equal("office_hours", await Refused(settings)); // both or neither
+        settings["office_end_minute"] = 540;
+        Assert.Equal("office_hours", await Refused(settings)); // the start before the end
+        settings["office_end_minute"] = 1200;
+        Assert.Equal(HttpStatusCode.NoContent, (await staff.PutAsJsonAsync("/api/panel/booking/settings", settings, Ct)).StatusCode);
+        var saved = (await staff.GetFromJsonAsync<JsonNode>("/api/panel/booking/settings", Ct))!;
+        Assert.Equal((600, 1200), ((int)saved["office_start_minute"]!, (int)saved["office_end_minute"]!));
+
+        async Task<List<string>> Times(string service) =>
+            (await staff.GetFromJsonAsync<JsonNode>($"/api/panel/booking/preview?day=2026-11-20&service={service}", Ct))!["slots"]!.AsArray()
+            .Select(s => TimeZoneInfo.ConvertTime(DateTimeOffset.Parse((string)s!), Office.Domain.Tasks.OfficeHours.Cairo).ToString("HH:mm"))
+            .ToList();
+
+        var office = await Times("of");
+        Assert.Equal(("10:00", "19:30"), (office[0], office[^1])); // the last meeting starts at 7:30 and ends at 8
+        var urf = await Times("mo");
+        Assert.Equal(("10:00", "19:00"), (urf[0], urf[^1])); // an hour
+        var phone = await Times("pv");
+        Assert.Equal(("10:00", "23:45"), (phone[0], phone[^1])); // the week's 10:00–24:00
+    }
+
     [Fact]
     public async Task The_office_s_payment_details_are_the_manager_s_and_the_lawyer_s()
     {

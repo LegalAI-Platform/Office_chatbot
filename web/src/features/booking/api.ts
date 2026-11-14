@@ -25,6 +25,11 @@ export interface Settings {
   hold_minutes: number; hold_short_minutes: number; hold_short_within_hours: number; hold_gap_minutes: number; urf_minutes: number;
   /** v1.50 (TASK 19): hours after an appointment ends before nobody's mark becomes «خلص (تلقائي)»; 0 = off. */
   auto_complete_hours?: number | null;
+  /**
+   * v1.113: the office's meetings and Urfi signings, minutes of the day (0–1440) inside the week's hours; both null = the week's
+   * hours for them too. The phone, video and urgent calls always keep the week's hours.
+   */
+  office_start_minute?: number | null; office_end_minute?: number | null;
 }
 export interface Office {
   instapay: string; wallet_number: string; wallet_provider: string; address: string; map_url: string;

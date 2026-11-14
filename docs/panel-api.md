@@ -193,6 +193,8 @@ the documents. States: `collecting` → `documents_pending` → `booked` → `ap
 
 `/booking/settings` also carries `urf_minutes` (15–480, default 60): the length of an Urfi appointment.
 
+**(v1.113)** It also carries `office_start_minute` and `office_end_minute`: the minutes of the day (0–1440) that the office's meetings and the Urfi signings keep inside, within the week's hours and its exceptions. Migration 0085 sets them to 600 and 1200 (10:00 to 20:00). Both `null` in a read means they are not set, so the office uses the week's hours too. In a save, give both or neither: neither leaves them unchanged, and one alone or a start that is not before the end is `400 office_hours`. The phone, video and urgent calls always keep the week's hours. `GET /booking/preview` applies the same hours to `of` and the Urfi codes.
+
 ## Prices (TASK 06, DECISIONS v1.17 B-23)
 
 B-23's prices are settings (`price.*`). Every amount the system asks for (a booking, a service's range, the written opinion,
