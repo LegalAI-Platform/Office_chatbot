@@ -451,9 +451,10 @@ function NeedsYouPanel({ recent, priority: top, pending, now }: { recent?: Dashb
     .sort((x, y) => (RANK[priority(x).tone] ?? 3) - (RANK[priority(y).tone] ?? 3) || x.due_at.localeCompare(y.due_at));
   const groups = groupByClient(items, (t) => t.client_name);
   return (
-    <Panel title="مطلوب منك" icon="tasks" count={groups.length} action={<SeeAll to="/tasks" />} flush>
+    // v1.110 (the owner: «عاوز جمل معبره بالعربيه الفصحي سيتيم مكتب محاماه»): not «مطلوب منك»
+    <Panel title="بانتظار إجرائك" icon="tasks" count={groups.length} action={<SeeAll to="/tasks" />} flush>
       {pending ? <Rows n={4} /> : !items.length ? (
-        <Quiet icon="alert_receipt_green" title="لا يوجد ما ينتظرك">ستظهر هنا أي مهمة يفتحها حازم.</Quiet>
+        <Quiet icon="alert_receipt_green" title="لا توجد مهام بانتظار إجرائك">ستظهر هنا المهام التي يفتحها حازم للمكتب.</Quiet>
       ) : (
         <ul className={LIST}>
           {groups.map((g) => (g.items.length === 1

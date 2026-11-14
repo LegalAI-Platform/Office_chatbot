@@ -269,7 +269,7 @@ function TaskRow({ task: t }: { task: TaskListItem }) {
       {/* who has it */}
       <Cell term="المسؤول">
         {t.staff ? <span className="font-semibold">{t.staff.name}</span>
-          : <span className="font-semibold text-orange-ink">{live ? "لم يستلمها أحد بعد" : "غير مُسندة"}</span>}
+          : <span className="font-semibold text-orange-ink">{live ? "لم تُسند إلى أحد بعد" : "غير مُسندة"}</span>}
       </Cell>
 
       {/* by when */}

@@ -110,7 +110,7 @@ describe("routing and permissions", () => {
     expect(await within(urgent.closest("section")!).findByText("3")).toBeTruthy();
     const late = screen.getByRole("heading", { name: "مهام متأخرة" });
     expect(within(late.closest("section")!).getByText("2")).toBeTruthy();
-    const table = screen.getByRole("heading", { name: "مطلوب منك" }).closest("section")!; // fix/alert-flood: one card
+    const table = screen.getByRole("heading", { name: "بانتظار إجرائك" }).closest("section")!; // fix/alert-flood: one card
     expect(within(table).getByText("عاجلة")).toBeTruthy();
     expect(within(table).getByRole("link", { name: "افتح مهمة سارة محمد" }).getAttribute("href")).toBe("/tasks/t1");
   });

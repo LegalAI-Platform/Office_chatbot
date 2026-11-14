@@ -32,9 +32,10 @@ export const TASK_TYPES: Record<string, string> = {
   appointment_unmarked: "انقضى موعد دون تسجيل نتيجته، ولم يُراجَع التحويل بعد: راجعه وسجّل نتيجة الموعد (المواعيد)",
   rating_low: "قيّم عميل الخدمة بـ«يحتاج للتحسين»: تواصل معه (السبب في رسالة العميل إن كتبه)",
   urgent_call_failed: "تعذّر وصول تنبيه الاستشارة العاجلة إلى المستشار: تواصل معه أو مع العميل الآن (رقم المستشار في إعدادات المواعيد ← بيانات المكتب والدفع)",
-  urgent_call_unanswered: "لم يردّ المستشار على تنبيه استشارة عاجلة مدفوعة (لم يضغط «التحويل تمام، هكلمه» ولا «فيه مشكلة»): تصرّف الآن",
+  // v1.110 (the owner: «عاوز جمل معبره بالعربيه الفصحي»): no colloquial button quoted in the panel's own words
+  urgent_call_unanswered: "لم يردّ المستشار على الاستشارة العاجلة: لم يؤكد التحويل ولم يبلّغ عن مشكلة فيه في الوقت المحدد، فيُرجى التصرف فورًا",
   // v1.110: a paid urgent consultation's one task; the two above are its next steps (the same task)
-  urgent_call: "استشارة عاجلة مدفوعة: تنبيه المستشار على واتساب",
+  urgent_call: "استشارة عاجلة مدفوعة: بانتظار تواصل المستشار مع العميل",
 };
 
 /** The urgent tasks (v1.110: a paid urgent consultation's one task at each of its steps). */
@@ -204,8 +205,8 @@ export const ALERT_KINDS: Record<string, string> = {
   task_human: "عميل يطلب التحدث مع موظف",
   task_rating: "تقييم ضعيف من عميل",
   system: "مشكلة في النظام",
-  // v1.105: any other task Hazem opened for the office; the line under it says why (its type)
-  task_new: "عميل يحتاج إلى موظف",
+  // v1.105: any other task Hazem opened for the office; the line under it says why (its type). v1.110: formal wording
+  task_new: "عميل بحاجة إلى متابعة من المكتب",
 };
 
 /** TASK 13: what a system alert is about. */
