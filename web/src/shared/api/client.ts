@@ -77,6 +77,7 @@ const MESSAGES: Record<string, string> = {
   no_file: "لم يُرفع الملف. ارفعه مرة أخرى.",
   too_large: "حجم الملف أكبر من 20 ميجابايت.",
   urf_minutes: "مدة موعد العرفي من 15 إلى 480 دقيقة.",
+  office_hours: "ساعات المقابلات في المكتب: يجب أن تبدأ قبل أن تنتهي، داخل اليوم نفسه.",
   // the account's photo (migration 0036)
   avatar_type: "يجب أن تكون الصورة بصيغة JPG أو PNG أو WebP.",
   avatar_too_large: "حجم الصورة أكبر من 300 كيلوبايت. اختر صورة أصغر.",

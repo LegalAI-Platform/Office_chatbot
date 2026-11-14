@@ -32,7 +32,10 @@ public sealed record WeekDayView(int Weekday, IReadOnlyList<RangeView> Ranges);
 public sealed record BookingSettingsView(bool Enabled, int BufferMinutes, int MinNoticeHours, int HorizonDays, int? MaxPerDay, int SlotStepMinutes,
     int OfferCount, string CalendarId, bool CalendarKey, bool TextsApproved, int HoldMinutes = 120, int HoldShortMinutes = 60,
     int HoldShortWithinHours = 6, int HoldGapMinutes = 15, int UrfMinutes = 60,
-    int? AutoCompleteHours = null); // v1.50 (TASK 19): 0 = off; absent from a save = unchanged
+    int? AutoCompleteHours = null, // v1.50 (TASK 19): 0 = off; absent from a save = unchanged
+    // v1.113: the office's meetings and Urfi signings, minutes of the day inside the panel's hours; both absent from a save =
+    // unchanged, both null in a read = not set (the panel's hours for them too)
+    int? OfficeStartMinute = null, int? OfficeEndMinute = null);
 
 public sealed record ExceptionView(Guid Id, DateOnly Day, string Kind, int? Start, int? End, string? Reason, string? By, DateTimeOffset At);
 
@@ -202,7 +205,8 @@ public sealed class PanelBooking(
             b.Rules.SlotStepMinutes, b.Rules.OfferCount, b.CalendarId, google.HasKey,
             HazemResponder.BookingTextKeys.All(k => active.ContainsKey(k)), b.Hold.Minutes, b.Hold.ShortMinutes, b.Hold.ShortWithinHours,
             b.Hold.GapMinutes, b.UrfMinutes,
-            int.TryParse(s.Get(BookingSettings.AutoCompleteHoursKey), out var auto) && auto >= 0 ? auto : BookingSettings.DefaultAutoCompleteHours);
+            int.TryParse(s.Get(BookingSettings.AutoCompleteHoursKey), out var auto) && auto >= 0 ? auto : BookingSettings.DefaultAutoCompleteHours,
+            b.OfficeWindow?.Start, b.OfficeWindow?.End);
     }
 
     public async Task<string?> SaveSettingsAsync(Guid by, string username, BookingSettingsView body, CancellationToken ct)
@@ -218,6 +222,13 @@ public sealed class PanelBooking(
         if (body.AutoCompleteHours is < 0 or > 72)
         {
             return "auto_complete_hours";
+        }
+
+        // v1.113: both or neither, and a range of one day (the start before the end)
+        if (body.OfficeStartMinute.HasValue != body.OfficeEndMinute.HasValue
+            || body is { OfficeStartMinute: { } os, OfficeEndMinute: { } oe } && !BookingSettings.OfficeWindowValid(os, oe))
+        {
+            return "office_hours";
         }
 
         if (calendarId.Length > 200 || calendarId.Any(char.IsWhiteSpace))
@@ -244,6 +255,12 @@ public sealed class PanelBooking(
         if (body.AutoCompleteHours is { } hours)
         {
             values[BookingSettings.AutoCompleteHoursKey] = hours.ToString(CultureInfo.InvariantCulture);
+        }
+
+        if (body is { OfficeStartMinute: { } start, OfficeEndMinute: { } end })
+        {
+            values[BookingSettings.OfficeStartKey] = start.ToString(CultureInfo.InvariantCulture);
+            values[BookingSettings.OfficeEndKey] = end.ToString(CultureInfo.InvariantCulture);
         }
 
         await SetAsync(by, username, "settings", "booking.settings", values, ct);
@@ -524,7 +541,7 @@ public sealed class PanelBooking(
         var from = BookingDesk.Instant(day);
         var to = BookingDesk.Instant(day.AddDays(1));
         var busy = await calendar.BusyAsync(from, to, settings, ct);
-        var schedule = await store.LoadScheduleAsync(day, day, ct);
+        var schedule = b.ScheduleFor(service, await store.LoadScheduleAsync(day, day, ct)); // v1.113: the office's hours
         var booked = (await store.TakenBetweenAsync(from, to, ct)).Select(x => x.Interval).ToList();
         // Without the calendar Hazem offers nothing (B-24); the preview still shows the panel's hours alone, and says so.
         var slots = Availability.Find(schedule, b.Rules, new SlotQuery(service.Minutes, now, service.IsUrgent, day, 96), booked,

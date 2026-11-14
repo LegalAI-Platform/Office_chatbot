@@ -86,17 +86,37 @@ public sealed class WeeklyHours
 
         return (new WeeklyHours(days), null);
     }
+
+    /// <summary>v1.113: the same week with every day cut to <paramref name="window"/> (a day left with nothing is a day off).</summary>
+    public WeeklyHours Within(MinuteRange window) =>
+        new(_days.ToDictionary(d => d.Key, d => (IReadOnlyList<MinuteRange>)Schedule.Clip(d.Value, window)));
 }
 
-/// <summary>The default week plus the exceptions of some dates.</summary>
-public sealed class Schedule(WeeklyHours weekly, IReadOnlyList<DayException> exceptions)
+/// <summary>
+/// The default week plus the exceptions of some dates. v1.113: <paramref name="window"/>, the hours of the day one kind of
+/// appointment is kept inside (the office's meetings: booking.office_*), after the week and the exceptions; null = all of them.
+/// </summary>
+public sealed class Schedule(WeeklyHours weekly, IReadOnlyList<DayException> exceptions, MinuteRange? window = null)
 {
     public WeeklyHours Weekly { get; } = weekly;
 
     public IReadOnlyList<DayException> Exceptions { get; } = exceptions;
 
-    /// <summary>The bookable ranges of a date, sorted and merged: the exception of the day wins over the week.</summary>
-    public IReadOnlyList<MinuteRange> HoursOn(DateOnly day)
+    public MinuteRange? Window { get; } = window;
+
+    /// <summary>v1.113 (the owner): the same week and exceptions, every day cut to <paramref name="hours"/>.</summary>
+    public Schedule Within(MinuteRange hours) => new(Weekly, Exceptions, hours);
+
+    /// <summary>
+    /// The bookable ranges of a date, sorted and merged: the exception of the day wins over the week, then
+    /// <see cref="Window"/> cuts them.
+    /// </summary>
+    public IReadOnlyList<MinuteRange> HoursOn(DateOnly day) => Window is { } w ? Clip(OpenOn(day), w) : OpenOn(day);
+
+    internal static List<MinuteRange> Clip(IEnumerable<MinuteRange> open, MinuteRange window) =>
+        open.Select(r => new MinuteRange(Math.Max(r.Start, window.Start), Math.Min(r.End, window.End))).Where(r => r.End > r.Start).ToList();
+
+    private List<MinuteRange> OpenOn(DateOnly day)
     {
         var own = Exceptions.Where(e => e.Day == day).ToList();
         if (own.Any(e => e.Kind == ExceptionKind.ClosedDay))

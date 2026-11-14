@@ -18,6 +18,7 @@ member, and Hazem uses the change at once.
 | The hours of every week | **المواعيد الثابتة**: each day one or more ranges, or none (إجازة) → احفظ الأسبوع |
 | Buffer, notice, furthest day, a daily limit, every how many minutes, how many times Hazem offers | **إعدادات الحجز** |
 | Switch booking from WhatsApp on or off | **إعدادات الحجز** → «حازم يحجز من واتساب» |
+| **(1.113)** The hours of the day for the office's meetings and the Urfi signings (10:00 to 20:00 on the server; the phone, video and urgent calls keep the week's hours) | **إعدادات الحجز** → «ساعات المقابلات في المكتب» → من / حتى → حفظ |
 | InstaPay, the wallet, the address, the map, **(1.25)** the Google Meet link and the office's phone (manager and lawyer only) | **بيانات المكتب** |
 
 - Every day shows **«حازم هيعرض إيه»**: the exact times Hazem would offer that day, now.

@@ -31,6 +31,9 @@ public sealed record BookingService(string Code, string Short, int Minutes, int 
 
     public bool IsUrf => Code.StartsWith("urf_", StringComparison.Ordinal);
 
+    /// <summary>v1.113: held in the office (the meeting and the Urfi signing), so only inside the office's hours (booking.office_*).</summary>
+    public bool AtOffice => Code == Office.Code || IsUrf;
+
     public static BookingService Urf(bool marriage, bool officeWitnesses) => (marriage, officeWitnesses) switch
     {
         (true, true) => UrfMarriageOffice,
@@ -94,6 +97,22 @@ public sealed record BookingSettings(bool Enabled, BookingRules Rules, string Ca
     /// <summary>B-11 (1.15): the Urfi appointment in the office, 15 minutes to 8 hours.</summary>
     public static bool UrfMinutesValid(int minutes) => minutes is >= 15 and <= 480;
 
+    /// <summary>
+    /// v1.113 (the owner, 2026-11-14: «المقابلات في المكتب من 10 الصبح ل 8 بالليل»): the minutes of the day (0–1440) the office's
+    /// meetings and Urfi signings are kept inside, within the panel's hours. Both unset: the panel's hours for them too.
+    /// </summary>
+    public const string OfficeStartKey = "booking.office_start_minute";
+
+    public const string OfficeEndKey = "booking.office_end_minute";
+
+    public static bool OfficeWindowValid(int start, int end) => new MinuteRange(start, end).IsValid;
+
+    /// <summary>v1.113: the office's hours of the day from the settings; null when unset (or not a range of the day).</summary>
+    public static MinuteRange? OfficeWindowFrom(HazemSettings s) =>
+        int.TryParse(s.Get(OfficeStartKey), out var start) && int.TryParse(s.Get(OfficeEndKey), out var end) && OfficeWindowValid(start, end)
+            ? new MinuteRange(start, end)
+            : null;
+
     public const string EnabledKey = "booking.enabled";
     public const string BufferKey = "booking.buffer_minutes";
     public const string MinNoticeKey = "booking.min_notice_hours";
@@ -123,8 +142,15 @@ public sealed record BookingSettings(bool Enabled, BookingRules Rules, string Ca
             Int(HoldGapKey, h.GapMinutes));
         return new(s.Flag(EnabledKey), rules.Problem() is null ? rules : d, s.Get(CalendarIdKey), OfficeInfo.From(s),
             hold.Problem() is null ? hold : h, UrfMinutesValid(Int(UrfMinutesKey, 60)) ? Int(UrfMinutesKey, 60) : 60,
-            PriceList.From(s)) { Urgent = UrgentRules.From(s) };
+            PriceList.From(s)) { Urgent = UrgentRules.From(s), OfficeWindow = OfficeWindowFrom(s) };
     }
+
+    /// <summary>v1.113: the office's hours of the day (<see cref="OfficeStartKey"/>); null = the panel's hours.</summary>
+    public MinuteRange? OfficeWindow { get; init; }
+
+    /// <summary>v1.113: the hours a service is offered from: an office one only inside <see cref="OfficeWindow"/>.</summary>
+    public Schedule ScheduleFor(BookingService service, Schedule schedule) =>
+        service.AtOffice && OfficeWindow is { } hours ? schedule.Within(hours) : schedule;
 
     /// <summary>B-23 as the panel has it now (TASK 06); the 1.4 values when it was not read.</summary>
     public PriceList Prices => PriceList ?? PriceList.Default;
@@ -340,11 +366,14 @@ public sealed class BookingDesk(IBookingStore store, IBusyCalendar calendar)
 {
     public static TimeZoneInfo Zone => OfficeHours.Cairo;
 
-    /// <summary>TASK 06 (B-20): the consultation hours in words, from the panel's default week (null when no day is open).</summary>
-    public async Task<string?> WeekHoursAsync(DateTimeOffset now, CancellationToken ct)
+    /// <summary>
+    /// TASK 06 (B-20): the consultation hours in words, from the panel's default week (null when no day is open). v1.113: with
+    /// the office's meetings' hours after them when <paramref name="office"/> makes those shorter.
+    /// </summary>
+    public async Task<string?> WeekHoursAsync(DateTimeOffset now, CancellationToken ct, MinuteRange? office = null)
     {
         var today = Today(now);
-        return BookingWords.WeekHours((await store.LoadScheduleAsync(today, today, ct)).Weekly);
+        return BookingWords.Hours((await store.LoadScheduleAsync(today, today, ct)).Weekly, office);
     }
 
     public async Task<FreeSlots> FindAsync(BookingSettings booking, HazemSettings settings, BookingService service, DateTimeOffset now,
@@ -364,7 +393,8 @@ public sealed class BookingDesk(IBookingStore store, IBusyCalendar calendar)
             return new FreeSlots(false, []);
         }
 
-        var schedule = await store.LoadScheduleAsync(first, last, ct);
+        // v1.113: a meeting in the office (and an Urfi signing) only inside the office's hours of the day
+        var schedule = booking.ScheduleFor(service, await store.LoadScheduleAsync(first, last, ct));
         var booked = (await store.TakenBetweenAsync(from, to, ct)).Where(a => a.Id != except).Select(a => a.Interval).ToList();
         // 1.13: a time too close to pay for in time is not offered (its hold would be under 15 minutes).
         // Only the first times of the day can be that close, so a second page is enough.
@@ -733,6 +763,24 @@ public static class BookingWords
         }
 
         return string.Join("، و", parts);
+    }
+
+    /// <summary>
+    /// v1.113 (the owner, 2026-11-14): the consultation hours, then the office's meetings when they keep shorter hours:
+    /// «كل يوم من 10:00 ص لـ 12 بالليل، والمقابلات في المكتب من 10:00 ص لـ 8:00 م» («كل يوم» is said once).
+    /// </summary>
+    public static string? Hours(WeeklyHours week, MinuteRange? office)
+    {
+        if (WeekHours(week) is not { } all || office is not { } window || WeekHours(week.Within(window)) is not { } meetings || meetings == all)
+        {
+            return WeekHours(week);
+        }
+
+        const string everyDay = "كل يوم ";
+        var said = all.StartsWith(everyDay, StringComparison.Ordinal) && meetings.StartsWith(everyDay, StringComparison.Ordinal)
+            ? meetings[everyDay.Length..]
+            : meetings;
+        return $"{all}، والمقابلات في المكتب {said}";
     }
 
     /// <summary>A minute of the day as Hazem says it: «10:00 ص»، «6:30 م»، «12 الضهر»، «12 بالليل».</summary>

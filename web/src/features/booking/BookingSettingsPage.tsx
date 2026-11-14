@@ -246,6 +246,21 @@ function SettingsForm() {
               <Field label="ينتهي الحجز المؤقت قبل الموعد بـ (دقيقة)" type="number" min={0} max={240} value={v.hold_gap_minutes} onChange={num("hold_gap_minutes")} />
             </div>
           </Sheet>
+          <Sheet icon="office" title="ساعات المقابلات في المكتب"
+            hint="يعرض حازم مواعيد المقابلة في المكتب ومواعيد العرفي داخل هذه الساعات فقط، ضمن مواعيد الأسبوع. الاستشارة بالهاتف أو الفيديو والاستشارة العاجلة تتبع مواعيد الأسبوع.">
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="grid gap-1.5 text-sm font-semibold">
+                من الساعة
+                <TimeSelect label="بداية المقابلات في المكتب" value={v.office_start_minute ?? 0}
+                  onChange={(m) => setDraft({ ...v, office_start_minute: m, office_end_minute: Math.min(1440, Math.max(v.office_end_minute ?? 1440, m + 15)) })} />
+              </label>
+              <label className="grid gap-1.5 text-sm font-semibold">
+                حتى الساعة (آخر مقابلة تنتهي قبلها)
+                <TimeSelect label="نهاية المقابلات في المكتب" min={(v.office_start_minute ?? 0) + 15} value={v.office_end_minute ?? 1440}
+                  onChange={(m) => setDraft({ ...v, office_start_minute: v.office_start_minute ?? 0, office_end_minute: m })} />
+              </label>
+            </div>
+          </Sheet>
           <Sheet icon="document" title="العرفي">
             <div className="grid gap-3 md:grid-cols-2">
               <Field label="مدة موعد العرفي في المكتب (دقيقة)" type="number" min={15} max={480} value={v.urf_minutes} onChange={num("urf_minutes")} />
