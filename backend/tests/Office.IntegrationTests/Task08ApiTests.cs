@@ -341,7 +341,7 @@ public sealed class Task08ApiTests(TestDatabase db) : IAsyncLifetime
     public async Task V111_a_hold_that_runs_out_or_a_client_s_cancellation_closes_them_too_and_another_booking_s_stay()
     {
         await db.ExecAsync("""
-            INSERT INTO hazem.persons (id, wa_id) VALUES ('00000000-0000-0000-0000-000000011101', '201000001111');
+            INSERT INTO hazem.persons (id, wa_id) VALUES ('00000000-0000-0000-0000-000000011101', '201000000911');
             INSERT INTO hazem.appointments (id, person_id, service, starts_at, ends_at, amount, booked_turn_id, state, hold_until)
             VALUES ('00000000-0000-0000-0000-0000000111a1', '00000000-0000-0000-0000-000000011101', 'consultation_phone_video',
                     '2026-12-02 14:00+02', '2026-12-02 14:15+02', 500, 'v111-a', 'pending_payment', '2026-12-02 13:00+02'),
