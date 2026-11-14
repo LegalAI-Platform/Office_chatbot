@@ -267,25 +267,7 @@ public static class PanelEndpoints
                 return Results.NotFound(new { error = "not_found" });
             }
 
-            var type = ClientFileTypes.Safe(file.ContentType);
-            ctx.Response.Headers.ContentSecurityPolicy = "sandbox; default-src 'none'; img-src 'self'; media-src 'self'";
-            var name = ClientFileTypes.Name(index, file.Filename, type);
-            // Safari plays audio and video only from byte ranges: those (WhatsApp keeps them under 16 MB)
-            // are read whole so a range can be answered. Everything else streams.
-            if ((type.StartsWith("audio/", StringComparison.Ordinal) || type.StartsWith("video/", StringComparison.Ordinal))
-                && file.Length is > 0 and <= ClientFileTypes.MaxRanged)
-            {
-                var whole = new MemoryStream((int)file.Length.Value);
-                await using (file.Content)
-                {
-                    await file.Content.CopyToAsync(whole, ct);
-                }
-
-                whole.Position = 0;
-                return Results.Stream(whole, type, null, enableRangeProcessing: true);
-            }
-
-            return Results.Stream(file.Content, type, ClientFileTypes.Inline(type) ? null : name, enableRangeProcessing: false);
+            return await Serve(ctx, file, index, ct);
         }).RequireAuthorization(PanelAuth.Policy(Permissions.TasksViewOwn));
 
         tasks.MapPost("/{id:guid}/assign", async (Guid id, AssignRequest? body, HttpContext ctx, PanelTasks use, CancellationToken ct) =>
@@ -302,6 +284,29 @@ public static class PanelEndpoints
         work.MapPost("/search", async (SearchBody? body, HttpContext ctx, PanelSearch use, CancellationToken ct) =>
             Results.Ok(await use.SearchAsync(ctx.CurrentUser().AsViewer(), body?.Q, ct)))
             .RequireAuthorization(PanelAuth.Policy(Permissions.TasksViewOwn));
+
+        // v1.110 (the owner: «…/documents شوف دي عاوز تعملها»): «المستندات», every file a client sent, by client. The search
+        // goes in the body, as the search bar's; a file opens like a task's (never cached, shown only when it is safe), recorded.
+        work.MapPost("/documents", async (DocumentsBody? body, HttpContext ctx, PanelDocuments use, CancellationToken ct) =>
+            Results.Ok(await use.ListAsync(ctx.CurrentUser().AsViewer(), new DocumentQuery(body?.Q, body?.Kind, body?.Source, body?.Page ?? 1), ct)))
+            .RequireAuthorization(PanelAuth.Policy(Permissions.TasksViewOwn));
+        work.MapGet("/documents/{source}/{id:guid}/{index:int}", async (string source, Guid id, int index, HttpContext ctx, PanelDocuments use,
+            IClientFiles files, CancellationToken ct) =>
+        {
+            if (!files.Configured)
+            {
+                return Results.Json(new { error = "not_configured" }, statusCode: StatusCodes.Status503ServiceUnavailable);
+            }
+
+            var viewer = ctx.CurrentUser().AsViewer();
+            if (await use.FileAsync(viewer, source, id, index, ct) is not { } found || await files.OpenAsync(found, ct) is not { } file)
+            {
+                return Results.NotFound(new { error = "not_found" });
+            }
+
+            await use.RecordOpenedAsync(viewer, source, id, ct);
+            return await Serve(ctx, file, index, ct);
+        }).RequireAuthorization(PanelAuth.Policy(Permissions.TasksViewOwn));
 
         // TASK 07c: the bell. Only what the person may see (their tasks and the unassigned, or all).
         work.MapGet("/alerts", async (HttpContext ctx, PanelAlerts alerts, CancellationToken ct) =>
@@ -466,6 +471,33 @@ public static class PanelEndpoints
         }
     }
 
+    /// <summary>
+    /// TASK 07c: a file a client sent, as the browser may show it: in the page only when it is a picture, a sound, a video or a
+    /// PDF; anything else downloads. Never cached, in a sandbox. v1.110: «المستندات» serves its files the same way.
+    /// </summary>
+    private static async Task<IResult> Serve(HttpContext ctx, ClientFile file, int index, CancellationToken ct)
+    {
+        var type = ClientFileTypes.Safe(file.ContentType);
+        ctx.Response.Headers.ContentSecurityPolicy = "sandbox; default-src 'none'; img-src 'self'; media-src 'self'";
+        var name = ClientFileTypes.Name(index, file.Filename, type);
+        // Safari plays audio and video only from byte ranges: those (WhatsApp keeps them under 16 MB)
+        // are read whole so a range can be answered. Everything else streams.
+        if ((type.StartsWith("audio/", StringComparison.Ordinal) || type.StartsWith("video/", StringComparison.Ordinal))
+            && file.Length is > 0 and <= ClientFileTypes.MaxRanged)
+        {
+            var whole = new MemoryStream((int)file.Length.Value);
+            await using (file.Content)
+            {
+                await file.Content.CopyToAsync(whole, ct);
+            }
+
+            whole.Position = 0;
+            return Results.Stream(whole, type, null, enableRangeProcessing: true);
+        }
+
+        return Results.Stream(file.Content, type, ClientFileTypes.Inline(type) ? null : name, enableRangeProcessing: false);
+    }
+
     private static IResult Answer(PanelResult<TaskView> r) =>
         r.Outcome == PanelOutcome.Ok ? Results.Ok(TaskDetailDto.From(r.Value!)) : Refused(r);
 
@@ -560,6 +592,9 @@ public sealed record StaffDto(Guid Id, string Name);
 
 /// <summary>v1.110: what the search bar sends (POST /search).</summary>
 public sealed record SearchBody(string? Q);
+
+/// <summary>v1.110: «المستندات»'s page (POST /documents): a search, «image» or «document», where it came from, the page.</summary>
+public sealed record DocumentsBody(string? Q, string? Kind, string? Source, int? Page);
 
 public sealed record AlertDto(long Id, string Kind, Guid? TaskId, string? TaskType, string? ClientName, DateTimeOffset? DueAt,
     DateTimeOffset CreatedAt, bool Read, string? SystemWhat, string? PhoneLast3, string? MatterType, string? StaffName);

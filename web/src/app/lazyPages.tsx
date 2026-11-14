@@ -27,6 +27,7 @@ const LOADERS = {
   "/prices": pick(() => import("../features/prices/PricesPage"), "PricesPage"),
   "/testing": pick(() => import("../features/testing/TestingPage"), "TestingPage"),
   "/chats": pick(() => import("../features/chats/ChatsPage"), "ChatsPage"),
+  "/documents": pick(() => import("../features/documents/DocumentsPage"), "DocumentsPage"), // v1.110
   "/reports": pick(() => import("../features/reports/ReportsPage"), "ReportsPage"),
   "/lists": pick(() => import("../features/lists/ListsPage"), "ListsPage"),
   "/texts": pick(() => import("../features/texts/TextsPage"), "TextsPage"),

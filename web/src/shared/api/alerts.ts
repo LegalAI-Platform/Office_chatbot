@@ -17,10 +17,11 @@ export const alertsKey = ["alerts"] as const;
 const AREAS: Record<string, readonly (readonly string[])[]> = {
   tasks: [dashboardKey, ["tasks"], ["task"], ["report"]],
   appointments: [["booking", "appointments"], ["booking", "month"], ["booking", "preview"], ["urf"], ["report"], ["report-trend"]],
-  payments: [["payments"], ["booking", "appointments"], ["booking", "month"], ["services"], ["urf"], ["report"], ["report-trend"]],
-  services: [["services"], ["payments"], ["report"], ["report-trend"]],
-  urf: [["urf"], ["payments"]],
-  clients: [["report"], ["ai-cost"]],
+  // v1.110: «المستندات» («documents») with every area a client's file comes with
+  payments: [["payments"], ["booking", "appointments"], ["booking", "month"], ["services"], ["urf"], ["report"], ["report-trend"], ["documents"]],
+  services: [["services"], ["payments"], ["report"], ["report-trend"], ["documents"]],
+  urf: [["urf"], ["payments"], ["documents"]],
+  clients: [["report"], ["ai-cost"], ["documents"]],
   ai: [["report"], ["ai-cost"]],
   lists: [["lists"]],
   muted: [["muted"]],

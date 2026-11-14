@@ -312,6 +312,52 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
         }
     }
 
+    // v1.110 (the owner: «…/documents شوف دي عاوز تعملها» … «اعمل كله مع بعض»): «المستندات» lists every file a client sent,
+    // by client, for whoever may see his tasks (a staff member: hers and the unassigned), and opens one through the panel
+    // only, recorded; never another staff member's client's.
+    [Fact]
+    public async Task The_documents_page_lists_each_client_s_files_for_whoever_may_see_him_and_opens_them_recorded()
+    {
+        var mine = await NewTask("complaint", staff: _staffA);                              // yasmin's client: a picture
+        var others = await NewTask("complaint", staff: _staffB, mime: "application/pdf");   // karim's client: a PDF
+        var boss = await SignIn("boss");
+        var yasmin = await SignIn("yasmin");
+        async Task<JsonNode> List(HttpClient c, object body)
+        {
+            var r = await c.PostAsJsonAsync("/api/panel/documents", body, Ct);
+            Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+            return (await r.Content.ReadFromJsonAsync<JsonNode>(Ct))!;
+        }
+
+        static Guid[] Clients(JsonNode p) => [.. p["clients"]!.AsArray().Select(c => (Guid)c!["id"]!).Order()];
+        static JsonNode FirstFile(JsonNode p, Guid client) => p["clients"]!.AsArray().Single(c => (Guid)c!["id"]! == client)!["files"]![0]!;
+
+        var all = await List(boss, new { });
+        Assert.Equal(new[] { mine, others }.Order(), Clients(all));
+        Assert.Equal(2, (int)all["total"]!);
+        var picture = FirstFile(all, mine);
+        // the picture of the turn's second message, with the task opened from it (NewTask: the task id is the person's)
+        Assert.Equal(("message", "image", 1, mine), ((string)picture["source"]!, (string)picture["kind"]!, (int)picture["index"]!, (Guid)picture["task_id"]!));
+        Assert.Equal(1, (int)all["clients"]!.AsArray().Single(c => (Guid)c!["id"]! == mine)!["count"]!);
+
+        Assert.Equal([mine], Clients(await List(yasmin, new { })));                // not karim's client
+        Assert.Equal([others], Clients(await List(boss, new { kind = "document" })));
+        Assert.Empty(Clients(await List(boss, new { source = "receipt" })));
+        Assert.Equal(new[] { mine, others }.Order(), Clients(await List(boss, new { q = "ساره" }))); // «سارة محمد علي حسن»
+        Assert.Empty(Clients(await List(boss, new { q = "71" })));                   // names no one: nothing, never everyone
+
+        // opening: through the panel, recorded
+        var opened = await yasmin.GetAsync($"/api/panel/documents/message/{(Guid)picture["id"]!}/1", Ct);
+        Assert.Equal(HttpStatusCode.OK, opened.StatusCode);
+        Assert.Equal("image/jpeg", opened.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(1L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.panel_audit WHERE action = 'document.open'"));
+        var pdf = FirstFile(all, others);
+        Assert.Equal(HttpStatusCode.NotFound, (await yasmin.GetAsync($"/api/panel/documents/message/{(Guid)pdf["id"]!}/1", Ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await boss.GetAsync($"/api/panel/documents/message/{(Guid)pdf["id"]!}/1", Ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await boss.GetAsync($"/api/panel/documents/message/{(Guid)pdf["id"]!}/0", Ct)).StatusCode); // a text
+        Assert.Equal(HttpStatusCode.NotFound, (await boss.GetAsync($"/api/panel/documents/elsewhere/{(Guid)pdf["id"]!}/1", Ct)).StatusCode);
+    }
+
     // v1.110 (the owner, of the bell's red count: «أيوه، ضيفها»): a finished task (done, cancelled) leaves its alerts read
     // for everyone: out of the red count, and still in the list, dimmed.
     [Fact]

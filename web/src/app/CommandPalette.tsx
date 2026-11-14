@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router";
 import { can, useMe } from "../shared/api/session";
 import type { Permission } from "../shared/api/types";
@@ -18,6 +19,8 @@ const COMMANDS: Command[] = [
   { id: "home", text: "الرئيسية", hint: "صفحة", icon: "home", to: "/", words: "رئيسية داشبورد" },
   { id: "tasks", text: "المهام", hint: "صفحة", icon: "tasks", to: "/tasks", words: "مهام طلبات" },
   { id: "chats", text: "المحادثات", hint: "Chatwoot", icon: "chat", to: "/chats", words: "محادثات شات واتساب chatwoot" },
+  // v1.110: every file a client sent
+  { id: "documents", text: "المستندات", hint: "صفحة", icon: "document", to: "/documents", words: "مستندات ملفات ملف صور صورة عقد عقود بطاقة ورق" },
   { id: "reports", text: "التقارير", hint: "صفحة", icon: "reports", to: "/reports", words: "تقارير ارقام أرقام شهر", permission: "reports.view" },
   { id: "lists", text: "قوائم المكتب", hint: "الإعدادات", icon: "clients", to: "/lists", words: "قوائم قائمة قوايم موكلين موكّلين محظورين ممنوعين", permission: "lists.manage" },
   { id: "texts", text: "نصوص حازم", hint: "الإعدادات", icon: "message", to: "/texts", words: "نصوص رسائل حازم", permission: "texts.manage" },
@@ -60,7 +63,10 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   };
 
   if (!open) return null;
-  return (
+  // v1.110 (the owner: «لما بدور كنترول ك بص اي الي بيحصل اللون الاسود والابيض حلها»): on the page's body, not inside the top
+  // bar. The bar's backdrop blur makes it the box of anything fixed inside it, so the dim covered the bar only and the
+  // page under it stayed white.
+  return createPortal(
     <div className="fixed inset-0 z-50 grid items-start justify-items-center bg-black/50 px-4 pt-[12vh]"
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div role="dialog" aria-modal="true" aria-label="اختصارات وبحث"
@@ -95,6 +101,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
           <span><kbd dir="ltr">↑ ↓</kbd> للتنقل</span><span><kbd dir="ltr">Enter</kbd> للفتح</span><span><kbd dir="ltr">Ctrl K</kbd> من أي صفحة</span>
         </p>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

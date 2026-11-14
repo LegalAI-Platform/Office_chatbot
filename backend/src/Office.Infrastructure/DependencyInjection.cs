@@ -103,6 +103,9 @@ public static class DependencyInjection
         // v1.110: the search bar's one search (the clients, their appointments, the tasks)
         services.AddScoped<Application.Panel.IPanelSearchStore, Panel.PanelSearchStore>();
         services.AddScoped<Application.Panel.PanelSearch>();
+        // v1.110: «المستندات», every file a client sent (hazem.client_documents)
+        services.AddScoped<Application.Panel.IPanelDocumentStore, Panel.PanelDocumentStore>();
+        services.AddScoped<Application.Panel.PanelDocuments>();
         // v1.9: sign-up, e-mail codes (the owner's SMTP) and the authenticator app.
         services.AddSingleton<Application.Panel.IPanelCrypto, Panel.PanelCrypto>();
         services.AddSingleton<Application.Panel.IPanelMailer, Panel.SmtpPanelMailer>();
