@@ -207,6 +207,8 @@ export const ALERT_KINDS: Record<string, string> = {
   system: "مشكلة في النظام",
   // v1.105: any other task Hazem opened for the office; the line under it says why (its type). v1.110: formal wording
   task_new: "عميل بحاجة إلى متابعة من المكتب",
+  // v1.111 (the owner: «لو عميل بعت صوره الايصال وعاوز تأكيد الدفع»)
+  receipt_review: "إيصال تحويل بانتظار التأكيد",
 };
 
 /** TASK 13: what a system alert is about. */
