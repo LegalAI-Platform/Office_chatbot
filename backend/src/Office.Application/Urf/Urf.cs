@@ -253,7 +253,7 @@ public static class UrfRules
         return locked && (Differs(c.Witnesses, witnesses, "office", "own") || Took(UrfStep.Witnesses, c.Witnesses)
             || c.IsMarriage && (Differs(c.WifePast, wifePast, "first", "divorced", "khul", "widow") || Took(UrfStep.WifePast, c.WifePast)
                 || Differs(c.Guardian, guardian, "father", "brother", "uncle", "none") || Took(UrfStep.Guardian, c.Guardian)
-                || Ages(husbandAge, wifeAge) is { } said && said != (c.HusbandAge, c.WifeAge) || Took(UrfStep.Ages, c.HusbandAge)));
+                || AgesOf(c, husbandAge, wifeAge) is { } said && said != (c.HusbandAge, c.WifeAge) || Took(UrfStep.Ages, c.HusbandAge)));
     }
 
     /// <summary>TASK 20 (v1.84): the same check for what the AI read this turn.</summary>
@@ -308,6 +308,13 @@ public static class UrfRules
 
     private static (int, int)? Ages(int? husband, int? wife) =>
         husband is >= 1 and <= 120 && wife is >= 1 and <= 120 ? (husband.Value, wife.Value) : null;
+
+    /// <summary>
+    /// v1.114: the ages he said, as a pair. A correction may name one side only («19 مش 15»): the other side is the one the case
+    /// already has. With no ages yet, one side alone is no answer (the ages question stays, v1.72).
+    /// </summary>
+    private static (int, int)? AgesOf(UrfCase c, int? husband, int? wife) =>
+        Ages(husband ?? (wife is not null ? c.HusbandAge : null), wife ?? (husband is not null ? c.WifeAge : null));
 
     /// <summary>B-11.1: the typed ages. Under 18 on either side closes the case without a price or a time.</summary>
     /// <param name="words">v1.52 (phase 1): numbers in words («الاتنين تلاتين») are read too.</param>
@@ -389,7 +396,7 @@ public static class UrfRules
         var past = c.IsMarriage ? Only(wifePast, "first", "divorced", "khul", "widow") : null;
         var guard = c.IsMarriage ? Only(guardian, "father", "brother", "uncle", "none") : null;
         var wit = Only(witnesses, "office", "own");
-        var ages = c.IsMarriage ? Ages(husbandAge, wifeAge) : null;
+        var ages = c.IsMarriage ? AgesOf(c, husbandAge, wifeAge) : null; // v1.114: one side alone corrects the pair the case has
         // v1.87: who will not come is kept (one named as the guardian leaves the list); the guardian he had is then taken back,
         // and when none of the three is left it is «nobody of her family» (B-11), as if he said it
         var outNow = c.IsMarriage ? c.Out.Concat(notComing ?? []).Where(g => g != guard).Distinct().ToList() : [];
@@ -413,7 +420,7 @@ public static class UrfRules
         // v1.72 (Ahmed Amin's chat: «طب هجيب ابوها» after «مفيش حد منهم» got the closing text, then silence): the refusal for no
         // guardian is the answer «none» like any other answer, so what he says after it changes it as it changes the others: a
         // guardian named, or a past that needs none. The case goes on from where it stopped, as a new case (a refused case is never
-        // written again); its other answers are kept. The age refusal has nothing to change: it stays.
+        // written again); its other answers are kept.
         if (c.State == UrfCase.RejectedGuardian && (guard is not null and not "none" || past is not null and not "first"))
         {
             var again = c with
@@ -425,6 +432,23 @@ public static class UrfRules
             return NextStep(again) is { } next
                 ? again with { Step = next }
                 : again with { State = UrfCase.DocumentsPending };
+        }
+
+        // v1.114 (the owner, of a chat of 2026-11-14 where the wife's age, corrected from under 18 right after the refusal, got the
+        // closing text twice: «هو عدل السن… صلحها»): the age refusal the same way as the guardian's (v1.72). The ages
+        // he says after it (the last said, v1.74; one side alone keeps the other) go through the SAME rules: 18 or more on both
+        // sides, the case goes on from where it stopped, as a new case with its other answers; a refusal still, it stays as it
+        // is. Who signs is checked on the IDs by the lawyer or the manager before the time, as for every Urfi case (B-11.7).
+        if (c.State == UrfCase.RejectedAge && ages is { } said && said != (c.HusbandAge, c.WifeAge))
+        {
+            var again = Settle(c with
+            {
+                Id = Guid.NewGuid(), State = UrfCase.Collecting, Step = null, PolicyVersion = null,
+                HusbandAge = said.Item1, WifeAge = said.Item2,
+                WifePast = past ?? c.WifePast, Guardian = guard ?? c.Guardian, Witnesses = wit ?? c.Witnesses,
+                GuardianOut = UrfCase.OutOf(outNow),
+            });
+            return again.State is UrfCase.RejectedAge or UrfCase.RejectedGuardian ? c : again;
         }
 
         return c;
