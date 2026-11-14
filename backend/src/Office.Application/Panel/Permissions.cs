@@ -70,7 +70,9 @@ public static class Permissions
         // v1.100: without TextsManage and TestingForget (the maintenance role's); v1.106: and without ReportsView
         [Manager] = [TasksViewOwn, TasksViewAll, TasksUpdate, TasksAssign, UsersManage, AccountSelf, ListsManage,
             ConversationsUnmute, ScheduleManage, OfficeManage, PaymentsVerify, PaymentsRefund, ServicesManage, ServicesPrice, UrfManage, UrfReview, PricesManage],
-        [Lawyer] = [TasksViewOwn, TasksViewAll, TasksUpdate, TasksAssign, AccountSelf, ListsManage, ScheduleManage,
+        // v1.110 (the owner, 2026-11-14: «خلي المستشار يشوفها»): «الحسابات» too (UsersManage), as the manager has it; the
+        // maintenance accounts stay MaintenanceManage's only
+        [Lawyer] = [TasksViewOwn, TasksViewAll, TasksUpdate, TasksAssign, UsersManage, AccountSelf, ListsManage, ScheduleManage,
             OfficeManage, PaymentsVerify, PaymentsRefund, ServicesManage, ServicesPrice, UrfManage, UrfReview, PricesManage],
         [Staff] = [TasksViewOwn, TasksUpdate, AccountSelf, ScheduleManage, PaymentsVerify, PaymentsRefund, ServicesManage, UrfManage],
     };

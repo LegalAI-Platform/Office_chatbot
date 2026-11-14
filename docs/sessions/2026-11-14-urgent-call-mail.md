@@ -30,6 +30,7 @@ So the urgent consultation was the one multiplier: 11 of the 17 alert e-mails.
 | A second receipt (after «فيه مشكلة») opens no second task while the call's is open | `ConversationStores` |
 | E-mail: nobody while the WhatsApp alert is the lawyer's, the lawyer when it failed, the staff when nobody answered, never «late» for it; the bell as before | `AlertKinds.BellOnly`, `AlertAudience.For`, `PanelAlertStore.UnsentAsync`, `PanelMails` (two new e-mails) |
 | The task stays urgent in the panel at every step | `PanelTasks.UrgentTypes`, `web/src/shared/lib/labels.ts` (`URGENT_TYPES`), tasks page, home |
+| Before the merge, the owner added: «خلي المستشار يشوفها» («الحسابات» in the settings). The lawyer has `users.manage` now, as the manager: add, close, a temporary password, roles, sign-up approvals. The maintenance accounts stay `maintenance.manage`'s, nobody changes their own account, the approval e-mail stays the managers', and 2FA stays optional (`PANEL_MANAGERS_NEED_2FA` is off on the server) | `Permissions.cs`, the RBAC test, the tour's test |
 | Docs | `DECISIONS-v1.110.md`, CLAUDE.md, START-HERE |
 
 ## Checked

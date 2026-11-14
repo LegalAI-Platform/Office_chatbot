@@ -12,10 +12,11 @@ import { tourSteps } from "./tourSteps";
 // The roles' permissions as backend/src/Office.Application/Panel/Permissions.cs gives them.
 const STAFF: Permission[] = ["tasks.view_own", "tasks.update", "account.self", "schedule.manage", "payments.verify", "payments.refund",
   "services.manage", "urf.manage"];
-const LAWYER: Permission[] = ["tasks.view_own", "tasks.view_all", "tasks.update", "tasks.assign", "account.self", "lists.manage",
-  "schedule.manage", "office.manage", "payments.verify", "payments.refund", "services.manage", "services.price",
+// v1.110: the lawyer has «الحسابات» (users.manage) too, as the manager (the owner: «خلي المستشار يشوفها»)
+const LAWYER: Permission[] = ["tasks.view_own", "tasks.view_all", "tasks.update", "tasks.assign", "users.manage", "account.self",
+  "lists.manage", "schedule.manage", "office.manage", "payments.verify", "payments.refund", "services.manage", "services.price",
   "urf.manage", "urf.review", "prices.manage"];
-const MANAGER: Permission[] = [...LAWYER, "users.manage", "conversations.unmute"];
+const MANAGER: Permission[] = [...LAWYER, "conversations.unmute"];
 // v1.106: the reports are the maintenance role's only
 const MAINTENANCE: Permission[] = [...MANAGER, "texts.manage", "reports.view", "testing.forget", "maintenance.manage"];
 
@@ -76,7 +77,7 @@ describe("the tour's steps (the owner's words)", () => {
 
   it("says what each role has in «الإعدادات» and in «المهام»", () => {
     expect(body(account(), "settings")).toBe("فيها حسابك، وكلمة السر، والأسعار.");
-    expect(body(lawyer, "settings")).toBe("فيها حسابك، وكلمة السر، وقوائم المكتب، والأسعار.");
+    expect(body(lawyer, "settings")).toBe("فيها حسابك، وكلمة السر، وحسابات المكتب، وقوائم المكتب، والأسعار.");
     expect(body(manager, "settings")).toBe("فيها حسابك، وكلمة السر، وحسابات المكتب، وقوائم المكتب، والأسعار.");
     expect(body(maintenance, "settings")).toBe("فيها حسابك، وكلمة السر، وحسابات المكتب، وقوائم المكتب، ونصوص حازم وأدوات التجربة، والأسعار.");
     expect(body(account(), "tasks")).toBe("عندما يحتاج عميل على واتساب إلى أحد من المكتب، يفتح له حازم مهمة هنا. اضغط «ابدأ العمل عليها»، وعند الانتهاء «تحديد كمكتملة».");
