@@ -317,6 +317,14 @@ Grafana «Hazem · Logs», the service, search `****` (the masked number). The c
 ##### LogShippingFailing
 "Logs are not reaching Loki". `docker compose --profile monitoring logs --tail 50 loki alloy`.
 
+**(v1.115) «entry too far behind» in Loki's log.** Loki refuses a line that is more than an hour behind the newest line of its stream, and Alloy counts it as dropped (`reason="ingester_error"`). The healthcheck's «the logs reach Loki» counts any such drop in the last hour, and a failed healthcheck makes a deploy roll back.
+
+This happened on 2026-11-14 after two deploys within an hour. The one-shot `chatwoot-init` ran again with its earlier run's lines in its log, and Alloy sent those again.
+
+Alloy now sends only the last 50 minutes of a log (`stage.drop`, `older_than = "50m"` in `infra/monitoring/alloy/config.alloy`). Older lines stay in Docker (`docker compose logs`), and Alloy counts them apart, as `loki_process_dropped_lines_total{reason="older_than_50m"}`.
+
+If such a drop already sits in the last hour before a deploy, either wait for the hour to pass, or stop the monitoring for the deploy (`bash scripts/linux/monitoring.sh down`, deploy, `bash scripts/linux/monitoring.sh up`). The healthcheck skips the monitoring's checks while it is stopped.
+
 #### The monitoring itself
 
 ##### TargetDown
