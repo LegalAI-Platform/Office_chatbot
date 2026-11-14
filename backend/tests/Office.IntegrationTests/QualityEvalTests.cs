@@ -40,7 +40,7 @@ public sealed class QualityEvalTests(TestDatabase db)
           'office.lawyer_whatsapp', 'office.manager_whatsapp', 'office.address', 'office.map_url', 'ai.writer_model');
         UPDATE hazem.settings SET value = 'openai' WHERE key = 'ai.provider';
         TRUNCATE hazem.panel_audit; DELETE FROM hazem.panel_users;
-        TRUNCATE hazem.turns, hazem.ai_usage, hazem.generated_replies, hazem.send_results, hazem.turn_replies, hazem.classifications, hazem.panel_alerts, hazem.panel_alert_reads, hazem.staff_tasks, hazem.list_entries;
+        TRUNCATE hazem.turns, hazem.ai_usage, hazem.generated_replies, hazem.send_results, hazem.turn_replies, hazem.classifications, hazem.panel_alerts, hazem.panel_alert_reads, hazem.staff_tasks, hazem.staff_task_turns, hazem.list_entries;
         DELETE FROM hazem.staff; DELETE FROM hazem.intakes; DELETE FROM hazem.conversations; DELETE FROM hazem.persons;
         """;
 

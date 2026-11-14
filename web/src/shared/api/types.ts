@@ -190,6 +190,8 @@ export interface PanelAlert {
   /** v1.111, a receipt's alert: what it pays for (an appointment's service, or a written service's kind) and the amount due. */
   receipt_for?: string;
   amount?: number;
+  /** v1.112, a task's alert: the client's messages the task holds (his later ones join it, and it is told again). */
+  messages?: number;
 }
 
 export interface AlertList {

@@ -31,6 +31,12 @@ public sealed record WriteRequest(string Purpose, string Approved, string Call, 
     /// <summary>v1.45: the approved messages sent just before this one in the same turn (the price, the address): never repeated.</summary>
     public string Before { get; init; } = "";
 
+    /// <summary>
+    /// v1.112 (Ahmed Amin's chat, 2026-11-14 10:24: the written reply said his words stay private, and the approved privacy text
+    /// right after it said it again): the approved messages sent right after this one in the same turn, never said in it.
+    /// </summary>
+    public string After { get; init; } = "";
+
     /// <summary>v1.56: the writer's refused reply and why (ReplyRetry), when this is its second try; null on the first.</summary>
     public string? Feedback { get; init; }
 }
@@ -240,6 +246,12 @@ public static partial class ReplyGuard
             return "repeats_before";
         }
 
+        // v1.112: what goes right after it in the same turn is never said in it: four words in a row from it, or its privacy line
+        if (request.After.Length > 0 && (SharesFourWords(text, request.After) || SpeaksOfPrivacy(text) && SpeaksOfPrivacy(request.After)))
+        {
+            return "repeats_after";
+        }
+
         if (previous is not null && Normal(previous) == Normal(text))
         {
             return "same_as_previous";
@@ -447,6 +459,16 @@ public static class Conversational
     /// <summary>v1.48: words that send his question to the office (not said with an answer from the facts).</summary>
     private static readonly string[] OfficeWords = ["هوصّله", "هوصله", "ويردوا", "هيردوا", "هسأل المكتب", "هبلّغ", "هبلغ"];
 
+    /// <summary>
+    /// v1.112: what says his question went to the office (the approved «سؤال حضرتك وصل للمكتب، وهيردوا عليك هنا»,
+    /// «هوصّلها للمستشار»), with the words above.
+    /// </summary>
+    private static readonly string[] ReachedOffice = ["للمكتب", "للمستشار", "المكتب هيرد", "هوصّل", "هوصل"];
+
+    /// <summary>v1.112: the reply tells him the office will answer (his question is the office's: a task is kept for it).</summary>
+    public static bool SaysOfficeAnswers(string reply) =>
+        OfficeWords.Concat(ReachedOffice).Any(w => reply.Contains(w, StringComparison.Ordinal));
+
     /// <summary>v1.45: texts whose numbers (the price he asked) must all be in the written message.</summary>
     private static readonly HashSet<string> Locked =
     [
@@ -571,6 +593,7 @@ public static class Conversational
         {
             Facts = facts, Client = client,
             Before = string.Join("\n", composed.Actions.Take(start).Select(a => a.Text).Where(t => t is { Length: > 0 })),
+            After = string.Join("\n", composed.Actions.Skip(end + 1).Select(a => a.Text).Where(t => t is { Length: > 0 })), // v1.112
         };
         // v1.45 (the owner): a price the client asked goes out to the letter, and the legal refusal always says the lawyer
         // answers it in the consultation; otherwise the approved texts go as they are
@@ -627,6 +650,14 @@ public static class Conversational
                 && OfficeWords.Any(w => o.Reply!.Contains(w, StringComparison.Ordinal)))
             {
                 problem = "facts_and_office";
+            }
+
+            // v1.112 (Ahmed Amin's chat, 2026-11-14 10:10: «إيه البيانات اللي محتاجينها مني؟» got a list of papers no office fact
+            // gave, and the office a task to answer it all the same; the owner: «اعمل كدا»): a question the facts do not answer is
+            // the office's. The reply says it reached the office (its task is kept), never the answer itself.
+            if (problem is null && !o.FromFacts && keys.Contains(TextKeys.ServiceDetail) && !SaysOfficeAnswers(o.Reply!))
+            {
+                problem = "answered_alone";
             }
 
             if (problem is null && mainKey == TextKeys.SituationReview

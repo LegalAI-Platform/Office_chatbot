@@ -11,7 +11,7 @@ import { useEffect, useRef } from "react";
 import type { PanelAlert } from "../api/types";
 import { ALERT_KINDS, BOOKING_SERVICES, label, matterLabel, SERVICE_KINDS, SYSTEM_WHAT, TASK_TYPES } from "./labels";
 import { cairoWhen } from "./time";
-import { countWords, MORE_ALERTS, NEW_THINGS } from "./group";
+import { countWords, MESSAGES, MORE_ALERTS, NEW_THINGS } from "./group";
 
 const TITLE = "لوحة حازم";
 // the alert worth a sound: a client's urgent request (urgent_request, safety_alert). v1.104: a system failure no more.
@@ -40,13 +40,19 @@ export const receiptFor = (code?: string): string =>
 export const alertTarget = (a: PanelAlert): string | undefined =>
   a.task_id ? `/tasks/${a.task_id}` : a.kind === "receipt_review" ? "/receipts" : undefined;
 
-/** The line under an alert's title, as the bell shows it: the system's problem, the receipt's, or the task's kind and client. */
+/** v1.112: «3 رسائل» when a task holds more than one of the client's messages (his later ones join it); else nothing. */
+export const messagesOf = (a: PanelAlert): string => (a.messages && a.messages > 1 ? countWords(a.messages, MESSAGES) : "");
+
+/**
+ * The line under an alert's title, as the bell shows it: the system's problem, the receipt's, or the task's kind and client
+ * (v1.112: how many messages first, when his later ones joined the task: the line is cut at its end).
+ */
 export const alertLine = (a: PanelAlert): string =>
   a.kind === "system"
     ? label(SYSTEM_WHAT, a.system_what) || "افتح اللوحة لعرض التنبيه."
     : a.kind === "receipt_review"
       ? [receiptFor(a.receipt_for), a.client_name ?? "رقم بلا اسم"].filter(Boolean).join(" · ")
-      : `${label(TASK_TYPES, a.task_type ?? "")} · ${a.client_name ?? "رقم بلا اسم"}`;
+      : [messagesOf(a), label(TASK_TYPES, a.task_type ?? ""), a.client_name ?? "رقم بلا اسم"].filter(Boolean).join(" · ");
 
 /** The task kind each alert's title already names. */
 const SAME_AS_TITLE: Record<string, string> = { task_urgent: "urgent_request", task_human: "human_requested", task_rating: "rating_low" };
@@ -72,7 +78,7 @@ export function alertDetails(a: PanelAlert, now: Date = new Date()): string[] {
   }
   // the task's kind, unless the title already says it (an urgent request's, a request for someone's, a low rating's)
   const type = a.task_type && a.task_type !== SAME_AS_TITLE[a.kind] ? label(TASK_TYPES, a.task_type) : "";
-  const what = [type, a.matter_type ? matterLabel(a.matter_type) : "", a.phone_last3 ? `رقمه ينتهي بـ ${a.phone_last3}` : ""];
+  const what = [messagesOf(a), type, a.matter_type ? matterLabel(a.matter_type) : "", a.phone_last3 ? `رقمه ينتهي بـ ${a.phone_last3}` : ""];
   const when = [a.due_at ? `موعدها ${cairoWhen(a.due_at, now)}` : "", a.staff_name ? `مُسندة إلى: ${a.staff_name}` : "غير مُسندة لأحد"];
   return [what, when].map((line) => line.filter(Boolean).join(" · ")).filter(Boolean);
 }
@@ -113,7 +119,10 @@ export function groupAlerts(fresh: PanelAlert[]): Note[] {
   const notes: Note[] = [...byClient.values()].map((list) => {
     const first = list[0]!;
     if (list.length === 1) {
-      return { title: rtl(alertTitle(first)), body: alertDetails(first).map(rtl).join("\n"), tag: `hazem-alert-${first.id}`, stay: first.kind === "task_urgent", to: alertTarget(first) };
+      // v1.112: a task's notification has its task's tag: told again when his next message joins it, it takes the old one's
+      // place in Windows instead of a second one beside it
+      const tag = first.task_id ? `hazem-task-${first.task_id}` : `hazem-alert-${first.id}`;
+      return { title: rtl(alertTitle(first)), body: alertDetails(first).map(rtl).join("\n"), tag, stay: first.kind === "task_urgent", to: alertTarget(first) };
     }
     const who = first.client_name ?? "رقم بلا اسم";
     const what = [...new Set(list.map(whatOf).filter(Boolean))];
@@ -133,7 +142,9 @@ const away = () => document.hidden || !document.hasFocus();
 
 function show(title: string, body: string, tag: string, opts: { stay?: boolean; onClick?: () => void } = {}): boolean {
   try {
-    const n = new Notification(title, { body, tag, icon: ICON, lang: "ar", dir: "rtl", requireInteraction: !!opts.stay });
+    // v1.112: renotify, so one that takes an older one's place (the same task's tag) is still heard and shown
+    const options = { body, tag, icon: ICON, lang: "ar", dir: "rtl", requireInteraction: !!opts.stay, renotify: true } as NotificationOptions;
+    const n = new Notification(title, options);
     n.onclick = () => {
       window.focus();
       opts.onClick?.();

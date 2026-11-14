@@ -43,6 +43,8 @@ export const NEW_THINGS: CountForms = { one: "عنصر جديد", two: "عنصر
 export const NEW_ALERTS: CountForms = { one: "تنبيه جديد", two: "تنبيهان جديدان", few: "تنبيهات جديدة", many: "تنبيهًا جديدًا", hundred: "تنبيه جديد" };
 export const MORE_ALERTS: CountForms = { one: "تنبيه جديد آخر", two: "تنبيهان جديدان آخران", few: "تنبيهات جديدة أخرى", many: "تنبيهًا جديدًا آخر", hundred: "تنبيه جديد آخر" };
 export const LATE_TASKS: CountForms = { one: "مهمة متأخرة", two: "مهمتان متأخرتان", few: "مهام متأخرة", many: "مهمة متأخرة" };
+/** v1.112: the client's messages one task holds (his later ones join it). */
+export const MESSAGES: CountForms = { one: "رسالة واحدة", two: "رسالتان", few: "رسائل", many: "رسالة", hundred: "رسالة" };
 /** after «في»: «في محادثة واحدة»، «في محادثتين»، «في 3 محادثات». */
 export const CONVERSATIONS: CountForms = { one: "محادثة واحدة", two: "محادثتين", few: "محادثات", many: "محادثة" };
 

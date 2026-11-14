@@ -51,6 +51,48 @@ public sealed class ConversationStore(HazemDbContext db) : IConversationStore
 
     internal static DateTimeOffset? Utc(DateTimeOffset? value) => value?.ToUniversalTime();
 
+    private static readonly string[] OpenStates = ["open", "in_progress", "overdue"];
+
+    /// <summary>The alerts a task's new message makes again: the bell's and Windows' own, never an e-mailed one (v1.110).</summary>
+    private static readonly string[] ToldAgain = [Office.Application.Panel.AlertKinds.New, Office.Application.Panel.AlertKinds.Human,
+        Office.Application.Panel.AlertKinds.Rating];
+
+    /// <summary>
+    /// v1.112 (the owner, of a bell full of one client's tasks: «ليه في كل النوتيفيكيشنز دي؟ … ملعبكة» … «اعمل كدا»; one chat
+    /// made 6 «استفسار» tasks in 20 minutes): a client's open task of the same kind takes his later message instead of a new task.
+    /// One job, one task: the task shows all his words (staff_task_turns, oldest first), and its bell and Windows alert is made
+    /// again, so the office hears he wrote again (never a second e-mail). The office's missing detail and the paid urgent call
+    /// keep their own one-task rules (TASK 06, v1.110). True when it joined one (or already had: the same turn again).
+    /// </summary>
+    private static async Task<bool> JoinOpenTaskAsync(HazemDbContext db, Guid personId, string turnId, string kind, CancellationToken ct)
+    {
+        // the same turn again (n8n's retry) that made its own task: as before, nothing new (ON CONFLICT below)
+        if (kind is PendingTask.OfficeInfoMissing or PendingTask.UrgentCall
+            || await db.StaffTasks.AsNoTracking().AnyAsync(t => t.TurnId == turnId && t.Type == kind, ct))
+        {
+            return false;
+        }
+
+        var open = await db.StaffTasks.AsNoTracking()
+            .Where(t => t.PersonId == personId && t.Type == kind && OpenStates.Contains(t.State) && t.TurnId != turnId)
+            .OrderByDescending(t => t.CreatedAt).Select(t => (Guid?)t.Id).FirstOrDefaultAsync(ct);
+        if (open is not { } id)
+        {
+            return false;
+        }
+
+        var joined = await db.Database.ExecuteSqlInterpolatedAsync(
+            $"INSERT INTO hazem.staff_task_turns (task_id, turn_id) VALUES ({id}, {turnId}) ON CONFLICT DO NOTHING", ct);
+        if (joined == 1)
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE hazem.staff_tasks SET joined_at = now() WHERE id = {id}", ct);
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"DELETE FROM hazem.panel_alerts WHERE task_id = {id} AND kind = ANY({ToldAgain})", ct);
+        }
+
+        return true;
+    }
+
     /// <summary>Called by <see cref="TurnStore"/> inside the turn's transaction.</summary>
     internal static async Task SaveAsync(HazemDbContext db, string turnId, TurnEffects e, CancellationToken ct)
     {
@@ -84,6 +126,11 @@ public sealed class ConversationStore(HazemDbContext db) : IConversationStore
         string[] urgentCall = [.. PendingTask.UrgentCallSteps];
         foreach (var task in e.Tasks)
         {
+            if (await JoinOpenTaskAsync(db, person.Id, turnId, task.Kind, ct))
+            {
+                continue;
+            }
+
             // TASK 06: «write the missing office detail» is one job for the office, however many clients ask meanwhile.
             // v1.110: a paid urgent call is one task, whatever receipts follow it (a new one after «فيه مشكلة»): none while
             // the person's is still open, at any of its steps.

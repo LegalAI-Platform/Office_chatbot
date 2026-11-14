@@ -55,6 +55,12 @@ public static class WriterPrompt
             sb.Append("ALREADY SENT IN THIS TURN, just before your message (never repeat it; go on from it):\n").Append(r.Before).Append('\n');
         }
 
+        // v1.112: an approved message goes right after the written one (the privacy line after a price): never say what it says
+        if (r.After.Length > 0)
+        {
+            sb.Append("SENT RIGHT AFTER YOUR MESSAGE, exactly as written (never say what it says; leave that part to it):\n").Append(r.After).Append('\n');
+        }
+
         sb.Append("CALL HIM: ").Append(r.Call.Length > 0 ? r.Call : "(no name: say «حضرتك»)").Append('\n');
         if (r.Feedback is { Length: > 0 })
         {

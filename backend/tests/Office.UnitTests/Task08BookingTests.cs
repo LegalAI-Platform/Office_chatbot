@@ -704,7 +704,7 @@ public sealed partial class BookingFlowTests
         var d = await Receipt(caption: "حولت من رقم أخويا");
         Assert.Null(d.Effects!.Classification);
         Assert.Equal([TextKeys.BookingPaid], Keys(d));
-        Assert.Contains(PendingTask.UnclearMessage, TaskKinds(d));
+        Assert.Equal([PendingTask.AttachedMessage], TaskKinds(d)); // v1.112: words that came with it, never «unclear»
     }
 
     [Fact]
@@ -986,10 +986,11 @@ public sealed partial class BookingFlowTests
             new IncomingMessage($"wamid.{++_turn}", MessageType.Text, "وممكن أجيب معايا أخويا؟", null, null),
         ]));
         Assert.Equal(InteractivePayload.Buttons, Assert.Single(d.Actions).Interactive!.Kind); // the press is answered (1.25: the app)
-        Assert.Contains(PendingTask.UnclearMessage, TaskKinds(d)); // and the words go to the office
+        Assert.Contains(PendingTask.AttachedMessage, TaskKinds(d)); // and the words go to the office (v1.112: named for what they are)
+        Assert.DoesNotContain(PendingTask.UnclearMessage, TaskKinds(d));
 
         var alone = await Press(BookingChoice.Mode(BookingService.PhoneVideo));
-        Assert.DoesNotContain(PendingTask.UnclearMessage, TaskKinds(alone));
+        Assert.DoesNotContain(PendingTask.AttachedMessage, TaskKinds(alone));
     }
 
     // ---------- TASK 10: the written services ----------

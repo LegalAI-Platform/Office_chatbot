@@ -26,7 +26,7 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
         await db.ExecAsync("""
             TRUNCATE hazem.panel_audit; DELETE FROM hazem.panel_users;
             TRUNCATE hazem.panel_alerts, hazem.panel_alert_reads, hazem.ops_runs; DELETE FROM app.workflow_errors; DELETE FROM app.wa_turns WHERE wa_id LIKE '2010000009%';
-            TRUNCATE hazem.turns, hazem.ai_usage, hazem.generated_replies, hazem.send_results, hazem.turn_replies, hazem.classifications, hazem.panel_alerts, hazem.panel_alert_reads, hazem.staff_tasks, hazem.list_entries;
+            TRUNCATE hazem.turns, hazem.ai_usage, hazem.generated_replies, hazem.send_results, hazem.turn_replies, hazem.classifications, hazem.panel_alerts, hazem.panel_alert_reads, hazem.staff_tasks, hazem.staff_task_turns, hazem.list_entries;
             DELETE FROM hazem.staff; DELETE FROM hazem.intakes; DELETE FROM hazem.conversations; DELETE FROM hazem.persons;
             UPDATE hazem.settings SET value = to_char((now() - interval '1 hour') AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
              WHERE key = 'alerts.since';
@@ -656,6 +656,38 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal(HttpStatusCode.NotFound, (await yasmin.GetAsync($"/api/panel/tasks/{mine}/files/9", Ct)).StatusCode);
         var karims = await NewTask(staff: _staffB);
         Assert.Equal(HttpStatusCode.NotFound, (await yasmin.GetAsync($"/api/panel/tasks/{karims}/files/1", Ct)).StatusCode);
+    }
+
+    // v1.112 (the owner: «ليه في كل النوتيفيكيشنز دي؟ … ملعبكة»): a client's later message that joined his task is on its
+    // page after the first, its file opens by its place in that list, and the bell says how many messages the task holds
+    [Fact]
+    public async Task V112_a_task_shows_the_messages_that_joined_it_with_their_files_and_the_bell_counts_them()
+    {
+        var task = await NewTask(staff: _staffA); // its own turn: a text and a picture
+        var later = "wt:" + Guid.NewGuid();
+        await db.ExecAsync($$$"""
+            INSERT INTO hazem.turns (turn_id, wa_id, messages, status, responder)
+            SELECT '{{{later}}}', p.wa_id, '[
+              {"wamid":"w3","type":"text","text":"وعندي سؤال تاني"},
+              {"wamid":"w4","type":"image","media":{"status":"stored","bucket":"office-sensitive","key":"wa/2026/10/{{{task}}}-2.jpg","mime_type":"image/jpeg","filename":"x.jpg"}}
+            ]'::jsonb, 'processed', 'hazem' FROM hazem.persons p WHERE p.id = '{{{task}}}';
+            INSERT INTO hazem.staff_task_turns (task_id, turn_id) VALUES ('{{{task}}}', '{{{later}}}');
+            """);
+        _factory.Files.Objects[$"office-sensitive/wa/2026/10/{task}-2.jpg"] = ([5, 6, 7], "image/jpeg");
+
+        var yasmin = await SignIn("yasmin");
+        var page = (await yasmin.GetFromJsonAsync<JsonNode>($"/api/panel/tasks/{task}", Ct))!;
+        Assert.Equal(["البطاقة", null, "وعندي سؤال تاني", null], page["client_words"]!.AsArray().Select(w => (string?)w!["text"]).ToList());
+        var file = await yasmin.GetAsync($"/api/panel/tasks/{task}/files/3", Ct); // the later message's picture
+        Assert.Equal(HttpStatusCode.OK, file.StatusCode);
+        Assert.Equal([5, 6, 7], await file.Content.ReadAsByteArrayAsync(Ct));
+        Assert.Equal(HttpStatusCode.NotFound, (await yasmin.GetAsync($"/api/panel/tasks/{task}/files/2", Ct)).StatusCode); // its text
+        Assert.Equal(HttpStatusCode.OK, (await yasmin.GetAsync($"/api/panel/tasks/{task}/files/1", Ct)).StatusCode); // the first one's
+
+        await RunAlerts();
+        var alert = (await yasmin.GetFromJsonAsync<JsonNode>("/api/panel/alerts", Ct))!["items"]!.AsArray()
+            .First(a => (Guid?)a!["task_id"] == task)!;
+        Assert.Equal(2, (int)alert["messages"]!);
     }
 
     [Fact]

@@ -37,7 +37,8 @@ public sealed class PanelAlertStore(HazemDbContext db) : IPanelAlertStore
     public async Task<int> MakeAsync(CancellationToken ct) => await MakeForTasksAsync(ct) + await MakeForReceiptsAsync(ct);
 
     // v1.105: every other new task makes a «task_new» alert, whatever its type (a general rule, not a list). Only a task
-    // of the last 10 minutes: a deploy never floods the bell with the old ones.
+    // of the last 10 minutes: a deploy never floods the bell with the old ones. v1.112: or one a client's new message
+    // joined in the last 10 minutes (its old alert was taken away with it: told again as new, at the top)
     private Task<int> MakeForTasksAsync(CancellationToken ct) => db.Database.ExecuteSqlInterpolatedAsync($"""
         INSERT INTO hazem.panel_alerts (kind, task_id)
         SELECT k.kind, t.id
@@ -47,7 +48,8 @@ public sealed class PanelAlertStore(HazemDbContext db) : IPanelAlertStore
             (CASE WHEN t.type = ANY({Urgent}) AND t.state NOT IN ('done', 'cancelled') THEN {AlertKinds.Urgent} END),
             (CASE WHEN t.type = 'human_requested' AND t.state NOT IN ('done', 'cancelled') THEN {AlertKinds.Human} END),
             (CASE WHEN t.type = 'rating_low' AND t.state NOT IN ('done', 'cancelled') THEN {AlertKinds.Rating} END),
-            (CASE WHEN t.type <> ALL({OwnAlert}) AND t.state NOT IN ('done', 'cancelled') AND t.created_at >= now() - interval '10 minutes'
+            (CASE WHEN t.type <> ALL({OwnAlert}) AND t.state NOT IN ('done', 'cancelled')
+                       AND COALESCE(t.joined_at, t.created_at) >= now() - interval '10 minutes'
                   THEN {AlertKinds.New} END)) AS k(kind)
          WHERE k.kind IS NOT NULL
            AND t.created_at >= (SELECT value::timestamptz FROM hazem.settings WHERE key = 'alerts.since')
@@ -196,13 +198,18 @@ public sealed class PanelAlertStore(HazemDbContext db) : IPanelAlertStore
                               Read = t != null && Finished.Contains(t.State) || db.PanelAlertReads.Any(r => r.AlertId == a.Id && r.UserId == viewer.UserId),
                               WaId = p == null ? null : p.WaId, StaffName = s == null ? null : s.Name, Matter = i == null ? null : i.MatterType,
                               a.ReceiptId,
+                              // v1.112: the client's messages on the task (its own, and the ones that joined it)
+                              Joined = t == null ? 0 : db.StaffTaskTurns.Count(x => x.TaskId == t.Id),
                           }).Take(limit).ToListAsync(ct);
         var receipts = await ReceiptsAsync([.. rows.Where(r => r.ReceiptId != null).Select(r => r.ReceiptId!.Value)], ct);
         // the Windows notification's details (v1.104): the number's last 3 digits only, as the task list shows them
         return rows.Select(r =>
         {
             var alert = new PanelAlert(r.Id, r.Kind, r.TaskId, r.Type, r.Name, r.DueAt, r.CreatedAt, r.Read, r.SystemWhat,
-                r.WaId is { Length: >= 3 } wa ? wa[^3..] : null, r.Matter, r.StaffName);
+                r.WaId is { Length: >= 3 } wa ? wa[^3..] : null, r.Matter, r.StaffName)
+            {
+                Messages = r.TaskId is null ? null : 1 + r.Joined,
+            };
             // v1.111: a receipt's alert, its client and what it pays for; read for everyone once it is reviewed
             return r.ReceiptId is { } id && receipts.TryGetValue(id, out var x)
                 ? alert with

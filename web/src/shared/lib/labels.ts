@@ -12,6 +12,8 @@ export const TASK_TYPES: Record<string, string> = {
   lawyer_direct_message: "رسالة لقائمة المستشار",
   external_contact: "زميل أو صحافة أو مورّد",
   unclear_message: "رسالة غير واضحة",
+  // v1.112: words he wrote with a photo, a file or a press, which nothing else of his message took to the office
+  attached_message: "رسالة كتبها العميل مع صورة أو اختيار: اقرأها",
   urgent_request: "طلب عاجل",
   service_request: "طلب خدمة",
   reschedule_or_cancel: "تغيير موعد أو إلغاؤه",

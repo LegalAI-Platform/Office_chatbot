@@ -34,7 +34,7 @@ public sealed class Task11ApiTests(TestDatabase db) : IAsyncLifetime
         UPDATE hazem.approved_texts SET active = true
          WHERE source IN ('proposal TASK 08', 'proposal TASK 09', 'proposal TASK 10', 'proposal TASK 11') AND version = (SELECT max(m.version) FROM hazem.approved_texts m WHERE m.key = approved_texts.key);
         TRUNCATE hazem.panel_audit; DELETE FROM hazem.panel_users;
-        TRUNCATE hazem.turns, hazem.ai_usage, hazem.generated_replies, hazem.send_results, hazem.turn_replies, hazem.classifications, hazem.panel_alerts, hazem.panel_alert_reads, hazem.staff_tasks, hazem.list_entries;
+        TRUNCATE hazem.turns, hazem.ai_usage, hazem.generated_replies, hazem.send_results, hazem.turn_replies, hazem.classifications, hazem.panel_alerts, hazem.panel_alert_reads, hazem.staff_tasks, hazem.staff_task_turns, hazem.list_entries;
         DELETE FROM hazem.staff; DELETE FROM hazem.intakes; DELETE FROM hazem.conversations; DELETE FROM hazem.persons;
         """;
 
@@ -317,12 +317,24 @@ public sealed class Task11ApiTests(TestDatabase db) : IAsyncLifetime
         var id = await db.ScalarAsync<Guid>("SELECT id FROM hazem.urf_cases");
         Assert.Equal(HttpStatusCode.Conflict, (await lawyer.PostAsJsonAsync($"/api/panel/urf/{id}/review", new { decision = "approved" }, Ct)).StatusCode);
         // ↑ only a confirmed appointment: the hold may still run out
+        const string Tasks = "SELECT count(*) FROM hazem.staff_tasks WHERE type = 'urf_documents_missing'";
         await db.ExecAsync("UPDATE hazem.appointments SET starts_at = now() + interval '20 hours', ends_at = now() + interval '21 hours'");
         await Notices();
+        // v1.112 (Mohamed Emad's test, 2026-11-14 10:51: the task came 7 seconds after the hold of a time the same day, before he
+        // paid or was asked for the documents): a time only held, or paid a moment ago, is no task yet
+        Assert.Equal(0L, await db.ScalarAsync<long>(Tasks));
+        await db.ExecAsync("""
+            UPDATE hazem.appointments SET state = 'confirmed', hold_until = NULL;
+            UPDATE hazem.payments SET state = 'proof_received', proof_at = now() - interval '10 minutes';
+            """);
         await Notices();
-        Assert.Equal(1L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.staff_tasks WHERE type = 'urf_documents_missing'"));
+        Assert.Equal(0L, await db.ScalarAsync<long>(Tasks));
+        await db.ExecAsync("UPDATE hazem.payments SET proof_at = now() - interval '2 hours'"); // an hour after he was asked
+        await Notices();
+        await Notices();
+        Assert.Equal(1L, await db.ScalarAsync<long>(Tasks));
 
-        // The hold runs out: the case goes back to picking a time, and no longer takes files.
+        // The time goes: the case goes back to picking a time, and no longer takes files.
         await db.ExecAsync("UPDATE hazem.appointments SET state = 'expired'");
         // v1.111 (the owner: «لما انا لغيت الحجز … تشالش ليه» … «Yes, add it»): its documents' task went with that time; the
         // case may book again and have its own (the key keeps the time it was for)
