@@ -304,6 +304,10 @@ public static class TextKeys
     public const string SituationPast = "situation_past";           // v1.99: his appointment that passed: {{service}} {{day}} {{time}}
     public const string RepeatChoice = "repeat_choice";             // the same answer again: the services or a person
     public const string BtnTalkToOffice = "btn_talk_to_office";     // «أكلم حد من المكتب»
+
+    // v1.115 (the owner, 2026-11-14): B-06 said to the client outside the office's hours, and what he needs asked once he told it.
+    public const string OfficeAnswersLater = "office_answers_later"; // «المكتب بيرد من {{opens}} لـ {{closes}}، فحد من المكتب هيرد … {{day}} من الساعة {{opens}} 🙏»
+    public const string AskNeed = "ask_need";                         // «وصلني اللي بعته 👍 محتاج المكتب يساعد حضرتك في إيه بخصوصه؟»
     public const string Greeting2 = "greeting_2";                   // more wordings, taken in turn (3.6)
     public const string Greeting3 = "greeting_3";
     public const string TopicReceived2 = "topic_received_2";

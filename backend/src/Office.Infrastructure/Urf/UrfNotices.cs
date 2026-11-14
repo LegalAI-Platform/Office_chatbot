@@ -28,7 +28,7 @@ public sealed class UrfNotices(HazemDbContext db, BookingStore store, IApprovedT
         foreach (var c in System.Text.Json.JsonDocument.Parse(due).RootElement.EnumerateArray())
         {
             await store.AddTaskAsync(c.GetProperty("person").GetGuid(), $"urf:{c.GetProperty("id").GetGuid():N}:documents",
-                PendingTask.UrfDocumentsMissing, OfficeHours.DueAt(now), ct);
+                PendingTask.UrfDocumentsMissing, await OfficeDue.AtAsync(db, now, ct), ct);
         }
 
         var cases = await (from c in db.UrfCases.AsNoTracking()
@@ -59,7 +59,7 @@ public sealed class UrfNotices(HazemDbContext db, BookingStore store, IApprovedT
             var told = await notices.SendAsync(x.WaId, id, Requester, step, active, ct);
             if (!told)
             {
-                await store.AddTaskAsync(x.c.PersonId, id, PendingTask.BookingMessageFailed, OfficeHours.DueAt(now), ct);
+                await store.AddTaskAsync(x.c.PersonId, id, PendingTask.BookingMessageFailed, await OfficeDue.AtAsync(db, now, ct), ct);
             }
 
             await db.Database.ExecuteSqlInterpolatedAsync(

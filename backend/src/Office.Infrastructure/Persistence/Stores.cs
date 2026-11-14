@@ -104,9 +104,10 @@ public sealed class SendResultStore(HazemDbContext db, TimeProvider clock) : ISe
         // office, once per turn: «رسالة ما وصلتش للعميل». The client's words are in the turn; the office answers him.
         if (turnId is not null && reportedBy == RecordSendResults.ReportedByN8n && results.Any(r => !r.Ok))
         {
+            var due = await OfficeDue.AtAsync(db, clock.GetUtcNow(), ct); // v1.115: the office's hours
             await db.Database.ExecuteSqlInterpolatedAsync($"""
                 INSERT INTO hazem.staff_tasks (person_id, turn_id, type, due_at)
-                SELECT p.id, {turnId}, {PendingTask.BookingMessageFailed}, {Office.Domain.Tasks.OfficeHours.DueAt(clock.GetUtcNow()).ToUniversalTime()}
+                SELECT p.id, {turnId}, {PendingTask.BookingMessageFailed}, {due.ToUniversalTime()}
                   FROM hazem.turns t JOIN hazem.persons p ON p.wa_id = t.wa_id
                  WHERE t.turn_id = {turnId}
                 ON CONFLICT (turn_id, type) DO NOTHING

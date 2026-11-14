@@ -791,6 +791,19 @@ public static class BookingWords
         _ => $"{(minute / 60 % 12 == 0 ? 12 : minute / 60 % 12)}:{minute % 60:00} {(minute < 720 ? "ص" : "م")}",
     };
 
+    /// <summary>
+    /// v1.115: a minute of the day as the office's hours are said to a client: «10 الصبح»، «2 الضهر»، «5:30 العصر»، «8 بالليل»,
+    /// «12 بالليل».
+    /// </summary>
+    public static string Clock(int minute)
+    {
+        var m = ((minute % 1440) + 1440) % 1440;
+        var (hour, min) = (m / 60, m % 60);
+        var h12 = hour % 12 == 0 ? 12 : hour % 12;
+        var part = hour switch { >= 5 and < 12 => "الصبح", >= 12 and < 15 => "الضهر", >= 15 and < 18 => "العصر", _ => "بالليل" };
+        return min == 0 ? $"{h12} {part}" : $"{h12}:{min:00} {part}";
+    }
+
     /// <summary>«النهارده»، «بكرة»، or «الخميس 29/10».</summary>
     public static string Day(DateTimeOffset at, DateTimeOffset now)
     {

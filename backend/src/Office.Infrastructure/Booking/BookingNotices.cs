@@ -74,13 +74,13 @@ public sealed class BookingNotices(HazemDbContext db, BookingStore store, Bookin
             var told = await notices.SendAsync(x.WaId, $"booking:{a.Id:N}:{Short(kind)}", Requester, step, active, ct);
             if (!told)
             {
-                await store.AddTaskAsync(a.PersonId, $"booking:{a.Id:N}:{Short(kind)}", PendingTask.BookingMessageFailed, OfficeHours.DueAt(now), ct);
+                await store.AddTaskAsync(a.PersonId, $"booking:{a.Id:N}:{Short(kind)}", PendingTask.BookingMessageFailed, await OfficeDue.AtAsync(db, now, ct), ct);
             }
 
             if (kind == "office_cancelled" && !bookingOn)
             {
                 // The client cannot pick a new time from WhatsApp: the staff arrange it or the refund.
-                await store.AddTaskAsync(a.PersonId, $"booking:{a.Id:N}:office", PendingTask.OfficeCancelled, OfficeHours.DueAt(now), ct);
+                await store.AddTaskAsync(a.PersonId, $"booking:{a.Id:N}:office", PendingTask.OfficeCancelled, await OfficeDue.AtAsync(db, now, ct), ct);
             }
 
             await db.Database.ExecuteSqlInterpolatedAsync(
@@ -110,7 +110,7 @@ public sealed class BookingNotices(HazemDbContext db, BookingStore store, Bookin
             var told = await notices.SendAsync(x.WaId, id, Requester, new ReplyStep(key, null, fill), active, ct);
             if (!told)
             {
-                await store.AddTaskAsync(a.PersonId, id, PendingTask.BookingMessageFailed, OfficeHours.DueAt(now), ct);
+                await store.AddTaskAsync(a.PersonId, id, PendingTask.BookingMessageFailed, await OfficeDue.AtAsync(db, now, ct), ct);
             }
 
             await db.Database.ExecuteSqlInterpolatedAsync(
