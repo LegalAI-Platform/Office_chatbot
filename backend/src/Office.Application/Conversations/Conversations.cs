@@ -74,7 +74,16 @@ public sealed record PendingTask(string Kind, DateTimeOffset DueAt, Guid? StaffI
     public const string PaymentReviewDue = "payment_review_due"; // 1.25 (B-08): the appointment is soon and its transfer is not reviewed
     public const string RatingLow = "rating_low";             // 1.31 (B-26): «يحتاج للتحسين», the managers call the client
     public const string UrgentCallFailed = "urgent_call_failed"; // 1.33 (B-09): the lawyer's alert could not go (no number, a refused send)
-    public const string UrgentCallUnanswered = "urgent_call_unanswered"; // 1.33 (B-09): «هكلمه» not pressed in time: the managers
+    public const string UrgentCallUnanswered = "urgent_call_unanswered"; // 1.33 (B-09): «هكلمه» not pressed in time: the staff
+
+    /// <summary>
+    /// v1.110 (migration 0077; the owner: «كميه ايميلات كتيره اوي» … «موافق»): a paid urgent consultation's one task, opened with
+    /// the payment. It moves on to <see cref="UrgentCallFailed"/> and <see cref="UrgentCallUnanswered"/> instead of two tasks more.
+    /// </summary>
+    public const string UrgentCall = "urgent_call";
+
+    /// <summary>v1.110: the steps of a paid urgent consultation's one task, in order.</summary>
+    public static readonly IReadOnlyList<string> UrgentCallSteps = [UrgentCall, UrgentCallFailed, UrgentCallUnanswered];
 }
 
 /// <summary>hazem.classifications: no client text and no name, only what the AI decided and what it cost.</summary>

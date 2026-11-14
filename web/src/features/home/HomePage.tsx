@@ -6,14 +6,12 @@ import { openChatwoot } from "../../shared/api/chatwoot";
 import { useDashboard } from "../../shared/api/dashboard";
 import { can, useMe } from "../../shared/api/session";
 import type { DashboardTask, MonthReport } from "../../shared/api/types";
-import { BOOKING_SERVICES, label } from "../../shared/lib/labels";
+import { BOOKING_SERVICES, label, URGENT_TYPES as URGENT } from "../../shared/lib/labels";
 import { CONVERSATIONS, countWords, firstAndMore, groupByClient, shortType, thingsWords } from "../../shared/lib/group";
 import { cairoDate, cairoDayWord, cairoHour, cairoMonth, cairoWeek, timeAgo } from "../../shared/lib/time";
 import { Icon, type IconName } from "../../shared/ui/Icon";
 import { OwnerImg, type OwnerImage } from "../../shared/ui/Owner";
 import { ErrorState } from "../../shared/ui/ui";
-
-const URGENT = new Set(["urgent_request", "safety_alert"]);
 
 /** The fields of /booking/appointments this page shows (the booking feature has the whole type; features stay apart). */
 interface Appointment {

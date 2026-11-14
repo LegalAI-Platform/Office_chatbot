@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Office.Application.Conversations;
 using Office.Application.Panel;
 using Office.Infrastructure.Monitoring;
 using Office.Infrastructure.Persistence;
@@ -16,7 +17,10 @@ namespace Office.Infrastructure.Panel;
 /// </summary>
 public sealed class PanelAlertStore(HazemDbContext db) : IPanelAlertStore
 {
-    private static readonly string[] Urgent = ["urgent_request", "safety_alert", "urgent_call_failed", "urgent_call_unanswered"]; // 1.33 (B-09)
+    // 1.33 (B-09). v1.110: a paid urgent call's one task, at each of its steps (PendingTask.UrgentCallSteps).
+    private static readonly string[] Urgent = ["urgent_request", "safety_alert", "urgent_call", "urgent_call_failed", "urgent_call_unanswered"];
+
+    private static readonly string[] UrgentCall = [.. PendingTask.UrgentCallSteps];
 
     /// <summary>The types whose own alert already says a new task came (urgent, a client asking for someone, a low rating).</summary>
     private static readonly string[] OwnAlert = [.. Urgent, "human_requested", "rating_low"];
@@ -93,6 +97,10 @@ public sealed class PanelAlertStore(HazemDbContext db) : IPanelAlertStore
                                  // overdue only; a client asking for someone and the rest stay in the bell and Windows.
                                  && (a.Kind == AlertKinds.Urgent || a.Kind == AlertKinds.Overdue)
                                  && (a.Kind == AlertKinds.Overdue ? t.State == "overdue" : t.State != "done" && t.State != "cancelled")
+                                 // v1.110 (AlertKinds.BellOnly): a paid urgent call's urgent alert while the lawyer's WhatsApp
+                                 // alert is his, and its «late» one at every step
+                                 && !(a.Kind == AlertKinds.Urgent && t.Type == PendingTask.UrgentCall)
+                                 && !(a.Kind == AlertKinds.Overdue && UrgentCall.Contains(t.Type))
                            orderby a.Id
                            select new AlertToMail(a.Id, a.Kind, a.TaskId, t.Type, t.DueAt, t.StaffId, null)).ToListAsync(ct);
         var system = await db.PanelAlerts.AsNoTracking()

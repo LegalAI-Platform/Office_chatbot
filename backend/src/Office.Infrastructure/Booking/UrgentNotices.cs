@@ -19,10 +19,13 @@ namespace Office.Infrastructure.Booking;
 /// <item>The alert: an urgent call whose latest receipt has no decision yet and was not alerted, urgent.call_within_minutes
 /// before it starts (at once when it is sooner, or for a new receipt after «فيه مشكلة»): the M-03 template urgent_alert to
 /// office.lawyer_whatsapp ({{1}} the name, {{2}} the client's number, {{3}} the time, «شوف التحويل» = «ug:see:call»). Once per
-/// receipt: a refused send, or no lawyer's number, is an urgent task (urgent_call_failed), never a retry.</item>
+/// receipt: a refused send, or no lawyer's number, moves the call's task to urgent_call_failed (v1.110: the lawyer's e-mail
+/// instead), never a retry.</item>
 /// <item>The escalation: urgent.escalate_after_minutes after the alert and its receipt still without a decision: the same
-/// template to office.manager_whatsapp (when written), urgent_waiting to the client (once per call), and an urgent task for
-/// the managers. Once per alert (a new alert starts the clock again).</item>
+/// template to office.manager_whatsapp (when written), urgent_waiting to the client (once per call), and the call's task moves
+/// to urgent_call_unanswered (v1.110: the staff's e-mail). Once per alert (a new alert starts the clock again).</item>
+/// <item>v1.110 (the owner: «كميه ايميلات كتيره اوي» … «موافق»): the call has one task, opened with the payment (urgent_call).
+/// What happens to the call is a step of that task (<see cref="BookingStore.UrgentStepAsync"/>), never a task of its own.</item>
 /// <item>The buttons (<see cref="PressAsync"/>): see <see cref="IUrgentCalls"/>. The first decision on the call's latest
 /// receipt wins, in one conditional UPDATE (the database decides, never two presses at once).</item>
 /// </list>
@@ -66,7 +69,7 @@ public sealed class UrgentNotices(HazemDbContext db, BookingStore store, ISettin
                          select new { a.Id, a.PersonId, a.StartsAt, Receipt = r.Id }).Take(Batch).ToListAsync(ct);
         foreach (var a in due)
         {
-            // Claimed first: one alert per receipt, even when the send below fails (the office sees a task instead). A new
+            // Claimed first: one alert per receipt, even when the send below fails (the call's task says so instead). A new
             // alert starts the escalation's clock again.
             var claimed = await db.Database.ExecuteSqlInterpolatedAsync($"""
                 UPDATE hazem.appointments SET urgent_alerted_at = {now}, urgent_alert_receipt = {a.Receipt}, urgent_escalated_at = NULL
@@ -81,8 +84,9 @@ public sealed class UrgentNotices(HazemDbContext db, BookingStore store, ISettin
                      && await AlertOneAsync(rules, rules.LawyerWhatsApp, $"urgent:{a.Receipt:N}:lawyer", a.Id, active, ct);
             if (!ok)
             {
-                // B-09.6: until Meta approves the template, or without the lawyer's number: the panel's bell (and e-mail) only.
-                await store.AddTaskAsync(a.PersonId, $"urgent:{a.Receipt:N}:lawyer", PendingTask.UrgentCallFailed, now, ct);
+                // B-09.6: until Meta approves the template, or without the lawyer's number: the panel's bell, and (v1.110) the
+                // lawyer's e-mail instead of the WhatsApp alert that did not reach him, on the call's own task.
+                await store.UrgentStepAsync(a.PersonId, $"urgent:{a.Receipt:N}:lawyer", PendingTask.UrgentCallFailed, ct);
             }
         }
 
@@ -112,10 +116,10 @@ public sealed class UrgentNotices(HazemDbContext db, BookingStore store, ISettin
                 continue;
             }
 
-            if (rules.ManagerWhatsApp.Length > 0
-                && !await AlertOneAsync(rules, rules.ManagerWhatsApp, $"urgent:{a.Receipt:N}:manager", a.Id, active, ct))
+            // The manager's WhatsApp, when written. v1.110: refused, it opens no task: the staff hear it just below.
+            if (rules.ManagerWhatsApp.Length > 0)
             {
-                await store.AddTaskAsync(a.PersonId, $"urgent:{a.Receipt:N}:manager", PendingTask.UrgentCallFailed, now, ct);
+                await AlertOneAsync(rules, rules.ManagerWhatsApp, $"urgent:{a.Receipt:N}:manager", a.Id, active, ct);
             }
 
             if (a.UrgentWaitingAt is null)
@@ -129,7 +133,8 @@ public sealed class UrgentNotices(HazemDbContext db, BookingStore store, ISettin
                 }
             }
 
-            await store.AddTaskAsync(a.PersonId, $"urgent:{a.Receipt:N}:unanswered", PendingTask.UrgentCallUnanswered, now, ct);
+            // v1.110 (the owner, 2026-11-13: «الموظف»): the call's own task goes to the staff, with one e-mail to them.
+            await store.UrgentStepAsync(a.PersonId, $"urgent:{a.Receipt:N}:unanswered", PendingTask.UrgentCallUnanswered, ct);
         }
 
         return due.Count;
@@ -214,31 +219,30 @@ public sealed class UrgentNotices(HazemDbContext db, BookingStore store, ISettin
                              join a in db.Appointments.AsNoTracking() on p.AppointmentId equals (Guid?)a.Id
                              where a.Id == appointmentId && a.Service == BookingService.Urgent.Code
                              orderby r.ReceivedAt descending, r.Id descending
-                             select new { r.Id, r.Bucket, r.Key, r.Mime, r.UrgentDecision, a.PersonId }).FirstOrDefaultAsync(ct);
+                             select new { r.Id, r.Bucket, r.Key, r.Mime, r.UrgentDecision }).FirstOrDefaultAsync(ct);
         if (receipt is not { UrgentDecision: null })
         {
             return;
         }
 
-        var now = clock.GetUtcNow();
         var active = await texts.GetActiveAsync(ct);
         var fill = await FillAsync(appointmentId, ct);
         var document = receipt.Bucket == S3Deliverables.Bucket && deliverables.Configured
             ? new DocumentPayload(deliverables.ReadLink(receipt.Key), receipt.Mime == "image/png" ? "صورة التحويل.png" : "صورة التحويل.jpg")
             : null;
-        // One press, one pair of messages (a second press of «شوف التحويل» sends them again: its own turn's keys).
-        var sent = document is not null
-                   && await notices.SendAsync(presserWaId, $"urgent:{turnId}:receipt", Requester, new ReplyStep(TextKeys.UrgentAlert, null, fill),
-                       active, ct, document)
-                   && await notices.SendAsync(presserWaId, $"urgent:{turnId}:decide", Requester, new ReplyStep(TextKeys.UrgentAlert, null, fill,
-                       new ReplyChoices(InteractivePayload.Buttons,
-                       [
-                           new ReplyChoice(UrgentButtons.Ok(receipt.Id), TextKeys.BtnUrgentOk),
-                           new ReplyChoice(UrgentButtons.Bad(receipt.Id), TextKeys.BtnUrgentBad),
-                       ])), active, ct);
-        if (!sent)
+        // One press, one pair of messages (a second press of «شوف التحويل» sends them again: its own turn's keys). v1.110: a
+        // receipt that could not be shown opens no task: the presser can press again, the call's own task is still there, and
+        // nobody's decision in time still reaches the staff.
+        if (document is not null
+            && await notices.SendAsync(presserWaId, $"urgent:{turnId}:receipt", Requester, new ReplyStep(TextKeys.UrgentAlert, null, fill),
+                active, ct, document))
         {
-            await store.AddTaskAsync(receipt.PersonId, $"urgent:{receipt.Id:N}:receipt", PendingTask.UrgentCallFailed, now, ct);
+            await notices.SendAsync(presserWaId, $"urgent:{turnId}:decide", Requester, new ReplyStep(TextKeys.UrgentAlert, null, fill,
+                new ReplyChoices(InteractivePayload.Buttons,
+                [
+                    new ReplyChoice(UrgentButtons.Ok(receipt.Id), TextKeys.BtnUrgentOk),
+                    new ReplyChoice(UrgentButtons.Bad(receipt.Id), TextKeys.BtnUrgentBad),
+                ])), active, ct);
         }
     }
 

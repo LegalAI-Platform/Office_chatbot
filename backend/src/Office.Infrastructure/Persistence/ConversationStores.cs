@@ -81,15 +81,22 @@ public sealed class ConversationStore(HazemDbContext db) : IConversationStore
             await Office.Infrastructure.Urf.UrfStore.Write(db, urf, intake.Id, ct);
         }
 
+        string[] urgentCall = [.. PendingTask.UrgentCallSteps];
         foreach (var task in e.Tasks)
         {
             // TASK 06: «write the missing office detail» is one job for the office, however many clients ask meanwhile.
+            // v1.110: a paid urgent call is one task, whatever receipts follow it (a new one after «فيه مشكلة»): none while
+            // the person's is still open, at any of its steps.
             await db.Database.ExecuteSqlInterpolatedAsync($"""
                 INSERT INTO hazem.staff_tasks (person_id, intake_id, turn_id, type, staff_id, due_at)
                 SELECT {person.Id}, {intake.Id}, {turnId}, {task.Kind}, {task.StaffId}, {Utc(task.DueAt)}
-                 WHERE {task.Kind} <> {PendingTask.OfficeInfoMissing}
-                    OR NOT EXISTS (SELECT 1 FROM hazem.staff_tasks
-                                    WHERE type = {PendingTask.OfficeInfoMissing} AND state IN ('open', 'in_progress', 'overdue'))
+                 WHERE ({task.Kind} <> {PendingTask.OfficeInfoMissing}
+                        OR NOT EXISTS (SELECT 1 FROM hazem.staff_tasks
+                                        WHERE type = {PendingTask.OfficeInfoMissing} AND state IN ('open', 'in_progress', 'overdue')))
+                   AND ({task.Kind} <> {PendingTask.UrgentCall}
+                        OR NOT EXISTS (SELECT 1 FROM hazem.staff_tasks
+                                        WHERE person_id = {person.Id} AND type = ANY({urgentCall})
+                                          AND state IN ('open', 'in_progress', 'overdue')))
                 ON CONFLICT (turn_id, type) DO NOTHING
                 """, ct);
         }

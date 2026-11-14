@@ -33,7 +33,12 @@ export const TASK_TYPES: Record<string, string> = {
   rating_low: "قيّم عميل الخدمة بـ«يحتاج للتحسين»: تواصل معه (السبب في رسالة العميل إن كتبه)",
   urgent_call_failed: "تعذّر وصول تنبيه الاستشارة العاجلة إلى المستشار: تواصل معه أو مع العميل الآن (رقم المستشار في إعدادات المواعيد ← بيانات المكتب والدفع)",
   urgent_call_unanswered: "لم يردّ المستشار على تنبيه استشارة عاجلة مدفوعة (لم يضغط «التحويل تمام، هكلمه» ولا «فيه مشكلة»): تصرّف الآن",
+  // v1.110: a paid urgent consultation's one task; the two above are its next steps (the same task)
+  urgent_call: "استشارة عاجلة مدفوعة: تنبيه المستشار على واتساب",
 };
+
+/** The urgent tasks (v1.110: a paid urgent consultation's one task at each of its steps). */
+export const URGENT_TYPES = new Set(["urgent_request", "safety_alert", "urgent_call", "urgent_call_failed", "urgent_call_unanswered"]);
 
 /** TASK 12 (B-18): the reminders before a confirmed appointment. */
 export const REMINDER_KINDS: Record<string, string> = {

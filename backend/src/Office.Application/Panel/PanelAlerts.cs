@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using Office.Application.Conversations;
 
 namespace Office.Application.Panel;
 
@@ -33,6 +34,15 @@ public static class AlertKinds
     /// task, a client asking for someone, a low rating) are the bell's and Windows' only.
     /// </summary>
     public static readonly IReadOnlyList<string> Mailed = [Urgent, Overdue, System];
+
+    /// <summary>
+    /// v1.110 (the owner: «كميه ايميلات كتيره اوي» … «موافق»): a paid urgent call's alerts that stay in the bell and Windows,
+    /// though their kind is e-mailed: its urgent alert while the lawyer's WhatsApp alert is his (urgent_call), and its «late»
+    /// one at every step (the escalation after urgent.escalate_after_minutes is that).
+    /// </summary>
+    public static bool BellOnly(string kind, string? taskType) =>
+        kind == Urgent && taskType == PendingTask.UrgentCall
+        || kind == Overdue && taskType is not null && PendingTask.UrgentCallSteps.Contains(taskType);
 }
 
 /// <summary>
@@ -43,9 +53,11 @@ public static class AlertKinds
 /// <item><see cref="Urgent"/>: an urgent alert nobody holds: the lawyer and the office both (nobody escalates it later, so it is
 /// never one person's only).</item>
 /// <item><see cref="Lawyer"/>: pricing a service, an Urfi case's review, while nobody holds them.</item>
-/// <item><see cref="Office"/>: the staff, everything else Hazem opens (an urgent call that did not reach the lawyer or that
-/// he did not answer included: the staff act on those). An office with no active staff account: the managers.</item>
+/// <item><see cref="Office"/>: the staff, everything else Hazem opens. An office with no active staff account: the managers.</item>
 /// <item><see cref="Managers"/>: the system's problems and a low rating (the manager and the maintenance account).</item>
+/// <item>v1.110, a paid urgent call's one task, in the e-mail (the bell shows its urgent line to the lawyer and the staff, as
+/// any urgent one): nobody while the lawyer's WhatsApp alert is his (<see cref="AlertKinds.BellOnly"/>); the lawyer when that
+/// alert did not reach him (urgent_call_failed); the staff when nobody took it in time (urgent_call_unanswered).</item>
 /// </list>
 /// </summary>
 public static class AlertAudience
@@ -80,6 +92,8 @@ public static class AlertAudience
     /// <summary>Whose job an alert nobody holds is (a held task's alerts are its holder's, but a rating's and the system's).</summary>
     public static string For(string kind, string? taskType) =>
         kind == AlertKinds.System || kind == AlertKinds.Rating || taskType == RatingType ? Managers
+        : kind == AlertKinds.Urgent && taskType == PendingTask.UrgentCallFailed ? Lawyer // v1.110
+        : kind == AlertKinds.Urgent && taskType == PendingTask.UrgentCallUnanswered ? Office // v1.110 (the owner: «الموظف»)
         : kind == AlertKinds.Urgent ? Urgent
         : taskType is not null && LawyerWork.Contains(taskType) ? Lawyer
         : Office;

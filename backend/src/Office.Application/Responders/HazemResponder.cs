@@ -3563,7 +3563,9 @@ public sealed class HazemResponder(
         /// </summary>
         private void SayUrgentPaid(AppointmentInfo a, BookingSettings b, bool later)
         {
-            plan.Task(PendingTask.UrgentRequest); // v1.38: the office's urgent task once he has paid, not when he pressed the row
+            // v1.38: the office's urgent task once he has paid, not when he pressed the row. v1.110: the call's one task
+            // (urgent_call): the lawyer's WhatsApp alert is his, so it e-mails nobody until that alert fails or nobody takes it.
+            plan.Task(PendingTask.UrgentCall);
             if (a.Start <= plan.Now.AddMinutes(b.Urgent.CallWithinMinutes))
             {
                 plan.Say(TextKeys.UrgentNow);

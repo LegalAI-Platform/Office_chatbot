@@ -96,4 +96,44 @@ public sealed class PanelRulesTests
     public void An_alert_email_builds_with_no_culture_data() =>
         Assert.Contains("المطلوب قبل:", PanelMails.Alert("a@example.test",
             new AlertToMail(1, AlertKinds.Urgent, Guid.NewGuid(), "urgent_request", DateTimeOffset.UtcNow, null), "http://x").Text);
+
+    // v1.110 (the owner: «كميه ايميلات كتيره اوي» … «موافق»): a paid urgent call is one task. Its alerts e-mail whose turn
+    // it is: nobody while the lawyer's WhatsApp alert is his, the lawyer when it did not reach him, the staff when nobody
+    // took it in time, and never «late». Every other urgent alert, as before (the lawyer and the staff both).
+    [Theory]
+    [InlineData("task_urgent", "urgent_call", true, "urgent")]
+    [InlineData("task_urgent", "urgent_call_failed", false, "lawyer")]
+    [InlineData("task_urgent", "urgent_call_unanswered", false, "office")]
+    [InlineData("task_overdue", "urgent_call", true, "office")]
+    [InlineData("task_overdue", "urgent_call_failed", true, "office")]
+    [InlineData("task_overdue", "urgent_call_unanswered", true, "office")]
+    [InlineData("task_urgent", "urgent_request", false, "urgent")]
+    [InlineData("task_urgent", "safety_alert", false, "urgent")]
+    [InlineData("task_overdue", "urgent_request", false, "office")]
+    [InlineData("task_overdue", "service_pricing", false, "lawyer")]
+    public void A_paid_urgent_call_emails_only_whose_turn_it_is(string kind, string type, bool bellOnly, string audience)
+    {
+        Assert.Equal(bellOnly, AlertKinds.BellOnly(kind, type));
+        Assert.Equal(audience, AlertAudience.For(kind, type));
+    }
+
+    [Fact]
+    public void A_paid_urgent_call_s_two_emails_say_what_happened_and_never_the_client()
+    {
+        var task = Guid.NewGuid();
+        var failed = PanelMails.Alert("lawyer@example.test",
+            new AlertToMail(1, AlertKinds.Urgent, task, "urgent_call_failed", DateTimeOffset.UtcNow, null), "http://x");
+        Assert.StartsWith("لم يصلك تنبيه استشارة عاجلة على واتساب |", failed.Subject, StringComparison.Ordinal); // then the office's name
+        Assert.Contains("النوع: استشارة عاجلة مدفوعة: لم يصل تنبيهها إلى المستشار", failed.Text);
+        Assert.Contains($"http://x/tasks/{task}", failed.Text);
+
+        var unanswered = PanelMails.Alert("staff@example.test",
+            new AlertToMail(2, AlertKinds.Urgent, task, "urgent_call_unanswered", DateTimeOffset.UtcNow, null), "http://x");
+        Assert.StartsWith("استشارة عاجلة مدفوعة لم يتولّها أحد |", unanswered.Subject, StringComparison.Ordinal);
+        Assert.Contains("تواصل مع المستشار أو مع العميل الآن.", unanswered.Text);
+
+        // any other urgent alert, as before
+        Assert.StartsWith("طلب عاجل |", PanelMails.Alert("a@example.test",
+            new AlertToMail(3, AlertKinds.Urgent, task, "safety_alert", DateTimeOffset.UtcNow, null), "http://x").Subject, StringComparison.Ordinal);
+    }
 }

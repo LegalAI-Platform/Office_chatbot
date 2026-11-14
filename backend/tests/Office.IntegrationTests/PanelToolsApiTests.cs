@@ -186,6 +186,33 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal(new[] { urgent, asking }.Order(), await Bell("boss"));
     }
 
+    // v1.110 (the owner: «كميه ايميلات كتيره اوي» … «موافق» … «سيبهم»): a paid urgent call is one task. While the lawyer's
+    // WhatsApp alert is his, its urgent alert is the bell's and Windows' only; when that alert did not reach him, the lawyer's
+    // e-mail; when nobody took it in time, the staff's; never a «late» e-mail for it. The bell shows its urgent line to the
+    // lawyer and the staff, as any urgent one.
+    [Fact]
+    public async Task A_paid_urgent_call_emails_the_lawyer_only_when_whatsapp_failed_and_the_staff_only_when_nobody_took_it()
+    {
+        var waiting = await NewTask("urgent_call");
+        var failed = await NewTask("urgent_call_failed");
+        var unanswered = await NewTask("urgent_call_unanswered");
+        var late = await NewTask("urgent_call", due: "-5 minutes");
+        await RunAlerts();
+        string[] To(Guid task) => [.. _factory.Mail.Sent.Where(m => m.Text.Contains(task.ToString(), StringComparison.Ordinal)).Select(m => m.To).Distinct().Order(StringComparer.Ordinal)];
+        Assert.Empty(To(waiting));
+        Assert.Equal(["lawyer@example.test"], To(failed));
+        Assert.Equal(["karim@example.test", "yasmin@example.test"], To(unanswered));
+        Assert.Empty(To(late)); // neither its urgent alert nor its late one
+        Assert.Equal("task_overdue,task_urgent", await db.ScalarAsync<string>(
+            $"SELECT string_agg(kind, ',' ORDER BY kind) FROM hazem.panel_alerts WHERE task_id = '{late}'")); // the bell has both
+
+        async Task<Guid[]> Bell(string who) =>
+            [.. (await (await SignIn(who)).GetFromJsonAsync<JsonNode>("/api/panel/alerts", Ct))!["items"]!.AsArray().Select(a => (Guid)a!["task_id"]!).Distinct().Order()];
+        Guid[] all = [.. new[] { waiting, failed, unanswered, late }.Order()];
+        Assert.Equal(all, await Bell("lawyer"));
+        Assert.Equal(all, await Bell("yasmin"));
+    }
+
     // v1.105 (the owner: «العميل … اجابته لازم موظف يتدخل ليه فيها … الحاجات دي انا عايزها تيجي في النوتيفيكيشن … نشوف
     // حل عام»): every task Hazem opens for the office alerts at once, whatever its type; never by e-mail.
     [Fact]
