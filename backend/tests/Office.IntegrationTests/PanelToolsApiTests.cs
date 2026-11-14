@@ -213,6 +213,27 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal(all, await Bell("yasmin"));
     }
 
+    // v1.110 (the owner, of the bell's red count: «أيوه، ضيفها»): a finished task (done, cancelled) leaves its alerts read
+    // for everyone: out of the red count, and still in the list, dimmed.
+    [Fact]
+    public async Task A_finished_task_s_alerts_are_read_for_everyone_and_stay_in_the_list()
+    {
+        var urgent = await NewTask("urgent_request");
+        var complaint = await NewTask("complaint");
+        await RunAlerts();
+        var yasmin = await SignIn("yasmin");
+        async Task<JsonNode> Bell() => (await yasmin.GetFromJsonAsync<JsonNode>("/api/panel/alerts", Ct))!;
+        Assert.Equal(2, (int)(await Bell())["unread"]!);
+
+        await db.ExecAsync($"UPDATE hazem.staff_tasks SET state = 'done' WHERE id = '{urgent}'");
+        Assert.Equal(1, (int)(await Bell())["unread"]!);
+        await db.ExecAsync($"UPDATE hazem.staff_tasks SET state = 'cancelled' WHERE id = '{complaint}'");
+        var bell = await Bell();
+        Assert.Equal(0, (int)bell["unread"]!);
+        Assert.Equal(2, bell["items"]!.AsArray().Count);
+        Assert.All(bell["items"]!.AsArray(), a => Assert.True((bool)a!["read"]!));
+    }
+
     // v1.105 (the owner: «العميل … اجابته لازم موظف يتدخل ليه فيها … الحاجات دي انا عايزها تيجي في النوتيفيكيشن … نشوف
     // حل عام»): every task Hazem opens for the office alerts at once, whatever its type; never by e-mail.
     [Fact]

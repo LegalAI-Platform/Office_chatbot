@@ -31,6 +31,8 @@ So the urgent consultation was the one multiplier: 11 of the 17 alert e-mails.
 | E-mail: nobody while the WhatsApp alert is the lawyer's, the lawyer when it failed, the staff when nobody answered, never «late» for it; the bell as before | `AlertKinds.BellOnly`, `AlertAudience.For`, `PanelAlertStore.UnsentAsync`, `PanelMails` (two new e-mails) |
 | The task stays urgent in the panel at every step | `PanelTasks.UrgentTypes`, `web/src/shared/lib/labels.ts` (`URGENT_TYPES`), tasks page, home |
 | Before the merge, the owner added: «خلي المستشار يشوفها» («الحسابات» in the settings). The lawyer has `users.manage` now, as the manager: add, close, a temporary password, roles, sign-up approvals. The maintenance accounts stay `maintenance.manage`'s, nobody changes their own account, the approval e-mail stays the managers', and 2FA stays optional (`PANEL_MANAGERS_NEED_2FA` is off on the server) | `Permissions.cs`, the RBAC test, the tour's test |
+| He asked how long the bell's red «3» stays (an old urgent call's): until each person reads it, even after the task was closed. «أيوه، ضيفها»: a finished task (done, cancelled) leaves its alerts read for everyone, out of the red count and the tab's title, dimmed in the list | `PanelAlertStore.ListAsync`, `UnreadAsync` |
+| «وعاوز لما يدوس علي اللوجو يعمل ريلود»: the logo (the side bar's seal and name, the phone's top bar) reloads the home page, as the browser's button, instead of asking everything again in place | `web/src/app/Layout.tsx` (`HomeLogo`), `web/src/shared/lib/reload.ts` |
 | Docs | `DECISIONS-v1.110.md`, CLAUDE.md, START-HERE |
 
 ## Checked

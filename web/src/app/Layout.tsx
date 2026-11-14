@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router";
 import { useAlerts, useAlertStream, useMarkAlertsRead } from "../shared/api/alerts";
 import type { PanelAlert } from "../shared/api/types";
@@ -8,6 +7,7 @@ import { avatarUrl, can, useLogout, useMe } from "../shared/api/session";
 import { ALERT_KINDS, label, ROLES } from "../shared/lib/labels";
 import { countWords, firstAndMore, groupByClient, LATE_TASKS, NEW_ALERTS, thingsWords } from "../shared/lib/group";
 import { alertLine, notifyState, testNotification, useAlertNotifications } from "../shared/lib/notify";
+import { reloadAt } from "../shared/lib/reload";
 import { cairoLongDate, cairoTime, timeAgo } from "../shared/lib/time";
 import { Avatar } from "../shared/ui/Avatar";
 import { Icon, type IconName } from "../shared/ui/Icon";
@@ -270,22 +270,17 @@ function TopBar({ late }: { late: number }) {
 
 /** TASK 07c: the office's alerts (overdue, urgent, a client asking for someone) that this person may see. */
 /**
- * The office's logo (the side bar's seal and name, the phone's top bar): back to the home page with everything asked again,
- * like a refresh without reloading the page (the tester: «when I press the logo it refreshes and gets me back on the main
- * page»). On the home page already, it only asks again and goes back to the top.
+ * The office's logo (the side bar's seal and name, the phone's top bar): the home page, reloaded (the tester: «when I press
+ * the logo it refreshes and gets me back on the main page»). v1.110 (the owner: «لما يدوس علي اللوجو يعمل ريلود»): a real
+ * reload, as the browser's own button, not only everything asked again in place.
  */
 function HomeLogo({ className, children }: { className: string; children: ReactNode }) {
-  const qc = useQueryClient();
-  const navigate = useNavigate();
-  const { pathname } = useLocation();
-  const refresh = (e: ReactMouseEvent) => {
+  const reload = (e: ReactMouseEvent) => {
     if (e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return; // a new tab or window: the browser's own
     e.preventDefault();
-    if (pathname !== "/") void navigate("/");
-    window.scrollTo({ top: 0 });
-    void qc.invalidateQueries();
+    reloadAt("/");
   };
-  return <Link to="/" onClick={refresh} aria-label="الرئيسية: تحديث الصفحة" title="الرئيسية" className={className}>{children}</Link>;
+  return <Link to="/" onClick={reload} aria-label="الرئيسية: تحديث الصفحة" title="الرئيسية" className={className}>{children}</Link>;
 }
 
 function Bell({ late }: { late: number }) {
