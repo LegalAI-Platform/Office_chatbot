@@ -2366,6 +2366,7 @@ public sealed class HazemResponder(
             answering = turnClass;
             // v1.72: what the AI read from the chat changes the answer a case was refused for (a guardian named after «مفيش حد
             // منهم»), as it changes any other answer (v1.60): the case goes on from where it stopped. Only then the closing text.
+            // v1.114: the age refusal too (an age corrected to 18 or more), said back first («تمام، عدّلت السن…»).
             if (urfOn && MayBook && ageRefusal?.Case is { } refused && WithUrfFacts(refused) is { State: not (UrfCase.RejectedAge or UrfCase.RejectedGuardian) } again)
             {
                 Reopen(refused, again);
