@@ -41,8 +41,7 @@ public sealed class PanelSearchStore(HazemDbContext db, TimeProvider clock) : IP
         var now = clock.GetUtcNow().ToUniversalTime(); // the database takes UTC only
         // the tasks this viewer may see (PanelTasks.MaySee): every one, or theirs and the unassigned; the unfinished first
         var tasks = await db.Database.SqlQuery<TaskHit>($"""
-            SELECT t.id AS "Id", p.office_name AS "Name", right(p.wa_id, 3) AS "Last3", t.type AS "Type", t.state AS "State",
-                   t.due_at AS "DueAt"
+            SELECT t.id AS id, p.office_name AS name, right(p.wa_id, 3) AS last3, t.type AS type, t.state AS state, t.due_at AS due_at
               FROM hazem.staff_tasks t JOIN hazem.persons p ON p.id = t.person_id
              WHERE t.person_id = ANY({persons}) AND ({allTasks} OR t.staff_id IS NULL OR t.staff_id = {staffId})
              ORDER BY t.state IN ('open', 'in_progress', 'overdue') DESC, t.created_at DESC
@@ -50,8 +49,8 @@ public sealed class PanelSearchStore(HazemDbContext db, TimeProvider clock) : IP
             """).ToListAsync(ct);
         // the coming ones first (the nearest first), then the past ones (the latest first); a hold that ran out is no appointment
         List<AppointmentHit> booked = !appointments ? [] : await db.Database.SqlQuery<AppointmentHit>($"""
-            SELECT a.id AS "Id", p.office_name AS "Name", right(p.wa_id, 3) AS "Last3", a.service AS "Service", a.state AS "State",
-                   a.starts_at AS "StartsAt"
+            SELECT a.id AS id, p.office_name AS name, right(p.wa_id, 3) AS last3, a.service AS service, a.state AS state,
+                   a.starts_at AS starts_at
               FROM hazem.appointments a JOIN hazem.persons p ON p.id = a.person_id
              WHERE a.person_id = ANY({persons}) AND a.state <> 'expired'
              ORDER BY a.starts_at >= {now} DESC, CASE WHEN a.starts_at >= {now} THEN a.starts_at END, a.starts_at DESC
@@ -59,17 +58,17 @@ public sealed class PanelSearchStore(HazemDbContext db, TimeProvider clock) : IP
             """).ToListAsync(ct);
         // a client the viewer has something to open for: a task he may see, or an appointment
         var clients = await db.Database.SqlQuery<ClientHit>($"""
-            SELECT p.id AS "Id", p.office_name AS "Name", right(p.wa_id, 3) AS "Last3",
+            SELECT p.id AS id, p.office_name AS name, right(p.wa_id, 3) AS last3,
                    (SELECT count(*)::int FROM hazem.staff_tasks t
                      WHERE t.person_id = p.id AND t.state IN ('open', 'in_progress', 'overdue')
-                       AND ({allTasks} OR t.staff_id IS NULL OR t.staff_id = {staffId})) AS "OpenTasks",
+                       AND ({allTasks} OR t.staff_id IS NULL OR t.staff_id = {staffId})) AS open_tasks,
                    (SELECT t.id FROM hazem.staff_tasks t
                      WHERE t.person_id = p.id AND ({allTasks} OR t.staff_id IS NULL OR t.staff_id = {staffId})
-                     ORDER BY t.state IN ('open', 'in_progress', 'overdue') DESC, t.created_at DESC LIMIT 1) AS "TaskId",
+                     ORDER BY t.state IN ('open', 'in_progress', 'overdue') DESC, t.created_at DESC LIMIT 1) AS task_id,
                    (SELECT a.starts_at FROM hazem.appointments a
                      WHERE {appointments} AND a.person_id = p.id AND a.state <> 'expired'
                      ORDER BY a.starts_at >= {now} DESC, CASE WHEN a.starts_at >= {now} THEN a.starts_at END, a.starts_at DESC
-                     LIMIT 1) AS "AppointmentAt"
+                     LIMIT 1) AS appointment_at
               FROM hazem.persons p
              WHERE p.id = ANY({persons})
                AND (EXISTS (SELECT 1 FROM hazem.staff_tasks t

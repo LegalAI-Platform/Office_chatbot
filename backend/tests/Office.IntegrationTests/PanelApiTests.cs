@@ -220,7 +220,9 @@ public sealed class PanelApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal("lawyer", (string?)me["role"]);
         var permissions = me["permissions"]!.AsArray().Select(p => (string)p!).ToList();
         Assert.Contains("tasks.assign", permissions);
-        Assert.DoesNotContain("users.manage", permissions);
+        Assert.Contains("users.manage", permissions); // v1.110 (the owner: «خلي المستشار يشوفها»), as the manager
+        Assert.DoesNotContain("conversations.unmute", permissions); // the manager's
+        Assert.DoesNotContain("texts.manage", permissions); // the maintenance account's
     }
 
     // ---------- passwords and sessions ----------
@@ -301,8 +303,10 @@ public sealed class PanelApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal(HttpStatusCode.OK, (await other.PostAsJsonAsync($"/api/panel/users/{bossId}/role", new { role = "lawyer" }, Ct)).StatusCode);
         var last = await boss.GetAsync("/api/panel/auth/me", Ct);
         Assert.Equal(HttpStatusCode.Unauthorized, last.StatusCode); // the new role ended the old session
+        // v1.110: a lawyer manages the accounts too (the owner: «خلي المستشار يشوفها»), but the last manager stays one
         var r = await (await SignIn("boss")).PostAsJsonAsync($"/api/panel/users/{second.Id}/role", new { role = "staff" }, Ct);
-        Assert.Equal(HttpStatusCode.Forbidden, r.StatusCode); // a lawyer has no users.manage
+        Assert.Equal(HttpStatusCode.Conflict, r.StatusCode);
+        Assert.Equal("last_manager", (string?)(await r.Content.ReadFromJsonAsync<JsonNode>(Ct))!["error"]);
         var demoteLast = await other.PostAsJsonAsync($"/api/panel/users/{second.Id}/role", new { role = "lawyer" }, Ct);
         Assert.Equal(HttpStatusCode.Conflict, demoteLast.StatusCode);
         Assert.Equal("cannot_change_self", (string?)(await demoteLast.Content.ReadFromJsonAsync<JsonNode>(Ct))!["error"]);

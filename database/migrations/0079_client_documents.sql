@@ -10,7 +10,7 @@
 
 -- migrate:up
 CREATE VIEW hazem.client_documents AS
-SELECT 'message'::text AS source, t.id AS id, (m.ord - 1)::int AS index, p.id AS person_id,
+SELECT 'message'::text AS source, t.id AS id, (m.ord - 1)::int AS "index", p.id AS person_id,
        -- what the file is, as its type says; the message's own type only when the file has none
        CASE WHEN coalesce(m.msg -> 'media' ->> 'mime_type', '') LIKE 'image/%'
               OR m.msg -> 'media' ->> 'mime_type' IS NULL AND m.msg ->> 'type' = 'image'

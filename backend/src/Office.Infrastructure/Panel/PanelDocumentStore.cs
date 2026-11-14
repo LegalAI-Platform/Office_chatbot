@@ -25,8 +25,8 @@ public sealed class PanelDocumentStore(HazemDbContext db, TimeProvider clock) : 
         var offset = (page - 1) * pageSize;
         // a staff member: the clients of her tasks and of the unassigned ones (PanelTasks.MaySee)
         var clients = await db.Database.SqlQuery<ClientRow>($"""
-            SELECT d.person_id AS "Id", p.office_name AS "Name", right(p.wa_id, 3) AS "Last3", count(*)::int AS "Count",
-                   max(d.received_at) AS "LatestAt", (count(*) OVER ())::int AS "Total"
+            SELECT d.person_id AS id, p.office_name AS name, right(p.wa_id, 3) AS last3, count(*)::int AS count,
+                   max(d.received_at) AS latest_at, (count(*) OVER ())::int AS total
               FROM hazem.client_documents d JOIN hazem.persons p ON p.id = d.person_id
              WHERE ({anyone} OR d.person_id = ANY({persons}))
                AND ({kind}::text IS NULL OR d.kind = {kind}::text) AND ({source}::text IS NULL OR d.source = {source}::text)
@@ -44,16 +44,15 @@ public sealed class PanelDocumentStore(HazemDbContext db, TimeProvider clock) : 
 
         Guid[] shown = [.. clients.Select(c => c.Id)];
         var files = await db.Database.SqlQuery<FileRow>($"""
-            SELECT x."Source", x."Id", x."Index", x."PersonId", x."Kind", x."Mime", x."Name", x."ReceivedAt", x."TaskId" FROM (
-              SELECT d.source AS "Source", d.id AS "Id", d.index AS "Index", d.person_id AS "PersonId", d.kind AS "Kind",
-                     d.mime AS "Mime", d.name AS "Name", d.received_at AS "ReceivedAt",
-                     (SELECT st.id FROM hazem.staff_tasks st WHERE st.turn_id = d.turn_id ORDER BY st.created_at LIMIT 1) AS "TaskId",
-                     row_number() OVER (PARTITION BY d.person_id ORDER BY d.received_at DESC, d.id, d.index) AS n
+            SELECT x.source, x.id, x."index", x.person_id, x.kind, x.mime, x.name, x.received_at, x.task_id FROM (
+              SELECT d.source, d.id, d."index", d.person_id, d.kind, d.mime, d.name, d.received_at,
+                     (SELECT st.id FROM hazem.staff_tasks st WHERE st.turn_id = d.turn_id ORDER BY st.created_at LIMIT 1) AS task_id,
+                     row_number() OVER (PARTITION BY d.person_id ORDER BY d.received_at DESC, d.id, d."index") AS n
                 FROM hazem.client_documents d
                WHERE d.person_id = ANY({shown})
                  AND ({kind}::text IS NULL OR d.kind = {kind}::text) AND ({source}::text IS NULL OR d.source = {source}::text)) x
              WHERE x.n <= {perClient}
-             ORDER BY x."ReceivedAt" DESC, x."Id", x."Index"
+             ORDER BY x.received_at DESC, x.id, x."index"
             """).ToListAsync(ct);
         var byClient = files.ToLookup(f => f.PersonId);
         return new(
