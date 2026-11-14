@@ -495,3 +495,70 @@
     transform: none;
   }
 }
+
+/*
+ * v1.110 (the owner: «تقدر تستخرج تقارير pdf templtes»): a report on paper. «تصدير PDF» prints the page; on paper only
+ * the report is left (no sidebar, top bar or tab bar), on its letterhead, in the light colours, A4, with the page count.
+ */
+@media print {
+  @page {
+    size: A4;
+    margin: 16mm 14mm 18mm;
+    @bottom-center {
+      content: "صفحة " counter(page) " من " counter(pages);
+      font-family: "Cairo", sans-serif;
+      font-size: 9pt;
+      color: #776c5a;
+    }
+  }
+
+  /* the light colours, whatever the screen's theme (beats both dark rules) */
+  :root:root:root {
+    --page: #ffffff;
+    --card: #ffffff;
+    --card-2: #f7f5f1;
+    --line: #d9d2c6;
+    --top: #ffffff;
+    --ink: #1e1a14;
+    --ink-soft: #5e5446;
+    --gold: #b08552;
+    --gold-ink: #6b4626;
+    --gold-tint: #f2e6d5;
+    --gold-line: #d4b996;
+    --green-ink: #078a5d;
+    --orange-ink: #b86a00;
+    --red-ink: #d42a2a;
+    --blue-ink: #2563eb;
+    --grey-ink: #6b6253;
+    --kpi-ink: #1e1a14;
+    --kpi-soft: #6b6253;
+    --light-only: inline-block;
+    --dark-only: none;
+    --shadow: none;
+    color-scheme: light;
+  }
+
+  html, body { background: #fff !important; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+  /* the panel's frame stays on screen */
+  aside, nav, body header.sticky, .print-hide { display: none !important; }
+  #main { padding: 0 !important; }
+
+  /* the glass prints as plain bordered paper */
+  [data-print-root] .liquid,
+  [data-print-root] .liquid-kids > .surface {
+    background: #fff !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border: 1px solid #d9d2c6 !important;
+  }
+  [data-print-root] .liquid::before { display: none !important; }
+  [data-print-root] [class*="blur-"] { filter: none !important; }
+
+  /* a table or a card never splits across two pages; each report starts its own heading */
+  [data-print-root] table, [data-print-root] tr, [data-print-root] .liquid { break-inside: avoid; }
+  [data-print-root] [data-report] + [data-report] { break-before: auto; }
+  [data-print-root] h2, [data-print-root] h3 { break-after: avoid; }
+}

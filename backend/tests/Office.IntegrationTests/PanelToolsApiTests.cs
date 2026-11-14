@@ -786,7 +786,7 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
         await NewUser("keeper", Permissions.Maintenance);
         var keeper = await SignIn("keeper");
         await MaintenanceTwoFactor.TurnOnAsync(keeper, Ct);
-        foreach (var office in new[] { "boss", "lawyer", "karim" })
+        foreach (var office in new[] { "boss", "karim" })
         {
             var c = await SignIn(office);
             foreach (var path in new[] { "/api/panel/reports", "/api/panel/reports/trend", "/api/panel/reports/ai-cost" })
@@ -795,6 +795,13 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
             }
         }
 
+        // v1.110 (the owner: «تكون ظاهره للمستشار»): the lawyer reads the office's reports, never Hazem's own parts
+        var lawyer = await SignIn("lawyer");
+        Assert.Equal(HttpStatusCode.OK, (await lawyer.GetAsync("/api/panel/reports/trend", Ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await lawyer.GetAsync("/api/panel/reports/ai-cost", Ct)).StatusCode);
+        var his = (await lawyer.GetFromJsonAsync<JsonNode>("/api/panel/reports", Ct))!;
+        Assert.Empty(his["review"]!.AsArray());
+        Assert.Equal(0m, (decimal)his["ai_cost"]!["total_usd"]!);
         return keeper;
     }
 

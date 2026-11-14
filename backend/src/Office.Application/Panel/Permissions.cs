@@ -72,7 +72,8 @@ public static class Permissions
             ConversationsUnmute, ScheduleManage, OfficeManage, PaymentsVerify, PaymentsRefund, ServicesManage, ServicesPrice, UrfManage, UrfReview, PricesManage],
         // v1.110 (the owner, 2026-11-14: «خلي المستشار يشوفها»): «الحسابات» too (UsersManage), as the manager has it; the
         // maintenance accounts stay MaintenanceManage's only
-        [Lawyer] = [TasksViewOwn, TasksViewAll, TasksUpdate, TasksAssign, UsersManage, AccountSelf, ListsManage, ScheduleManage,
+        // v1.110 (the owner: «تكون ظاهره للمستشار»): the reports too; Hazem's own parts in them stay MaintenanceManage's
+        [Lawyer] = [TasksViewOwn, TasksViewAll, TasksUpdate, TasksAssign, UsersManage, AccountSelf, ListsManage, ReportsView, ScheduleManage,
             OfficeManage, PaymentsVerify, PaymentsRefund, ServicesManage, ServicesPrice, UrfManage, UrfReview, PricesManage],
         [Staff] = [TasksViewOwn, TasksUpdate, AccountSelf, ScheduleManage, PaymentsVerify, PaymentsRefund, ServicesManage, UrfManage],
     };

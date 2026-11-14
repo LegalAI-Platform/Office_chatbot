@@ -1,6 +1,8 @@
-import { Fragment, useId, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useId, useState, type ReactNode } from "react";
 import { queryOptions, useQuery, type QueryClient } from "@tanstack/react-query";
 import { api, errorMessage } from "../../shared/api/client";
+import { can, useMe } from "../../shared/api/session";
+import { OwnerImg } from "../../shared/ui/Owner";
 import type { AiCostReport, AiCostTurn, FreeAnswerRow, MonthReport, RatingReport, ReportRow, ReviewRow, ServiceReportRow, TrendRow, WrittenSummary } from "../../shared/api/types";
 import { APPOINTMENT_STATES, BOOKING_SERVICES, label, SERVICE_KINDS, SOURCES, TASK_TYPES, CLIENT_TYPES, matterLabel } from "../../shared/lib/labels";
 import { Icon, type IconName } from "../../shared/ui/Icon";
@@ -74,16 +76,29 @@ export function ReportsPage() {
   const report = useQuery(days ? rangeQuery(days[0], days[1]) : reportQuery(month));
   const r = report.data;
   const pct = (a: number, b: number) => (b === 0 ? "—" : `${Math.round((a / b) * 100)}%`);
+  const { data: me } = useMe();
+  const internal = can(me, "maintenance.manage"); // v1.110: Hazem's own parts stay the maintenance account's
+  const [shown, setShown] = useState("all");
+  const [printing, setPrinting] = useState<string | null>(null);
+  // v1.110: «تصدير PDF» prints the report on its letterhead; the browser's «حفظ بتنسيق PDF» makes the file
+  const exportPdf = (id: string) => setPrinting(id);
+  useEffect(() => {
+    if (printing === null) return;
+    const done = () => setPrinting(null);
+    window.addEventListener("afterprint", done, { once: true });
+    const t = setTimeout(() => window.print(), 50);
+    return () => { clearTimeout(t); window.removeEventListener("afterprint", done); };
+  }, [printing]);
 
   return (
-    <div className="relative isolate grid gap-6 pb-4">
+    <div data-print-root className="relative isolate grid gap-6 pb-4">
       {/* the soft light the glass shows through */}
-      <div aria-hidden className="pointer-events-none absolute inset-x-0 -top-6 -z-10 h-[30rem] overflow-hidden">
+      <div aria-hidden className="pointer-events-none absolute inset-x-0 -top-6 -z-10 h-[30rem] overflow-hidden print:hidden">
         <span className="absolute -top-16 end-[4%] size-[24rem] rounded-full bg-gold/30 blur-[100px]" />
         <span className="absolute top-24 start-[10%] size-[20rem] rounded-full bg-blue/10 blur-[100px]" />
       </div>
 
-      <header className="relative">
+      <header className="relative print:hidden">
         <div className="relative flex flex-wrap items-end justify-between gap-5">
           <div className="flex min-w-0 flex-1 basis-[20rem] items-center gap-4">
             <span aria-hidden className="grid size-11 shrink-0 place-items-center rounded-[14px] bg-gradient-to-br from-gold-tint to-card text-gold-ink shadow-[inset_0_1px_0_rgb(255_255_255/0.6),0_8px_20px_-10px_rgb(140_98_58/0.7)]">
@@ -116,28 +131,47 @@ export function ReportsPage() {
 
       {report.isPending ? <Loading /> : report.isError ? <ErrorState message={errorMessage(report.error)} onRetry={() => void report.refetch()} /> : r ? (
         <>
-          <Group icon="tasks" title="المهام">
+          <Toolbar shown={shown} onShow={setShown} onExport={exportPdf} internal={internal} />
+
+          {/* only on paper: the office's letterhead, the report's name and its period */}
+          <Letterhead title={REPORTS.find((x) => x.id === (printing ?? shown))?.title ?? "التقرير الشامل"} period={periodOf(r.month)} />
+
+          <Report id="summary" shown={shown} printing={printing} icon="reports" title="ملخص الفترة">
+            <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+              <Number icon="tasks" title="المهام" value={r.tasks} />
+              <Number icon="check-circle" tone="green" title="المكتملة" value={r.done} note={pct(r.done, r.tasks)} />
+              <Number icon="alert-circle" tone="orange" title="المتأخرة" value={r.late} />
+              <Number icon="user-plus" tone="blue" title="عملاء جدد" value={r.new_clients} />
+              <Number icon="calendar" title="الحجوزات المؤكدة" value={booked(r)} />
+              <Number icon="check-circle" tone="green" title="المُستلَم (جنيه)" value={r.received} />
+              <Number icon="alert-circle" tone="orange" title="الناقص (جنيه)" value={r.missing} />
+              <Number icon="message" tone="blue" title="متوسط تقييم العملاء" value={r.ratings?.average == null ? "—" : `${r.ratings.average.toFixed(1)} من 5`} />
+            </div>
+          </Report>
+
+          <Report id="tasks" shown={shown} printing={printing} icon="tasks" title="المهام وأداء فريق العمل">
             <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
               <Number icon="tasks" title="المهام" value={r.tasks} />
               <Number icon="check-circle" tone="green" title="المكتملة" value={r.done} note={pct(r.done, r.tasks)} />
               <Number icon="clock" tone="blue" title="اكتملت في موعدها" value={r.done_on_time} note={pct(r.done_on_time, r.done)} />
-              <Number icon="user-plus" tone="orange" title="عملاء جدد" value={r.new_clients} />
+              <Number icon="alert-circle" tone="orange" title="المتأخرة" value={r.late} />
             </div>
             <div className="grid gap-4 lg:grid-cols-2">
               <Table icon="tasks" title="المهام حسب النوع" rows={r.by_type} name={(k) => label(TASK_TYPES, k)} />
               <Staff rows={r.by_staff} />
             </div>
-          </Group>
+            <Note>«في موعدها»: المهام التي اكتملت قبل موعد إنجازها.</Note>
+          </Report>
 
-          <Group icon="clients" title="العملاء الجدد">
+          <Report id="clients" shown={shown} printing={printing} icon="clients" title="العملاء الجدد ومصادرهم">
             <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
               <Table icon="trend-up" title="العملاء الجدد حسب المصدر" rows={r.by_source} name={(k) => (k === "unknown" ? "غير معروف" : label(SOURCES, k))} />
-              <Table icon="document" title="العملاء الجدد حسب الموضوع" rows={r.by_matter} name={(k) => (k === "unknown" ? "لم يُحدَّد بعد" : matterLabel(k))} />
+              <Table icon="document" title="العملاء الجدد حسب موضوع القضية" rows={r.by_matter} name={(k) => (k === "unknown" ? "لم يُحدَّد بعد" : matterLabel(k))} />
               <Table icon="users" title="حسب نوع العميل" rows={r.by_client_type} name={(k) => (k === "unknown" ? "لم يُحدَّد بعد" : label(CLIENT_TYPES, k))} />
             </div>
-          </Group>
+          </Report>
 
-          <Group icon="calendar" title="الحجوزات والمبالغ">
+          <Report id="bookings" shown={shown} printing={printing} icon="calendar" title="المواعيد والإيرادات">
             <div className="grid gap-4 lg:grid-cols-2">
               <Table icon="calendar" title="الحجوزات حسب الحالة" rows={r.by_booking} name={(k) => label(APPOINTMENT_STATES, k)} />
               <div className="grid content-start gap-3 sm:grid-cols-3 lg:grid-cols-1 2xl:grid-cols-3">
@@ -148,17 +182,117 @@ export function ReportsPage() {
             </div>
             <ByService rows={r.by_service ?? []} />
             <Months />
-            <Note>«في موعدها» = اكتملت قبل الموعد المطلوب. المبالغ = ما سجّل المكتب أنه وصل فعلًا عن حجوزات الشهر.</Note>
-            <Note>«محجوز» = تم تأكيده بالدفع (تم، أو لم يحن موعده بعد، أو لم يحضر). الخدمات المكتوبة: الطلب الذي تم تسعيره، و«تم» = تم التسليم.</Note>
-          </Group>
+            <Note>المبالغ: ما سجّل المكتب وصوله فعلًا عن حجوزات الفترة. «محجوز»: ما تأكد بالدفع (تم، أو لم يحن موعده، أو لم يحضر العميل). الخدمات المكتوبة: الطلب الذي سُعِّر، و«تم»: ما سُلِّم.</Note>
+          </Report>
 
-          {r.ratings ? <Ratings ratings={r.ratings} /> : null}
-          <Review rows={r.review ?? []} />
-          <FreeAnswers rows={r.free_answers ?? []} written={r.written} />
-          {span === "month" ? <AiCost month={month} /> : null}
+          {r.ratings ? (
+            <Report id="ratings" shown={shown} printing={printing} icon="message" title="رضا العملاء" bare>
+              <Ratings ratings={r.ratings} />
+            </Report>
+          ) : null}
+
+          {/* Hazem's own parts: the maintenance account's only (the API leaves them empty for the others) */}
+          {internal ? (
+            <Report id="hazem" shown={shown} printing={printing} icon="chat" title="أداء حازم (للصيانة)" bare>
+              <Review rows={r.review ?? []} />
+              <FreeAnswers rows={r.free_answers ?? []} written={r.written} />
+              {span === "month" ? <AiCost month={month} /> : null}
+            </Report>
+          ) : null}
         </>
       ) : null}
     </div>
+  );
+}
+
+// ---------- v1.110: the reports one by one, and each as a PDF ----------
+
+/**
+ * v1.110 (the owner: «عاوزك تهندل ui بتاعها وتبقي فعلا صفحه تقارير … تقدر تستخرج تقارير pdf templtes … ظاهره للمستشار»):
+ * the reports the page holds; «الكل» shows them one under the other, as «التقرير الشامل» prints them.
+ */
+const REPORTS: { id: string; title: string; internal?: boolean }[] = [
+  { id: "summary", title: "ملخص الفترة" },
+  { id: "tasks", title: "المهام وأداء فريق العمل" },
+  { id: "clients", title: "العملاء الجدد ومصادرهم" },
+  { id: "bookings", title: "المواعيد والإيرادات" },
+  { id: "ratings", title: "تقييمات العملاء" },
+  { id: "hazem", title: "أداء حازم (للصيانة)", internal: true },
+];
+
+/** The bookings paid for in the period: confirmed, done, or not attended. */
+const booked = (r: MonthReport) =>
+  r.by_booking.filter((b) => b.key === "confirmed" || b.key === "completed" || b.key === "no_show").reduce((n, b) => n + b.count, 0);
+
+/** The period as the report names it: «نوفمبر 2026», «14 نوفمبر 2026», or «من … إلى …». */
+export function periodOf(label: string): string {
+  const fmt = (d: string, opts: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat("ar-EG-u-nu-latn", { ...opts, timeZone: "UTC" }).format(new Date(`${d}T12:00:00Z`));
+  const day = (d: string) => fmt(d, { day: "numeric", month: "long", year: "numeric" });
+  if (/^\d{4}-\d{2}$/.test(label)) return fmt(`${label}-15`, { month: "long", year: "numeric" });
+  if (/^\d{4}-\d{2}-\d{2}$/.test(label)) return day(label);
+  const [from, to] = label.split("..");
+  return from && to ? `من ${day(from)} إلى ${day(to)}` : label;
+}
+
+/** One report of the page: shown when it is the one picked (or all are), printed when it is the one exported (or all are). */
+function Report({ id, shown, printing, icon, title, bare, children }: {
+  id: string; shown: string; printing: string | null; icon: IconName; title: string; bare?: boolean; children: ReactNode;
+}) {
+  const on = shown === "all" || shown === id;
+  const paper = printing === null ? on : printing === "all" || printing === id;
+  return (
+    <div data-report={id} className={`${on ? "" : "hidden"} ${paper ? "print:block" : "print:hidden"} print:break-inside-auto`}>
+      {bare ? <div className="grid gap-6">{children}</div> : <Group icon={icon} title={title}>{children}</Group>}
+    </div>
+  );
+}
+
+function Toolbar({ shown, onShow, onExport, internal }: {
+  shown: string; onShow: (id: string) => void; onExport: (id: string) => void; internal: boolean;
+}) {
+  const list = REPORTS.filter((x) => internal || !x.internal);
+  return (
+    <section aria-label="التقارير" className="liquid grid gap-2 rounded-[22px] p-3 sm:flex sm:flex-wrap sm:items-center print:hidden">
+      <div className="-mx-1 flex min-w-0 flex-1 gap-1 overflow-x-auto px-1 sm:flex-wrap" role="tablist" aria-label="اختر التقرير">
+        {[{ id: "all", title: "التقرير الشامل" }, ...list].map((x) => (
+          <button key={x.id} type="button" role="tab" aria-selected={shown === x.id} onClick={() => onShow(x.id)}
+            className={`min-h-9 shrink-0 whitespace-nowrap rounded-full px-3.5 text-[13px] transition ${shown === x.id ? "btn-gold font-bold" : "text-ink hover:bg-card/80"}`}>
+            {x.title}
+          </button>
+        ))}
+      </div>
+      <button type="button" onClick={() => onExport(shown)}
+        className="btn-gold flex min-h-10 items-center justify-center gap-2 rounded-full px-4 text-[13.5px] font-bold">
+        <Icon name="document" className="size-4" />
+        تصدير PDF
+      </button>
+    </section>
+  );
+}
+
+/** The letterhead of a printed report: on paper only. */
+function Letterhead({ title, period }: { title: string; period: string }) {
+  const issued = new Intl.DateTimeFormat("ar-EG-u-nu-latn", { timeZone: "Africa/Cairo", day: "numeric", month: "long", year: "numeric" }).format(new Date());
+  return (
+    <header className="hidden print:grid print:gap-3" data-letterhead>
+      <div className="flex items-center justify-between gap-4 border-b-2 border-[#a87a48] pb-3">
+        <div className="flex items-center gap-3">
+          <OwnerImg name="logo_emblem" className="size-14" />
+          <div className="grid">
+            <p className="text-[18px] font-bold">مكتب سعد فتحي سعد</p>
+            <p className="text-[12.5px]">للمحاماة والاستشارات القانونية</p>
+          </div>
+        </div>
+        <div className="grid text-end text-[12px]">
+          <span>تاريخ الإصدار: {issued}</span>
+          <span>سري: للاستخدام الداخلي للمكتب</span>
+        </div>
+      </div>
+      <div className="grid gap-0.5">
+        <h1 className="text-[22px] font-bold">{title}</h1>
+        <p className="text-[13.5px]">الفترة: {period}</p>
+      </div>
+    </header>
   );
 }
 

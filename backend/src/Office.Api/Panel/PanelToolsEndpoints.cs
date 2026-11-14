@@ -135,7 +135,16 @@ public static partial class PanelToolsEndpoints
         });
 
         // ---------- reports ----------
-        panel.MapGet("/reports", async (string? month, string? from, string? to, PanelTools tools, TimeProvider clock, CancellationToken ct) =>
+        panel.MapGet("/reports", async (string? month, string? from, string? to, HttpContext ctx, PanelTools tools, TimeProvider clock,
+            CancellationToken ct) =>
+            await ReportAsync(month, from, to, tools, clock, ct) is not MonthReport r ? Results.BadRequest(new { error = "invalid_range" })
+            // v1.110: the lawyer reads the office's reports; Hazem's own parts (his reviewed chats, free answers, what the AI cost)
+            // stay the maintenance account's
+            : Results.Ok(Permissions.Has(ctx.CurrentUser().Role, Permissions.MaintenanceManage) ? r
+                : r with { Review = [], FreeAnswers = [], Written = new(0, 0, 0, []), AiCost = new(0m, 0, 0, 0, 0, 0) }))
+            .RequireAuthorization(PanelAuth.Policy(Permissions.ReportsView));
+
+        static async Task<MonthReport?> ReportAsync(string? month, string? from, string? to, PanelTools tools, TimeProvider clock, CancellationToken ct)
         {
             var now = TimeZoneInfo.ConvertTime(clock.GetUtcNow(), Office.Domain.Tasks.OfficeHours.Cairo);
             // the owner (2026-11-07): a day, a range or a year too: «from» and «to» (YYYY-MM-DD, both included, up to 366 days)
@@ -146,10 +155,10 @@ public static partial class PanelToolsEndpoints
                     || !DateOnly.TryParseExact(to ?? from, "yyyy-MM-dd", fmt, System.Globalization.DateTimeStyles.None, out var t)
                     || f.Year < 2024 || t < f || t.DayNumber - f.DayNumber > 365)
                 {
-                    return Results.BadRequest(new { error = "invalid_range" });
+                    return null;
                 }
 
-                return Results.Ok(await tools.ReportAsync(f, t, f == t ? f.ToString("yyyy-MM-dd", fmt) : $"{f:yyyy-MM-dd}..{t:yyyy-MM-dd}", ct));
+                return await tools.ReportAsync(f, t, f == t ? f.ToString("yyyy-MM-dd", fmt) : $"{f:yyyy-MM-dd}..{t:yyyy-MM-dd}", ct);
             }
 
             int year = now.Year, m = now.Month;
@@ -159,12 +168,12 @@ public static partial class PanelToolsEndpoints
                 if (parts.Length != 2 || !int.TryParse(parts[0], out year) || !int.TryParse(parts[1], out m)
                     || year is < 2024 or > 2100 || m is < 1 or > 12)
                 {
-                    return Results.BadRequest(new { error = "invalid_month" });
+                    return null;
                 }
             }
 
-            return Results.Ok(await tools.ReportAsync(year, m, ct));
-        }).RequireAuthorization(PanelAuth.Policy(Permissions.ReportsView));
+            return await tools.ReportAsync(year, m, ct);
+        }
 
         // «الشهور»: what came each month, the last 12 months up to this one
         panel.MapGet("/reports/trend", async (PanelTools tools, TimeProvider clock, CancellationToken ct) =>
@@ -176,11 +185,11 @@ public static partial class PanelToolsEndpoints
         // v1.58 (the owner: «المحادثة صرفت قد إيه من الكريدت؟»): the AI cost by conversation, and one conversation's messages
         panel.MapGet("/reports/ai-cost", async (string? month, PanelTools tools, TimeProvider clock, CancellationToken ct) =>
             MonthOf(month, clock) is { } m ? Results.Ok(await tools.AiCostAsync(m.Year, m.Month, ct)) : Results.BadRequest(new { error = "invalid_month" }))
-            .RequireAuthorization(PanelAuth.Policy(Permissions.ReportsView));
+            .RequireAuthorization(PanelAuth.Policy(Permissions.MaintenanceManage)); // v1.110: Hazem's own part
         panel.MapGet("/reports/ai-cost/{personId:guid}", async (Guid personId, string? month, PanelTools tools, TimeProvider clock, CancellationToken ct) =>
             MonthOf(month, clock) is { } m ? Results.Ok(new { turns = await tools.AiCostTurnsAsync(personId, m.Year, m.Month, ct) })
                 : Results.BadRequest(new { error = "invalid_month" }))
-            .RequireAuthorization(PanelAuth.Policy(Permissions.ReportsView));
+            .RequireAuthorization(PanelAuth.Policy(Permissions.MaintenanceManage));
     }
 
     /// <summary>The month asked («2026-11»), this month when none; null when it is not a month from 2024 on.</summary>

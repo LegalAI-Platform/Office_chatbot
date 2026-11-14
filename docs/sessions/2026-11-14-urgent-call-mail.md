@@ -37,13 +37,16 @@ So the urgent consultation was the one multiplier: 11 of the 17 alert e-mails.
 | «…/documents شوف دي عاوز تعملها» … «اعمل كله مع بعض»: «المستندات», a «coming soon» page, now lists every file a client sent (his messages' pictures and documents, his receipts, his services' and Urfi cases' documents; a file kept as one of those three shows once, under it), by client, the newest first, 12 files each, 20 clients a page; a search as the search bar's, and filters by kind and by source. A file opens in a new tab through the panel only, recorded (`document.open`); no picture in the list (ID cards). Who sees a client's files is who sees his tasks | migration `0079_client_documents.sql` (the view), `PanelDocuments`, `PanelDocumentStore`, POST `/api/panel/documents`, GET `/api/panel/documents/{source}/{id}/{index}`, `web/src/features/documents` |
 | «لما بدور كنترول ك بص اي الي بيحصل اللون الاسود والابيض حلها»: the Ctrl K box lived inside the top bar, whose backdrop blur made it the box of anything fixed in it, so its dim covered the bar only. It opens on the page's body now (a portal), and it has «المستندات» too | `web/src/app/CommandPalette.tsx` |
 | «الكلمات العاميه … زي مطلوب منك … عاوز جمل معبره بالعربيه الفصحي سيتيم مكتب محاماه»: a scan of the panel's strings (a word list of Egyptian forms) found little left after #154. «مطلوب منك» → «بانتظار إجرائك»; «لا يوجد ما ينتظرك» → «لا توجد مهام بانتظار إجرائك»; «لم يستلمها أحد بعد» → «لم تُسند إلى أحد بعد»; Hazem's state on a task in full sentences; «عميل يحتاج إلى موظف» → «عميل بحاجة إلى متابعة من المكتب»; the unanswered urgent call's label without the WhatsApp buttons' colloquial words. Kept: Hazem's texts to clients, the buttons where the panel says what the lawyer sees, quoted client words, the search's colloquial synonyms | `HomePage.tsx`, `TasksPage.tsx`, `TaskDetailPage.tsx`, `labels.ts` |
+| «في صفحه التقارير انا عاوزك تهندل ui بتاعها … تستخرج تقارير pdf templtes … وتكون ظاهره للمستشار»: five reports (a period summary, the tasks and the team, the clients, the bookings and the money, the ratings) picked one at a time or all together; «تصدير PDF» prints the shown one on a letterhead (the emblem, the office's name, the report and its period, the issue date, A4 with «صفحة س من ص», light colours whatever the theme). The lawyer has `reports.view` again; Hazem's own parts (the reviewed chats, the free answers, the AI cost) stay `maintenance.manage`, emptied by the API for anyone else | `ReportsPage.tsx`, `styles.css` (print), `Permissions.cs`, `PanelToolsEndpoints.cs` |
 | Docs | `DECISIONS-v1.110.md`, CLAUDE.md, START-HERE |
 
 ## Checked
 
-- `dotnet build` (warnings are errors): clean. Unit tests: 883 of 883, with new ones for whose e-mail it is and the two e-mails' words.
-- The panel: `tsc --noEmit` clean, vitest 120 of 120.
+- `dotnet build` (warnings are errors): clean. Unit tests: 890 of 890, with new ones for whose e-mail it is and the two e-mails' words.
+- The panel: `tsc --noEmit` clean, vitest 127 of 127 (with the reports page: the lawyer's view and the PDF export).
 - The integration tests (the urgent flow end to end, the e-mail routing) were changed or added here and run in the CI only (they need the database).
+
+- The reports printed from a build against the fake API (headless Chrome in print mode, A4 width), light and dark: the letterhead, the sections, light colours.
 
 ## Next
 

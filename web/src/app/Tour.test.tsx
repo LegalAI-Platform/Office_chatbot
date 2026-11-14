@@ -15,9 +15,9 @@ const STAFF: Permission[] = ["tasks.view_own", "tasks.update", "account.self", "
 // v1.110: the lawyer has «الحسابات» (users.manage) too, as the manager (the owner: «خلي المستشار يشوفها»)
 const LAWYER: Permission[] = ["tasks.view_own", "tasks.view_all", "tasks.update", "tasks.assign", "users.manage", "account.self",
   "lists.manage", "schedule.manage", "office.manage", "payments.verify", "payments.refund", "services.manage", "services.price",
-  "urf.manage", "urf.review", "prices.manage"];
-const MANAGER: Permission[] = [...LAWYER, "conversations.unmute"];
-// v1.106: the reports are the maintenance role's only
+  "urf.manage", "urf.review", "prices.manage", "reports.view"];
+// v1.106: the reports were the maintenance role's only; v1.110 (the owner: «تكون ظاهره للمستشار»): the lawyer's too, not the manager's
+const MANAGER: Permission[] = [...LAWYER.filter((p) => p !== "reports.view"), "conversations.unmute"];
 const MAINTENANCE: Permission[] = [...MANAGER, "texts.manage", "reports.view", "testing.forget", "maintenance.manage"];
 
 const account = (over: Partial<Me> = {}): Me => ({
@@ -67,12 +67,14 @@ describe("the tour's steps (the owner's words)", () => {
 
   it("shows each role only the pages it can open", () => {
     // v1.106: the reports are the maintenance account's only («اكونت صيانه بس»)
-    for (const me of [account(), lawyer, manager]) {
+    for (const me of [account(), manager]) {
       expect(tourSteps(me).map((s) => s.id)).toEqual(
         ["welcome", "kpis", "tasks", "appointments", "chats", "money", "bell", "search", "settings", "account"]);
     }
-    expect(tourSteps(maintenance).map((s) => s.id)).toEqual(
-      ["welcome", "kpis", "tasks", "appointments", "chats", "money", "reports", "bell", "search", "settings", "account"]);
+    for (const me of [lawyer, maintenance]) {
+      expect(tourSteps(me).map((s) => s.id)).toEqual(
+        ["welcome", "kpis", "tasks", "appointments", "chats", "money", "reports", "bell", "search", "settings", "account"]);
+    }
   });
 
   it("says what each role has in «الإعدادات» and in «المهام»", () => {
@@ -127,7 +129,7 @@ describe("the tour on the screen", () => {
     const { saved } = show(lawyer);
     await screen.findByRole("dialog");
     fireEvent.click(screen.getByRole("button", { name: "لنبدأ" }));
-    expect(screen.getByText("2 من 10")).toBeTruthy(); // v1.106: the lawyer's tour has no reports
+    expect(screen.getByText("2 من 11")).toBeTruthy(); // v1.110: the lawyer's tour has the reports
     fireEvent.click(screen.getByRole("button", { name: "تخطّي" }));
     expect(screen.queryByRole("dialog")).toBeNull();
     await waitFor(() => expect(saved()).toBe(1));
@@ -251,7 +253,7 @@ describe("the tour in the whole panel (the real shell and pages)", () => {
     expect(link.getAttribute("href")).toBe("/?tour=1");
     fireEvent.click(link);
     expect(await screen.findByRole("dialog", { name: "مرحبًا بك يا أحمد" })).toBeTruthy();
-    expect(screen.getByText("1 من 10")).toBeTruthy(); // v1.106: the lawyer's tour has no reports
+    expect(screen.getByText("1 من 11")).toBeTruthy(); // v1.110: the lawyer's tour has the reports
   });
 });
 

@@ -9,10 +9,11 @@ public sealed class PanelRulesTests
     // v1.100: texts.manage and testing.forget are the maintenance role's only (with maintenance.manage).
     // v1.106: reports.view too (the owner: «اكونت صيانه بس»).
     // v1.110: the lawyer has users.manage («الحسابات»), as the manager (the owner: «خلي المستشار يشوفها»).
+    // v1.110: and reports.view again (the owner: «تكون ظاهره للمستشار»), without Hazem's own parts (maintenance.manage)
     [Theory]
     [InlineData("maintenance", "tasks.view_own tasks.view_all tasks.update tasks.assign users.manage account.self lists.manage texts.manage reports.view conversations.unmute schedule.manage office.manage payments.verify payments.refund services.manage services.price urf.manage urf.review prices.manage testing.forget maintenance.manage")]
     [InlineData("manager", "tasks.view_own tasks.view_all tasks.update tasks.assign users.manage account.self lists.manage conversations.unmute schedule.manage office.manage payments.verify payments.refund services.manage services.price urf.manage urf.review prices.manage")]
-    [InlineData("lawyer", "tasks.view_own tasks.view_all tasks.update tasks.assign users.manage account.self lists.manage schedule.manage office.manage payments.verify payments.refund services.manage services.price urf.manage urf.review prices.manage")]
+    [InlineData("lawyer", "tasks.view_own tasks.view_all tasks.update tasks.assign users.manage account.self lists.manage reports.view schedule.manage office.manage payments.verify payments.refund services.manage services.price urf.manage urf.review prices.manage")]
     [InlineData("staff", "tasks.view_own tasks.update account.self schedule.manage payments.verify payments.refund services.manage urf.manage")]
     public void Each_role_has_exactly_its_permissions(string role, string expected)
     {
