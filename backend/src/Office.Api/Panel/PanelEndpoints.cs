@@ -317,7 +317,7 @@ public static class PanelEndpoints
                 unread,
                 unreadSystem, // v1.104: the bell counts the clients' requests, and shows the system's problems below them
                 items = items.Select(a => new AlertDto(a.Id, a.Kind, a.TaskId, a.TaskType, a.ClientName, a.DueAt, a.CreatedAt, a.Read, a.SystemWhat,
-                    a.PhoneLast3, a.MatterType, a.StaffName, a.ReceiptFor, a.Amount)),
+                    a.PhoneLast3, a.MatterType, a.StaffName, a.ReceiptFor, a.Amount, a.Messages)),
             });
         }).RequireAuthorization(PanelAuth.Policy(Permissions.TasksViewOwn));
 
@@ -596,10 +596,13 @@ public sealed record SearchBody(string? Q);
 /// <summary>v1.110: «المستندات»'s page (POST /documents): a search, «image» or «document», where it came from, the page.</summary>
 public sealed record DocumentsBody(string? Q, string? Kind, string? Source, int? Page);
 
-/// <summary>v1.111: a receipt's alert has no task: <c>receipt_for</c> (an appointment's service or a written service's kind) and <c>amount</c> (due).</summary>
+/// <summary>
+/// v1.111: a receipt's alert has no task: <c>receipt_for</c> (an appointment's service or a written service's kind) and
+/// <c>amount</c> (due). v1.112: a task's alert, <c>messages</c>: the client's messages it holds (his later ones join it).
+/// </summary>
 public sealed record AlertDto(long Id, string Kind, Guid? TaskId, string? TaskType, string? ClientName, DateTimeOffset? DueAt,
     DateTimeOffset CreatedAt, bool Read, string? SystemWhat, string? PhoneLast3, string? MatterType, string? StaffName,
-    string? ReceiptFor = null, int? Amount = null);
+    string? ReceiptFor = null, int? Amount = null, int? Messages = null);
 
 public sealed record DashboardTaskDto(Guid Id, string Type, string State, DateTimeOffset DueAt, DateTimeOffset CreatedAt,
     string? ClientName, string? StaffName, bool Late);

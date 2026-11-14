@@ -138,6 +138,7 @@ public static class PanelMails
         "lawyer_direct_message" => "رسالة لقائمة المستشار",
         "external_contact" => "زميل أو صحافة أو مورّد",
         "unclear_message" => "رسالة غير واضحة",
+        "attached_message" => "رسالة كتبها العميل مع صورة أو اختيار", // v1.112
         "service_question" => "استفسار عن خدمة معيّنة",
         "payment_review_due" => "اقترب الموعد ولم يُراجَع التحويل بعد",
         "appointment_unmarked" => "انقضى موعد دون تسجيل نتيجته، ولم يُراجَع التحويل بعد",

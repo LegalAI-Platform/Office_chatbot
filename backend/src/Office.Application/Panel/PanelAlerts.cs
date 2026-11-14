@@ -135,6 +135,9 @@ public sealed record PanelAlert(long Id, string Kind, Guid? TaskId, string? Task
 
     /// <summary>v1.111, a receipt's alert: the amount due, in pounds.</summary>
     public int? Amount { get; init; }
+
+    /// <summary>v1.112, a task's alert: how many of the client's messages the task holds (his later ones join it).</summary>
+    public int? Messages { get; init; }
 }
 
 /// <summary>An alert whose e-mail has not gone out yet.</summary>

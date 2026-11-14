@@ -628,6 +628,8 @@ public sealed class HazemResponder(
                 await flow.RunBookingAsync(booking!, settings, ct);
             }
 
+            flow.WordsGoWithTheTurn(); // v1.112: after the turn's own work, so they go with its task when it has one
+
             if (flow.ServiceToOpen is { } kind)
             {
                 await services!.OpenAsync(state.Person.Id, flow.State.Intake.Id, kind, turn.TurnId, ct);
@@ -1892,14 +1894,27 @@ public sealed class HazemResponder(
             }
         }
 
-        /// <summary>Words typed or said with a press or a receipt are not lost: a task, and the panel shows the turn's words.</summary>
-        private void WordsToOffice()
+        /// <summary>
+        /// Words typed or said with a press or a receipt are not lost: the panel shows the turn's words with its task. v1.112
+        /// (Ahmed Amin's ID photo with «دي صوره البطاقه» and the car's details got «رسالة غير واضحة» beside its pricing task; the
+        /// owner: «اعمل كدا»): they go with the turn's own task when it makes one (its pricing, its Urfi review…), else with a
+        /// task of their own named for what they are (attached_message), never «unclear». Decided once the turn's work is done
+        /// (<see cref="WordsGoWithTheTurn"/>).
+        /// </summary>
+        private void WordsToOffice() =>
+            wordsWith |= turn.Messages.Any(m => m.Type == MessageType.Text && !string.IsNullOrWhiteSpace(m.Text)
+                                                || !string.IsNullOrWhiteSpace(m.Caption)
+                                                || m.Transcript is { Status: Transcript.Done, Text.Length: > 0 });
+
+        /// <summary>v1.112: words came with a press, a receipt or a file (<see cref="WordsToOffice"/>).</summary>
+        private bool wordsWith;
+
+        /// <summary>v1.112: after the turn's work (its booking's too), the words that came with a press or a file reach the office.</summary>
+        public void WordsGoWithTheTurn()
         {
-            if (turn.Messages.Any(m => m.Type == MessageType.Text && !string.IsNullOrWhiteSpace(m.Text)
-                                       || !string.IsNullOrWhiteSpace(m.Caption)
-                                       || m.Transcript is { Status: Transcript.Done, Text.Length: > 0 }))
+            if (wordsWith && plan.Tasks.Count == 0)
             {
-                plan.Task(PendingTask.UnclearMessage);
+                plan.Task(PendingTask.AttachedMessage);
             }
         }
 
@@ -3860,13 +3875,18 @@ public sealed class HazemResponder(
             }
 
             // v1.111 (the same chat: «ورق زي ايه مش معايا ورق انا» after it opened got its answer, then the service's text and
-            // «✅ ابدأ الطلب» again): its order is open, so nothing is started again. Named again with nothing else said: where
-            // the request stands («مستني الورق»).
+            // «✅ ابدأ الطلب» again): its order is open, so nothing is started again.
+            // v1.112 (Ahmed Amin's chat, 2026-11-14 10:16: the car's details and «ممكن تضيف شرط جزائي؟», read as naming the
+            // service again, got «طلب حضرتك مستني الورق», and the question never reached the office; the owner: «اعمل كدا»):
+            // what he writes about his open request is his words to the office, never its status in their place (v1.43: the
+            // status only when he asks for it). The writer answers it from the office facts, else tells him it reached the
+            // office, which gets it (one task: his later messages join it).
             if (open)
             {
                 if (!plan.Steps.Any(s => !IsGreeting(s.Key)))
                 {
-                    SaySituation();
+                    plan.Say(TextKeys.ServiceDetail, TextKeys.ServiceCheck);
+                    plan.Task(PendingTask.ServiceQuestion);
                 }
 
                 return;

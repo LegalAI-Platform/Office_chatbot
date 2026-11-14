@@ -142,9 +142,11 @@ public sealed partial class BookingFlowTests
         Assert.Equal([TextKeys.ServiceDetail], Keys(asked)); // its answer only
         Assert.DoesNotContain(asked.Actions, a => a.Interactive is not null); // never «✅ ابدأ الطلب» again
 
+        // v1.112: naming it again is his words about his open request: they reach the office, never its status in their place
         var named = await Say("عايز اكتب عقد هل ده موجود في المكتب؟");
-        Assert.Equal([TextKeys.SituationOrder], Keys(named)); // where the request stands
-        Assert.Contains("مستني الورق", Assert.Single(named.Actions).Text);
+        Assert.Equal([TextKeys.ServiceDetail], Keys(named));
+        Assert.Contains(PendingTask.ServiceQuestion, TaskKinds(named));
+        Assert.DoesNotContain(named.Actions, a => a.Text?.Contains("مستني الورق", StringComparison.Ordinal) == true);
         Assert.Single(_booking.Orders);
 
         var again = await Press(ServiceRow.Id(ServiceRow.Drafting)); // the old button once more: open, nothing new

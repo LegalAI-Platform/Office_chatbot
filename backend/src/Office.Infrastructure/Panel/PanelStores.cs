@@ -279,38 +279,62 @@ public sealed class PanelTaskStore(HazemDbContext db, TimeProvider clock) : IPan
         var conversation = await db.Conversations.AsNoTracking().FirstOrDefaultAsync(c => c.PersonId == t.PersonId, ct);
         var intake = t.IntakeId is { } iid ? await db.Intakes.AsNoTracking().FirstOrDefaultAsync(i => i.Id == iid, ct) : null;
         var staff = t.StaffId is { } sid ? await db.Staff.AsNoTracking().FirstOrDefaultAsync(s => s.Id == sid, ct) : null;
-        var turn = await db.Turns.AsNoTracking().FirstOrDefaultAsync(x => x.TurnId == t.TurnId, ct);
+        var turns = await TurnsOfAsync(t.Id, t.TurnId, ct);
         return new TaskRecord(t.Id, t.Type, t.State, t.DueAt, t.CreatedAt, staff is null ? null : new StaffRef(staff.Id, staff.Name),
             person.OfficeName, person.WaId, intake?.ClientType, person.Source, conversation?.State,
-            intake?.MatterType, intake?.MatterSubtype, turn is null ? [] : ClientWords(turn.Messages));
+            intake?.MatterType, intake?.MatterSubtype, [.. turns.SelectMany(ClientWords)]);
+    }
+
+    /// <summary>
+    /// The client's turns a task holds, oldest first: the one that opened it, then (v1.112, migration 0083) his later messages
+    /// that joined it. A file's index counts through all of them, in this order, as the task's words are listed.
+    /// </summary>
+    private async Task<IReadOnlyList<string>> TurnsOfAsync(Guid taskId, string ownTurn, CancellationToken ct)
+    {
+        var joined = await db.StaffTaskTurns.AsNoTracking().Where(x => x.TaskId == taskId).OrderBy(x => x.AddedAt)
+            .Select(x => x.TurnId).ToListAsync(ct);
+        List<string> ids = [ownTurn, .. joined];
+        var found = await db.Turns.AsNoTracking().Where(x => ids.Contains(x.TurnId)).Select(x => new { x.TurnId, x.Messages })
+            .ToListAsync(ct);
+        return [.. ids.Select(id => found.FirstOrDefault(f => f.TurnId == id)?.Messages).OfType<string>()];
     }
 
     public async Task<ClientFileRef?> FileAsync(Guid taskId, int index, CancellationToken ct)
     {
         var turnId = await db.StaffTasks.AsNoTracking().Where(t => t.Id == taskId).Select(t => t.TurnId).FirstOrDefaultAsync(ct);
-        var messages = turnId is null ? null
-            : await db.Turns.AsNoTracking().Where(t => t.TurnId == turnId).Select(t => t.Messages).FirstOrDefaultAsync(ct);
-        if (messages is null)
-        {
-            return null;
-        }
-
-        using var doc = JsonDocument.Parse(messages);
-        if (doc.RootElement.ValueKind != JsonValueKind.Array || index >= doc.RootElement.GetArrayLength())
+        if (turnId is null || index < 0)
         {
             return null;
         }
 
         static string? Str(JsonElement e, string name) =>
             e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
-        var m = doc.RootElement[index];
-        if (!m.TryGetProperty("media", out var media) || media.ValueKind != JsonValueKind.Object
-            || Str(media, "status") != "stored" || Str(media, "bucket") is not { } bucket || Str(media, "key") is not { } key)
+        foreach (var messages in await TurnsOfAsync(taskId, turnId, ct))
         {
-            return null;
+            using var doc = JsonDocument.Parse(messages);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array)
+            {
+                continue;
+            }
+
+            var count = doc.RootElement.GetArrayLength();
+            if (index >= count)
+            {
+                index -= count; // in a later turn of the task
+                continue;
+            }
+
+            var m = doc.RootElement[index];
+            if (!m.TryGetProperty("media", out var media) || media.ValueKind != JsonValueKind.Object
+                || Str(media, "status") != "stored" || Str(media, "bucket") is not { } bucket || Str(media, "key") is not { } key)
+            {
+                return null;
+            }
+
+            return new ClientFileRef(Str(m, "type") ?? "unsupported", bucket, key, Str(media, "mime_type"), Str(media, "filename"));
         }
 
-        return new ClientFileRef(Str(m, "type") ?? "unsupported", bucket, key, Str(media, "mime_type"), Str(media, "filename"));
+        return null;
     }
 
     /// <summary>

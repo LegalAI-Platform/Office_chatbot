@@ -48,6 +48,12 @@ public sealed record PendingTask(string Kind, DateTimeOffset DueAt, Guid? StaffI
 
     // TASK 04 / 05a additions (documented in the reports)
     public const string UnclearMessage = "unclear_message";
+
+    /// <summary>
+    /// v1.112 (migration 0083): words written with a photo, a file or a press, which Hazem's code does not read, when nothing
+    /// else of the turn took them to the office (they were «unclear_message», which said they were not clear).
+    /// </summary>
+    public const string AttachedMessage = "attached_message";
     public const string UrgentRequest = "urgent_request";
     public const string ServiceRequest = "service_request";
     public const string RescheduleOrCancel = "reschedule_or_cancel";

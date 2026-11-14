@@ -83,6 +83,11 @@ public static class ReplyRetry
         "refusal_dropped" => "It must say that the lawyer himself answers this in the consultation.",
         "asked_back" => "Do not end with a question: the handoff is done.",
         "facts_and_office" => "Do not also say that the office will answer: you answered from the facts.",
+        // v1.112
+        "answered_alone" =>
+            "The OFFICE FACTS do not answer his question, so the office answers it: tell him kindly, in a few words, that his question reached the office and they will answer him here (if he told details, say them back in a few words). Never answer it yourself: no papers, steps, rules or times that the facts do not give.",
+        "repeats_after" =>
+            "It says what the message sent right after yours already says. Leave that part out: write only the rest.",
         "said_confirmed" => "The transfer is still under the office's review: never say it is confirmed.",
         _ => "It was refused by a check: write it plainly, using only the APPROVED TEXT and the OFFICE FACTS.",
     };

@@ -60,7 +60,8 @@ describe("v1.104 Windows notifications", () => {
     next([alert({ id: 2, task_id: "t2", client_name: "دوت نت", phone_last3: "471", matter_type: "personal_status", staff_name: "منى", due_at: due }), old]);
     expect(made).toHaveLength(1);
     const n = made[0]!;
-    expect(n).toEqual(expect.objectContaining({ title: "مهمة متأخرة · دوت نت", icon: "/landing/img/logo.png", tag: "hazem-alert-2", stay: false }));
+    // v1.112: a task's notification has its task's tag (told again, it takes the old one's place)
+    expect(n).toEqual(expect.objectContaining({ title: "مهمة متأخرة · دوت نت", icon: "/landing/img/logo.png", tag: "hazem-task-t2", stay: false }));
     const [what, when] = n.body!.split("\n");
     expect(what).toBe("شكوى · أحوال شخصية · رقمه ينتهي بـ 471");
     expect(when).toMatch(/^موعدها (اليوم|غدًا)\s\d{1,2}:\d{2}\s[صم] · مُسندة إلى: منى$/);
@@ -184,6 +185,17 @@ describe("v1.104 Windows notifications", () => {
     expect(made).toHaveLength(1);
     expect(made[0]!.title).toBe("عنصران جديدان · سارة");
     expect(made[0]!.body).toContain("• إيصال تحويل بانتظار التأكيد");
+  });
+
+  // v1.112 (the owner: «ليه في كل النوتيفيكيشنز دي؟ … ملعبكة»): a client's later messages join his open task of the same kind
+  it("his next message on the same task is told again in the same notification's place, with how many messages", () => {
+    away();
+    const { next } = watch([]);
+    next([alert({ id: 60, kind: "task_new", task_id: "q", task_type: "service_question", client_name: "أحمد", phone_last3: "589" })]);
+    next([alert({ id: 61, kind: "task_new", task_id: "q", task_type: "service_question", client_name: "أحمد", phone_last3: "589", messages: 3 })]);
+    expect(made.map((m) => m.tag)).toEqual(["hazem-task-q", "hazem-task-q"]); // one place in Windows
+    expect(made[1]!.body!.split("\n")[0]).toBe("3 رسائل · استفسار عميل عن خدمة (هل نقدّمها، أو تفاصيلها): رُدّ عليه · رقمه ينتهي بـ 589");
+    expect(made[0]!.body).not.toContain("رسال"); // one message: no count
   });
 });
 
@@ -358,5 +370,14 @@ describe("v1.106 every page at once", () => {
     const row = within(within(bell).getByRole("list", { name: "الطلبات" })).getByRole("button");
     expect(row.textContent).toContain("إيصال تحويل بانتظار التأكيد");
     expect(row.textContent).toContain("استشارة مقابلة في المكتب · محمد");
+  });
+
+  it("v1.112: a task holding several of the client's messages says how many in its line", async () => {
+    const bell = await openBell("تنبيه جديد", {
+      unread: 1,
+      items: [alert({ id: 70, kind: "task_new", task_type: "attached_message", client_name: "أحمد", messages: 2 })],
+    });
+    const row = within(within(bell).getByRole("list", { name: "الطلبات" })).getByRole("button");
+    expect(row.textContent).toContain("رسالتان · رسالة كتبها العميل مع صورة أو اختيار: اقرأها · أحمد");
   });
 });

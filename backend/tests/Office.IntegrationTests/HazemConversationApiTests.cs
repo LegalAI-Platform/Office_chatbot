@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Office.Infrastructure.Ai;
 
@@ -26,7 +27,7 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
     public async ValueTask InitializeAsync()
     {
         await db.ExecAsync("""
-            TRUNCATE hazem.turns, hazem.ai_usage, hazem.generated_replies, hazem.send_results, hazem.turn_replies, hazem.classifications, hazem.panel_alerts, hazem.panel_alert_reads, hazem.staff_tasks, hazem.list_entries;
+            TRUNCATE hazem.turns, hazem.ai_usage, hazem.generated_replies, hazem.send_results, hazem.turn_replies, hazem.classifications, hazem.panel_alerts, hazem.panel_alert_reads, hazem.staff_tasks, hazem.staff_task_turns, hazem.list_entries;
             TRUNCATE hazem.panel_audit; DELETE FROM hazem.panel_users; -- they point at hazem.staff
             DELETE FROM hazem.staff;
             DELETE FROM hazem.intakes; DELETE FROM hazem.conversations; DELETE FROM hazem.persons;
@@ -132,6 +133,39 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
         {
             await db.ExecAsync("UPDATE hazem.approved_texts SET active = true WHERE key = 'human_request' AND version = (SELECT max(version) FROM hazem.approved_texts WHERE key = 'human_request')");
         }
+    }
+
+    /// <summary>One round of the bell's worker (off in tests).</summary>
+    private async Task Alerts()
+    {
+        using var scope = _factory.Services.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<Office.Application.Panel.PanelAlerts>().RunAsync("http://127.0.0.1:8080", Ct);
+    }
+
+    // v1.112 (the owner, of a bell full of one client's tasks: «ليه في كل النوتيفيكيشنز دي؟ … ملعبكة» … «اعمل كدا»): his open
+    // task of the same kind takes his next message instead of a new task, and its bell alert is made again
+    [Fact]
+    public async Task V112_his_next_request_of_the_same_kind_joins_his_open_task_and_its_alert_is_made_again()
+    {
+        await Say("السلام عليكم");
+        await Say("محمد أحمد علي حسن");
+        await Say("عايز أكلم موظف");
+        await Alerts();
+        var first = await db.ScalarAsync<long>("SELECT id FROM hazem.panel_alerts WHERE kind = 'task_human'");
+
+        await Say("عايز أكلم موظف لو سمحت");
+        Assert.Equal("1|1|0", await db.ScalarAsync<string>("""
+            SELECT (SELECT count(*) FROM hazem.staff_tasks WHERE type = 'human_requested') || '|'
+                || (SELECT count(*) FROM hazem.staff_task_turns) || '|'
+                || (SELECT count(*) FROM hazem.panel_alerts WHERE kind = 'task_human')
+            """)); // one task with his second message on it; its old alert taken away with it
+        await Alerts();
+        Assert.True(await db.ScalarAsync<long>("SELECT id FROM hazem.panel_alerts WHERE kind = 'task_human'") > first); // told again
+
+        // the office finished it: his next request is a new task
+        await db.ExecAsync("UPDATE hazem.staff_tasks SET state = 'done' WHERE type = 'human_requested'");
+        await Say("عايز أكلم موظف تاني");
+        Assert.Equal(2L, await db.ScalarAsync<long>("SELECT count(*) FROM hazem.staff_tasks WHERE type = 'human_requested'"));
     }
 
     [Fact]

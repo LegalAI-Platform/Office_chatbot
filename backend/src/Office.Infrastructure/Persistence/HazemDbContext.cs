@@ -86,6 +86,13 @@ public sealed class HazemDbContext(DbContextOptions<HazemDbContext> options) : D
             e.HasKey(x => x.Id);
         });
 
+        // v1.112 (migration 0083): a client's later messages that joined his open task of the same kind
+        b.Entity<StaffTaskTurnRow>(e =>
+        {
+            e.ToTable("staff_task_turns");
+            e.HasKey(x => new { x.TaskId, x.TurnId });
+        });
+
         // Migration 0009 (TASK 07a): panel accounts. Written with SQL (see PanelUserStore).
         b.Entity<PanelUserRow>(e =>
         {
@@ -210,6 +217,7 @@ public sealed class HazemDbContext(DbContextOptions<HazemDbContext> options) : D
 
     public DbSet<StaffRow> Staff => Set<StaffRow>();
     public DbSet<StaffTaskRow> StaffTasks => Set<StaffTaskRow>();
+    public DbSet<StaffTaskTurnRow> StaffTaskTurns => Set<StaffTaskTurnRow>();
     public DbSet<PanelUserRow> PanelUsers => Set<PanelUserRow>();
     public DbSet<PanelCodeRow> PanelCodes => Set<PanelCodeRow>();
     public DbSet<PanelRecoveryCodeRow> PanelRecoveryCodes => Set<PanelRecoveryCodeRow>();
@@ -301,6 +309,15 @@ public sealed class StaffTaskRow
     public DateTimeOffset DueAt { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
+    public DateTimeOffset? JoinedAt { get; set; } // v1.112: the last time a client's message joined it
+}
+
+/// <summary>v1.112 (migration 0083): a later turn of the client whose words joined his open task of the same kind.</summary>
+public sealed class StaffTaskTurnRow
+{
+    public Guid TaskId { get; set; }
+    public required string TurnId { get; set; }
+    public DateTimeOffset AddedAt { get; set; }
 }
 
 public sealed class PanelUserRow
