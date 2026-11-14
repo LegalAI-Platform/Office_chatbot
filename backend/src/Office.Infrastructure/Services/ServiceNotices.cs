@@ -33,7 +33,7 @@ public sealed class ServiceNotices(HazemDbContext db, BookingStore store, ISetti
         foreach (var c in System.Text.Json.JsonDocument.Parse(closed).RootElement.EnumerateArray())
         {
             await store.AddTaskAsync(c.GetProperty("person").GetGuid(), $"service:{c.GetProperty("id").GetGuid():N}:unpaid", PendingTask.ServiceUnpaid,
-                OfficeHours.DueAt(now), ct);
+                await OfficeDue.AtAsync(db, now, ct), ct);
         }
 
         var orders = await (from o in db.ServiceOrders.AsNoTracking()
@@ -114,7 +114,7 @@ public sealed class ServiceNotices(HazemDbContext db, BookingStore store, ISetti
                            new ReplyStep(key, null, fill), active, ct, document);
             if (!told)
             {
-                await store.AddTaskAsync(o.PersonId, id, PendingTask.BookingMessageFailed, OfficeHours.DueAt(now), ct);
+                await store.AddTaskAsync(o.PersonId, id, PendingTask.BookingMessageFailed, await OfficeDue.AtAsync(db, now, ct), ct);
             }
 
             await db.Database.ExecuteSqlInterpolatedAsync(
@@ -143,7 +143,7 @@ public sealed class ServiceNotices(HazemDbContext db, BookingStore store, ISetti
             var told = await notices.SendAsync(x.WaId, id, Requester, new ReplyStep(key, null, fill), active, ct);
             if (!told)
             {
-                await store.AddTaskAsync(x.PersonId, id, PendingTask.BookingMessageFailed, OfficeHours.DueAt(now), ct);
+                await store.AddTaskAsync(x.PersonId, id, PendingTask.BookingMessageFailed, await OfficeDue.AtAsync(db, now, ct), ct);
             }
 
             await db.Database.ExecuteSqlInterpolatedAsync(

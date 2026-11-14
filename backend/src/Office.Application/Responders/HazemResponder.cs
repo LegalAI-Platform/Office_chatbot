@@ -152,6 +152,44 @@ public sealed class HazemResponder(
         RepeatChoice(plan, texts);
     }
 
+    /// <summary>
+    /// v1.115: the replies that tell the client the office will answer or contact him (B-06's promises of a person). The lawyer's
+    /// calls (the booked and the urgent ones) keep their own times and are not here.
+    /// </summary>
+    internal static readonly IReadOnlySet<string> OfficeAnswersKeys = new HashSet<string>(StringComparer.Ordinal)
+    {
+        TextKeys.HumanRequest, TextKeys.HandoffWaiting, TextKeys.ServiceDetail, TextKeys.ExistingMatter, TextKeys.UrfRequest,
+        TextKeys.BookingNoSlots, TextKeys.BookingUnavailable, TextKeys.BookingRefundRequested, TextKeys.BookingCancelled,
+        TextKeys.RatingLow, TextKeys.ColleagueReceived, TextKeys.PressReceived, TextKeys.VendorReceived,
+    };
+
+    /// <summary>
+    /// v1.115 (the owner, of «تمام، بلّغت المكتب… وحد من المكتب هيرد على حضرتك هنا» at 21:52: «هو حد اصلا من المكتب هيرد عليه
+    /// دلوقتي؟ المفروض يقول له بكره، صح كده؟ يعني على حسب المواعيد»): a reply that promises him a person, when the office does not
+    /// answer within the hour (B-06 with the office's hours: its last hour, after it, before it opens), is followed by when it
+    /// answers: «المكتب بيرد من 10 الصبح لـ 8 بالليل، فحد من المكتب هيرد على حضرتك هنا بكرة من الساعة 10 الصبح 🙏» («النهارده»
+    /// before the opening, B-07). As approved, word for word, never in the writer's words: it is a time. Only after a promise that
+    /// is sent: a promise whose text is off in «النصوص» sends nothing, so its time is never sent alone.
+    /// </summary>
+    private static void OfficeAnswersWhen(Plan plan, IReadOnlyDictionary<string, ApprovedText> texts)
+    {
+        if (!plan.Steps.Any(s => OfficeAnswersKeys.Contains(s.Key) && texts.TryGetValue(s.Key, out var promise) && promise.Active)
+            || plan.Steps.Any(s => s.Key == TextKeys.OfficeAnswersLater)
+            || OfficeHours.NextAnswer(plan.Now, plan.OfficeWindow) is not { } opens
+            || !texts.TryGetValue(TextKeys.OfficeAnswersLater, out var t) || !t.Active)
+        {
+            return;
+        }
+
+        var hours = plan.OfficeWindow ?? OfficeHours.Default;
+        plan.Say(TextKeys.OfficeAnswersLater, Fill: new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["opens"] = BookingWords.Clock(hours.Start),
+            ["closes"] = BookingWords.Clock(hours.End),
+            ["day"] = BookingWords.Day(opens, plan.Now),
+        });
+    }
+
     /// <summary>v1.39: «معلش لو مش واضح، تحب تشوف خدمات المكتب، ولا تكلم حد من المكتب؟» in place of the answer (the greeting in kind kept).</summary>
     private static bool RepeatChoice(Plan plan, IReadOnlyDictionary<string, ApprovedText> texts)
     {
@@ -269,6 +307,8 @@ public sealed class HazemResponder(
 
         bool Active(string key) => texts.TryGetValue(key, out var t) && t.Active;
         plan.PhoneCallOn = Active(TextKeys.AskCallAppPhone) && Active(TextKeys.BtnAppPhone) && Active(TextKeys.BtnAppsList);
+        plan.OfficeWindow = bookingSettings.OfficeWindow; // v1.115: B-06 with the office's hours
+        plan.AskNeedOn = Active(TextKeys.AskNeed) && Active(TextKeys.BtnServicesList) && Active(TextKeys.BtnTalkToOffice);
         plan.UrgentButtonOn = Active(TextKeys.BtnBookUrgent);
         plan.CaseAnswersOn = new[] { TextKeys.UrfGuardianCan, TextKeys.UrfOptionCan, TextKeys.UrfGuardianCannot, TextKeys.UrfAgeCannot, TextKeys.UrfGuardianClosed, TextKeys.BtnYes, TextKeys.BtnNo }.All(Active); // v1.84
         plan.GuardianNeededOn = Active(TextKeys.UrfGuardianNeeded); // v1.86
@@ -660,6 +700,8 @@ public sealed class HazemResponder(
             // after it hears that it arrived, once; Hazem is silent again after it, and always once a staff member writes.
             plan.Say(TextKeys.HandoffWaiting);
         }
+
+        OfficeAnswersWhen(plan, texts); // v1.115: outside the office's hours, when the office answers him
 
         var composed = ReplyComposer.Compose(turn.TurnId, turn.Messages[^1].Wamid, plan.Steps, texts);
 
@@ -2171,7 +2213,7 @@ public sealed class HazemResponder(
                     plan.Task(PendingTask.ExistingClientMessage, list.ExistingClient?.StaffId);
                     return true;
                 case Intent.TellProblem:
-                    plan.Say(TextKeys.ServicesTell);
+                    TellOrAskNeed(); // v1.115: once he told it, what he needs
                     return true;
                 case Intent.Urgent when situation.Kind == SituationKind.UrgentWaiting:
                     AskedStatus = true; // waiting for the call: when it comes is what he needs, even twice
@@ -2610,7 +2652,7 @@ public sealed class HazemResponder(
                     ServicesMenu(); // v1.39: «خدمات»، «عندكم إيه؟»: the list, as the welcome's button
                     break;
                 case Intent.TellProblem:
-                    plan.Say(TextKeys.ServicesTell); // v1.39: as the «أحكي مشكلتي» button
+                    TellOrAskNeed(); // v1.39: as the «أحكي مشكلتي» button; v1.115: once he told it, what he needs
                     break;
                 case Intent.MyStatus when understanding && plan.CaseSaidOn && situation.Facts.Last is { } passed:
                     // v1.91 (Ahmed Amin's chat: «هو الميعاد كان امتي» after it passed got the welcome): his appointment that passed
@@ -3937,6 +3979,28 @@ public sealed class HazemResponder(
             Check(Intake.MoveTo(IntakeState.HandedToStaff));
         }
 
+        /// <summary>
+        /// v1.115 (the owner, of a chat where a client sent a medical report and, asked to tell his matter, said it was his
+        /// report, then got «معلش لو مش واضح»): asked to tell his matter, he told something whose need the AI cannot place (his
+        /// story, a report, papers). Hazem says he got it and asks what he needs the office to do about it, with the services and
+        /// a person («وصلني اللي بعته 👍 محتاج المكتب يساعد حضرتك في إيه بخصوصه؟»), never «احكيلي الموضوع» again. A second time
+        /// it is the same step again, so v1.111 says it in new words or «معلش لو مش واضح…».
+        /// </summary>
+        private void TellOrAskNeed()
+        {
+            if (plan.AskNeedOn && (situation.RepliedLast(TextKeys.ServicesTell) || situation.RepliedLast(TextKeys.AskNeed)))
+            {
+                plan.Ask(TextKeys.AskNeed, new ReplyChoices(InteractivePayload.Buttons,
+                [
+                    new ReplyChoice(ServiceRow.Id(ServiceRow.Menu), TextKeys.BtnServicesList),
+                    new ReplyChoice(ServiceRow.Id(ServiceRow.Human), TextKeys.BtnTalkToOffice),
+                ]));
+                return;
+            }
+
+            plan.Say(TextKeys.ServicesTell);
+        }
+
         /// <summary>A turn with no words: it never reaches the AI (T-09); answered by its type.</summary>
         private void AnswerMediaOnly()
         {
@@ -4097,12 +4161,18 @@ public sealed class HazemResponder(
         public void Ask(string key, ReplyChoices choices, IReadOnlyDictionary<string, string>? Fill = null, string? fallback = null) =>
             Steps.Add(new ReplyStep(key, fallback, Fill, choices));
 
-        /// <summary>A staff task, due by the B-06 table.</summary>
+        /// <summary>v1.115: the office's hours of the day from the panel (booking.office_*): B-06's promises and due times follow them.</summary>
+        public Office.Domain.Booking.MinuteRange? OfficeWindow { get; set; }
+
+        /// <summary>v1.115: «وصلني اللي بعته 👍 محتاج المكتب يساعد حضرتك في إيه بخصوصه؟» and its two buttons are approved.</summary>
+        public bool AskNeedOn { get; set; }
+
+        /// <summary>A staff task, due by the B-06 table (v1.115: with the office's hours).</summary>
         public void Task(string kind, Guid? staffId = null)
         {
             if (Tasks.All(t => t.Kind != kind))
             {
-                Tasks.Add(new PendingTask(kind, OfficeHours.DueAt(now), staffId));
+                Tasks.Add(new PendingTask(kind, OfficeHours.DueAt(now, OfficeWindow), staffId));
             }
         }
     }

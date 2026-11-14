@@ -47,6 +47,15 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
         await db.SetAsync("hazem.recipients", "");
     }
 
+    /// <summary>The API with its clock stopped at one instant, for a test whose answer depends on the hour (v1.115, B-06).</summary>
+    private async Task At(DateTimeOffset now)
+    {
+        _n8n.Dispose();
+        await _factory.DisposeAsync();
+        _factory = new ApiFactory(db, new FixedClock(now));
+        _n8n = _factory.CreateN8nClient();
+    }
+
     private async Task<JsonNode> Post(JsonArray messages, string waId = Client)
     {
         var r = await _n8n.PostAsJsonAsync("/api/hazem/turns", new JsonObject
@@ -119,10 +128,18 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
     [Fact]
     public async Task Human_request_records_a_task_and_sends_nothing_while_its_text_is_inactive()
     {
+        // v1.115, the owner's case: at 21:52, after the office's hours (10:00–20:00, 0085; another class empties them), the time
+        // the office answers follows, and the task is due at its opening. With the text off, nothing: never that line alone.
+        await db.SetAsync("booking.office_start_minute", "600");
+        await db.SetAsync("booking.office_end_minute", "1200");
+        await At(new DateTimeOffset(2026, 11, 19, 21, 52, 0, TimeSpan.FromHours(2)));
         await Say("السلام عليكم");
         await Say("محمد أحمد علي حسن");
-        Assert.Equal(["تمام، بلّغت المكتب إن حضرتك عايز تكلم حد، وحد من المكتب هيرد على حضرتك هنا."], Texts(await Say("عايز أكلم موظف"))); // v1.48 (0049)
-        Assert.Equal("human_requested|open", await db.ScalarAsync<string>("SELECT type || '|' || state FROM hazem.staff_tasks"));
+        Assert.Equal(["تمام، بلّغت المكتب إن حضرتك عايز تكلم حد، وحد من المكتب هيرد على حضرتك هنا.", // v1.48 (0049)
+                "المكتب بيرد من 10 الصبح لـ 8 بالليل، فحد من المكتب هيرد على حضرتك هنا بكرة من الساعة 10 الصبح 🙏"], // v1.115 (0086)
+            Texts(await Say("عايز أكلم موظف")));
+        Assert.Equal("human_requested|open|2026-11-20 08:00", await db.ScalarAsync<string>(
+            "SELECT type || '|' || state || '|' || to_char(due_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI') FROM hazem.staff_tasks"));
 
         await db.ExecAsync("UPDATE hazem.approved_texts SET active = false WHERE key = 'human_request'");
         try
@@ -334,7 +351,8 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
                         + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.90.md"), Ct) // v1.90: urf_witnesses_needed
                         + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.93.md"), Ct) // v1.93: the welcome without «المساعد الرقمي»
                         + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.99.md"), Ct) // v1.99: situation_past
-                        + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.111.md"), Ct); // v1.111: service_order_opened
+                        + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.111.md"), Ct) // v1.111: service_order_opened
+                        + await File.ReadAllTextAsync(RepoFile("docs", "decisions", "DECISIONS-v1.115.md"), Ct); // v1.115: office_answers_later, ask_need
         decisions = decisions.Replace("\r\n", "\n", StringComparison.Ordinal); // a Windows checkout (core.autocrlf) has CRLF; the texts have \n
         await using var c = new NpgsqlConnection(db.ApiConnectionString);
         await c.OpenAsync(Ct);
@@ -360,6 +378,7 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
             // 1.39 (B-28): how Hazem calls the client (with its space, or nothing) and the situation's own values.
             ["{{changed}}"] = "[اللي اتعدّل]", ["{{meanings}}"] = "[المعاني]", // v1.75, v1.76 // v1.75: what he corrected in the Urfi answers
             ["{{call}}"] = " [النداء]", ["{{when}}"] = "[الوقت]", ["{{deadline}}"] = "[آخر وقت]", ["{{status}}"] = "[الحالة]",
+            ["{{closes}}"] = "[نهاية الشغل]", // v1.115: the office's hours said after a promise of a person, outside them
         };
         var count = 0;
         while (await r.ReadAsync(Ct))
@@ -369,7 +388,7 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
             Assert.True(decisions.Contains(text, StringComparison.Ordinal), $"{r.GetString(0)} is not word for word in DECISIONS");
         }
 
-        Assert.Equal(151, count); // v1.111: service_order_opened + v1.99: situation_past + v1.90: urf_witnesses_needed + v1.87: urf_ask_guardian_other + v1.86: urf_guardian_needed + v1.84: urf_option_can, urf_guardian_cannot and urf_age_cannot + v1.82: urf_guardian_can + v1.76: ask_which_meaning + v1.75: urf_answer_corrected + v1.71: urf_guardian_closed + v1.68: btn_urf_divorced v2 and btn_urf_widow (urf_ask_wife_past v2 one for one) + v1.67: booking_time_passed and booking_time_taken + v1.57: office_playbook_more2 + v1.53 (B-34): free_answer, office_playbook and office_playbook_more + v1.52 (B-33): no_pressure and price_objection + v1.49 (B-23): the two urgent offers, btn_book_urgent, ask_call_app_phone, btn_app_phone, btn_apps_list + v1.48 (B-12): handoff_waiting, no_personal_number, human_request v2 + v1.47 (B-32): booking_step_again + v1.46 (B-31): office_privacy, service_detail, urf_step_again and unclear v2 + situation_review and situation_ask_topic of v1.45 (situation_confirmed and situation_urgent reworded, one for one) + btn_start_order of v1.43 + urgent_later of v1.42 + the 11 of v1.39 (B-28) + 3 of v1.37 (ask_phone, ask_phone_again, phone_needed_for_call) + 8 (TASK 04) + B-04 question + the two B-25 texts (TASK 05a) + B-08 and B-22 (TASK 08) + B-11 (TASK 11) + B-18 (TASK 12) + B-11.1 (v1.20) + 9 greetings B-01.6 (v1.21) + 5 of v1.22 + 8 of v1.25 + 3 of v1.28 + ask_name_again of v1.29 (welcome_ask_name's v2 replaced its v1) + the 22 of the services list (v1.30: 13 texts and 9 price lines) + 11 of v1.31 (welcome_back and the 10 of the rating) + 2 of v1.32 (welcome, welcome_choose and ask_name_booking added, welcome_ask_name switched off; services_menu's v2 replaced its v1, and every «المستشار» text replaced its own «الأستاذ» version one for one) + the 10 of v1.33 (B-09: 6 texts, the alert and its 3 buttons); v1.35: ask_name_again and urgent_waiting reworded, one for one
+        Assert.Equal(153, count); // v1.115: office_answers_later and ask_need + v1.111: service_order_opened + v1.99: situation_past + v1.90: urf_witnesses_needed + v1.87: urf_ask_guardian_other + v1.86: urf_guardian_needed + v1.84: urf_option_can, urf_guardian_cannot and urf_age_cannot + v1.82: urf_guardian_can + v1.76: ask_which_meaning + v1.75: urf_answer_corrected + v1.71: urf_guardian_closed + v1.68: btn_urf_divorced v2 and btn_urf_widow (urf_ask_wife_past v2 one for one) + v1.67: booking_time_passed and booking_time_taken + v1.57: office_playbook_more2 + v1.53 (B-34): free_answer, office_playbook and office_playbook_more + v1.52 (B-33): no_pressure and price_objection + v1.49 (B-23): the two urgent offers, btn_book_urgent, ask_call_app_phone, btn_app_phone, btn_apps_list + v1.48 (B-12): handoff_waiting, no_personal_number, human_request v2 + v1.47 (B-32): booking_step_again + v1.46 (B-31): office_privacy, service_detail, urf_step_again and unclear v2 + situation_review and situation_ask_topic of v1.45 (situation_confirmed and situation_urgent reworded, one for one) + btn_start_order of v1.43 + urgent_later of v1.42 + the 11 of v1.39 (B-28) + 3 of v1.37 (ask_phone, ask_phone_again, phone_needed_for_call) + 8 (TASK 04) + B-04 question + the two B-25 texts (TASK 05a) + B-08 and B-22 (TASK 08) + B-11 (TASK 11) + B-18 (TASK 12) + B-11.1 (v1.20) + 9 greetings B-01.6 (v1.21) + 5 of v1.22 + 8 of v1.25 + 3 of v1.28 + ask_name_again of v1.29 (welcome_ask_name's v2 replaced its v1) + the 22 of the services list (v1.30: 13 texts and 9 price lines) + 11 of v1.31 (welcome_back and the 10 of the rating) + 2 of v1.32 (welcome, welcome_choose and ask_name_booking added, welcome_ask_name switched off; services_menu's v2 replaced its v1, and every «المستشار» text replaced its own «الأستاذ» version one for one) + the 10 of v1.33 (B-09: 6 texts, the alert and its 3 buttons); v1.35: ask_name_again and urgent_waiting reworded, one for one
     }
 
     [Fact]

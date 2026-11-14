@@ -38,6 +38,18 @@ public sealed class Task05aApiTests(TestDatabase db) : IAsyncLifetime
         await db.SetAsync("hazem.recipients", "");
     }
 
+    /// <summary>
+    /// The API with its clock stopped at one instant, for a test whose answer depends on the hour: v1.115's line after a promise of
+    /// a person comes only outside the office's hours (OfficeHoursApiTests), and the tests run at any hour.
+    /// </summary>
+    private async Task At(DateTimeOffset now)
+    {
+        _n8n.Dispose();
+        await _factory.DisposeAsync();
+        _factory = new ApiFactory(db, new FixedClock(now));
+        _n8n = _factory.CreateN8nClient();
+    }
+
     private async Task<ListImporter.Result> Import(string kind, string csv, bool replace = false)
     {
         using var scope = _factory.Services.CreateScope();
@@ -138,12 +150,13 @@ public sealed class Task05aApiTests(TestDatabase db) : IAsyncLifetime
     [Fact]
     public async Task A_listed_client_asking_about_their_case_gets_the_neutral_text_and_a_task_for_their_staff()
     {
+        await At(new DateTimeOffset(2026, 11, 19, 12, 0, 0, TimeSpan.FromHours(2))); // 12:00 Cairo: the office answers within the hour
         await Import("existing_client", $"name,phone,staff\nمحمد أحمد علي حسن,{Listed},أ. محمود\n");
         Assert.Equal(["رسالة حضرتك وصلت للمكتب، وهتتبلّغ للمسؤول عن موضوعك."], await Say("الجلسة الجاية امتى؟", Listed));
         Assert.Equal("existing_client_message|open|أ. محمود|true", await db.ScalarAsync<string>("""
-            SELECT t.type || '|' || t.state || '|' || s.name || '|' || (t.due_at > t.created_at)
+            SELECT t.type || '|' || t.state || '|' || s.name || '|' || (t.due_at = '2026-11-19 11:00:00+00')
               FROM hazem.staff_tasks t JOIN hazem.staff s ON s.id = t.staff_id
-            """));
+            """)); // B-06: within the hour
         Assert.Equal("existing_client|true", await db.ScalarAsync<string>(
             $"SELECT i.client_type || '|' || p.full_name_provided FROM hazem.intakes i JOIN hazem.persons p ON p.id = i.person_id WHERE p.wa_id = '{Listed}'"));
     }
@@ -249,7 +262,9 @@ public sealed class Task05aApiTests(TestDatabase db) : IAsyncLifetime
         // TASK 07b: no migration turns it on; chatwoot-setup does, once someone can answer (B-12).
         Assert.Equal("false", await db.ScalarAsync<string>("SELECT value FROM hazem.settings WHERE key = 'handoff.enabled'"));
         // 1.31 (B-26): rating_low promises a call with no time («وحد من المكتب هيتواصل مع حضرتك»), the owner's own words.
+        // v1.115: office_answers_later says when the office answers, from its hours in the panel («بكرة من الساعة 10 الصبح»),
+        // the owner's own: «المفروض يقول له بكره… على حسب المواعيد».
         Assert.Equal(0L, await db.ScalarAsync<long>(
-            "SELECT count(*) FROM hazem.approved_texts WHERE active AND text ~ '(خلال ساعة|الساعة 10|هيتواصل|هيرد عليك)' AND key <> 'rating_low'"));
+            "SELECT count(*) FROM hazem.approved_texts WHERE active AND text ~ '(خلال ساعة|الساعة 10|هيتواصل|هيرد عليك)' AND key NOT IN ('rating_low', 'office_answers_later')"));
     }
 }

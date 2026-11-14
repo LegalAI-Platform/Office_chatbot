@@ -246,7 +246,7 @@ public sealed class PanelServices(HazemDbContext db, BookingStore store, IDelive
         if (r.GetProperty("refund").ValueKind == JsonValueKind.Number)
         {
             await store.AddTaskAsync(r.GetProperty("person").GetGuid(), $"service:{id:N}:refund", PendingTask.Refund,
-                OfficeHours.DueAt(clock.GetUtcNow()), ct);
+                await OfficeDue.AtAsync(db, clock.GetUtcNow(), ct), ct);
         }
 
         await Audit(by, "service.closed", id, new Dictionary<string, string?>(), ct);

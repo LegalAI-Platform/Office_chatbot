@@ -106,7 +106,7 @@ public sealed class PanelUrf(HazemDbContext db, BookingStore store, TimeProvider
         if (r.GetProperty("refund").ValueKind == JsonValueKind.Number)
         {
             await store.AddTaskAsync(r.GetProperty("person").GetGuid(), $"urf:{caseId:N}:refund", PendingTask.Refund,
-                OfficeHours.DueAt(clock.GetUtcNow()), ct);
+                await OfficeDue.AtAsync(db, clock.GetUtcNow(), ct), ct);
         }
 
         await PanelAudit.WriteAsync(db, clock, by, "urf." + decision, "urf", caseId, new Dictionary<string, string?>(), ct);

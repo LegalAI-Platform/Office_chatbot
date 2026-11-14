@@ -11,6 +11,8 @@ namespace Office.IntegrationTests;
 /// the due time is a Cairo time ("today/tomorrow 10:00", offset +03:00) and Npgsql refused to write
 /// it, so every turn that opened a task between 23:00 and 10:00 failed with 500 and the client got
 /// no answer until the morning. The tests used to pass only because they ran in the day.
+/// v1.115: B-06 follows the office's hours of the panel (10:00–20:00, 0085), and outside them the client hears when the office
+/// answers (0086). Found on 2026-11-14 the same way: two tests on the machine's clock failed in the CI at 22:29 Cairo.
 /// </summary>
 [Collection(nameof(HazemApiTests))]
 public sealed class OfficeHoursApiTests(TestDatabase db) : IAsyncLifetime
@@ -32,14 +34,18 @@ public sealed class OfficeHoursApiTests(TestDatabase db) : IAsyncLifetime
 
     public async ValueTask DisposeAsync() => await db.SetAsync("hazem.recipients", "");
 
-    // Instants in UTC; Cairo is +03:00 on these dates (summer time ends on 2026-10-29).
+    // Instants in UTC; Cairo is +03:00 on these dates (summer time ends on 2026-10-29). The day he hears, or none.
     [Theory]
-    [InlineData("2026-10-22T22:30:00Z", "2026-10-23T07:00:00Z")] // 01:30 Cairo → today 10:00
-    [InlineData("2026-10-22T20:30:00Z", "2026-10-23T07:00:00Z")] // 23:30 Cairo → tomorrow 10:00
-    [InlineData("2026-10-23T06:59:00Z", "2026-10-23T07:00:00Z")] // 09:59 Cairo → today 10:00
-    [InlineData("2026-10-23T09:00:00Z", "2026-10-23T10:00:00Z")] // 12:00 Cairo → within an hour
-    public async Task A_task_opened_at_any_hour_is_saved_with_its_B06_due_time(string now, string due)
+    [InlineData("2026-10-22T22:30:00Z", "2026-10-23T07:00:00Z", "النهارده")] // 01:30 Cairo → today 10:00
+    [InlineData("2026-10-22T20:30:00Z", "2026-10-23T07:00:00Z", "بكرة")] // 23:30 Cairo → tomorrow 10:00
+    [InlineData("2026-10-22T16:30:00Z", "2026-10-23T07:00:00Z", "بكرة")] // v1.115: 19:30 Cairo, the office's last hour → tomorrow 10:00
+    [InlineData("2026-10-23T06:59:00Z", "2026-10-23T07:00:00Z", "النهارده")] // 09:59 Cairo → today 10:00
+    [InlineData("2026-10-23T09:00:00Z", "2026-10-23T10:00:00Z", null)] // 12:00 Cairo → within an hour, nothing added
+    public async Task A_task_opened_at_any_hour_is_saved_with_its_B06_due_time_and_outside_the_hours_he_hears_when(
+        string now, string due, string? day)
     {
+        await db.SetAsync("booking.office_start_minute", "600"); // 0085's hours: another class empties them
+        await db.SetAsync("booking.office_end_minute", "1200");
         await using var factory = new ApiFactory(db, new FixedClock(DateTimeOffset.Parse(now)));
         using var n8n = factory.CreateN8nClient();
         using (var scope = factory.Services.CreateScope())
@@ -52,6 +58,13 @@ public sealed class OfficeHoursApiTests(TestDatabase db) : IAsyncLifetime
 
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         Assert.Equal(due, await db.ScalarAsync<string>(Utc("due_at", "hazem.staff_tasks")));
+        List<string?> said = ["رسالة حضرتك وصلت للمكتب، وهتتبلّغ للمسؤول عن موضوعك."];
+        if (day is not null)
+        {
+            said.Add($"المكتب بيرد من 10 الصبح لـ 8 بالليل، فحد من المكتب هيرد على حضرتك هنا {day} من الساعة 10 الصبح 🙏");
+        }
+
+        Assert.Equal(said, (await r.Content.ReadFromJsonAsync<JsonNode>(Ct))!["actions"]!.AsArray().Select(a => (string?)a!["text"]));
     }
 
     [Fact]

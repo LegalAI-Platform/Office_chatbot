@@ -48,11 +48,16 @@ loki.source.docker "containers" {
   forward_to    = [loki.process.recent.receiver]
 }
 
-// On a first start Docker hands over each container's whole log: the last 6 hours are enough (Docker keeps the rest).
+// On a first start Docker hands over each container's whole log, and a one-shot container started again (chatwoot-init,
+// storage-init, preflight, monitoring-init: every deploy, every rollback) hands over its earlier runs' lines too. Loki
+// refuses a line more than an hour behind its stream's newest («entry too far behind»), and Alloy counts it dropped, which
+// failed the healthcheck's «the logs reach Loki» after two deploys within an hour (v1.115, 2026-11-14). So only the last
+// 50 minutes go (Docker keeps the rest; `docker compose logs` reads it). This drop is counted apart, in
+// loki_process_dropped_lines_total{reason="older_than_50m"}, never as a line Loki lost.
 loki.process "recent" {
   stage.drop {
-    older_than          = "6h"
-    drop_counter_reason = "older_than_6h"
+    older_than          = "50m"
+    drop_counter_reason = "older_than_50m"
   }
 
   forward_to = [mask.mask.logs.receiver]
