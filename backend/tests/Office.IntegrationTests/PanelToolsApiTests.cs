@@ -213,6 +213,105 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal(all, await Bell("yasmin"));
     }
 
+    /// <summary>v1.110: a client of this name and number, for the search's tests.</summary>
+    private async Task<Guid> Client(string name, string wa)
+    {
+        var person = Guid.NewGuid();
+        await db.ExecAsync($"""
+            INSERT INTO hazem.persons (id, wa_id, name_raw, full_name_provided, source, first_seen_at)
+            VALUES ('{person}', '{wa}', '{name}', true, 'ad', now());
+            """);
+        return person;
+    }
+
+    private async Task<Guid> TaskOf(Guid person, string type, Guid? staff = null, string state = "open")
+    {
+        var id = Guid.NewGuid();
+        await db.ExecAsync($"""
+            INSERT INTO hazem.staff_tasks (id, person_id, turn_id, type, state, staff_id, due_at)
+            VALUES ('{id}', '{person}', 'wt:{id}', '{type}', '{state}', {(staff is null ? "NULL" : $"'{staff}'")}, now() + interval '1 hour');
+            """);
+        return id;
+    }
+
+    // v1.110 (the owner: «السيرش بار هنا حاسه بيسرش غلط» … «اعمل بحث شامل»): the search bar's one search finds the clients,
+    // their appointments and the tasks: a part of the name in any order, through one form of the letters, or the end of the
+    // number, in Arabic digits or with spaces too. A staff member finds only the tasks she may see, and the number never
+    // comes back whole. The tasks page's own search finds the same clients.
+    [Fact]
+    public async Task The_search_bar_finds_clients_appointments_and_tasks_by_any_form_of_the_name_or_the_number_s_end()
+    {
+        var ahmed = await Client("أحمد مصطفى العمدة", "201000000713");
+        var fatma = await Client("فاطمة علي", "201000000824");
+        var other = await Client("كريم سامي", "201000000935");
+        var open = await TaskOf(ahmed, "complaint");
+        var done = await TaskOf(ahmed, "human_requested", state: "done");
+        var karims = await TaskOf(fatma, "service_request", staff: _staffB);
+        await TaskOf(other, "complaint");
+        var visit = Guid.NewGuid();
+        await db.ExecAsync($"""
+            INSERT INTO hazem.appointments (id, person_id, service, starts_at, ends_at, state, amount, booked_turn_id)
+            VALUES ('{visit}', '{ahmed}', 'consultation_office', now() + interval '1 day', now() + interval '1 day 30 minutes',
+                    'confirmed', 500, 'wt:{visit}');
+            """);
+        try
+        {
+            var boss = await SignIn("boss");
+            async Task<JsonNode> Search(HttpClient c, string q)
+            {
+                var r = await c.PostAsJsonAsync("/api/panel/search", new { q }, Ct);
+                Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+                return (await r.Content.ReadFromJsonAsync<JsonNode>(Ct))!;
+            }
+
+            static Guid[] Ids(JsonNode r, string kind) => [.. r[kind]!.AsArray().Select(x => (Guid)x!["id"]!)];
+
+            // one form of the letters, the words in any order
+            foreach (var q in new[] { "احمد", "مصطفي العمده", "العمدة أحمد" })
+            {
+                var r = await Search(boss, q);
+                Assert.Equal([ahmed], Ids(r, "clients"));
+                Assert.Equal([visit], Ids(r, "appointments"));
+                Assert.Equal([open, done], Ids(r, "tasks")); // the unfinished first, a finished one too
+            }
+
+            Assert.Equal([fatma], Ids(await Search(boss, "فاطمه"), "clients"));
+            // the number's end: Arabic digits, spaces, the whole number as WhatsApp or as written in Egypt
+            foreach (var q in new[] { "713", "٧١٣", "0100 000 0713", "+20 100 000 0713" })
+            {
+                Assert.Equal([ahmed], Ids(await Search(boss, q), "clients"));
+            }
+
+            Assert.Equal([ahmed], Ids(await Search(boss, "احمد 713"), "clients")); // a name and a number together
+            Assert.Empty(Ids(await Search(boss, "احمد 824"), "clients"));
+
+            // the client: his number's last 3 digits only, and where the panel opens him (his unfinished task)
+            var found = await Search(boss, "713");
+            var client = found["clients"]![0]!;
+            Assert.Equal(("713", open, 1), ((string)client["phone_last3"]!, (Guid)client["task_id"]!, (int)client["open_tasks"]!));
+            Assert.DoesNotContain("201000000713", found.ToJsonString(), StringComparison.Ordinal);
+
+            // yasmin: her tasks and the unassigned, never karim's; a client with nothing for her to open is not listed
+            var yasmin = await SignIn("yasmin");
+            var forYasmin = await Search(yasmin, "فاطمه");
+            Assert.Empty(Ids(forYasmin, "tasks"));
+            Assert.Empty(Ids(forYasmin, "clients"));
+            Assert.Equal([karims], Ids(await Search(boss, "فاطمه"), "tasks"));
+
+            // too short, or no one
+            Assert.Empty(Ids(await Search(boss, "71"), "clients"));
+            Assert.Empty(Ids(await Search(boss, "لا يوجد اسم كهذا"), "clients"));
+
+            // the tasks page's search finds the same clients
+            var page = (await boss.GetFromJsonAsync<JsonNode>($"/api/panel/tasks?scope=all&state=active&q={Uri.EscapeDataString("مصطفي")}", Ct))!;
+            Assert.Equal([open], page["items"]!.AsArray().Select(x => (Guid)x!["id"]!));
+        }
+        finally
+        {
+            await db.ExecAsync($"DELETE FROM hazem.appointments WHERE id = '{visit}'"); // before the next test empties the persons
+        }
+    }
+
     // v1.110 (the owner, of the bell's red count: «أيوه، ضيفها»): a finished task (done, cancelled) leaves its alerts read
     // for everyone: out of the red count, and still in the list, dimmed.
     [Fact]

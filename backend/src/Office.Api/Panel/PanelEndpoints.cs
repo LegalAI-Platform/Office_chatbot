@@ -297,6 +297,12 @@ public static class PanelEndpoints
             Results.Ok(DashboardDto.From(await use.DashboardAsync(ctx.CurrentUser().AsViewer(), ct))))
             .RequireAuthorization(PanelAuth.Policy(Permissions.TasksViewOwn));
 
+        // v1.110 (the owner: «اعمل بحث شامل»): the search bar's one search: the clients, their appointments, the tasks. The term
+        // goes in the body, never in the address: a number typed there would stay in the browser's history and the edge's log.
+        work.MapPost("/search", async (SearchBody? body, HttpContext ctx, PanelSearch use, CancellationToken ct) =>
+            Results.Ok(await use.SearchAsync(ctx.CurrentUser().AsViewer(), body?.Q, ct)))
+            .RequireAuthorization(PanelAuth.Policy(Permissions.TasksViewOwn));
+
         // TASK 07c: the bell. Only what the person may see (their tasks and the unassigned, or all).
         work.MapGet("/alerts", async (HttpContext ctx, PanelAlerts alerts, CancellationToken ct) =>
         {
@@ -551,6 +557,9 @@ public sealed record MeDto(Guid Id, string Username, string DisplayName, string 
     bool TourSeen);
 
 public sealed record StaffDto(Guid Id, string Name);
+
+/// <summary>v1.110: what the search bar sends (POST /search).</summary>
+public sealed record SearchBody(string? Q);
 
 public sealed record AlertDto(long Id, string Kind, Guid? TaskId, string? TaskType, string? ClientName, DateTimeOffset? DueAt,
     DateTimeOffset CreatedAt, bool Read, string? SystemWhat, string? PhoneLast3, string? MatterType, string? StaffName);

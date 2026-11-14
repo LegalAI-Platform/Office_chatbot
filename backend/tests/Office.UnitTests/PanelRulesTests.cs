@@ -118,6 +118,24 @@ public sealed class PanelRulesTests
         Assert.Equal(audience, AlertAudience.For(kind, type));
     }
 
+    // v1.110 (the owner: «السيرش بار هنا حاسه بيسرش غلط» … «اعمل بحث شامل»): the search's term is the name's words, and a
+    // number's end however it was typed (Arabic digits, spaces, «+», brackets); under 3 digits is no number
+    [Theory]
+    [InlineData("احمد مصطفي", "احمد|مصطفي", "")]
+    [InlineData("  ٠١٠٠ ٠٠٠ ٠٧١٣ ", "", "01000000713")]
+    [InlineData("+20 (100) 000-0713", "", "201000000713")]
+    [InlineData("احمد ٧١٣", "احمد", "713")]
+    [InlineData("احمد 71", "احمد", "")]
+    [InlineData("71", "", "")]
+    [InlineData("", "", "")]
+    public void The_search_term_is_the_name_s_words_and_the_number_s_end(string q, string words, string digits)
+    {
+        var term = SearchTerm.Parse(q);
+        Assert.Equal(words, string.Join('|', term.Words));
+        Assert.Equal(digits, string.Join('|', term.Digits));
+        Assert.Equal(words.Length == 0 && digits.Length == 0, term.IsEmpty);
+    }
+
     [Fact]
     public void A_paid_urgent_call_s_two_emails_say_what_happened_and_never_the_client()
     {

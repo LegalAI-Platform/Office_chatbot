@@ -87,8 +87,9 @@ describe("the tour's steps (the owner's words)", () => {
   it("greets by the first name, and says Ctrl K only where there is a keyboard", () => {
     expect(tourSteps(maintenance)[0]!.title).toBe("مرحبًا بك يا محمد");
     expect(tourSteps(account({ display_name: " " }))[0]!.title).toBe("مرحبًا بك");
-    expect(body(account(), "search")).toBe("ابحث في المهام باسم العميل أو بآخر أرقام هاتفه.");
-    expect(body(account(), "search", true)).toBe("ابحث في المهام باسم العميل أو بآخر أرقام هاتفه. ويفتح Ctrl K اختصارات لكل صفحة.");
+    expect(body(account(), "search")).toBe("ابحث عن عميل أو موعد أو مهمة باسم العميل أو بآخر أرقام هاتفه، والنتائج تظهر أثناء الكتابة.");
+    expect(body(account(), "search", true)).toBe(
+      "ابحث عن عميل أو موعد أو مهمة باسم العميل أو بآخر أرقام هاتفه، والنتائج تظهر أثناء الكتابة. ويفتح Ctrl K اختصارات لكل صفحة.");
   });
 
   it("says «المزيد» only when it points at «المزيد» (a phone's tab bar)", () => {

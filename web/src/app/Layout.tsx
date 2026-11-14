@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router";
 import { useAlerts, useAlertStream, useMarkAlertsRead } from "../shared/api/alerts";
 import type { PanelAlert } from "../shared/api/types";
@@ -12,7 +12,7 @@ import { cairoLongDate, cairoTime, timeAgo } from "../shared/lib/time";
 import { Avatar } from "../shared/ui/Avatar";
 import { Icon, type IconName } from "../shared/ui/Icon";
 import { ConfirmHost, Toaster } from "../shared/ui/feedback";
-import { CommandPalette } from "./CommandPalette";
+import { SearchBar } from "./SearchBar";
 import { prefetchAll, usePrefetch } from "./lazyPages";
 import { Tour } from "./Tour";
 import { TOUR_REPLAY } from "./tourSteps";
@@ -261,7 +261,7 @@ function TopBar({ late }: { late: number }) {
         </HomeLogo>
         <Clock />
         <Bell late={late} />
-        <Search />
+        <SearchBar />
         <UserMenu />
       </div>
     </header>
@@ -540,40 +540,3 @@ function Clock() {
   );
 }
 
-/** Finds tasks by the client's name or the last digits of the number; Ctrl K opens the quick search (CommandPalette). */
-function Search() {
-  const navigate = useNavigate();
-  const input = useRef<HTMLInputElement>(null);
-  const [palette, setPalette] = useState(false);
-  useEffect(() => {
-    const key = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        setPalette(true);
-      }
-    };
-    document.addEventListener("keydown", key);
-    return () => document.removeEventListener("keydown", key);
-  }, []);
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    const q = input.current?.value.trim() ?? "";
-    navigate(q ? `/tasks?q=${encodeURIComponent(q)}` : "/tasks");
-  };
-  return (
-    <form role="search" data-tour="search" onSubmit={submit}
-      className="group/search flex min-h-[2.9rem] min-w-0 flex-1 items-center gap-2.5 rounded-full border border-line/80 bg-card/70 ps-4 pe-2 shadow-[inset_0_1px_2px_rgb(0_0_0/0.04)] transition duration-200
-        hover:border-gold-line focus-within:border-gold focus-within:bg-card focus-within:shadow-[0_0_0_4px_rgb(176_133_82/0.16)] lg:max-w-[36rem]">
-      <Icon name="search" className="size-[18px] shrink-0 text-ink-soft transition-colors group-focus-within/search:text-gold-ink" />
-      {/* a phone shows the start of the hint, ending in «…» */}
-      <input ref={input} type="search" aria-label="بحث" placeholder="ابحث عن عميل أو موعد أو مهمة أو رقم قضية..."
-        className="min-h-10 min-w-0 flex-1 bg-transparent text-[14px] outline-none placeholder:text-ink-soft/80 max-lg:text-ellipsis" />
-      <button type="button" onClick={() => setPalette(true)} aria-label="اختصارات وبحث (Ctrl K)"
-        className="hidden shrink-0 items-center gap-1 rounded-full px-1.5 py-1 font-sans text-[11px] font-semibold text-ink-soft transition hover:bg-card-2 sm:flex" dir="ltr">
-        <kbd className="rounded-md border border-line border-b-2 bg-card px-1.5 py-0.5 font-sans">Ctrl</kbd>
-        <kbd className="rounded-md border border-line border-b-2 bg-card px-1.5 py-0.5 font-sans">K</kbd>
-      </button>
-      <CommandPalette open={palette} onClose={() => setPalette(false)} />
-    </form>
-  );
-}
