@@ -99,6 +99,18 @@ public sealed partial class BookingFlowTests
     }
 
     [Fact]
+    public async Task V115_a_promise_whose_text_is_off_never_sends_its_time_alone()
+    {
+        OfficeAnswersOn();
+        _texts.Remove(TextKeys.HumanRequest); // off in «النصوص»: only the active texts are read
+        _now = AvailabilityTests.At(19, 21, 52);
+
+        var d = await Say("عايز اكلم حد من المكتب");
+        Assert.DoesNotContain(TextKeys.OfficeAnswersLater, Keys(d));
+        Assert.Empty(d.Actions);
+    }
+
+    [Fact]
     public async Task V115_once_he_told_his_matter_hazem_asks_what_he_needs_then_the_choice()
     {
         _texts[TextKeys.AskNeed] = new ApprovedText(TextKeys.AskNeed, 1, "وصلني اللي بعته 👍 محتاج المكتب يساعد حضرتك في إيه بخصوصه؟", 300, true);

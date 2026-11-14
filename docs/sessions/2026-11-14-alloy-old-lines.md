@@ -53,5 +53,19 @@ He said «هو حد اصلا من المكتب هيرد عليه دلوقتي؟ 
 ### Checked
 
 - `dotnet build` (warnings are errors): clean.
-- Unit tests 953 of 953 (16 new). Every earlier test is unchanged: «عاوز احكي مشكلتي» with nothing told before still gets `services_tell` in every situation (Task16SituationTests).
+- Unit tests 954 of 954 (17 new). Every earlier test is unchanged: «عاوز احكي مشكلتي» with nothing told before still gets `services_tell` in every situation (Task16SituationTests).
 - Migration 0086 and the integration tests run in the CI.
+
+### The first CI run failed
+
+It ran at 22:29 Cairo. Two integration tests on the machine's clock got the new line after their one reply: the existing client's neutral text (Task05a) and «تمام، بلّغت المكتب…» (HazemConversation). The app did what was approved, but the tests depended on the time they ran.
+
+The failure also showed a real gap. If a promise's text is off in «النصوص», the line could go out alone, with no promise before it, because only the active texts are read.
+
+- **The code:** `OfficeAnswersWhen` adds the line only after a promise whose text is sent. A unit test covers it.
+- **The tests:** each one runs at a fixed time, as TASK 06–11's do.
+  - Task05a runs at 12:00 Cairo, and its due time is now checked exactly. Before, it was checked as «after its creation», which a fixed day would break later.
+  - HazemConversation is the owner's own case, at 21:52: the two lines, then a task due at 10:00 the next day. With the text off, nothing is sent.
+  - OfficeHoursApiTests checks the replies at 01:30, 09:59, 12:00, 19:30 (the office's last hour) and 23:30.
+- **The hours:** these tests set the office's hours themselves, because Task08's `Clean` empties every `booking.%` setting and the order of the test classes is not fixed.
+- **B-26:** Task05a's check that «no active text promises a contact time» now names `office_answers_later` as the owner's v1.115 exception. Its pattern did not match it before only because the text holds `{{opens}}`, not «10».

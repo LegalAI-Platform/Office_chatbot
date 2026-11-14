@@ -168,11 +168,13 @@ public sealed class HazemResponder(
     /// دلوقتي؟ المفروض يقول له بكره، صح كده؟ يعني على حسب المواعيد»): a reply that promises him a person, when the office does not
     /// answer within the hour (B-06 with the office's hours: its last hour, after it, before it opens), is followed by when it
     /// answers: «المكتب بيرد من 10 الصبح لـ 8 بالليل، فحد من المكتب هيرد على حضرتك هنا بكرة من الساعة 10 الصبح 🙏» («النهارده»
-    /// before the opening, B-07). As approved, word for word, never in the writer's words: it is a time.
+    /// before the opening, B-07). As approved, word for word, never in the writer's words: it is a time. Only after a promise that
+    /// is sent: a promise whose text is off in «النصوص» sends nothing, so its time is never sent alone.
     /// </summary>
     private static void OfficeAnswersWhen(Plan plan, IReadOnlyDictionary<string, ApprovedText> texts)
     {
-        if (!plan.Steps.Any(s => OfficeAnswersKeys.Contains(s.Key)) || plan.Steps.Any(s => s.Key == TextKeys.OfficeAnswersLater)
+        if (!plan.Steps.Any(s => OfficeAnswersKeys.Contains(s.Key) && texts.TryGetValue(s.Key, out var promise) && promise.Active)
+            || plan.Steps.Any(s => s.Key == TextKeys.OfficeAnswersLater)
             || OfficeHours.NextAnswer(plan.Now, plan.OfficeWindow) is not { } opens
             || !texts.TryGetValue(TextKeys.OfficeAnswersLater, out var t) || !t.Active)
         {

@@ -47,6 +47,15 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
         await db.SetAsync("hazem.recipients", "");
     }
 
+    /// <summary>The API with its clock stopped at one instant, for a test whose answer depends on the hour (v1.115, B-06).</summary>
+    private async Task At(DateTimeOffset now)
+    {
+        _n8n.Dispose();
+        await _factory.DisposeAsync();
+        _factory = new ApiFactory(db, new FixedClock(now));
+        _n8n = _factory.CreateN8nClient();
+    }
+
     private async Task<JsonNode> Post(JsonArray messages, string waId = Client)
     {
         var r = await _n8n.PostAsJsonAsync("/api/hazem/turns", new JsonObject
@@ -119,10 +128,18 @@ public sealed class HazemConversationApiTests(TestDatabase db) : IAsyncLifetime
     [Fact]
     public async Task Human_request_records_a_task_and_sends_nothing_while_its_text_is_inactive()
     {
+        // v1.115, the owner's case: at 21:52, after the office's hours (10:00–20:00, 0085; another class empties them), the time
+        // the office answers follows, and the task is due at its opening. With the text off, nothing: never that line alone.
+        await db.SetAsync("booking.office_start_minute", "600");
+        await db.SetAsync("booking.office_end_minute", "1200");
+        await At(new DateTimeOffset(2026, 11, 19, 21, 52, 0, TimeSpan.FromHours(2)));
         await Say("السلام عليكم");
         await Say("محمد أحمد علي حسن");
-        Assert.Equal(["تمام، بلّغت المكتب إن حضرتك عايز تكلم حد، وحد من المكتب هيرد على حضرتك هنا."], Texts(await Say("عايز أكلم موظف"))); // v1.48 (0049)
-        Assert.Equal("human_requested|open", await db.ScalarAsync<string>("SELECT type || '|' || state FROM hazem.staff_tasks"));
+        Assert.Equal(["تمام، بلّغت المكتب إن حضرتك عايز تكلم حد، وحد من المكتب هيرد على حضرتك هنا.", // v1.48 (0049)
+                "المكتب بيرد من 10 الصبح لـ 8 بالليل، فحد من المكتب هيرد على حضرتك هنا بكرة من الساعة 10 الصبح 🙏"], // v1.115 (0086)
+            Texts(await Say("عايز أكلم موظف")));
+        Assert.Equal("human_requested|open|2026-11-20 08:00", await db.ScalarAsync<string>(
+            "SELECT type || '|' || state || '|' || to_char(due_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI') FROM hazem.staff_tasks"));
 
         await db.ExecAsync("UPDATE hazem.approved_texts SET active = false WHERE key = 'human_request'");
         try
