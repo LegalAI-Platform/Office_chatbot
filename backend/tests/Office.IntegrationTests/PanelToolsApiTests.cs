@@ -429,9 +429,10 @@ public sealed class PanelToolsApiTests(TestDatabase db) : IAsyncLifetime
         Assert.Equal(wa[^3..], (string)a["phone_last3"]!);
         Assert.Equal("personal_status", (string)a["matter_type"]!);
         Assert.Equal("ياسمين", (string)a["staff_name"]!);
-        Assert.Equal(
-            ["client_name", "created_at", "due_at", "id", "kind", "matter_type", "phone_last3", "read", "staff_name", "task_id", "task_type"],
+        Assert.Equal( // v1.112: «messages», how many of his messages the task holds (a count, never his words)
+            ["client_name", "created_at", "due_at", "id", "kind", "matter_type", "messages", "phone_last3", "read", "staff_name", "task_id", "task_type"],
             a.AsObject().Select(p => p.Key).Order(StringComparer.Ordinal));
+        Assert.Equal(1, (int)a["messages"]!);
 
         var b = bell.Single(x => (Guid?)x!["task_id"] == nobody)!;
         Assert.Null(b["staff_name"]); // nobody has it yet
